@@ -9,4 +9,5 @@ resources:
 - role_binding.yaml
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
-- metrics_service.yaml
+- pipelinerollout_editor_role.yaml
+- pipelinerollout_viewer_role.yaml

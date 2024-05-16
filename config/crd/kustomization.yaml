@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- bases/numaplane.numaproj.io_gitsyncs.yaml
+- bases/numaplane.numaproj.io_pipelinerollouts.yaml

@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- numaplane.numaproj.io_v1alpha1_gitsync.yaml
+- numaplane.numaproj.io_v1alpha1_pipelinerollout.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
