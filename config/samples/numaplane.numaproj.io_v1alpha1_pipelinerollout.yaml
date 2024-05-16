@@ -1,9 +1,8 @@
 apiVersion: numaplane.numaproj.io/v1alpha1
 kind: PipelineRollout
 metadata:
-  labels:
-    app.kubernetes.io/name: numaplane
-    app.kubernetes.io/managed-by: kustomize
-  name: pipelinerollout-sample
+  name: pipelinerollout-example
+  namespace: numaplane-system
 spec:
-  # TODO(user): Add fields here
+  pipeline:
+    field: "field val"

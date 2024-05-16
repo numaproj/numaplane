@@ -41,6 +41,7 @@ spec:
             properties:
               pipeline:
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
             required:
             - pipeline
             type: object

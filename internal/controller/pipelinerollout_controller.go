@@ -19,11 +19,12 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/numaproj-labs/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj-labs/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -47,9 +48,23 @@ type PipelineRolloutReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	// update the Base Logger's level according to the Numaplane Config
+	logger.RefreshBaseLoggerLevel()
+	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("pipelinerollout", req.NamespacedName)
 
-	// TODO(user): your logic here
+	numaLogger.Info("PipelineRollout Reconcile")
+
+	pipelineRollout := &apiv1.PipelineRollout{}
+	if err := r.Client.Get(ctx, req.NamespacedName, pipelineRollout); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		} else {
+			numaLogger.Error(err, "Unable to get PipelineRollout", "request", req)
+			return ctrl.Result{}, err
+		}
+	}
+
+	numaLogger.Info(pipelineRollout.Spec.Pipeline.String())
 
 	return ctrl.Result{}, nil
 }

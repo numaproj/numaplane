@@ -18,7 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -26,7 +26,7 @@ import (
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
-	Pipeline unstructured.Unstructured `json:"pipeline"`
+	Pipeline runtime.RawExtension `json:"pipeline"`
 }
 
 // PipelineRolloutStatus defines the observed state of PipelineRollout
