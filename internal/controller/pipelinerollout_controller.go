@@ -30,8 +30,18 @@ import (
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+	client client.Client
+	scheme *runtime.Scheme
+}
+
+func NewPipelineRolloutReconciler(
+	client client.Client,
+	s *runtime.Scheme,
+) *PipelineRolloutReconciler {
+	return &PipelineRolloutReconciler{
+		client,
+		s,
+	}
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
@@ -55,7 +65,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger.Info("PipelineRollout Reconcile")
 
 	pipelineRollout := &apiv1.PipelineRollout{}
-	if err := r.Client.Get(ctx, req.NamespacedName, pipelineRollout); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, pipelineRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
@@ -64,7 +74,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	numaLogger.Info(pipelineRollout.Spec.Pipeline.String())
+	numaLogger.Info(string(pipelineRollout.Spec.Pipeline.Raw))
 
 	return ctrl.Result{}, nil
 }

@@ -33,12 +33,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	//+kubebuilder:scaffold:imports
+
+	"github.com/numaproj/numaplane/internal/controller"
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	// logger is the global logger for the controller-manager.
+	numaLogger = logger.New().WithName("controller-manager")
+	configPath = "/etc/numaplane" // Path in the volume mounted in the pod where yaml is present
 )
 
 func init() {
@@ -90,6 +96,21 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
+	// Load Config For the pod
+	configManager := config.GetConfigManagerInstance()
+	err := configManager.LoadConfig(func(err error) {
+		numaLogger.Error(err, "Failed to reload global configuration file")
+	}, configPath, "config", "yaml")
+	if err != nil {
+		numaLogger.Fatal(err, "Failed to load config file")
+	}
+	config, err := configManager.GetConfig()
+	if err != nil {
+		numaLogger.Fatal(err, "Failed to get config")
+	}
+	numaLogger.SetLevel(config.LogLevel)
+	logger.SetBaseLogger(numaLogger)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -119,6 +140,15 @@ func main() {
 	}
 
 	//+kubebuilder:scaffold:builder
+
+	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	)
+
+	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
+		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
