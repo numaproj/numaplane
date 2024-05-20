@@ -31,7 +31,7 @@ import (
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
 	client client.Client
-	Scheme *runtime.Scheme
+	scheme *runtime.Scheme
 }
 
 func NewNumaflowControllerRolloutReconciler(

@@ -31,7 +31,7 @@ import (
 // ISBServiceRolloutReconciler reconciles a ISBServiceRollout object
 type ISBServiceRolloutReconciler struct {
 	client client.Client
-	Scheme *runtime.Scheme
+	scheme *runtime.Scheme
 }
 
 func NewISBServiceRolloutReconciler(

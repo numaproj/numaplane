@@ -69,7 +69,7 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &NumaflowControllerRolloutReconciler{
 				client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, sigsReconcile.Request{
