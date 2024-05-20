@@ -21,26 +21,31 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
 }
 
 func NewPipelineRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
+	restConfig *rest.Config,
 ) *PipelineRolloutReconciler {
 	return &PipelineRolloutReconciler{
 		client,
 		s,
+		restConfig,
 	}
 }
 
@@ -74,7 +79,17 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	numaLogger.Info(string(pipelineRollout.Spec.Pipeline.Raw))
+	obj, err := kubernetes.ParseRawExtension(ctx, pipelineRollout.Spec.Pipeline)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to parse RawExtension: %v", err)
+		return ctrl.Result{}, err
+	}
+
+	err = kubernetes.UpdateCRSpec(ctx, r.restConfig, obj, "pipelines")
+	if err != nil {
+		numaLogger.Errorf(err, "failed to apply CR: %v", err)
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
