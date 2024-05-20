@@ -3,3 +3,5 @@ kind: Kustomization
 
 resources:
 - bases/numaplane.numaproj.io_pipelinerollouts.yaml
+- bases/numaplane.numaproj.io_numaflowcontrollerrollouts.yaml
+- bases/numaplane.numaproj.io_isbservicerollouts.yaml

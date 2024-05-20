@@ -3,6 +3,128 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
+  name: isbservicerollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: ISBServiceRollout
+    listKind: ISBServiceRolloutList
+    plural: isbservicerollouts
+    singular: isbservicerollout
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ISBServiceRollout is the Schema for the isbservicerollouts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
+            properties:
+              interStepBufferService:
+                properties:
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+            required:
+            - interStepBufferService
+            type: object
+          status:
+            description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: numaflowcontrollerrollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: NumaflowControllerRollout
+    listKind: NumaflowControllerRolloutList
+    plural: numaflowcontrollerrollouts
+    singular: numaflowcontrollerrollout
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NumaflowControllerRolloutSpec defines the desired state of
+              NumaflowControllerRollout
+            properties:
+              controller:
+                properties:
+                  version:
+                    type: string
+                required:
+                - version
+                type: object
+            required:
+            - controller
+            type: object
+          status:
+            description: NumaflowControllerRolloutStatus defines the observed state
+              of NumaflowControllerRollout
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: pipelinerollouts.numaplane.numaproj.io
 spec:
   group: numaplane.numaproj.io
@@ -106,6 +228,106 @@ rules:
   verbs:
   - create
   - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: isbservicerollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: isbservicerollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontrollerrollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontrollerrollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts/status
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

@@ -1,0 +1,9 @@
+apiVersion: numaplane.numaproj.io/v1alpha1
+kind: ISBServiceRollout
+metadata:
+  name: isbservicerollout-sample
+  namespace: numaplane-system
+spec:
+  interStepBufferService:
+    spec:
+      field: "custom field val"

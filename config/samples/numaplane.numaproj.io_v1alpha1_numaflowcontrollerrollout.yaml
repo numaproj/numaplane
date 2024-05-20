@@ -1,0 +1,8 @@
+apiVersion: numaplane.numaproj.io/v1alpha1
+kind: NumaflowControllerRollout
+metadata:
+  name: numaflowcontrollerrollout-sample
+  namespace: numaplane-system
+spec:
+  controller:
+    version: 1.2.1

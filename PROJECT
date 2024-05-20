@@ -17,4 +17,22 @@ resources:
   kind: PipelineRollout
   path: github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: github.com.numaproj-labs
+  group: numaplane.numaproj.io
+  kind: NumaflowControllerRollout
+  path: github.com/numaproj-labs/numaplane/pkg/apis/numaplane/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: github.com.numaproj-labs
+  group: numaplane.numaproj.io
+  kind: ISBServiceRollout
+  path: github.com/numaproj-labs/numaplane/pkg/apis/numaplane/v1alpha1
+  version: v1alpha1
 version: "3"

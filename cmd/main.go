@@ -37,6 +37,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var (
@@ -50,7 +51,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	//+kubebuilder:scaffold:scheme
+	utilruntime.Must(apiv1.AddToScheme(scheme))
 }
 
 func main() {
@@ -148,6 +149,24 @@ func main() {
 
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
+	}
+
+	numaflowControllerRolloutReconciler := controller.NewNumaflowControllerRolloutReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	)
+
+	if err = numaflowControllerRolloutReconciler.SetupWithManager(mgr); err != nil {
+		numaLogger.Fatal(err, "Unable to set up NumaflowControllerRollout controller")
+	}
+
+	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	)
+
+	if err = isbServiceRolloutReconciler.SetupWithManager(mgr); err != nil {
+		numaLogger.Fatal(err, "Unable to set up ISBServiceRollout controller")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
