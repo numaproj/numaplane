@@ -1,10 +1,11 @@
 apiVersion: numaplane.numaproj.io/v1alpha1
 kind: PipelineRollout
 metadata:
-  name: pipelinerollout-example
-  namespace: numaplane-system
+  name: my-pipeline
+  namespace: example-namespace
 spec:
   pipeline:
+    interStepBufferServiceName: my-isbsvc
     vertices:
       - name: in
         source:

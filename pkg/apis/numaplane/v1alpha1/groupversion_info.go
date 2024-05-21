@@ -36,6 +36,15 @@ var (
 
 	GitSyncGroupVersionKind     = SchemeGroupVersion.WithKind("GitSync")
 	GitSyncGroupVersionResource = SchemeGroupVersion.WithResource("gitsyncs")
+
+	ISBServiceRolloutGroupVersionKind     = SchemeGroupVersion.WithKind("ISBServiceRollout")
+	ISBServiceRolloutGroupVersionResource = SchemeGroupVersion.WithResource("isbservicerollouts")
+
+	PipelineRolloutGroupVersionKind     = SchemeGroupVersion.WithKind("PipelineRollout")
+	PipelineRolloutGroupVersionResource = SchemeGroupVersion.WithResource("pipelinerollouts")
+
+	NumaflowControllerRolloutGroupVersionKind     = SchemeGroupVersion.WithKind("NumaflowControllerRollout")
+	NumaflowControllerRolloutGroupVersionResource = SchemeGroupVersion.WithResource("numaflowcontrollerrollouts")
 )
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource

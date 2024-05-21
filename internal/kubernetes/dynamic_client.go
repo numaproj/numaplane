@@ -40,9 +40,9 @@ type GenericObject struct {
 	Spec runtime.RawExtension `json:"spec"`
 }
 
-// UpdateCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
+// ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
-func UpdateCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
 	numaLogger := logger.FromContext(ctx)
 
 	// todo: Set the annotation for the hashed spec in the spec

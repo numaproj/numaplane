@@ -19,12 +19,14 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -80,25 +82,95 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
+	// save off a copy of the original before we modify it
+	isbServiceRolloutOrig := isbServiceRollout
+	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
+
+	err := r.reconcile(ctx, isbServiceRollout)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Update the Spec if needed
+	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
+		isbServiceRolloutStatus := isbServiceRollout.Status
+		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
+			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
+			return ctrl.Result{}, err
+		}
+		// restore the original status, which would've been wiped in the previous call to Update()
+		isbServiceRollout.Status = isbServiceRolloutStatus
+	}
+
+	// Update the Status subresource
+	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
+		if err := r.client.Status().Update(ctx, isbServiceRollout); err != nil {
+			numaLogger.Error(err, "Error Updating isbServiceRollout Status", "isbServiceRollout", isbServiceRollout)
+			return ctrl.Result{}, err
+		}
+	}
+
+	numaLogger.Debug("reconciliation successful")
+
+	return ctrl.Result{}, nil
+}
+
+// reconcile does the real logic
+func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// is isbServiceRollout being deleted? need to remove the finalizer so it can
+	// (OwnerReference will delete the underlying ISBService through Cascading deletion)
+	if !isbServiceRollout.DeletionTimestamp.IsZero() {
+		numaLogger.Info("Deleting ISBServiceRollout")
+		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
+			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
+		}
+		return nil
+	}
+
+	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
+	if !controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
+		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
+	}
+
+	// apply ISBService
 	obj := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      isbServiceRollout.Name,
-			Namespace: isbServiceRollout.Namespace,
+			Name:            isbServiceRollout.Name,
+			Namespace:       isbServiceRollout.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	err := kubernetes.UpdateCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
+	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		return ctrl.Result{}, err
+		//todo: isbServiceRollout.Status.MarkFailed("???", err.Error())
+		return err
 	}
 
-	return ctrl.Result{}, nil
+	//todo: isbServiceRollout.Status.MarkRunning() // should already be but just in case
+	return nil
+
+}
+
+func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRollout) bool {
+
+	if old == nil {
+		return true
+	}
+	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
+	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+		return true
+	}
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.
