@@ -458,6 +458,20 @@ subjects:
 ---
 apiVersion: v1
 data:
+  controller_definitions.yaml: |
+    controllerDefinitions:
+    - version: "1.2.1"
+      fullSpec: ""
+    - version: "1.1.7"
+      fullSpec: ""
+immutable: true
+kind: ConfigMap
+metadata:
+  name: numaflow-controller-definitions-config
+  namespace: numaplane-system
+---
+apiVersion: v1
+data:
   config.yaml: |-
     syncTimeIntervalMs: 30000
     includedResources: "group=apps,kind=Deployment;\
@@ -528,6 +542,8 @@ spec:
         volumeMounts:
         - mountPath: /etc/numaplane
           name: config-volume
+        - mountPath: /etc/numarollout
+          name: numarollout-volume
       initContainers: []
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
@@ -535,3 +551,6 @@ spec:
       - configMap:
           name: numaplane-controller-config
         name: config-volume
+      - configMap:
+          name: numaflow-controller-definitions-config
+        name: numarollout-volume

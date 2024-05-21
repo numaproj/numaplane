@@ -100,9 +100,9 @@ func main() {
 
 	// Load Config For the pod
 	configManager := config.GetConfigManagerInstance()
-	err := configManager.LoadConfig(func(err error) {
+	err := configManager.LoadAllConfigs(func(err error) {
 		numaLogger.Error(err, "Failed to reload global configuration file")
-	}, configPath, "config", "yaml")
+	}, config.WithConfigsPath(configPath), config.WithConfigFileName("config"))
 	if err != nil {
 		numaLogger.Fatal(err, "Failed to load config file")
 	}

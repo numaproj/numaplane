@@ -12,3 +12,17 @@ patches:
     target:
       kind: Deployment
       name: numaplane-controller-manager
+
+configMapGenerator:
+- name: numaplane-controller-config
+  namespace: numaplane-system
+  files:
+    - config.yaml
+  behavior: merge  # Optional, defaults to "create"
+- name: numaflow-controller-definitions-config
+  namespace: numaplane-system
+  files:
+    - controller_definitions.yaml
+  behavior: merge  # Optional, defaults to "create"
+generatorOptions:
+  immutable: true

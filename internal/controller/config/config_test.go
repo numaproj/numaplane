@@ -18,7 +18,7 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	assert.Nil(t, err, "Failed to get working directory")
 	configPath := filepath.Join(getwd, "../../../", "tests", "config")
 	configManager := GetConfigManagerInstance()
-	err = configManager.LoadConfig(func(err error) {}, configPath, "testconfig", "yaml")
+	err = configManager.LoadAllConfigs(func(err error) {}, WithConfigsPath(configPath), WithConfigFileName("testconfig"))
 	assert.NoError(t, err)
 	config, err := configManager.GetConfig()
 	assert.NoError(t, err)
@@ -58,6 +58,26 @@ func TestLoadConfigMatchValues(t *testing.T) {
 
 }
 
+func TestLoadNumaRolloutConfigMatchValues(t *testing.T) {
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, WithConfigsPath(configPath), WithRolloutConfigFileName("controller-definitions-config"))
+	assert.NoError(t, err)
+	config, err := configManager.GetNumaRolloutConfig()
+	assert.NoError(t, err)
+
+	assert.Nil(t, err, "Failed to load configuration")
+
+	assert.NotNil(t, config.ControllerDefinitions, "ControllerDefinitions should not be nil")
+
+	assert.Equal(t, "1.2.1", config.ControllerDefinitions[0].Version, "Version for ControllerDefinitions[0] does not match")
+	assert.Equal(t, "", config.ControllerDefinitions[0].FullSpec, "FullSpec for ControllerDefinitions[0] does not match")
+	assert.Equal(t, "1.1.7", config.ControllerDefinitions[1].Version, "Version for ControllerDefinitions[1] does not match")
+	assert.Equal(t, "", config.ControllerDefinitions[1].FullSpec, "FullSpec for ControllerDefinitions[1] does not match")
+}
+
 func copyFile(src, dst string) error {
 	source, err := os.Open(src)
 	if err != nil {
@@ -79,7 +99,7 @@ func copyFile(src, dst string) error {
 }
 
 // to verify this test run with go test -race ./... it  won't give a race condition as we have used mutex.RwLock
-// in onConfigChange in LoadConfig
+// in onConfigChange in LoadAllConfigs
 func TestConfigManager_LoadConfigNoRace(t *testing.T) {
 	configDir := os.TempDir()
 
@@ -108,7 +128,7 @@ func TestConfigManager_LoadConfigNoRace(t *testing.T) {
 		errors = append(errors, err)
 	}
 	// concurrent Access of files
-	err = cm.LoadConfig(onError, configDir, "config", "yaml")
+	err = cm.LoadAllConfigs(onError, WithConfigsPath(configDir), WithConfigFileName("config"))
 	assert.NoError(t, err)
 	goroutines := 10
 	wg.Add(goroutines)
@@ -205,7 +225,6 @@ pkg: main/convert
 cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
 BenchmarkCloneWithSerialization-6          29619         47935 ns/op
 PASS
-
 
 */
 

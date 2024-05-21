@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: numaflow-controller-definitions-config
+data:
+  controller_definitions.yaml: |
+    controllerDefinitions:
+    - version: "1.2.1"
+      fullSpec: ""
+    - version: "1.1.7"
+      fullSpec: ""
+immutable: true
