@@ -24,13 +24,9 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type InterStepBufferService struct {
-	Spec runtime.RawExtension `json:"spec"` // TODO: revisit ISBS spec field definition
-}
-
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
-	InterStepBufferService InterStepBufferService `json:"interStepBufferService"`
+	InterStepBufferService runtime.RawExtension `json:"interStepBufferService"`
 }
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout

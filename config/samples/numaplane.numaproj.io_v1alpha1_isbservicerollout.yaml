@@ -5,5 +5,8 @@ metadata:
   namespace: numaplane-system
 spec:
   interStepBufferService:
-    spec:
-      field: "custom field val"
+    # Example from https://github.com/numaproj/numaflow/blob/main/examples/0-isbsvc-jetstream.yaml
+    jetstream:
+      version: latest
+      persistence:
+        volumeSize: 1Gi

@@ -155,6 +155,7 @@ func main() {
 	numaflowControllerRolloutReconciler := controller.NewNumaflowControllerRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
+		mgr.GetConfig(),
 	)
 
 	if err = numaflowControllerRolloutReconciler.SetupWithManager(mgr); err != nil {
@@ -164,6 +165,7 @@ func main() {
 	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
+		mgr.GetConfig(),
 	)
 
 	if err = isbServiceRolloutReconciler.SetupWithManager(mgr); err != nil {

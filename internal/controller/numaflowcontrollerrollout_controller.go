@@ -21,6 +21,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -30,17 +31,20 @@ import (
 
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
 }
 
 func NewNumaflowControllerRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
+	restConfig *rest.Config,
 ) *NumaflowControllerRolloutReconciler {
 	return &NumaflowControllerRolloutReconciler{
 		client,
 		s,
+		restConfig,
 	}
 }
 
@@ -74,7 +78,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		}
 	}
 
-	numaLogger.Info(string(numaflowControllerRollout.Spec.Controller.Version))
+	// TODO: reconciliation logic here
 
 	return ctrl.Result{}, nil
 }

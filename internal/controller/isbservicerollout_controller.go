@@ -20,27 +20,33 @@ import (
 	"context"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // ISBServiceRolloutReconciler reconciles a ISBServiceRollout object
 type ISBServiceRolloutReconciler struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
 }
 
 func NewISBServiceRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
+	restConfig *rest.Config,
 ) *ISBServiceRolloutReconciler {
 	return &ISBServiceRolloutReconciler{
 		client,
 		s,
+		restConfig,
 	}
 }
 
@@ -74,7 +80,23 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	numaLogger.Info(string(isbServiceRollout.Spec.InterStepBufferService.Spec.Raw))
+	obj := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "InterStepBufferService",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      isbServiceRollout.Name,
+			Namespace: "numaflow-system",
+		},
+		Spec: isbServiceRollout.Spec.InterStepBufferService,
+	}
+
+	err := kubernetes.UpdateCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
+	if err != nil {
+		numaLogger.Errorf(err, "failed to apply CR: %v", err)
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }

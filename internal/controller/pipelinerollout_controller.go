@@ -20,6 +20,7 @@ import (
 	"context"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -79,13 +80,19 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	obj, err := kubernetes.ParseRawExtension(ctx, pipelineRollout.Spec.Pipeline)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to parse RawExtension: %v", err)
-		return ctrl.Result{}, err
+	obj := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pipeline",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pipelineRollout.Name,
+			Namespace: "numaflow-system",
+		},
+		Spec: pipelineRollout.Spec.Pipeline,
 	}
 
-	err = kubernetes.UpdateCRSpec(ctx, r.restConfig, obj, "pipelines")
+	err := kubernetes.UpdateCRSpec(ctx, r.restConfig, &obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		return ctrl.Result{}, err
