@@ -87,7 +87,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pipelineRollout.Name,
-			Namespace: "numaflow-system",
+			Namespace: pipelineRollout.Namespace,
 		},
 		Spec: pipelineRollout.Spec.Pipeline,
 	}

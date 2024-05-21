@@ -87,7 +87,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      isbServiceRollout.Name,
-			Namespace: "numaflow-system",
+			Namespace: isbServiceRollout.Namespace,
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
