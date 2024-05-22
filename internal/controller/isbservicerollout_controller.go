@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -174,6 +175,7 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 // SetupWithManager sets up the controller with the Manager.
 func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apiv1.ISBServiceRollout{}).
+		// Reconcile ISBServiceRollouts when there's been a Generation changed (i.e. Spec change)
+		For(&apiv1.ISBServiceRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }

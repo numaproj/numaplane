@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -177,6 +178,7 @@ func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout)
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apiv1.PipelineRollout{}).
+		// Reconcile PipelineRollouts when there's been a Generation changed (i.e. Spec change)
+		For(&apiv1.PipelineRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
