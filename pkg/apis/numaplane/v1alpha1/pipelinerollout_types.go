@@ -31,8 +31,7 @@ type PipelineRolloutSpec struct {
 
 // PipelineRolloutStatus defines the observed state of PipelineRollout
 type PipelineRolloutStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Status `json:",inline"`
 }
 
 //+kubebuilder:object:root=true

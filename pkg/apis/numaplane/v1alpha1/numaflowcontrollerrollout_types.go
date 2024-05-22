@@ -34,8 +34,7 @@ type NumaflowControllerRolloutSpec struct {
 
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
 type NumaflowControllerRolloutStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Status `json:",inline"`
 }
 
 //+kubebuilder:object:root=true

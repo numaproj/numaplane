@@ -29,6 +29,10 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+const (
+	finalizerName = "numaplane-controller"
+)
+
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
 	client     client.Client
@@ -65,8 +69,6 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	// update the Base Logger's level according to the Numaplane Config
 	logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
-
-	numaLogger.Info("NumaflowControllerRollout Reconcile")
 
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {

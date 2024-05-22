@@ -70,8 +70,6 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("isbservicerollout", req.NamespacedName)
 
-	numaLogger.Info("ISBServiceRollout Reconcile")
-
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -151,20 +149,20 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		//todo: isbServiceRollout.Status.MarkFailed("???", err.Error())
+		isbServiceRollout.Status.MarkFailed("", err.Error())
 		return err
 	}
 
-	//todo: isbServiceRollout.Status.MarkRunning() // should already be but just in case
-	return nil
+	isbServiceRollout.Status.MarkRunning()
 
+	return nil
 }
 
 func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRollout) bool {
-
 	if old == nil {
 		return true
 	}
+
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
 	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
 	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
