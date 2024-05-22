@@ -14,7 +14,15 @@ spec:
     singular: isbservicerollout
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ISBServiceRollout is the Schema for the isbservicerollouts API
@@ -123,7 +131,7 @@ spec:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
               phase:
-                description: Phase indicates the health status.
+                description: Phase indicates the current phase of the resource.
                 enum:
                 - ""
                 - Pending

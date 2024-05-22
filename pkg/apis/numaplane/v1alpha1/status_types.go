@@ -48,7 +48,7 @@ type Status struct {
 	// +patchStrategy=merge
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 
-	// Phase indicates the health status.
+	// Phase indicates the current phase of the resource.
 	Phase Phase `json:"phase,omitempty"`
 
 	// Message is added if Phase is PhaseFailed.
