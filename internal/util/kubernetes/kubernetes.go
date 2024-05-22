@@ -29,8 +29,8 @@ func IsValidKubernetesNamespace(name string) bool {
 	return false
 }
 
-// GetGitSyncInstanceLabel returns the application instance name from label
-func GetGitSyncInstanceLabel(un *unstructured.Unstructured, key string) (string, error) {
+// GetNumaplaneInstanceLabel returns the application instance name from label
+func GetNumaplaneInstanceLabel(un *unstructured.Unstructured, key string) (string, error) {
 	labels, err := nestedNullableStringMap(un.Object, "metadata", "labels")
 	if err != nil {
 		return "", fmt.Errorf("failed to get labels from target object %s %s/%s: %w", un.GroupVersionKind().String(), un.GetNamespace(), un.GetName(), err)

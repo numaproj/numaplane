@@ -1,17 +1,18 @@
 package config
 
 type options struct {
-	configsPath           string
-	configFileName        string
-	configFileType        string
-	rolloutConfigFileName string
+	configsPath       string
+	configFileName    string
+	defConfigFileName string
+	defConfigPath     string
+	fileType          string
 }
 
 type Option func(*options)
 
 func defaultOptions() *options {
 	return &options{
-		configFileType: "yaml",
+		fileType: "yaml",
 	}
 }
 
@@ -27,14 +28,14 @@ func WithConfigFileName(configFileName string) Option {
 	}
 }
 
-func WithConfigFileType(configFileType string) Option {
+func WithDefConfigPath(defConfigPath string) Option {
 	return func(o *options) {
-		o.configFileType = configFileType
+		o.defConfigPath = defConfigPath
 	}
 }
 
-func WithRolloutConfigFileName(rolloutConfigFileName string) Option {
+func WithDefConfigFileName(defConfigFileName string) Option {
 	return func(o *options) {
-		o.rolloutConfigFileName = rolloutConfigFileName
+		o.defConfigFileName = defConfigFileName
 	}
 }

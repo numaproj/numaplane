@@ -817,8 +817,6 @@ spec:
             - ALL
         volumeMounts:
         - mountPath: /etc/numaplane
-          name: config-volume
-        - mountPath: /etc/numarollout
           name: numarollout-volume
       initContainers: []
       serviceAccountName: numaplane-sa

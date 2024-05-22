@@ -54,10 +54,10 @@ func TestGetGitSyncInstanceLabel(t *testing.T) {
 	var obj unstructured.Unstructured
 	err = yaml.Unmarshal(yamlBytes, &obj)
 	assert.Nil(t, err)
-	err = SetGitSyncInstanceLabel(&obj, common.LabelKeyGitSyncInstance, "my-gitsync")
+	err = SetGitSyncInstanceLabel(&obj, common.LabelKeyNumaplaneInstance, "my-gitsync")
 	assert.Nil(t, err)
 
-	label, err := GetGitSyncInstanceLabel(&obj, common.LabelKeyGitSyncInstance)
+	label, err := GetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance)
 	assert.Nil(t, err)
 	assert.Equal(t, "my-gitsync", label)
 }
@@ -69,7 +69,7 @@ func TestGetGitSyncInstanceLabelWithInvalidData(t *testing.T) {
 	err = yaml.Unmarshal(yamlBytes, &obj)
 	assert.Nil(t, err)
 
-	_, err = GetGitSyncInstanceLabel(&obj, "valid-label")
+	_, err = GetNumaplaneInstanceLabel(&obj, "valid-label")
 	assert.Error(t, err)
 	assert.Equal(t, "failed to get labels from target object /v1, Kind=Service /my-service: .metadata.labels accessor error: contains non-string value in the map under key \"invalid-label\": <nil> is of the type <nil>, expected string", err.Error())
 }

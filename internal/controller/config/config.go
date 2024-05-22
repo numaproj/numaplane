@@ -3,11 +3,12 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 type ConfigManager struct {
@@ -60,7 +61,7 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *ConfigManager) GetNumaRolloutConfig() (NumaflowControllerDefinitionConfig, error) {
+func (cm *ConfigManager) GetControllerDefinitionsConfig() (NumaflowControllerDefinitionConfig, error) {
 	cm.lock.RLock()
 	defer cm.lock.RUnlock()
 
@@ -77,13 +78,21 @@ func (cm *ConfigManager) LoadAllConfigs(
 ) error {
 	opts := defaultOptions()
 	for _, o := range options {
-		o(opts)
+		if o != nil {
+			o(opts)
+		}
 	}
 	if opts.configFileName != "" {
-		cm.loadConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.configFileType, false)
+		err := cm.loadConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.fileType, false)
+		if err != nil {
+			return err
+		}
 	}
-	if opts.rolloutConfigFileName != "" {
-		cm.loadConfig(onErrorReloading, opts.configsPath, opts.rolloutConfigFileName, opts.configFileType, true)
+	if opts.defConfigFileName != "" {
+		err := cm.loadConfig(onErrorReloading, opts.defConfigPath, opts.defConfigFileName, opts.fileType, true)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

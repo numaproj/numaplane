@@ -37,6 +37,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -45,8 +46,9 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 	// logger is the global logger for the controller-manager.
-	numaLogger = logger.New().WithName("controller-manager")
-	configPath = "/etc/numaplane" // Path in the volume mounted in the pod where yaml is present
+	numaLogger    = logger.New().WithName("controller-manager")
+	configPath    = "/etc/numaplane" // Path in the volume mounted in the pod where yaml is present
+	defConfigPath = "/etc/numarollout"
 )
 
 func init() {
@@ -102,7 +104,11 @@ func main() {
 	configManager := config.GetConfigManagerInstance()
 	err := configManager.LoadAllConfigs(func(err error) {
 		numaLogger.Error(err, "Failed to reload global configuration file")
-	}, config.WithConfigsPath(configPath), config.WithConfigFileName("config"))
+	},
+		config.WithConfigsPath(configPath),
+		config.WithConfigFileName("config"),
+		config.WithDefConfigPath(defConfigPath),
+		config.WithDefConfigFileName("controller_definitions"))
 	if err != nil {
 		numaLogger.Fatal(err, "Failed to load config file")
 	}
@@ -154,11 +160,16 @@ func main() {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
 	}
 
-	numaflowControllerRolloutReconciler := controller.NewNumaflowControllerRolloutReconciler(
+	kubectl := kubernetes.NewKubectl()
+	numaflowControllerRolloutReconciler, err := controller.NewNumaflowControllerRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		mgr.GetConfig(),
+		kubectl,
 	)
+	if err != nil {
+		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
+	}
 
 	if err = numaflowControllerRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up NumaflowControllerRollout controller")
