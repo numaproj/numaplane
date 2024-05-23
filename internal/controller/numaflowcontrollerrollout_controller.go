@@ -17,8 +17,10 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/argoproj/gitops-engine/pkg/diff"
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
@@ -26,7 +28,9 @@ import (
 	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +40,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -109,10 +114,6 @@ func loadDefinitions() (map[string]string, error) {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the NumaflowControllerRollout object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
@@ -186,7 +187,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// TODO: add owner reference
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
@@ -214,6 +214,19 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return nil
 }
 
+// applyOwnershipToManifests Applies GitSync ownership to Kubernetes manifests, returning modified manifests or an error.
+func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
+	manifestsWithOwnership := make([]string, 0, len(manifests))
+	for _, v := range manifests {
+		reference, err := kubernetes.ApplyOwnership(v, controllerRollout)
+		if err != nil {
+			return nil, err
+		}
+		manifestsWithOwnership = append(manifestsWithOwnership, string(reference))
+	}
+	return manifestsWithOwnership, nil
+}
+
 // TODO: share sync logic with `syncer`
 func (r *NumaflowControllerRolloutReconciler) sync(
 	rollout *apiv1.NumaflowControllerRollout,
@@ -223,13 +236,21 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 
 	// Get the target manifests
 	version := rollout.Spec.Controller.Version
-	manifest, found := r.definitions[version]
-	if !found {
-		return gitopsSyncCommon.OperationError, fmt.Errorf("manifest not found for version %s; number of versions defined: %d", version, len(r.definitions))
-	}
-	targetObjs, err := kubeUtil.SplitYAML([]byte(manifest))
+	manifest := r.definitions[version]
+
+	// Applying ownership reference
+	manifests, err := SplitYAMLToString([]byte(manifest))
 	if err != nil {
-		return gitopsSyncCommon.OperationError, err
+		return gitopsSyncCommon.OperationError, fmt.Errorf("can not parse file data, err: %v", err)
+	}
+	manifestsWithOwnership, err := applyOwnershipToManifests(manifests, rollout)
+	if err != nil {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("failed to apply ownership reference, %w", err)
+	}
+
+	targetObjs, err := toUnstructuredAndApplyAnnotation(manifestsWithOwnership, rollout.Name)
+	if err != nil {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("failed to parse the manifest, %w", err)
 	}
 	numaLogger.Debugf("found %d target objects associated with Numaflow Controller version %s; versions defined:%+v", len(targetObjs), version, r.definitions)
 
@@ -363,4 +384,44 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 
 	   return nil
 	*/
+}
+
+// SplitYAMLToString splits a YAML file into strings. Returns list of yamls
+// found in the yaml. If an error occurs, returns objects that have been parsed so far too.
+func SplitYAMLToString(yamlData []byte) ([]string, error) {
+	d := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(yamlData), 4096)
+	var objs []string
+	for {
+		ext := runtime.RawExtension{}
+		if err := d.Decode(&ext); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return objs, fmt.Errorf("failed to unmarshal manifest: %v", err)
+		}
+		ext.Raw = bytes.TrimSpace(ext.Raw)
+		if len(ext.Raw) == 0 || bytes.Equal(ext.Raw, []byte("null")) {
+			continue
+		}
+		objs = append(objs, string(ext.Raw))
+	}
+	return objs, nil
+}
+
+func toUnstructuredAndApplyAnnotation(manifests []string, name string) ([]*unstructured.Unstructured, error) {
+	uns := make([]*unstructured.Unstructured, 0)
+	for _, m := range manifests {
+		obj := make(map[string]interface{})
+		err := yaml.Unmarshal([]byte(m), &obj)
+		if err != nil {
+			return nil, err
+		}
+		target := &unstructured.Unstructured{Object: obj}
+		err = kubernetes.SetNumaplaneInstanceLabel(target, common.LabelKeyNumaplaneInstance, name)
+		if err != nil {
+			return nil, err
+		}
+		uns = append(uns, target)
+	}
+	return uns, nil
 }

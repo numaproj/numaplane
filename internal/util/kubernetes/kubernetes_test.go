@@ -54,7 +54,7 @@ func TestGetGitSyncInstanceLabel(t *testing.T) {
 	var obj unstructured.Unstructured
 	err = yaml.Unmarshal(yamlBytes, &obj)
 	assert.Nil(t, err)
-	err = SetGitSyncInstanceLabel(&obj, common.LabelKeyNumaplaneInstance, "my-gitsync")
+	err = SetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance, "my-gitsync")
 	assert.Nil(t, err)
 
 	label, err := GetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance)
