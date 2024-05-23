@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // validManifestExtensions contains the supported extension for raw file.

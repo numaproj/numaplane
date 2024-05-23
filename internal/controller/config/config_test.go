@@ -73,7 +73,7 @@ func TestLoadNumaRolloutConfigMatchValues(t *testing.T) {
 	assert.NotNil(t, config.ControllerDefinitions, "ControllerDefinitions should not be nil")
 
 	assert.Equal(t, "1.2.1", config.ControllerDefinitions[0].Version, "Version for ControllerDefinitions[0] does not match")
-	assert.Equal(t, "apiVersion: apps/v1\nkind: Deployment\n", config.ControllerDefinitions[0].FullSpec, "FullSpec for ControllerDefinitions[0] does not match")
+	assert.Equal(t, "apiVersion: apps/v1\nkind: Deployment\n---\napiVersion: apps/v1\nkind: ConfigMap\n", config.ControllerDefinitions[0].FullSpec, "FullSpec for ControllerDefinitions[0] does not match")
 	assert.Equal(t, "1.1.7", config.ControllerDefinitions[1].Version, "Version for ControllerDefinitions[1] does not match")
 	assert.Equal(t, "", config.ControllerDefinitions[1].FullSpec, "FullSpec for ControllerDefinitions[1] does not match")
 }
