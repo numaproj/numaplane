@@ -213,7 +213,7 @@ func createGlobalConfigForBenchmarking() *GlobalConfig {
  go test -bench=. results for CloneWithSerialization
 goos: darwin
 goarch: arm64
-pkg: github.com/numaproj-labs/numaplane/internal/controller/config
+pkg: github.com/numaproj/numaplane/internal/controller/config
 BenchmarkCloneWithSerialization-8         241724              5068 ns/op
 Used
 PASS

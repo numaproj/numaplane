@@ -26,12 +26,20 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+)
+
+const (
+	ControllerPipelineRollout = "pipeline-rollout-controller"
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
@@ -88,6 +96,8 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRolloutOrig := pipelineRollout
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
+	pipelineRollout.Status.InitConditions()
+
 	err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -137,6 +147,7 @@ func (r *PipelineRolloutReconciler) reconcile(ctx context.Context, pipelineRollo
 	}
 
 	// apply Pipeline
+	// todo: store hash of spec in annotation; use to compare to determine if anything needs to be updated
 	obj := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
@@ -152,14 +163,44 @@ func (r *PipelineRolloutReconciler) reconcile(ctx context.Context, pipelineRollo
 
 	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "pipelines")
 	if err != nil {
-		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		pipelineRollout.Status.MarkFailed("", err.Error())
+		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
+		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
 		return err
 	}
+	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
+	pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
+	if err != nil {
+		numaLogger.Errorf(err, "failed to get Pipeline: %v", err)
+		return err
+	}
+
+	processPipelineStatus(ctx, pipeline, pipelineRollout)
 
 	pipelineRollout.Status.MarkRunning()
 
 	return nil
+}
+
+// Set the Condition in the Status for child resource health
+func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) {
+	numaLogger := logger.FromContext(ctx)
+	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
+		return
+	}
+
+	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
+
+	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+	switch pipelinePhase {
+	case numaflowv1.PipelinePhaseFailed:
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed")
+	case numaflowv1.PipelinePhaseUnknown:
+		// this will have been set to Unknown in the call to InitConditions()
+	default:
+		pipelineRollout.Status.MarkChildResourcesHealthy()
+	}
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
@@ -177,8 +218,21 @@ func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		// Reconcile PipelineRollouts when there's been a Generation changed (i.e. Spec change)
-		For(&apiv1.PipelineRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+
+	controller, err := runtimecontroller.New(ControllerPipelineRollout, mgr, runtimecontroller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
+
+	// Watch PipelineRollouts
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.PipelineRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
+		return err
+	}
+
+	// Watch Pipelines
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}), &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
+		return err
+	}
+
+	return nil
 }

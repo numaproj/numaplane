@@ -44,6 +44,10 @@ const (
 	finalizerName = "numaplane-controller"
 )
 
+const (
+	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
+)
+
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
 	client     client.Client
@@ -219,11 +223,15 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 
 	// Get the target manifests
 	version := rollout.Spec.Controller.Version
-	manifest := r.definitions[version]
+	manifest, found := r.definitions[version]
+	if !found {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("manifest not found for version %s; number of versions defined: %d", version, len(r.definitions))
+	}
 	targetObjs, err := kubeUtil.SplitYAML([]byte(manifest))
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
 	}
+	numaLogger.Debugf("found %d target objects associated with Numaflow Controller version %s; versions defined:%+v", len(targetObjs), version, r.definitions)
 
 	var infoProvider kubeUtil.ResourceInfoProvider
 	clusterCache, err := r.stateCache.GetClusterCache()
@@ -323,8 +331,36 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Reconcile NumaflowControllerRollouts when there's been a Generation changed (i.e. Spec change)
 		For(&apiv1.NumaflowControllerRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
+
+	/*
+	   controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
+
+	   	if err != nil {
+	   		return err
+	   	}
+
+	   // Watch NumaflowControllerRollouts
+
+	   	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
+	   		return err
+	   	}
+
+	   // Watch Deployments of numaflow-controller
+	   // Can add other resources as well
+	   numaflowControllerDeployments := appv1.Deployment{}
+	   numaflowControllerDeployments.Name = "numaflow-controller" // not sure if this would work or not
+	   if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowControllerDeployments),
+
+	   		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
+	   		predicate.GenerationChangedPredicate{}); err != nil {
+	   		return err
+	   	}
+
+	   return nil
+	*/
 }

@@ -37,15 +37,28 @@ type GenericObject struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec runtime.RawExtension `json:"spec"`
+	Spec   runtime.RawExtension `json:"spec"`
+	Status runtime.RawExtension `json:"status,omitempty"`
+}
+
+type GenericStatus struct {
+	Phase      string             `json:"phase,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+func ParseStatus(obj *GenericObject) (GenericStatus, error) {
+	var status GenericStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return GenericStatus{}, err
+	}
+	return status, nil
 }
 
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
 func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
 	numaLogger := logger.FromContext(ctx)
-
-	// todo: Set the annotation for the hashed spec in the spec
 
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -103,6 +116,31 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 	return nil
 }
 
+// look up a Resource
+func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+	unstruc, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, v1.GetOptions{})
+	if unstruc != nil {
+		return unstructuredToObject(unstruc)
+	} else {
+		return nil, err
+	}
+}
+
 func objectToUnstructured(object *GenericObject) (*unstructured.Unstructured, error) {
 	asJsonBytes, err := json.Marshal(object)
 	if err != nil {
@@ -117,8 +155,6 @@ func objectToUnstructured(object *GenericObject) (*unstructured.Unstructured, er
 	return &unstructured.Unstructured{Object: asMap}, nil
 }
 
-// unused - will keep and comment out in case it's needed later
-/*
 func unstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) {
 	asJsonBytes, err := json.Marshal(u.Object)
 	if err != nil {
@@ -127,5 +163,5 @@ func unstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	var genericObject GenericObject
 	err = json.Unmarshal(asJsonBytes, &genericObject)
 
-	return &genericObject, nil
-}*/
+	return &genericObject, err
+}

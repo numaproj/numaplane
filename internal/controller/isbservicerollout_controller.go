@@ -26,12 +26,20 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+)
+
+const (
+	ControllerISBSVCRollout = "isbsvc-rollout-controller"
 )
 
 // ISBServiceRolloutReconciler reconciles a ISBServiceRollout object
@@ -85,6 +93,8 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
+	isbServiceRollout.Status.InitConditions()
+
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -134,6 +144,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// apply ISBService
+	// todo: store hash of spec in annotation; use to compare to determine if anything needs to be updated
 	obj := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
@@ -150,13 +161,42 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("", err.Error())
+		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
+	// after the Apply, Get the ISBService so that we can propagate its health into our Status
+	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
+	if err != nil {
+		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
+		return err
+	}
+
+	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil
+}
+
+func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
+	numaLogger := logger.FromContext(ctx)
+	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to parse Status from InterstepBuffer CR: %+v, %v", isbsvc, err)
+		return
+	}
+
+	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
+
+	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
+	switch isbSvcPhase {
+	case numaflowv1.ISBSvcPhaseFailed:
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed")
+	case numaflowv1.ISBSvcPhaseUnknown:
+		// this will have been set to Unknown in the call to InitConditions()
+	default:
+		rollout.Status.MarkChildResourcesHealthy()
+	}
 }
 
 func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRollout) bool {
@@ -174,8 +214,22 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		// Reconcile ISBServiceRollouts when there's been a Generation changed (i.e. Spec change)
-		For(&apiv1.ISBServiceRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+
+	controller, err := runtimecontroller.New(ControllerISBSVCRollout, mgr, runtimecontroller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
+
+	// Watch ISBServiceRollouts
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.ISBServiceRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
+		return err
+	}
+
+	// Watch InterStepBufferServices
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.InterStepBufferService{}), &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
+		return err
+	}
+
+	return nil
+
 }

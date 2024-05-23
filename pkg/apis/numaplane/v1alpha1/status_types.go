@@ -38,6 +38,8 @@ const (
 
 	// ConditionConfigured indicates valid configuration.
 	ConditionConfigured ConditionType = "Configured"
+
+	ConditionChildResourcesHealthy ConditionType = "ChildResourcesHealthy"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -146,7 +148,7 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 
 // InitConditions sets conditions to Unknown state and Phase to Pending.
 func (status *Status) InitConditions() {
-	status.InitializeConditions(ConditionConfigured)
+	status.InitializeConditions(ConditionConfigured, ConditionChildResourcesHealthy)
 	status.SetPhase(PhasePending, "")
 }
 
@@ -162,8 +164,10 @@ func (status *Status) MarkFailed(reason, message string) {
 	status.SetPhase(PhaseFailed, message)
 }
 
-// MarkNotApplicable sets conditions to False state and Phase to NotApplicable.
-func (status *Status) MarkNotApplicable(reason, message string) {
-	status.MarkFalse(ConditionConfigured, reason, message)
-	status.SetPhase(PhaseNA, message)
+func (status *Status) MarkChildResourcesHealthy() {
+	status.MarkTrue(ConditionChildResourcesHealthy)
+}
+
+func (status *Status) MarkChildResourcesUnhealthy(reason, message string) {
+	status.MarkFalse(ConditionChildResourcesHealthy, reason, message)
 }
