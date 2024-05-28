@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv1 "github.com/numaproj-labs/numaplane/pkg/apis/numaplane/v1alpha1"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var _ = Describe("PipelineRollout Controller", func() {

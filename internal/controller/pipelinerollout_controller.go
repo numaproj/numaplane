@@ -24,8 +24,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numaproj-labs/numaplane/internal/util/logger"
-	apiv1 "github.com/numaproj-labs/numaplane/pkg/apis/numaplane/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
@@ -34,9 +34,9 @@ type PipelineRolloutReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=numaplane.numaproj.io.github.com.numaproj-labs,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=numaplane.numaproj.io.github.com.numaproj-labs,resources=pipelinerollouts/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=numaplane.numaproj.io.github.com.numaproj-labs,resources=pipelinerollouts/finalizers,verbs=update
+//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

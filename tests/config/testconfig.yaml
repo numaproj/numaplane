@@ -1,0 +1,46 @@
+clusterName: "staging-usw2-k8s"
+syncTimeIntervalMs: 30000
+cascadeDeletion: false
+persistentRepoClonePath: "/tmp"
+includedResources: "group=apps,kind=Deployment;\
+group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;group=,kind=Namespace;\
+group=numaflow.numaproj.io,kind=;\
+group=numaplane.numaproj.io,kind=;\
+group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
+repoCredentials:
+  - url: "github.com/numaproj-labs"
+    httpCredential:
+      username: "exampleUser"
+      password:
+        fromKubernetesSecret:
+          name: "http-creds"
+          key: "password"
+          namespace: "numaplane-controller"
+    tls:
+      insecureSkipVerify: true
+  - url: "github.com:numaproj"
+    sshCredential:
+      SSHKey:
+        fromKubernetesSecret:
+          name: "ssh-creds"
+          key: "sshKey"
+          namespace: "numaplane-controller"
+    tls:
+      insecureSkipVerify: true
+  - url: "github.com/numalabs"
+    httpCredential:
+      username: "exampleuser2"
+      password:
+        fromFile:
+          jsonFilePath: "/etc/credentials.json"
+          key: "password"
+    tls:
+      insecureSkipVerify: true
+  - url: "github.com:numaproj"
+    sshCredential:
+      SSHKey:
+        fromFile:
+          yamlFilePath: "/etc/credentials.yaml"
+          key: "sshKey"
+    tls:
+      insecureSkipVerify: true

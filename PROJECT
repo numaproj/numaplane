@@ -2,28 +2,19 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: github.com.numaproj
+domain: github.com/numaproj
 layout:
 - go.kubebuilder.io/v4
 projectName: numaplane
-repo: github.com.numaproj/numaplane
+repo: github.com/numaproj/numaplane
 resources:
 - api:
     crdVersion: v1alpha1
     namespaced: true
   controller: true
-  domain: github.com.numaproj
-  group: numaplane.numaproj.io
-  kind: GitSync
-  path: github.com.numaproj/numaplane/pkg/apis/numaplane/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1alpha1
-    namespaced: true
-  controller: true
-  domain: github.com.numaproj
+  domain: github.com/numaproj
   group: numaplane.numaproj.io
   kind: PipelineRollout
-  path: github.com.numaproj/numaplane/pkg/apis/numaplane/v1alpha1
+  path: github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1
   version: v1alpha1
 version: "3"
