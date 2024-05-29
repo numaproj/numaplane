@@ -40,10 +40,6 @@ GCFLAGS="all=-N -l"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
 
-# LOCAL GIT SERVER CONFIG
-REPO_COUNT=5
-GIT_SERVER_VERSION ?= latest
-GITSERVER_IMAGE=quay.io/numaio/numaplane-e2e-gitserver:$(GIT_SERVER_VERSION)
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -141,10 +137,6 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 build: manifests generate fmt vet ## Build manager binary.
 	go build -gcflags=${GCFLAGS} -o bin/manager cmd/main.go
 
-.PHONY: build-agent
-build-agent: generate fmt vet ## Build agent binary.
-	go build -gcflags=${GCFLAGS} -o bin/agent cmd/agent/main.go
-
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run -gcflags=${GCFLAGS} ./cmd/main.go
@@ -155,7 +147,6 @@ run-agent: generate fmt vet ## Run agent from your host.
 
 
 clean:
-	-rm bin/agent -f
 	-rm bin/manager -f
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -212,46 +203,6 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-
-.PHONY: gitserver
-gitserver:
-		cd tests/gitserver && \
-		 docker buildx build \
-		--no-cache \
-		--build-arg REPO_COUNT=$(REPO_COUNT) \
-		--platform $(PLATFORMS) \
-		-t $(GITSERVER_IMAGE) \
-		--push .
-
-# Pipelines and ISBs are deleted first as they may have finalizers which will cause "delete all" to hang
-# (because if a Controller is also being deleted, it first needs to remove the finalizers before it's deleted)
-# ConfigMaps and Secrets are explicitly deleted as they are not included in `kubectl delete all`
-# ref: https://stackoverflow.com/questions/33509194/command-to-delete-all-pods-in-all-kubernetes-namespaces
-.PHONY: cleanup-e2e
-cleanup-e2e:
-	$(KUBECTL) delete -n numaplane-e2e isbsvc --all
-	$(KUBECTL) delete -n numaplane-e2e pipeline --all
-	$(KUBECTL) delete -n numaplane-e2e cm --all
-	$(KUBECTL) delete -n numaplane-e2e secret --all
-	$(KUBECTL) delete -n numaplane-e2e all --all
-
-.PHONY: start-e2e
-start-e2e: numaflow-crd cleanup-e2e image
-	$(KUBECTL) apply -f tests/e2e/manifests/numaplane-ns.yaml
-	$(KUBECTL) apply -n numaplane-system -k ./tests/e2e-gitserver
-	$(KUBECTL) kustomize tests/e2e/manifests | sed 's/CLUSTER_NAME_VALUE/$(CLUSTER_NAME)/g' | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
-	$(MAKE) restart-control-plane-components
-	$(KUBECTL) wait -n numaplane-system pod --all --for=condition=Ready
-
-test-e2e:
-test-%: start-e2e
-	go generate $(shell find ./tests/$* -name '*.go')
-	go test -v -timeout 20m -count 1 --tags test -p 1 ./tests/$*
-	$(MAKE) cleanup-e2e
-
-restart-control-plane-components:
-	$(KUBECTL) -n numaplane-system delete po -lapp.kubernetes.io/component=controller-manager,app.kubernetes.io/part-of=numaplane --ignore-not-found=true
-	$(KUBECTL) -n numaplane-system delete po localgitserver-0 --ignore-not-found=true
 
 numaflow-crd:
 ifeq ($(NUMAFLOW_CRDS), 0)

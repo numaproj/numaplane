@@ -227,7 +227,6 @@ func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.Numa
 	return manifestsWithOwnership, nil
 }
 
-// TODO: share sync logic with `syncer`
 func (r *NumaflowControllerRolloutReconciler) sync(
 	rollout *apiv1.NumaflowControllerRollout,
 	namespace string,
@@ -248,7 +247,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 		return gitopsSyncCommon.OperationError, fmt.Errorf("failed to apply ownership reference, %w", err)
 	}
 
-	targetObjs, err := toUnstructuredAndApplyAnnotation(manifestsWithOwnership, rollout.Name)
+	targetObjs, err := toUnstructuredAndApplyLabel(manifestsWithOwnership, rollout.Name)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("failed to parse the manifest, %w", err)
 	}
@@ -304,12 +303,11 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 		gitopsSync.WithServerSideApplyManager(common.SSAManager),
 	}
 
-	cluster, err := r.stateCache.GetClusterCache()
 	if err != nil {
 		numaLogger.Error(err, "Error on getting the cluster cache")
 		//return gitopsSyncCommon.OperationError, err.Error()
 	}
-	openAPISchema := cluster.GetOpenAPISchema()
+	openAPISchema := clusterCache.GetOpenAPISchema()
 
 	syncCtx, cleanup, err := gitopsSync.NewSyncContext(
 		"",
@@ -408,7 +406,7 @@ func SplitYAMLToString(yamlData []byte) ([]string, error) {
 	return objs, nil
 }
 
-func toUnstructuredAndApplyAnnotation(manifests []string, name string) ([]*unstructured.Unstructured, error) {
+func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructured.Unstructured, error) {
 	uns := make([]*unstructured.Unstructured, 0)
 	for _, m := range manifests {
 		obj := make(map[string]interface{})

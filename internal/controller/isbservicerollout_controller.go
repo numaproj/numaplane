@@ -42,7 +42,7 @@ const (
 	ControllerISBSVCRollout = "isbsvc-rollout-controller"
 )
 
-// ISBServiceRolloutReconciler reconciles a ISBServiceRollout object
+// ISBServiceRolloutReconciler reconciles an ISBServiceRollout object
 type ISBServiceRolloutReconciler struct {
 	client     client.Client
 	scheme     *runtime.Scheme
