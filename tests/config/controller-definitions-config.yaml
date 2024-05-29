@@ -1,0 +1,10 @@
+controllerDefinitions:
+  - version: "1.2.1"
+    fullSpec: |
+      apiVersion: apps/v1
+      kind: Deployment
+      ---
+      apiVersion: apps/v1
+      kind: ConfigMap
+  - version: "1.1.7"
+    fullSpec: ""

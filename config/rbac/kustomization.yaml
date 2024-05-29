@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - service_account.yaml
+  - role.yaml
+  - role_binding.yaml
+  - leader_election_role.yaml
+  - leader_election_role_binding.yaml
+  - pipelinerollout_editor_role.yaml
+  - pipelinerollout_viewer_role.yaml
+  - numaflowcontrollerrollout_editor_role.yaml
+  - numaflowcontrollerrollout_viewer_role.yaml
+  - isbservicerollout_editor_role.yaml
+  - isbservicerollout_viewer_role.yaml

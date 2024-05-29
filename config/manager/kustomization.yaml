@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - controller-manager.yaml
+  - controller-config.yaml
+  - numaflow-controller-definitions-config.yaml
+
+images:
+  - name: quay.io/numaproj/numaplane-controller
+    newTag: latest

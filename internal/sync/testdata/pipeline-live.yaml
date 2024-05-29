@@ -1,0 +1,52 @@
+apiVersion: numaflow.numaproj.io/v1alpha1
+kind: Pipeline
+metadata:
+  labels:
+    numaplane.numaproj.io/tracking-id: gitsync-example
+  creationTimestamp: "2024-03-08T22:09:18Z"
+  finalizers:
+    - pipeline-controller
+  generation: 3
+  name: simple-pipeline
+  namespace: numaflow-pipeline-example
+  resourceVersion: "716917"
+  uid: a38b5758-de8f-483a-9fc4-b46acb8f36c8
+spec:
+  edges:
+    - from: in
+      to: cat
+    - from: cat
+      to: out
+  lifecycle: {}
+  vertices:
+    - name: in
+      source:
+        generator:
+          duration: 1s
+          rpu: 5
+    - name: cat
+      udf:
+        builtin:
+          name: cat
+    - name: out
+      sink:
+        log: {}
+  watermark: {}
+status:
+  conditions:
+    - lastTransitionTime: "2024-03-09T02:17:58Z"
+      message: Successful
+      reason: Successful
+      status: "True"
+      type: Configured
+    - lastTransitionTime: "2024-03-09T02:17:58Z"
+      message: Successful
+      reason: Successful
+      status: "True"
+      type: Deployed
+  lastUpdated: "2024-03-09T02:17:58Z"
+  phase: Running
+  sinkCount: 1
+  sourceCount: 1
+  udfCount: 1
+  vertexCount: 3
