@@ -30,3 +30,4 @@ bin/*
 go.work
 
 config/crd/bases/_.yaml
+.idea
