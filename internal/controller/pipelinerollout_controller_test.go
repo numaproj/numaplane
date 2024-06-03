@@ -21,9 +21,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	sigsReconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -32,33 +32,42 @@ import (
 
 var _ = Describe("PipelineRollout Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const namespace = "default"
+		const resourceName = "pipelinerollout-test"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: namespace,
 		}
-		pipelinerollout := &apiv1.PipelineRollout{}
+
+		// pipelinerollout := &apiv1.PipelineRollout{}
+
+		var controllerReconciler *PipelineRolloutReconciler
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind PipelineRollout")
-			err := k8sClient.Get(ctx, typeNamespacedName, pipelinerollout)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &apiv1.PipelineRollout{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+			// err := k8sClient.Get(ctx, typeNamespacedName, pipelinerollout)
+			// if err != nil && errors.IsNotFound(err) {
+			resource := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace,
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: runtime.RawExtension{
+						Raw: []byte(`{"field":"val"}`),
 					},
-					// TODO(user): Specify other spec details if needed.
-					Spec: apiv1.PipelineRolloutSpec{
-						Pipeline: runtime.RawExtension{
-							Raw: []byte(`{"field":"val"}`),
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			// }
+
+			controllerReconciler = &PipelineRolloutReconciler{
+				client:     k8sClient,
+				scheme:     k8sClient.Scheme(),
+				restConfig: cfg,
 			}
 		})
 
@@ -70,7 +79,45 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 			// By("Cleanup the specific resource instance PipelineRollout")
 			// Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, sigsReconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get the reconciled resource.
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check phase is Running.
+			Expect(resource.Status.Phase).To(Equal(apiv1.PhaseRunning))
+
+			// TODO: check that the pipeline contains the expected `{"field":"val"}`
+			// Expect(resource.Spec.Pipeline.Raw)
+
+			// =========================
+
+			// update
+			// resource.Spec.Pipeline = runtime.RawExtension{
+			// 	Raw: []byte(`{"field":"val2"}`),
+			// }
+
+			// _, err = controllerReconciler.Reconcile(ctx, sigsReconcile.Request{
+			// 	NamespacedName: typeNamespacedName,
+			// })
+
+			// Expect(err).NotTo(HaveOccurred())
+
+			// // Get the reconciled resource.
+			// err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			// Expect(err).NotTo(HaveOccurred())
+
+			// // Check phase is Running.
+			// Expect(resource.Status.Phase).To(Equal(apiv1.PhaseRunning))
+
 		})
+
 		// It("should successfully reconcile the resource", func() {
 		// 	By("Reconciling the created resource")
 		// 	controllerReconciler := &PipelineRolloutReconciler{
@@ -89,3 +136,8 @@ var _ = Describe("PipelineRollout Controller", func() {
 		// })
 	})
 })
+
+// func reconcile(t *testing.T, r *GitSyncReconciler, gitSync *apiv1.GitSync) {
+// 	err := r.reconcile(context.Background(), gitSync)
+// 	assert.NoError(t, err)
+// }
