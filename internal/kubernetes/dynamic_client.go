@@ -121,7 +121,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 			}
 			numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
 		} else {
-			return fmt.Errorf("error attempting to Get resources; GVR=%+v", gvr)
+			return fmt.Errorf("error attempting to Get resources; GVR=%+v err: %v", gvr, err)
 		}
 
 	} else {
