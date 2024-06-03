@@ -75,7 +75,8 @@ type ResourceInfo struct {
 type LiveStateCache interface {
 	// GetClusterCache returns synced cluster cache
 	GetClusterCache() (clustercache.ClusterCache, error)
-	// GetManagedLiveObjs returns state of live objects which correspond to target objects with the specified ResourceInfo name.
+	// GetManagedLiveObjs returns state of live objects which correspond to target
+	// objects with the specified ResourceInfo name and matching namespace.
 	GetManagedLiveObjs(name, namespace string, targetObjs []*unstructured.Unstructured) (map[kube.ResourceKey]*unstructured.Unstructured, error)
 	// Init must be executed before cache can be used
 	Init(numaLogger *logger.NumaLogger) error
