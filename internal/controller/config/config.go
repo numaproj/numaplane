@@ -36,14 +36,7 @@ func GetConfigManagerInstance() *ConfigManager {
 // supposed to be populated from the configmap attached to the
 // controller manager.
 type GlobalConfig struct {
-	ClusterName             string `json:"clusterName" mapstructure:"clusterName"`
-	SyncTimeIntervalMs      int    `json:"syncTimeIntervalMs" mapstructure:"syncTimeIntervalMs"`
-	AutomatedSyncDisabled   bool   `json:"automatedSyncDisabled" mapstructure:"automatedSyncDisabled"`
-	CascadeDeletion         bool   `json:"cascadeDeletion" mapstructure:"cascadeDeletion"`
-	AutoHealDisabled        bool   `json:"autoHealDisabled" mapstructure:"autoHealDisabled"`
-	IncludedResources       string `json:"includedResources" mapstructure:"includedResources"`
-	LogLevel                int    `json:"logLevel" mapstructure:"logLevel"`
-	PersistentRepoClonePath string `json:"persistentRepoClonePath" mapstructure:"persistentRepoClonePath"`
+	LogLevel int `json:"logLevel" mapstructure:"logLevel"`
 }
 
 type NumaflowControllerDefinitionConfig struct {

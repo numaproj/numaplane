@@ -1,5 +1,6 @@
 clusterName: "staging-usw2-k8s"
 syncTimeIntervalMs: 30000
+logLevel: 1
 cascadeDeletion: false
 persistentRepoClonePath: "/tmp"
 includedResources: "group=apps,kind=Deployment;\
