@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -156,4 +157,16 @@ func downloadCRD(url string, downloadDir string) {
 	// Write the response body to file
 	_, err = io.Copy(out, resp.Body)
 	Expect(err).ToNot(HaveOccurred())
+}
+
+func RemoveIndentationFromJSON(jsonString string) string {
+	var unmarshaledJSON map[string]interface{}
+
+	err := json.Unmarshal([]byte(jsonString), &unmarshaledJSON)
+	Expect(err).ToNot(HaveOccurred())
+
+	newJSON, err := json.Marshal(unmarshaledJSON)
+	Expect(err).ToNot(HaveOccurred())
+
+	return string(newJSON)
 }

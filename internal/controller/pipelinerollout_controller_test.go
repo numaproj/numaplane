@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,8 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	// numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -47,7 +45,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 	BeforeEach(func() {
 		// TODO: load an entire valid pipeline from test file or from examples
-		rawContent = `{
+		rawContent = RemoveIndentationFromJSON(`{
 			"interStepBufferServiceName": "my-isbsvc",
 			"vertices": [
 				{
@@ -85,7 +83,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 				}
 			]
 		}
-		`
+		`)
 	})
 
 	Context("When updating PipelineRollout", func() {
@@ -116,26 +114,23 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			// Expect(createdResource.Spec.Pipeline.Raw).Should(Equal([]byte(rawContent)))
+			Expect(createdResource.Spec.Pipeline.Raw).Should(BeEquivalentTo(rawContent))
 
-			fmt.Printf("CREATED RESOURCE: %+v\n", createdResource)
+			By("By checking the Pipeline CR exists")
+			createdPipeline := &numaflowv1.Pipeline{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, createdPipeline)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 
-			// By("By checking the PipelineRollout Phase is Running")
-			// Consistently(func() (apiv1.Phase, error) {
-			// 	err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
-			// 	if err != nil {
-			// 		return apiv1.Phase(""), err
-			// 	}
-			// 	return createdResource.Status.Phase, nil
-			// }, duration, interval).Should(Equal(apiv1.PhaseRunning))
-
-			// By("By checking the Pipeline CR exists")
-			// createdPipeline := &numaflowv1.Pipeline{}
-			// Eventually(func() bool {
-			// 	err := k8sClient.Get(ctx, resourceLookupKey, createdPipeline)
-			// 	return err == nil
-			// }, timeout, interval).Should(BeTrue())
-			// fmt.Printf("%+v\n", createdPipeline.Spec)
+			By("By checking the PipelineRollout Phase is Running")
+			Consistently(func() (apiv1.Phase, error) {
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				if err != nil {
+					return apiv1.Phase(""), err
+				}
+				return createdResource.Status.Phase, nil
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 		})
 	})
 })
