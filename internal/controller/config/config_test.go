@@ -179,8 +179,8 @@ func TestCloneWithSerialization(t *testing.T) {
 		t.Errorf("Cloned object is not deeply equal to the original")
 	}
 
-	cloned.LogLevel = 0
-	if original.LogLevel == 0 {
+	cloned.LogLevel = 1
+	if original.LogLevel == 1 {
 		t.Errorf("Modifying clone affected the original object")
 	}
 }
