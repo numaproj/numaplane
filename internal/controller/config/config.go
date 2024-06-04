@@ -36,7 +36,8 @@ func GetConfigManagerInstance() *ConfigManager {
 // supposed to be populated from the configmap attached to the
 // controller manager.
 type GlobalConfig struct {
-	LogLevel int `json:"logLevel" mapstructure:"logLevel"`
+	LogLevel          int    `json:"logLevel" mapstructure:"logLevel"`
+	IncludedResources string `json:"includedResources" mapstructure:"includedResources"`
 }
 
 type NumaflowControllerDefinitionConfig struct {
