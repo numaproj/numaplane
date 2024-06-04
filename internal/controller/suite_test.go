@@ -17,8 +17,10 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -42,11 +44,10 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg       *rest.Config
-	k8sClient client.Client
-	testEnv   *envtest.Environment
-	ctx       context.Context
-	cancel    context.CancelFunc
+	cfg             *rest.Config
+	k8sClient       client.Client
+	testEnv         *envtest.Environment
+	externalCRDsDir string
 )
 
 func TestControllers(t *testing.T) {
@@ -58,11 +59,20 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel = context.WithCancel(context.TODO())
+	// Download Numaflow CRDs
+	crdsURLs := []string{
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
+	}
+	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
+	for _, crdURL := range crdsURLs {
+		downloadCRD(crdURL, externalCRDsDir)
+	}
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
 		ErrorIfCRDPathMissing: true,
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
@@ -71,7 +81,7 @@ var _ = BeforeSuite(func() {
 		// Note that you must have the required binaries setup under the bin directory to perform
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+			fmt.Sprintf("1.28.3-%s-%s", runtime.GOOS, runtime.GOARCH)),
 	}
 
 	var err error
@@ -110,15 +120,40 @@ var _ = BeforeSuite(func() {
 
 	go func() {
 		defer GinkgoRecover()
-		err = k8sManager.Start(ctx)
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 	}()
 })
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	// TODO: uncommenting the lines below will break the tests
-	// cancel()
-	// err := testEnv.Stop()
+
+	err := os.RemoveAll(externalCRDsDir)
+	Expect(err).ToNot(HaveOccurred())
+
+	// TODO: this fails the test. Why?
+	// err = testEnv.Stop()
 	// Expect(err).NotTo(HaveOccurred())
 })
+
+func downloadCRD(url string, downloadDir string) {
+	// Create the download directory
+	err := os.MkdirAll(downloadDir, os.ModePerm)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Create the file
+	fileName := filepath.Base(url)                   // Extract the file name from the URL
+	filePath := filepath.Join(downloadDir, fileName) // Construct the local file path
+	out, err := os.Create(filePath)                  // Create a new file under filePath
+	Expect(err).ToNot(HaveOccurred())
+	defer out.Close()
+
+	// Download the file
+	resp, err := http.Get(url)
+	Expect(err).ToNot(HaveOccurred())
+	defer resp.Body.Close()
+
+	// Write the response body to file
+	_, err = io.Copy(out, resp.Body)
+	Expect(err).ToNot(HaveOccurred())
+}

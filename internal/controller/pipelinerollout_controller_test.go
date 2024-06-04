@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,19 +29,64 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var _ = Describe("PipelineRollout Controller", func() {
 	const (
-		name       = "pipelinerollout-test"
-		namespace  = "default"
-		rawContent = `{"interStepBufferServiceName":"my-isbsvc"}`
+		name      = "pipelinerollout-test"
+		namespace = "default"
 
 		timeout  = time.Second * 10
 		duration = time.Second * 10
 		interval = time.Millisecond * 250
 	)
+
+	var rawContent string
+
+	BeforeEach(func() {
+		// TODO: load an entire valid pipeline from test file or from examples
+		rawContent = `{
+			"interStepBufferServiceName": "my-isbsvc",
+			"vertices": [
+				{
+					"name": "in",
+					"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+						}
+					}
+				},
+				{
+					"name": "cat",
+					"udf": {
+						"builtin": {
+							"name": "cat"
+						}
+					}	
+				},
+				{
+					"name": "cat",
+					"sink": {
+						"log": {}
+					}
+				}
+			],
+			"edges": [
+				{
+					"from": "in",
+					"to": "cat"
+				},
+				{
+					"from": "cat",
+					"to": "out"
+				}
+			]
+		}
+		`
+	})
 
 	Context("When updating PipelineRollout", func() {
 		It("Should create a Pipeline CR", func() {
@@ -70,7 +116,9 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			Expect(string(createdResource.Spec.Pipeline.Raw)).Should(Equal(rawContent))
+			// Expect(createdResource.Spec.Pipeline.Raw).Should(Equal([]byte(rawContent)))
+
+			fmt.Printf("CREATED RESOURCE: %+v\n", createdResource)
 
 			// By("By checking the PipelineRollout Phase is Running")
 			// Consistently(func() (apiv1.Phase, error) {

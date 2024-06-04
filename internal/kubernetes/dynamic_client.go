@@ -47,6 +47,10 @@ type GenericStatus struct {
 }
 
 func ParseStatus(obj *GenericObject) (GenericStatus, error) {
+	if len(obj.Status.Raw) == 0 {
+		return GenericStatus{}, nil
+	}
+
 	var status GenericStatus
 	err := json.Unmarshal(obj.Status.Raw, &status)
 	if err != nil {
