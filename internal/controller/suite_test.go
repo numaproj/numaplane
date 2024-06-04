@@ -31,9 +31,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -47,7 +44,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -206,21 +205,27 @@ func downloadCRD(url string, downloadDir string) {
 func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
 	// Read definitions config file
 	// TODO: use this file instead "../../tests/config/controller-definitions-config.yaml"
-	data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
+	//data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
+	//Expect(err).ToNot(HaveOccurred())
+	//
+	//// Decode the yaml into a ConfigMap object
+	//configMap := corev1.ConfigMap{}
+	//err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
+	//Expect(err).ToNot(HaveOccurred())
+	//
+	//// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
+	//mp := configMap.Data["controller_definitions.yaml"]
+	//ncdc := config.NumaflowControllerDefinitionConfig{}
+	//err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
+	//Expect(err).ToNot(HaveOccurred())
+
+	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
+	Expect(err).ToNot(HaveOccurred())
+	var controllerConfig config.NumaflowControllerDefinitionConfig
+	err = yaml.Unmarshal(configData, &controllerConfig)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Decode the yaml into a ConfigMap object
-	configMap := corev1.ConfigMap{}
-	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
-	Expect(err).ToNot(HaveOccurred())
-
-	// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
-	mp := configMap.Data["controller_definitions.yaml"]
-	ncdc := config.NumaflowControllerDefinitionConfig{}
-	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
-	Expect(err).ToNot(HaveOccurred())
-
-	return ncdc
+	return controllerConfig
 }
 
 // verifyAutoHealing tests the auto healing feature
