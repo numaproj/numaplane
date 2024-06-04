@@ -25,7 +25,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/bsm/gomega/gexec"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -123,6 +125,10 @@ var _ = BeforeSuite(func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+
+		gexec.KillAndWait(4 * time.Second)
+		err := testEnv.Stop()
+		Expect(err).ToNot(HaveOccurred())
 	}()
 })
 
@@ -132,7 +138,7 @@ var _ = AfterSuite(func() {
 	err := os.RemoveAll(externalCRDsDir)
 	Expect(err).ToNot(HaveOccurred())
 
-	// TODO: this fails the test. Why?
+	// This fails the test. See https://github.com/kubernetes-sigs/controller-runtime/issues/1571
 	// err = testEnv.Stop()
 	// Expect(err).NotTo(HaveOccurred())
 })

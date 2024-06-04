@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,10 +42,15 @@ var _ = Describe("PipelineRollout Controller", func() {
 		interval = time.Millisecond * 250
 	)
 
+	var ctx context.Context
+	var resource client.Object
 	var rawContent string
+	var resourceLookupKey types.NamespacedName
 
 	BeforeEach(func() {
-		// TODO: load an entire valid pipeline from test file or from examples
+		ctx = context.Background()
+
+		// TODO: LOW PRIORITY: load an entire valid pipeline from test file or from sample files
 		rawContent = RemoveIndentationFromJSON(`{
 			"interStepBufferServiceName": "my-isbsvc",
 			"vertices": [
@@ -84,29 +90,26 @@ var _ = Describe("PipelineRollout Controller", func() {
 			]
 		}
 		`)
+
+		resource = &apiv1.PipelineRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Spec: apiv1.PipelineRolloutSpec{
+				Pipeline: runtime.RawExtension{
+					Raw: []byte(rawContent),
+				},
+			},
+		}
+
+		resourceLookupKey = types.NamespacedName{Name: name, Namespace: namespace}
 	})
 
-	Context("When updating PipelineRollout", func() {
-		It("Should create a Pipeline CR", func() {
-
-			By("By creating a new PipelineRollout")
-			ctx := context.Background()
-
-			resource := &apiv1.PipelineRollout{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: namespace,
-				},
-				Spec: apiv1.PipelineRolloutSpec{
-					Pipeline: runtime.RawExtension{
-						Raw: []byte(rawContent),
-					},
-				},
-			}
-
+	Context("When creating a PipelineRollout", func() {
+		It("Should create the PipelineRollout succesfully and as expected", func() {
 			Expect(k8sClient.Create(ctx, resource)).Should(Succeed())
 
-			resourceLookupKey := types.NamespacedName{Name: name, Namespace: namespace}
 			createdResource := &apiv1.PipelineRollout{}
 
 			Eventually(func() bool {
@@ -115,15 +118,20 @@ var _ = Describe("PipelineRollout Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			Expect(createdResource.Spec.Pipeline.Raw).Should(BeEquivalentTo(rawContent))
+		})
 
-			By("By checking the Pipeline CR exists")
-			createdPipeline := &numaflowv1.Pipeline{}
+		It("Should create a Pipeline", func() {
+			createdResource := &numaflowv1.Pipeline{}
+
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, createdPipeline)
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
+		})
 
-			By("By checking the PipelineRollout Phase is Running")
+		It("Should have the PipelineRollout Phase has Running", func() {
+			createdResource := &apiv1.PipelineRollout{}
+
 			Consistently(func() (apiv1.Phase, error) {
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				if err != nil {
