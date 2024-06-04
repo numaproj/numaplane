@@ -259,7 +259,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
 	}
-	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(rollout.Name, targetObjs)
+	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(rollout.Name, rollout.Namespace, targetObjs)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
 	}

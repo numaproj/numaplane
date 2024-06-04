@@ -75,8 +75,9 @@ type ResourceInfo struct {
 type LiveStateCache interface {
 	// GetClusterCache returns synced cluster cache
 	GetClusterCache() (clustercache.ClusterCache, error)
-	// GetManagedLiveObjs returns state of live objects which correspond to target objects with the specified ResourceInfo name.
-	GetManagedLiveObjs(name string, targetObjs []*unstructured.Unstructured) (map[kube.ResourceKey]*unstructured.Unstructured, error)
+	// GetManagedLiveObjs returns state of live objects which correspond to target
+	// objects with the specified ResourceInfo name and matching namespace.
+	GetManagedLiveObjs(name, namespace string, targetObjs []*unstructured.Unstructured) (map[kube.ResourceKey]*unstructured.Unstructured, error)
 	// Init must be executed before cache can be used
 	Init(numaLogger *logger.NumaLogger) error
 	// PopulateResourceInfo is called by the cache to update ResourceInfo struct for a managed resource
@@ -421,7 +422,7 @@ func (c *liveStateCache) GetClusterCache() (clustercache.ClusterCache, error) {
 }
 
 func (c *liveStateCache) GetManagedLiveObjs(
-	name string,
+	name, namespace string,
 	targetObjs []*unstructured.Unstructured,
 ) (map[kube.ResourceKey]*unstructured.Unstructured, error) {
 	clusterInfo, err := c.getSyncedCluster()
@@ -430,7 +431,7 @@ func (c *liveStateCache) GetManagedLiveObjs(
 	}
 	return clusterInfo.GetManagedLiveObjs(targetObjs, func(r *clustercache.Resource) bool {
 		// TODO: distigush between numaplane objects. e.g. NumaflowControllerRollout v.s. GitSync
-		return resInfo(r).Name == name
+		return resInfo(r).Name == name && r.Ref.Namespace == namespace
 	})
 }
 
