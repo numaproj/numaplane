@@ -37,9 +37,9 @@ var _ = Describe("PipelineRollout Controller", func() {
 		name      = "pipelinerollout-test"
 		namespace = "default"
 
-		timeout  = time.Second * 10
-		duration = time.Second * 10
-		interval = time.Millisecond * 250
+		timeout  = 10 * time.Second
+		duration = 10 * time.Second
+		interval = 250 * time.Millisecond
 	)
 
 	var ctx context.Context
@@ -106,8 +106,8 @@ var _ = Describe("PipelineRollout Controller", func() {
 		resourceLookupKey = types.NamespacedName{Name: name, Namespace: namespace}
 	})
 
-	Context("When creating a PipelineRollout", func() {
-		It("Should create the PipelineRollout succesfully and as expected", func() {
+	Context("When applying a PipelineRollout spec", func() {
+		It("Should create the PipelineRollout succesfully", func() {
 			Expect(k8sClient.Create(ctx, resource)).Should(Succeed())
 
 			createdResource := &apiv1.PipelineRollout{}
@@ -117,10 +117,11 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
+			By("Verifying the content of the pipeline field")
 			Expect(createdResource.Spec.Pipeline.Raw).Should(BeEquivalentTo(rawContent))
 		})
 
-		It("Should create a Pipeline", func() {
+		It("Should create a Numaflow Pipeline", func() {
 			createdResource := &numaflowv1.Pipeline{}
 
 			Eventually(func() bool {
@@ -129,7 +130,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
-		It("Should have the PipelineRollout Phase has Running", func() {
+		It("Should have the PipelineRollout Status Phase has Running", func() {
 			createdResource := &apiv1.PipelineRollout{}
 
 			Consistently(func() (apiv1.Phase, error) {
@@ -140,5 +141,88 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return createdResource.Status.Phase, nil
 			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 		})
+
+		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
+			By("updating the PipelineRollout")
+
+			currentResource := &apiv1.PipelineRollout{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentResource)).ToNot(HaveOccurred())
+
+			// TODO: only change part of the spec for the update instead of having the entire JSON here
+			newRawContent := []byte(
+				RemoveIndentationFromJSON(`{
+					"interStepBufferServiceName": "my-isbsvc",
+					"vertices": [
+						{
+							"name": "in",
+							"source": {
+								"generator": {
+									"rpu": 10,
+									"duration": "1s"
+								}
+							}
+						},
+						{
+							"name": "cat",
+							"udf": {
+								"builtin": {
+									"name": "cat"
+								}
+							}
+						},
+						{
+							"name": "cat",
+							"sink": {
+								"log": {}
+							}
+						}
+					],
+					"edges": [
+						{
+							"from": "in",
+							"to": "cat"
+						},
+						{
+							"from": "cat",
+							"to": "out"
+						}
+					]
+				}
+			`))
+
+			currentResource.Spec.Pipeline.Raw = newRawContent
+
+			Expect(k8sClient.Update(ctx, currentResource)).ToNot(HaveOccurred())
+
+			By("Verifying the content of the pipeline field of the PipelineRollout")
+			updatedResource := &apiv1.PipelineRollout{}
+			Eventually(func() ([]byte, error) {
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return []byte{}, err
+				}
+				return updatedResource.Spec.Pipeline.Raw, nil
+			}, timeout, interval).Should(Equal(currentResource.Spec.Pipeline.Raw))
+
+			// TODO: improve this comparison as needed
+			By("Verifying the content of the spec field of the Numaflow Pipeline")
+			updatedChildResource := &numaflowv1.Pipeline{}
+			Eventually(func() (int64, error) {
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
+				if err != nil {
+					return -1, err
+				}
+
+				for _, vertex := range updatedChildResource.Spec.Vertices {
+					if vertex.Name == "in" {
+						return *vertex.Source.Generator.RPU, nil
+					}
+				}
+
+				return -1, nil
+			}, timeout, interval).Should(BeEquivalentTo(10))
+		})
+
+		// TODO: perform PipelineRollout deletion and make sure both PipelineRollout and Numaflow Pipeline get deleted
 	})
 })
