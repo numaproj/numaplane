@@ -125,7 +125,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		}
 
 	} else {
-		numaLogger.Debugf(fmt.Sprintf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource))
+		numaLogger.Debugf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource)
 		// todo:
 		//   If the existing annotation matches the new hash, then nothing to do: log and return
 
