@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -182,7 +181,6 @@ spec:
 			}
 
 			manifests, err := applyOwnershipToManifests(manifests, resource)
-			log.Println(manifests)
 			Expect(err).To(BeNil())
 			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
 			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
