@@ -72,7 +72,9 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("bootstrapping test environment")
-	useExistingCluster := true
+	// TODO: IDEA: could set useExistingCluster via an env var to be able to reuse some tests cases in e2e tests
+	// by setting this variable in CI for unit tests and e2e tests appropriately.
+	useExistingCluster := false
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
 		ErrorIfCRDPathMissing: true,
@@ -86,7 +88,7 @@ var _ = BeforeSuite(func() {
 			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 
 		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
-		// Not sure why deletion does not work as expected on test cluster.
+		// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
 		UseExistingCluster: &useExistingCluster,
 	}
 

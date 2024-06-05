@@ -234,11 +234,15 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 
-			Eventually(func() bool {
-				deletedChildResource := &numaflowv1.Pipeline{}
-				err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
-				return errors.IsNotFound(err)
-			}, timeout, interval).Should(BeTrue())
+			// TODO: use this on real cluster for e2e tests
+			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
+			// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
+			// Could also reuse the env var used to set useExistingCluster to skip or perform the deletion based on CI settings.
+			// Eventually(func() bool {
+			// 	deletedChildResource := &numaflowv1.Pipeline{}
+			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
+			// 	return errors.IsNotFound(err)
+			// }, timeout, interval).Should(BeTrue())
 		})
 	})
 })
