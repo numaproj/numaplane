@@ -48,6 +48,13 @@ var _ = Describe("PipelineRollout Controller", func() {
 	var rawContent string
 	var resourceLookupKey types.NamespacedName
 
+	resourceMetaOnly := apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+
 	BeforeEach(func() {
 		ctx = context.Background()
 
@@ -93,10 +100,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 		`)
 
 		resource = &apiv1.PipelineRollout{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
+			ObjectMeta: resourceMetaOnly.ObjectMeta,
 			Spec: apiv1.PipelineRolloutSpec{
 				Pipeline: runtime.RawExtension{
 					Raw: []byte(rawContent),
@@ -112,7 +116,6 @@ var _ = Describe("PipelineRollout Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).Should(Succeed())
 
 			createdResource := &apiv1.PipelineRollout{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				return err == nil
@@ -123,18 +126,16 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 
 		It("Should create a Numaflow Pipeline", func() {
-			createdResource := &numaflowv1.Pipeline{}
-
 			Eventually(func() bool {
+				createdResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("Should have the PipelineRollout Status Phase has Running", func() {
-			createdResource := &apiv1.PipelineRollout{}
-
 			Consistently(func() (apiv1.Phase, error) {
+				createdResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				if err != nil {
 					return apiv1.Phase(""), err
@@ -196,8 +197,8 @@ var _ = Describe("PipelineRollout Controller", func() {
 			Expect(k8sClient.Update(ctx, currentResource)).ToNot(HaveOccurred())
 
 			By("Verifying the content of the pipeline field of the PipelineRollout")
-			updatedResource := &apiv1.PipelineRollout{}
 			Eventually(func() ([]byte, error) {
+				updatedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
 				if err != nil {
 					return []byte{}, err
@@ -207,8 +208,8 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 			// TODO: improve this comparison as needed
 			By("Verifying the content of the spec field of the Numaflow Pipeline")
-			updatedChildResource := &numaflowv1.Pipeline{}
 			Eventually(func() (int64, error) {
+				updatedChildResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
 				if err != nil {
 					return -1, err
@@ -225,13 +226,10 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
-			currentResource := &apiv1.PipelineRollout{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentResource)).ToNot(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, &resourceMetaOnly)).Should(Succeed())
 
-			Expect(k8sClient.Delete(ctx, currentResource)).Should(Succeed())
-
-			deletedResource := &apiv1.PipelineRollout{}
 			Eventually(func() bool {
+				deletedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())

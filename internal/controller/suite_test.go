@@ -25,9 +25,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
-	"github.com/bsm/gomega/gexec"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -125,10 +123,6 @@ var _ = BeforeSuite(func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
-
-		gexec.KillAndWait(4 * time.Second)
-		err := testEnv.Stop()
-		Expect(err).ToNot(HaveOccurred())
 	}()
 })
 
