@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	log "github.com/sirupsen/logrus"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -79,5 +81,111 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 		// 	// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 		// 	// Example: If you expect a certain status condition after reconciliation, verify it here.
 		// })
+	})
+})
+
+var _ = Describe("Apply OwnerShip Reference", func() {
+	Context("ownership reference", func() {
+		const resourceName = "test-resource"
+		manifests := []string{
+			`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-deployment
+  labels:
+    app: example
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+      - name: example-container
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
+`,
+			`
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-service
+spec:
+  selector:
+    app: example
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9376
+`}
+
+		resource := &apiv1.NumaflowControllerRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: "default",
+			},
+		}
+		It("should apply ownership reference correctly", func() {
+			emanifests := []string{
+				`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: example
+  name: example-deployment
+  ownerReferences:
+  - apiVersion: ""
+    blockOwnerDeletion: true
+    controller: true
+    kind: ""
+    name: test-resource
+    uid: ""
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+      - image: nginx:1.14.2
+        name: example-container
+        ports:
+        - containerPort: 80`,
+				`apiVersion: v1
+kind: Service
+metadata:
+  name: example-service
+  ownerReferences:
+  - apiVersion: ""
+    blockOwnerDeletion: true
+    controller: true
+    kind: ""
+    name: test-resource
+    uid: ""
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 9376
+  selector:
+    app: example`,
+			}
+
+			manifests, err := applyOwnershipToManifests(manifests, resource)
+			log.Println(manifests)
+			Expect(err).To(BeNil())
+			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
+			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
+		})
 	})
 })
