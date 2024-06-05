@@ -72,6 +72,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("bootstrapping test environment")
+	useExistingCluster := true
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
 		ErrorIfCRDPathMissing: true,
@@ -82,7 +83,11 @@ var _ = BeforeSuite(func() {
 		// Note that you must have the required binaries setup under the bin directory to perform
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.28.3-%s-%s", runtime.GOOS, runtime.GOARCH)),
+			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+
+		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
+		// Not sure why deletion does not work as expected on test cluster.
+		UseExistingCluster: &useExistingCluster,
 	}
 
 	var err error

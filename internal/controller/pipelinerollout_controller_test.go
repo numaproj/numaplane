@@ -234,12 +234,11 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 
-			// TODO: this is not working as expected. It reaches timeout without deleting the Numaflow Pipeline
-			// deletedChildResource := &numaflowv1.Pipeline{}
-			// Eventually(func() bool {
-			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
-			// 	return errors.IsNotFound(err)
-			// }, 120*time.Second, interval).Should(BeTrue())
+			Eventually(func() bool {
+				deletedChildResource := &numaflowv1.Pipeline{}
+				err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
+				return errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 })
