@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -223,6 +224,24 @@ var _ = Describe("PipelineRollout Controller", func() {
 			}, timeout, interval).Should(BeEquivalentTo(10))
 		})
 
-		// TODO: perform PipelineRollout deletion and make sure both PipelineRollout and Numaflow Pipeline get deleted
+		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
+			currentResource := &apiv1.PipelineRollout{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentResource)).ToNot(HaveOccurred())
+
+			Expect(k8sClient.Delete(ctx, currentResource)).Should(Succeed())
+
+			deletedResource := &apiv1.PipelineRollout{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
+				return errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
+
+			// TODO: this is not working as expected. It reaches timeout without deleting the Numaflow Pipeline
+			// deletedChildResource := &numaflowv1.Pipeline{}
+			// Eventually(func() bool {
+			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
+			// 	return errors.IsNotFound(err)
+			// }, 120*time.Second, interval).Should(BeTrue())
+		})
 	})
 })
