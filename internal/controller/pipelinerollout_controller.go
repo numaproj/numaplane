@@ -155,8 +155,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	// if not, check the change if it is image change, if yes, pause
-	// if not, just update
 	// apply Pipeline
 	// todo: store hash of spec in annotation; use to compare to determine if anything needs to be updated
 	obj := kubernetes.GenericObject{
@@ -201,6 +199,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 		paused := isPipelinePaused(ctx, pipeline)
 		if paused {
 			// Apply the new spec and resume the pipeline
+			// TODO: in the future, need to take into account whether Numaflow Controller
+			//       or ISBService is being installed to determine whether it's safe to unpause
 			newObj, err := setPipelineDesiredStatus(&obj, "Running")
 			if err != nil {
 				return false, err
@@ -221,7 +221,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			return false, err
 		}
 		if shouldPause {
-			// Use the existing spec, then pausing and re-enqueue
+			// Use the existing spec, then pause and re-enqueue
 			obj.Spec = pipeline.Spec
 			newObj, err := setPipelineDesiredStatus(&obj, "Paused")
 			if err != nil {
@@ -323,19 +323,14 @@ func setPipelineDesiredStatus(obj *kubernetes.GenericObject, status string) (*ku
 }
 
 func isPipelinePausing(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	numaLogger := logger.FromContext(ctx)
-	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
-		return false
-	}
-
-	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
-
-	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == numaflowv1.PipelinePhasePausing
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePausing)
 }
 
 func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+}
+
+func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
 	numaLogger := logger.FromContext(ctx)
 	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
 	if err != nil {
@@ -345,7 +340,7 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
-	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == numaflowv1.PipelinePhasePaused
+	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
 func applyPipelineSpec(
