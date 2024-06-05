@@ -1098,7 +1098,7 @@ metadata:
 apiVersion: v1
 data:
   config.yaml: |-
-    syncTimeIntervalMs: 30000
+    logLevel: 1
     includedResources: "group=apps,kind=Deployment;\
     group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;\
     group=numaflow.numaproj.io,kind=;\
