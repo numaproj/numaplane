@@ -1,5 +1,1 @@
-clusterName: "staging-usw2-k8s"
 logLevel: 1
-syncTimeIntervalMs: 30000
-cascadeDeletion: false
-persistentRepoClonePath: "/tmp"
