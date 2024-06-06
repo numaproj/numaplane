@@ -45,6 +45,10 @@ spec:
             type: string
           metadata:
             type: object
+            properties:
+              name:
+                type: string
+                pattern: ^numaflow-controller$
           spec:
             description: NumaflowControllerRolloutSpec defines the desired state of
               NumaflowControllerRollout
