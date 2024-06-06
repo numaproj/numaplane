@@ -55,8 +55,34 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
+func GetResource(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) (*unstructured.Unstructured, error) {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+
+	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, v1.GetOptions{})
+}
+
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
+// TODO: use CreateCR and UpdateCR instead
 func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
 	numaLogger := logger.FromContext(ctx)
 
@@ -84,7 +110,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 			// create object as it doesn't exist
 			numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
 
-			unstruct, err := objectToUnstructured(object)
+			unstruct, err := ObjectToUnstructured(object)
 			if err != nil {
 				return err
 			}
@@ -118,14 +144,30 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 
 // look up a Resource
 func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
+	unstruc, err := GetResource(ctx, restConfig, object, pluralName)
+	if unstruc != nil {
+		return UnstructuredToObject(unstruc)
+	} else {
+		return nil, err
+	}
+}
+
+func CreateCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
 	group, version, err := parseApiVersion(object.APIVersion)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{
@@ -133,15 +175,23 @@ func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, 
 		Version:  version,
 		Resource: pluralName,
 	}
-	unstruc, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, v1.GetOptions{})
-	if unstruc != nil {
-		return unstructuredToObject(unstruc)
-	} else {
-		return nil, err
+
+	numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
+
+	unstruct, err := ObjectToUnstructured(object)
+	if err != nil {
+		return err
 	}
+
+	_, err = client.Resource(gvr).Namespace(object.Namespace).Create(ctx, unstruct, v1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+	}
+	numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
+	return nil
 }
 
-func objectToUnstructured(object *GenericObject) (*unstructured.Unstructured, error) {
+func ObjectToUnstructured(object *GenericObject) (*unstructured.Unstructured, error) {
 	asJsonBytes, err := json.Marshal(object)
 	if err != nil {
 		return nil, err
@@ -155,7 +205,7 @@ func objectToUnstructured(object *GenericObject) (*unstructured.Unstructured, er
 	return &unstructured.Unstructured{Object: asMap}, nil
 }
 
-func unstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) {
+func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) {
 	asJsonBytes, err := json.Marshal(u.Object)
 	if err != nil {
 		return nil, err
