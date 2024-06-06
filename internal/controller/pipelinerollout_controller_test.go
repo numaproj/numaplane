@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -35,85 +35,81 @@ import (
 
 var _ = Describe("PipelineRollout Controller", func() {
 	const (
-		name      = "pipelinerollout-test"
-		namespace = "default"
-
-		timeout  = 10 * time.Second
-		duration = 10 * time.Second
-		interval = 250 * time.Millisecond
+		namespace           = "default"
+		pipelineRolloutName = "pipelinerollout-test"
+		timeout             = 10 * time.Second
+		duration            = 10 * time.Second
+		interval            = 250 * time.Millisecond
 	)
 
-	var ctx context.Context
-	var resource client.Object
-	var rawContent string
-	var resourceLookupKey types.NamespacedName
+	ctx := context.Background()
 
-	resourceMetaOnly := apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
+	pipelineSpecSourceRPU := int64(5)
+	pipelineSpecSourceDuration := metav1.Duration{
+		Duration: time.Second,
+	}
+
+	pipelineSpec := numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: "my-isbsvc",
+		Vertices: []numaflowv1.AbstractVertex{
+			{
+				Name: "in",
+				Source: &numaflowv1.Source{
+					Generator: &numaflowv1.GeneratorSource{
+						RPU:      &pipelineSpecSourceRPU,
+						Duration: &pipelineSpecSourceDuration,
+					},
+				},
+			},
+			{
+				Name: "cat",
+				UDF: &numaflowv1.UDF{
+					Builtin: &numaflowv1.Function{
+						Name: "cat",
+					},
+				},
+			},
+			{
+				Name: "out",
+				Sink: &numaflowv1.Sink{
+					AbstractSink: numaflowv1.AbstractSink{
+						Log: &numaflowv1.Log{},
+					},
+				},
+			},
+		},
+		Edges: []numaflowv1.Edge{
+			{
+				From: "in",
+				To:   "cat",
+			},
+			{
+				From: "cat",
+				To:   "out",
+			},
 		},
 	}
 
-	BeforeEach(func() {
-		ctx = context.Background()
+	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+	Expect(err).ToNot(HaveOccurred())
 
-		// TODO: LOW PRIORITY: load an entire valid pipeline from test file or from sample files
-		rawContent = RemoveIndentationFromJSON(`{
-			"interStepBufferServiceName": "my-isbsvc",
-			"vertices": [
-				{
-					"name": "in",
-					"source": {
-						"generator": {
-							"rpu": 5,
-							"duration": "1s"
-						}
-					}
-				},
-				{
-					"name": "cat",
-					"udf": {
-						"builtin": {
-							"name": "cat"
-						}
-					}	
-				},
-				{
-					"name": "cat",
-					"sink": {
-						"log": {}
-					}
-				}
-			],
-			"edges": [
-				{
-					"from": "in",
-					"to": "cat"
-				},
-				{
-					"from": "cat",
-					"to": "out"
-				}
-			]
-		}
-		`)
-
-		resource = &apiv1.PipelineRollout{
-			ObjectMeta: resourceMetaOnly.ObjectMeta,
-			Spec: apiv1.PipelineRolloutSpec{
-				Pipeline: runtime.RawExtension{
-					Raw: []byte(rawContent),
-				},
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      pipelineRolloutName,
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: runtime.RawExtension{
+				Raw: pipelineSpecRaw,
 			},
-		}
+		},
+	}
 
-		resourceLookupKey = types.NamespacedName{Name: name, Namespace: namespace}
-	})
+	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
 
 	Context("When applying a PipelineRollout spec", func() {
-		It("Should create the PipelineRollout succesfully", func() {
-			Expect(k8sClient.Create(ctx, resource)).Should(Succeed())
+		It("Should create the PipelineRollout", func() {
+			Expect(k8sClient.Create(ctx, pipelineRollout)).Should(Succeed())
 
 			createdResource := &apiv1.PipelineRollout{}
 			Eventually(func() bool {
@@ -121,16 +117,22 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the content of the pipeline field")
-			Expect(createdResource.Spec.Pipeline.Raw).Should(BeEquivalentTo(rawContent))
+			createdPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
+			Expect(json.Unmarshal(createdResource.Spec.Pipeline.Raw, &createdPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+
+			By("Verifying the content of the pipeline spec field")
+			Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
 		})
 
 		It("Should create a Numaflow Pipeline", func() {
+			createdResource := &numaflowv1.Pipeline{}
 			Eventually(func() bool {
-				createdResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the content of the pipeline spec")
+			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
 		})
 
 		It("Should have the PipelineRollout Status Phase has Running", func() {
@@ -147,86 +149,46 @@ var _ = Describe("PipelineRollout Controller", func() {
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
 			By("updating the PipelineRollout")
 
-			currentResource := &apiv1.PipelineRollout{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentResource)).ToNot(HaveOccurred())
+			currentPipelineRollout := &apiv1.PipelineRollout{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 
-			// TODO: only change part of the spec for the update instead of having the entire JSON here
-			newRawContent := []byte(
-				RemoveIndentationFromJSON(`{
-					"interStepBufferServiceName": "my-isbsvc",
-					"vertices": [
-						{
-							"name": "in",
-							"source": {
-								"generator": {
-									"rpu": 10,
-									"duration": "1s"
-								}
-							}
-						},
-						{
-							"name": "cat",
-							"udf": {
-								"builtin": {
-									"name": "cat"
-								}
-							}
-						},
-						{
-							"name": "cat",
-							"sink": {
-								"log": {}
-							}
-						}
-					],
-					"edges": [
-						{
-							"from": "in",
-							"to": "cat"
-						},
-						{
-							"from": "cat",
-							"to": "out"
-						}
-					]
-				}
-			`))
+			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
+			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+			Expect(err).ToNot(HaveOccurred())
 
-			currentResource.Spec.Pipeline.Raw = newRawContent
+			currentPipelineRollout.Spec.Pipeline.Raw = pipelineSpecRaw
 
-			Expect(k8sClient.Update(ctx, currentResource)).ToNot(HaveOccurred())
+			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
 
 			By("Verifying the content of the pipeline field of the PipelineRollout")
-			Eventually(func() ([]byte, error) {
+			Eventually(func() (numaflowv1.PipelineSpec, error) {
 				updatedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
 				if err != nil {
-					return []byte{}, err
+					return numaflowv1.PipelineSpec{}, err
 				}
-				return updatedResource.Spec.Pipeline.Raw, nil
-			}, timeout, interval).Should(Equal(currentResource.Spec.Pipeline.Raw))
 
-			// TODO: improve this comparison as needed
+				updatedPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
+				Expect(json.Unmarshal(updatedResource.Spec.Pipeline.Raw, &updatedPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+
+				return updatedPipelineRolloutPipelineSpec, nil
+			}, timeout, interval).Should(Equal(pipelineSpec))
+
 			By("Verifying the content of the spec field of the Numaflow Pipeline")
-			Eventually(func() (int64, error) {
+			Eventually(func() (numaflowv1.PipelineSpec, error) {
 				updatedChildResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
 				if err != nil {
-					return -1, err
+					return numaflowv1.PipelineSpec{}, err
 				}
-
-				for _, vertex := range updatedChildResource.Spec.Vertices {
-					if vertex.Name == "in" {
-						return *vertex.Source.Generator.RPU, nil
-					}
-				}
-
-				return -1, nil
-			}, timeout, interval).Should(BeEquivalentTo(10))
+				return updatedChildResource.Spec, nil
+			}, timeout, interval).Should(Equal(pipelineSpec))
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
-			Expect(k8sClient.Delete(ctx, &resourceMetaOnly)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+			})).Should(Succeed())
 
 			Eventually(func() bool {
 				deletedResource := &apiv1.PipelineRollout{}
