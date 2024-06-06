@@ -108,7 +108,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
 
 	Context("When applying a PipelineRollout spec", func() {
-		It("Should create the PipelineRollout", func() {
+		It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
 			Expect(k8sClient.Create(ctx, pipelineRollout)).Should(Succeed())
 
 			createdResource := &apiv1.PipelineRollout{}
@@ -190,11 +190,20 @@ var _ = Describe("PipelineRollout Controller", func() {
 				ObjectMeta: pipelineRollout.ObjectMeta,
 			})).Should(Succeed())
 
+			deletedResource := &apiv1.PipelineRollout{}
 			Eventually(func() bool {
-				deletedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
+
+			deletingChildResource := &numaflowv1.Pipeline{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
+			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
 
 			// TODO: use this on real cluster for e2e tests
 			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
