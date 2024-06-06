@@ -83,7 +83,7 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 	})
 })
 
-var _ = Describe("Apply OwnerShip Reference", func() {
+var _ = Describe("Apply Ownership Reference", func() {
 	Context("ownership reference", func() {
 		const resourceName = "test-resource"
 		manifests := []string{
@@ -123,16 +123,8 @@ spec:
       port: 80
       targetPort: 9376
 `}
-
-		resource := &apiv1.NumaflowControllerRollout{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: "default",
-			},
-		}
-		It("should apply ownership reference correctly", func() {
-			emanifests := []string{
-				`apiVersion: apps/v1
+		emanifests := []string{
+			`apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -160,7 +152,7 @@ spec:
         name: example-container
         ports:
         - containerPort: 80`,
-				`apiVersion: v1
+			`apiVersion: v1
 kind: Service
 metadata:
   name: example-service
@@ -178,12 +170,27 @@ spec:
     targetPort: 9376
   selector:
     app: example`,
-			}
+		}
+
+		resource := &apiv1.NumaflowControllerRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: "default",
+			},
+		}
+		It("should apply ownership reference correctly", func() {
 
 			manifests, err := applyOwnershipToManifests(manifests, resource)
 			Expect(err).To(BeNil())
 			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
 			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
+		})
+		It("should not apply ownership if it already exists", func() {
+			manifests, err := applyOwnershipToManifests(emanifests, resource)
+			Expect(err).To(BeNil())
+			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
+			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
+
 		})
 	})
 })
