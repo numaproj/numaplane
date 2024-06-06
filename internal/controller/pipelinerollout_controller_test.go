@@ -207,4 +207,21 @@ var _ = Describe("PipelineRollout Controller", func() {
 			// }, timeout, interval).Should(BeTrue())
 		})
 	})
+
+	Context("When applying an invalid PipelineRollout spec", func() {
+		It("Should not create the PipelineRollout", func() {
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				Spec: pipelineRollout.Spec,
+			})).To(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+			})).To(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+				Spec:       apiv1.PipelineRolloutSpec{},
+			})).To(HaveOccurred())
+		})
+	})
 })
