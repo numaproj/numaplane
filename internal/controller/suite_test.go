@@ -18,6 +18,9 @@ package controller
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -27,33 +30,52 @@ import (
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var cfg *rest.Config
-var k8sClient client.Client
-var testEnv *envtest.Environment
+var (
+	cfg             *rest.Config
+	k8sClient       client.Client
+	testEnv         *envtest.Environment
+	externalCRDsDir string
+)
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Controllers Suite")
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
+	// Download Numaflow CRDs
+	crdsURLs := []string{
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
+	}
+	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
+	for _, crdURL := range crdsURLs {
+		downloadCRD(crdURL, externalCRDsDir)
+	}
+
 	By("bootstrapping test environment")
+	// TODO: IDEA: could set useExistingCluster via an env var to be able to reuse some tests cases in e2e tests
+	// by setting this variable in CI for unit tests and e2e tests appropriately.
+	useExistingCluster := false
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
 		ErrorIfCRDPathMissing: true,
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
@@ -62,7 +84,11 @@ var _ = BeforeSuite(func() {
 		// Note that you must have the required binaries setup under the bin directory to perform
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.28.3-%s-%s", runtime.GOOS, runtime.GOARCH)),
+			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+
+		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
+		// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
+		UseExistingCluster: &useExistingCluster,
 	}
 
 	var err error
@@ -71,19 +97,70 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
+	err = numaflowv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = apiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+	Expect(err).ToNot(HaveOccurred())
 
+	k8sClient = k8sManager.GetClient()
+	Expect(k8sClient).ToNot(BeNil())
+
+	err = (&PipelineRolloutReconciler{
+		client:     k8sManager.GetClient(),
+		scheme:     k8sManager.GetScheme(),
+		restConfig: cfg,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&ISBServiceRolloutReconciler{
+		client:     k8sManager.GetClient(),
+		scheme:     k8sManager.GetScheme(),
+		restConfig: cfg,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	go func() {
+		defer GinkgoRecover()
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+	}()
 })
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+
+	err := os.RemoveAll(externalCRDsDir)
+	Expect(err).ToNot(HaveOccurred())
+
+	// This fails the test. See https://github.com/kubernetes-sigs/controller-runtime/issues/1571
+	// err = testEnv.Stop()
+	// Expect(err).NotTo(HaveOccurred())
 })
+
+func downloadCRD(url string, downloadDir string) {
+	// Create the download directory
+	err := os.MkdirAll(downloadDir, os.ModePerm)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Create the file
+	fileName := filepath.Base(url)                   // Extract the file name from the URL
+	filePath := filepath.Join(downloadDir, fileName) // Construct the local file path
+	out, err := os.Create(filePath)                  // Create a new file under filePath
+	Expect(err).ToNot(HaveOccurred())
+	defer out.Close()
+
+	// Download the file
+	resp, err := http.Get(url)
+	Expect(err).ToNot(HaveOccurred())
+	defer resp.Body.Close()
+
+	// Write the response body to file
+	_, err = io.Copy(out, resp.Body)
+	Expect(err).ToNot(HaveOccurred())
+}
