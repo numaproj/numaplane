@@ -212,7 +212,7 @@ interface Source2 {
   path: string;
   targetRevision: string;
 }
-interface Resource {
+export interface Resource {
   apiVersion: string;
   kind: string;
   metadata: Metadata;
@@ -357,7 +357,7 @@ interface ResourcesInfo {
   requestedByNeighbors: number;
   capacity: number;
 }
-interface Node {
+export interface Node {
   version: string;
   kind: string;
   namespace: string;

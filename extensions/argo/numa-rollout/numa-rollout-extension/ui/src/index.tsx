@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ArgoPropType } from "./ArgoPropType";
+import { RolloutComponentWrapper } from "./rollout/RolloutComponentWrapper";
 
 export const roundNumber = (num: number, dig: number): number => {
   return Math.round(num * 10 ** dig) / 10 ** dig;
@@ -8,7 +9,11 @@ export const roundNumber = (num: number, dig: number): number => {
 export const Extension = (props: ArgoPropType) => {
   return (
     <React.Fragment>
-      This is a Numarollout Extension. The props are : {JSON.stringify(props)}
+      <RolloutComponentWrapper
+        tree={props.tree}
+        resource={props.resource}
+        application={props.application}
+      />
     </React.Fragment>
   );
 };
@@ -16,6 +21,8 @@ export const Extension = (props: ArgoPropType) => {
 export const component = Extension;
 
 // Register the component extension in ArgoCD
+
+// registerResourceExtension(component: ExtensionComponent, group: string, kind: string, tabTitle: string)
 ((window: any) => {
   window?.extensionsAPI?.registerResourceExtension(
     component,
