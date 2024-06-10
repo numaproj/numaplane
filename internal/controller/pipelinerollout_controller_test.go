@@ -221,16 +221,16 @@ var _ = Describe("PipelineRollout Controller", func() {
 		It("Should not create the PipelineRollout", func() {
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				Spec: pipelineRollout.Spec,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: pipelineRollout.ObjectMeta,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: pipelineRollout.ObjectMeta,
 				Spec:       apiv1.PipelineRolloutSpec{},
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 		})
 	})
 })
