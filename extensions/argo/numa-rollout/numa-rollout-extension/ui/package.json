@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.5",
+    "@mui/material": "^5.15.19",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
@@ -10,20 +13,22 @@
     "@types/node": "^16.18.98",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "add": "^2.0.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
     "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "yarn": "^1.22.22"
   },
-   "peerDependencies": {
+  "peerDependencies": {
     "argo-ui": "git+https://github.com/argoproj/argo-ui.git",
+    "moment": "^2.29.4",
     "react": "^16.9.3",
-    "react-dom": "^16.9.3",
-    "moment": "^2.29.4"
+    "react-dom": "^16.9.3"
   },
   "devDependencies": {
-   "@types/react": "^17.0.44",
+    "@types/react": "^17.0.44",
     "@types/react-dom": "^17.0.9",
     "@types/react-helmet": "^6.1.0",
     "@types/react-router-dom": "^5.1.8",
