@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,9 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("ISBServiceRollout Controller", func() {
@@ -41,6 +42,19 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 
 	ctx := context.Background()
 
+	isbsSpec := numaflowv1.InterStepBufferServiceSpec{
+		Redis: &numaflowv1.RedisBufferService{},
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: "latest",
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &numaflowv1.DefaultVolumeSize,
+			},
+		},
+	}
+
+	isbsSpecRaw, err := json.Marshal(isbsSpec)
+	Expect(err).ToNot(HaveOccurred())
+
 	isbServiceRollout := &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
@@ -48,23 +62,7 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 		},
 		Spec: apiv1.ISBServiceRolloutSpec{
 			InterStepBufferService: runtime.RawExtension{
-				Raw: []byte(`{
-									"apiVersion": "v1",
-									"kind": "Service",
-									"metadata": {
-											"name": "my-service"
-									},
-									"spec": {
-											"selector": {
-													"app": "MyApp"
-											},
-											"ports": [{
-													"protocol": "TCP",
-													"port": 80,
-													"targetPort": 9376
-											}]
-									}
-							}`),
+				Raw: isbsSpecRaw,
 			},
 		},
 	}
@@ -82,6 +80,8 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying the content of the ISBServiceRollout spec field")
+			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
+			Expect(json.Unmarshal(createdResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
 			Expect(createdResource.Spec).Should(Equal(isbServiceRollout.Spec))
 		})
 
@@ -91,26 +91,22 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			currentISBServiceRollout := &apiv1.ISBServiceRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())
 
-			// Update the spec here
-			currentISBServiceRollout.Spec.InterStepBufferService = runtime.RawExtension{
-				Raw: []byte(`{
-									"apiVersion": "v1",
-									"kind": "Service",
-									"metadata": {
-											"name": "my-updated-service"
-									},
-									"spec": {
-											"selector": {
-													"app": "MyUpdatedApp"
-											},
-											"ports": [{
-													"protocol": "TCP",
-													"port": 8080,
-													"targetPort": 9377
-											}]
-									}
-							}`),
+			// Prepare a new spec for update
+			newIsbsSpec := numaflowv1.InterStepBufferServiceSpec{
+				Redis: &numaflowv1.RedisBufferService{},
+				JetStream: &numaflowv1.JetStreamBufferService{
+					Version: "an updated version",
+					Persistence: &numaflowv1.PersistenceStrategy{
+						VolumeSize: &numaflowv1.DefaultVolumeSize,
+					},
+				},
 			}
+
+			newIsbsSpecRaw, err := json.Marshal(newIsbsSpec)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Update the spec
+			currentISBServiceRollout.Spec.InterStepBufferService = runtime.RawExtension{Raw: newIsbsSpecRaw}
 
 			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
 
@@ -118,8 +114,13 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			Eventually(func() apiv1.ISBServiceRolloutSpec {
 				updatedResource := &apiv1.ISBServiceRollout{}
 				_ = k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+
+				createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
+				Expect(json.Unmarshal(updatedResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
+
 				return updatedResource.Spec
 			}, timeout, interval).Should(Equal(currentISBServiceRollout.Spec))
+
 		})
 
 		It("Should delete the ISBServiceRollout", func() {
