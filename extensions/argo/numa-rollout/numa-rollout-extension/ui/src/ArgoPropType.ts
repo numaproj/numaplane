@@ -32,94 +32,92 @@ interface FieldsV12 {
   'f:status': Fstatus2;
 }
 interface Fstatus2 {
-  '.'?: Fvpcamazonawscompodips;
+  '.'?: _;
   'f:health': Fhealth;
   'f:summary': Fsummary;
   'f:sync': Fsync;
-  'f:controllerNamespace'?: Fvpcamazonawscompodips;
-  'f:history'?: Fvpcamazonawscompodips;
+  'f:history'?: _;
   'f:operationState'?: FoperationState;
-  'f:reconciledAt'?: Fvpcamazonawscompodips;
-  'f:resources'?: Fvpcamazonawscompodips;
-  'f:sourceType'?: Fvpcamazonawscompodips;
+  'f:reconciledAt'?: _;
+  'f:resources'?: _;
+  'f:sourceType'?: _;
 }
 interface FoperationState {
-  '.': Fvpcamazonawscompodips;
-  'f:finishedAt': Fvpcamazonawscompodips;
-  'f:message': Fvpcamazonawscompodips;
+  '.': _;
+  'f:finishedAt': _;
+  'f:message': _;
   'f:operation': Foperation;
-  'f:phase': Fvpcamazonawscompodips;
-  'f:startedAt': Fvpcamazonawscompodips;
+  'f:phase': _;
+  'f:startedAt': _;
   'f:syncResult': FsyncResult;
 }
 interface FsyncResult {
-  '.': Fvpcamazonawscompodips;
-  'f:resources': Fvpcamazonawscompodips;
-  'f:revision': Fvpcamazonawscompodips;
+  '.': _;
+  'f:resources': _;
+  'f:revision': _;
   'f:source': Fsource;
 }
 interface Foperation {
-  '.': Fvpcamazonawscompodips;
+  '.': _;
   'f:initiatedBy': FinitiatedBy;
-  'f:retry': Fvpcamazonawscompodips;
+  'f:retry': _;
   'f:sync': Fsync2;
 }
 interface Fsync2 {
-  '.': Fvpcamazonawscompodips;
-  'f:revision': Fvpcamazonawscompodips;
+  '.': _;
+  'f:revision': _;
   'f:syncStrategy': FsyncStrategy;
 }
 interface FsyncStrategy {
-  '.': Fvpcamazonawscompodips;
-  'f:hook': Fvpcamazonawscompodips;
+  '.': _;
+  'f:hook': _;
 }
 interface FinitiatedBy {
-  '.': Fvpcamazonawscompodips;
-  'f:username': Fvpcamazonawscompodips;
+  '.': _;
+  'f:username': _;
 }
 interface Fsync {
-  '.'?: Fvpcamazonawscompodips;
+  '.'?: _;
   'f:comparedTo': FcomparedTo;
-  'f:revision'?: Fvpcamazonawscompodips;
-  'f:status'?: Fvpcamazonawscompodips;
+  'f:revision'?: _;
+  'f:status'?: _;
 }
 interface FcomparedTo {
-  '.'?: Fvpcamazonawscompodips;
+  '.'?: _;
   'f:destination': Fdestination2;
   'f:source': Fsource2;
 }
 interface Fsource2 {
-  'f:path'?: Fvpcamazonawscompodips;
-  'f:repoURL'?: Fvpcamazonawscompodips;
-  'f:targetRevision'?: Fvpcamazonawscompodips;
+  'f:path'?: _;
+  'f:repoURL'?: _;
+  'f:targetRevision'?: _;
 }
 interface Fdestination2 {
-  'f:namespace'?: Fvpcamazonawscompodips;
-  'f:server'?: Fvpcamazonawscompodips;
+  'f:namespace'?: _;
+  'f:server'?: _;
 }
 interface Fsummary {
-  'f:externalURLs'?: Fvpcamazonawscompodips;
-  'f:images'?: Fvpcamazonawscompodips;
+  'f:images'?: _;
 }
 interface Fhealth {
-  'f:status'?: Fvpcamazonawscompodips;
+  'f:status'?: _;
 }
 interface Fspec2 {
-  '.': Fvpcamazonawscompodips;
+  '.': _;
   'f:destination': Fdestination;
-  'f:project': Fvpcamazonawscompodips;
+  'f:project': _;
   'f:source': Fsource;
 }
 interface Fsource {
-  '.': Fvpcamazonawscompodips;
-  'f:path': Fvpcamazonawscompodips;
-  'f:repoURL': Fvpcamazonawscompodips;
-  'f:targetRevision': Fvpcamazonawscompodips;
+  '.': _;
+  'f:path': _;
+  'f:repoURL': _;
+  'f:targetRevision': _;
 }
 interface Fdestination {
-  '.': Fvpcamazonawscompodips;
-  'f:namespace': Fvpcamazonawscompodips;
-  'f:server': Fvpcamazonawscompodips;
+  '.': _;
+  'f:namespace': _;
+  'f:server': _;
 }
 interface Status2 {
   resources: Resource2[];
@@ -130,7 +128,6 @@ interface Status2 {
   reconciledAt: string;
   operationState: OperationState;
   sourceType: string;
-  controllerNamespace: string;
 }
 interface OperationState {
   operation: Operation;
@@ -159,7 +156,7 @@ interface Resource3 {
 interface Operation {
   sync: Sync2;
   initiatedBy: InitiatedBy;
-  retry: Fvpcamazonawscompodips;
+  retry: _;
 }
 interface InitiatedBy {
   username: string;
@@ -169,7 +166,7 @@ interface Sync2 {
   syncStrategy: SyncStrategy;
 }
 interface SyncStrategy {
-  hook: Fvpcamazonawscompodips;
+  hook: _;
 }
 interface History {
   revision: string;
@@ -191,18 +188,15 @@ interface ComparedTo {
   destination: Destination;
 }
 interface Summary {
-  externalURLs: string[];
   images: string[];
 }
 interface Resource2 {
+  group: string;
   version: string;
   kind: string;
   namespace: string;
   name: string;
   status: string;
-  health?: Health;
-  group?: string;
-  syncWave?: number;
 }
 interface Spec2 {
   project: string;
@@ -227,148 +221,59 @@ interface Resource {
 }
 interface Status {
   conditions: Condition[];
-  containerStatuses: ContainerStatus[];
-  hostIP: string;
   phase: string;
-  podIP: string;
-  podIPs: PodIP[];
-  qosClass: string;
-  startTime: string;
-}
-interface PodIP {
-  ip: string;
-}
-interface ContainerStatus {
-  containerID: string;
-  image: string;
-  imageID: string;
-  lastState: Fvpcamazonawscompodips;
-  name: string;
-  ready: boolean;
-  restartCount: number;
-  started: boolean;
-  state: State;
-}
-interface State {
-  running: Running;
-}
-interface Running {
-  startedAt: string;
 }
 interface Condition {
-  lastProbeTime?: any;
   lastTransitionTime: string;
+  message: string;
+  reason: string;
   status: string;
   type: string;
 }
 interface Spec {
-  containers: Container[];
-  dnsPolicy: string;
-  enableServiceLinks: boolean;
-  nodeName: string;
-  nodeSelector: NodeSelector;
-  preemptionPolicy: string;
-  priority: number;
-  restartPolicy: string;
-  schedulerName: string;
-  securityContext: Fvpcamazonawscompodips;
-  serviceAccount: string;
-  serviceAccountName: string;
-  terminationGracePeriodSeconds: number;
-  tolerations: Toleration[];
-  volumes: Volume[];
+  pipeline: Pipeline;
 }
-interface Volume {
+interface Pipeline {
+  edges: Edge[];
+  interStepBufferServiceName: string;
+  vertices: Vertex[];
+}
+interface Vertex {
   name: string;
-  projected: Projected;
+  source?: Source;
+  udf?: Udf;
+  sink?: Sink;
 }
-interface Projected {
-  defaultMode: number;
-  sources: Source[];
+interface Sink {
+  log: _;
+}
+interface Udf {
+  builtin: Builtin;
+}
+interface Builtin {
+  name: string;
 }
 interface Source {
-  serviceAccountToken?: ServiceAccountToken;
-  configMap?: ConfigMap;
-  downwardAPI?: DownwardAPI;
+  generator: Generator;
 }
-interface DownwardAPI {
-  items: Item2[];
+interface Generator {
+  duration: string;
+  rpu: number;
 }
-interface Item2 {
-  fieldRef: FieldRef;
-  path: string;
-}
-interface FieldRef {
-  apiVersion: string;
-  fieldPath: string;
-}
-interface ConfigMap {
-  items: Item[];
-  name: string;
-}
-interface Item {
-  key: string;
-  path: string;
-}
-interface ServiceAccountToken {
-  expirationSeconds: number;
-  path: string;
-}
-interface Toleration {
-  effect?: string;
-  key: string;
-  operator?: string;
-  tolerationSeconds?: number;
-}
-interface NodeSelector {
-  'node.kubernetes.io/instancegroup': string;
-}
-interface Container {
-  env: Info[];
-  image: string;
-  imagePullPolicy: string;
-  name: string;
-  resources: Resources;
-  terminationMessagePath: string;
-  terminationMessagePolicy: string;
-  volumeMounts: VolumeMount[];
-}
-interface VolumeMount {
-  mountPath: string;
-  name: string;
-  readOnly: boolean;
-}
-interface Resources {
-  limits: Limits;
-  requests: Requests;
-}
-interface Requests {
-  cpu: string;
-  'ephemeral-storage': string;
-  memory: string;
-}
-interface Limits {
-  'ephemeral-storage': string;
-  memory: string;
+interface Edge {
+  from: string;
+  to: string;
 }
 interface Metadata {
   annotations: Annotations;
   creationTimestamp: string;
-  generateName: string;
+  finalizers: string[];
+  generation: number;
   labels: Labels2;
   managedFields: ManagedField[];
   name: string;
   namespace: string;
-  ownerReferences: OwnerReference[];
   resourceVersion: string;
-  uid: string;
-}
-interface OwnerReference {
-  apiVersion: string;
-  blockOwnerDeletion: boolean;
-  controller: boolean;
-  kind: string;
-  name: string;
   uid: string;
 }
 interface ManagedField {
@@ -386,99 +291,44 @@ interface FieldsV1 {
   'f:status'?: Fstatus;
 }
 interface Fstatus {
-  'f:conditions': Fconditions;
-  'f:containerStatuses': Fvpcamazonawscompodips;
-  'f:hostIP': Fvpcamazonawscompodips;
-  'f:phase': Fvpcamazonawscompodips;
-  'f:podIP': Fvpcamazonawscompodips;
-  'f:podIPs': FpodIPs;
-  'f:startTime': Fvpcamazonawscompodips;
-}
-interface FpodIPs {
-  '.': Fvpcamazonawscompodips;
-  'k:{"ip":"10.195.40.168"}': Kip1019540168;
-}
-interface Kip1019540168 {
-  '.': Fvpcamazonawscompodips;
-  'f:ip': Fvpcamazonawscompodips;
-}
-interface Fconditions {
-  'k:{"type":"ContainersReady"}': KtypeContainersReady;
-  'k:{"type":"Initialized"}': KtypeContainersReady;
-  'k:{"type":"Ready"}': KtypeContainersReady;
-}
-interface KtypeContainersReady {
-  '.': Fvpcamazonawscompodips;
-  'f:lastProbeTime': Fvpcamazonawscompodips;
-  'f:lastTransitionTime': Fvpcamazonawscompodips;
-  'f:status': Fvpcamazonawscompodips;
-  'f:type': Fvpcamazonawscompodips;
+  '.': _;
+  'f:conditions': _;
+  'f:phase': _;
 }
 interface Fspec {
-  'f:containers': Fcontainers;
-  'f:dnsPolicy': Fvpcamazonawscompodips;
-  'f:enableServiceLinks': Fvpcamazonawscompodips;
-  'f:restartPolicy': Fvpcamazonawscompodips;
-  'f:schedulerName': Fvpcamazonawscompodips;
-  'f:securityContext': Fvpcamazonawscompodips;
-  'f:terminationGracePeriodSeconds': Fvpcamazonawscompodips;
+  '.': _;
+  'f:pipeline': Fpipeline;
 }
-interface Fcontainers {
-  'k:{"name":"app"}': Knameapp;
-}
-interface Knameapp {
-  '.': Fvpcamazonawscompodips;
-  'f:env': Fenv;
-  'f:image': Fvpcamazonawscompodips;
-  'f:imagePullPolicy': Fvpcamazonawscompodips;
-  'f:name': Fvpcamazonawscompodips;
-  'f:resources': Fvpcamazonawscompodips;
-  'f:terminationMessagePath': Fvpcamazonawscompodips;
-  'f:terminationMessagePolicy': Fvpcamazonawscompodips;
-}
-interface Fenv {
-  '.': Fvpcamazonawscompodips;
-  'k:{"name":"SPRING_PROFILE"}': KnameSPRINGPROFILE;
-}
-interface KnameSPRINGPROFILE {
-  '.': Fvpcamazonawscompodips;
-  'f:name': Fvpcamazonawscompodips;
-  'f:value': Fvpcamazonawscompodips;
+interface Fpipeline {
+  '.': _;
+  'f:edges': _;
+  'f:interStepBufferServiceName': _;
+  'f:vertices': _;
 }
 interface Fmetadata {
-  'f:annotations': Fannotations;
-  'f:generateName'?: Fvpcamazonawscompodips;
+  'f:annotations'?: Fannotations;
   'f:labels'?: Flabels;
-  'f:ownerReferences'?: FownerReferences;
+  'f:finalizers'?: Ffinalizers;
 }
-interface FownerReferences {
-  '.': Fvpcamazonawscompodips;
-  'k:{"uid":"75fbf6e3-bfee-4160-99e2-f25ca936c90b"}': Fvpcamazonawscompodips;
+interface Ffinalizers {
+  '.': _;
+  'v:"numaplane-controller"': _;
 }
 interface Flabels {
-  '.': Fvpcamazonawscompodips;
-  'f:app': Fvpcamazonawscompodips;
-  'f:applications.argoproj.io/app-name': Fvpcamazonawscompodips;
-  'f:pod-template-hash': Fvpcamazonawscompodips;
+  '.': _;
+  'f:app.kubernetes.io/instance': _;
 }
 interface Fannotations {
-  'f:vpc.amazonaws.com/pod-ips'?: Fvpcamazonawscompodips;
-  '.'?: Fvpcamazonawscompodips;
-  'f:iam.amazonaws.com/role'?: Fvpcamazonawscompodips;
+  '.': _;
+  'f:kubectl.kubernetes.io/last-applied-configuration': _;
 }
-interface Fvpcamazonawscompodips {
+interface _ {
 }
 interface Labels2 {
-  app: string;
-  'applications.argoproj.io/app-name': string;
-  assetId: string;
-  azId: string;
-  'pod-template-hash': string;
+  'app.kubernetes.io/instance': string;
 }
 interface Annotations {
-  'iam.amazonaws.com/role': string;
-  'kubernetes.io/limit-ranger': string;
-  'vpc.amazonaws.com/pod-ips': string;
+  'kubectl.kubernetes.io/last-applied-configuration': string;
 }
 interface Tree {
   nodes: Node[];
@@ -516,62 +366,51 @@ interface Node {
   parentRefs?: ParentRef[];
   resourceVersion: string;
   createdAt: string;
+  health?: Health;
   info?: Info[];
   networkingInfo?: NetworkingInfo;
   images?: string[];
-  health?: Health;
   group?: string;
-}
-interface Health {
-  status: string;
-  message?: string;
 }
 interface NetworkingInfo {
   labels?: Labels;
   targetLabels?: TargetLabels;
-  targetRefs?: TargetRef[];
-  ingress?: Ingress[];
-  externalURLs?: string[];
-}
-interface Ingress {
-  hostname: string;
-}
-interface TargetRef {
-  kind: string;
-  namespace: string;
-  name: string;
 }
 interface TargetLabels {
-  app: string;
-  'rollouts-pod-template-hash'?: string;
+  'app.kubernetes.io/component': string;
+  'app.kubernetes.io/managed-by': string;
+  'app.kubernetes.io/part-of': string;
+  'numaflow.numaproj.io/isbsvc-name'?: string;
+  'numaflow.numaproj.io/isbsvc-type'?: string;
+  'numaflow.numaproj.io/pipeline-name'?: string;
+  'numaflow.numaproj.io/vertex-name'?: string;
 }
 interface Labels {
-  app: string;
-  assetAlias?: string;
-  assetId: string;
+  'app.kubernetes.io/component': string;
+  'app.kubernetes.io/managed-by'?: string;
+  'app.kubernetes.io/part-of': string;
   azId: string;
-  env?: string;
-  'istio-injected'?: string;
-  l1?: string;
-  l2?: string;
-  policyId?: string;
-  role?: string;
-  'rollouts-pod-template-hash'?: string;
-  'scaleops.sh/pod-owner-identifier'?: string;
-  'security.istio.io/tlsMode'?: string;
-  'service.istio.io/canonical-name'?: string;
-  'service.istio.io/canonical-revision'?: string;
-  'applications.argoproj.io/app-name'?: string;
+  'controller-revision-hash'?: string;
+  'numaflow.numaproj.io/isbsvc-name'?: string;
+  'numaflow.numaproj.io/isbsvc-type'?: string;
+  'statefulset.kubernetes.io/pod-name'?: string;
+  'app.kubernetes.io/name'?: string;
+  'numaflow.numaproj.io/pipeline-name'?: string;
+  'numaflow.numaproj.io/vertex-name'?: string;
   'pod-template-hash'?: string;
 }
 interface Info {
   name: string;
   value: string;
 }
+interface Health {
+  status: string;
+  message?: string;
+}
 interface ParentRef {
+  group?: string;
   kind: string;
   namespace: string;
   name: string;
   uid: string;
-  group?: string;
 }
