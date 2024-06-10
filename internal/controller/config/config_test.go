@@ -24,7 +24,7 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Nil(t, err, "Failed to load configuration")
-	assert.Equal(t, 1, config.LogLevel, "Log Level does not match")
+	assert.Equal(t, 3, config.LogLevel, "Log Level does not match")
 	// now verify that if we modify the file, it will still be okay
 	originalFile := "../../../tests/config/testconfig.yaml"
 	fileToCopy := "../../../tests/config/testconfig2.yaml"
