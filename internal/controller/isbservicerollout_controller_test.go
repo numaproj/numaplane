@@ -85,6 +85,30 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			Expect(createdResource.Spec).Should(Equal(isbServiceRollout.Spec))
 		})
 
+		It("Should have created an ISBServiceRollout", func() {
+			createdISBR := &apiv1.ISBServiceRollout{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, createdISBR)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the content of the ISBServiceRollout spec")
+			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
+			Expect(json.Unmarshal(createdISBR.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
+			Expect(createdISBR.Spec).Should(Equal(isbServiceRollout.Spec))
+		})
+
+		It("Should have the ISBServiceRollout Status Phase as Running", func() {
+			Consistently(func() (apiv1.Phase, error) {
+				createdISBR := &apiv1.ISBServiceRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, createdISBR)
+				if err != nil {
+					return apiv1.Phase(""), err
+				}
+				return createdISBR.Status.Phase, nil
+			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+		})
+
 		It("Should update the ISBServiceRollout", func() {
 			By("updating the ISBServiceRollout")
 
