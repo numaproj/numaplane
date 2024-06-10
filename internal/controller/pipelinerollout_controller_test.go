@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,65 +29,208 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var _ = Describe("PipelineRollout Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+	const (
+		namespace           = "default"
+		pipelineRolloutName = "pipelinerollout-test"
+		timeout             = 10 * time.Second
+		duration            = 10 * time.Second
+		interval            = 250 * time.Millisecond
+	)
 
-		ctx := context.Background()
+	ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		pipelinerollout := &apiv1.PipelineRollout{}
+	pipelineSpecSourceRPU := int64(5)
+	pipelineSpecSourceDuration := metav1.Duration{
+		Duration: time.Second,
+	}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind PipelineRollout")
-			err := k8sClient.Get(ctx, typeNamespacedName, pipelinerollout)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &apiv1.PipelineRollout{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+	pipelineSpec := numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: "my-isbsvc",
+		Vertices: []numaflowv1.AbstractVertex{
+			{
+				Name: "in",
+				Source: &numaflowv1.Source{
+					Generator: &numaflowv1.GeneratorSource{
+						RPU:      &pipelineSpecSourceRPU,
+						Duration: &pipelineSpecSourceDuration,
 					},
-					// TODO(user): Specify other spec details if needed.
-					Spec: apiv1.PipelineRolloutSpec{
-						Pipeline: runtime.RawExtension{
-							Raw: []byte(`{"field":"val"}`),
-						},
+				},
+			},
+			{
+				Name: "cat",
+				UDF: &numaflowv1.UDF{
+					Builtin: &numaflowv1.Function{
+						Name: "cat",
 					},
+				},
+			},
+			{
+				Name: "out",
+				Sink: &numaflowv1.Sink{
+					AbstractSink: numaflowv1.AbstractSink{
+						Log: &numaflowv1.Log{},
+					},
+				},
+			},
+		},
+		Edges: []numaflowv1.Edge{
+			{
+				From: "in",
+				To:   "cat",
+			},
+			{
+				From: "cat",
+				To:   "out",
+			},
+		},
+	}
+
+	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+	Expect(err).ToNot(HaveOccurred())
+
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      pipelineRolloutName,
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: runtime.RawExtension{
+				Raw: pipelineSpecRaw,
+			},
+		},
+	}
+
+	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
+
+	Context("When applying a PipelineRollout spec", func() {
+		It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
+			Expect(k8sClient.Create(ctx, pipelineRollout)).Should(Succeed())
+
+			createdResource := &apiv1.PipelineRollout{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			createdPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
+			Expect(json.Unmarshal(createdResource.Spec.Pipeline.Raw, &createdPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+
+			By("Verifying the content of the pipeline spec field")
+			Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
+		})
+
+		It("Should create a Numaflow Pipeline", func() {
+			createdResource := &numaflowv1.Pipeline{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the content of the pipeline spec")
+			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
+		})
+
+		It("Should have the PipelineRollout Status Phase has Running", func() {
+			Consistently(func() (apiv1.Phase, error) {
+				createdResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				if err != nil {
+					return apiv1.Phase(""), err
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
+				return createdResource.Status.Phase, nil
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &apiv1.PipelineRollout{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
+			By("updating the PipelineRollout")
 
-			// By("Cleanup the specific resource instance PipelineRollout")
-			// Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			currentPipelineRollout := &apiv1.PipelineRollout{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
+
+			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
+			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+			Expect(err).ToNot(HaveOccurred())
+
+			currentPipelineRollout.Spec.Pipeline.Raw = pipelineSpecRaw
+
+			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
+
+			By("Verifying the content of the pipeline field of the PipelineRollout")
+			Eventually(func() (numaflowv1.PipelineSpec, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return numaflowv1.PipelineSpec{}, err
+				}
+
+				updatedPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
+				Expect(json.Unmarshal(updatedResource.Spec.Pipeline.Raw, &updatedPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+
+				return updatedPipelineRolloutPipelineSpec, nil
+			}, timeout, interval).Should(Equal(pipelineSpec))
+
+			By("Verifying the content of the spec field of the Numaflow Pipeline")
+			Eventually(func() (numaflowv1.PipelineSpec, error) {
+				updatedChildResource := &numaflowv1.Pipeline{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
+				if err != nil {
+					return numaflowv1.PipelineSpec{}, err
+				}
+				return updatedChildResource.Spec, nil
+			}, timeout, interval).Should(Equal(pipelineSpec))
 		})
-		// It("should successfully reconcile the resource", func() {
-		// 	By("Reconciling the created resource")
-		// 	controllerReconciler := &PipelineRolloutReconciler{
-		// 		client:     k8sClient,
-		// 		scheme:     k8sClient.Scheme(),
-		// 		restConfig: cfg,
-		// 	}
 
-		// 	_, err := controllerReconciler.Reconcile(ctx, sigsReconcile.Request{
-		// 		NamespacedName: typeNamespacedName,
-		// 	})
+		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
+			Expect(k8sClient.Delete(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+			})).Should(Succeed())
 
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-		// 	// Example: If you expect a certain status condition after reconciliation, verify it here.
-		// })
+			deletedResource := &apiv1.PipelineRollout{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
+				return errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
+
+			deletingChildResource := &numaflowv1.Pipeline{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
+			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
+
+			// TODO: use this on real cluster for e2e tests
+			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
+			// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
+			// Could also reuse the env var used to set useExistingCluster to skip or perform the deletion based on CI settings.
+			// Eventually(func() bool {
+			// 	deletedChildResource := &numaflowv1.Pipeline{}
+			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
+			// 	return errors.IsNotFound(err)
+			// }, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("When applying an invalid PipelineRollout spec", func() {
+		It("Should not create the PipelineRollout", func() {
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				Spec: pipelineRollout.Spec,
+			})).To(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+			})).To(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: pipelineRollout.ObjectMeta,
+				Spec:       apiv1.PipelineRolloutSpec{},
+			})).To(HaveOccurred())
+		})
 	})
 })

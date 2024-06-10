@@ -47,6 +47,10 @@ type GenericStatus struct {
 }
 
 func ParseStatus(obj *GenericObject) (GenericStatus, error) {
+	if len(obj.Status.Raw) == 0 {
+		return GenericStatus{}, nil
+	}
+
 	var status GenericStatus
 	err := json.Unmarshal(obj.Status.Raw, &status)
 	if err != nil {
@@ -121,7 +125,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 			}
 			numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
 		} else {
-			return fmt.Errorf("error attempting to Get resources; GVR=%+v", gvr)
+			return fmt.Errorf("error attempting to Get resources; GVR=%+v err: %v", gvr, err)
 		}
 
 	} else {
