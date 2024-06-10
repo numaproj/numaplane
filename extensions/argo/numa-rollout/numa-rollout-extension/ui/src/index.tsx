@@ -26,8 +26,22 @@ export const component = Extension;
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "",
-    "Pod",
+    "numaplane.numaproj.io",
+    "ISBServiceRollout",
+    "Numarollout",
+    { icon: "fa fa-chart-area" }
+  );
+  window?.extensionsAPI?.registerResourceExtension(
+    component,
+    "numaplane.numaproj.io",
+    "NumaflowControllerRollout",
+    "Numarollout",
+    { icon: "fa fa-chart-area" }
+  );
+  window?.extensionsAPI?.registerResourceExtension(
+    component,
+    "numaplane.numaproj.io",
+    "PipelineRollout",
     "Numarollout",
     { icon: "fa fa-chart-area" }
   );
