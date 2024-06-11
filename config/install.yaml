@@ -294,6 +294,9 @@ spec:
                 type: string
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: The metadata name must be 'numaflow-controller'
+          rule: (self.metadata.name == "numaflow-controller")
     served: true
     storage: true
     subresources:
