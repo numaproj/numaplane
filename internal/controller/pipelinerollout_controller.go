@@ -227,6 +227,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if err != nil {
 			return false, err
 		}
+	} else {
+		numaLogger.Debug("Pipeline spec is unchanged. No updates will be performed")
 	}
 
 	pipelineRollout.Status.MarkRunning()

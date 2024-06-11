@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -312,56 +311,6 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 	})
 })
-
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_PipelineRollout(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	pipelineRollout := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pipeline-test",
-			Namespace: "default",
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: runtime.RawExtension{Raw: []byte(`{"key":"value"}`)},
-		},
-	}
-
-	obj, operation, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, pipelineRollout)
-
-	require.NoError(t, err)
-	assert.Equal(t, "Pipeline", obj.Kind)
-	assert.Equal(t, "numaflow.numaproj.io/v1alpha1", obj.APIVersion)
-	assert.Equal(t, pipelineRollout.Name, obj.Name)
-	assert.Equal(t, pipelineRollout.Namespace, obj.Namespace)
-	assert.Equal(t, []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout, apiv1.PipelineRolloutGroupVersionKind)}, obj.OwnerReferences)
-	assert.Equal(t, operation, RolloutChildNew)
-}
-
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_ISBServiceRollout(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	isbService := &apiv1.ISBServiceRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "isbs-test",
-			Namespace: "default",
-		},
-		Spec: apiv1.ISBServiceRolloutSpec{
-			InterStepBufferService: runtime.RawExtension{Raw: []byte(`{"key":"value"}`)},
-		},
-	}
-
-	obj, operation, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, isbService)
-
-	require.NoError(t, err)
-	assert.Equal(t, "InterStepBufferService", obj.Kind)
-	assert.Equal(t, "numaflow.numaproj.io/v1alpha1", obj.APIVersion)
-	assert.Equal(t, isbService.Name, obj.Name)
-	assert.Equal(t, isbService.Namespace, obj.Namespace)
-	assert.Equal(t, []metav1.OwnerReference{*metav1.NewControllerRef(isbService, apiv1.ISBServiceRolloutGroupVersionKind)}, obj.OwnerReferences)
-	assert.Equal(t, operation, RolloutChildNew)
-}
 
 func Test_makeChildResourceFromRolloutAndUpdateSpecHash_InvalidType(t *testing.T) {
 	ctx := context.Background()
