@@ -24,20 +24,7 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Nil(t, err, "Failed to load configuration")
-
-	assert.Equal(t, "staging-usw2-k8s", config.ClusterName, "ClusterName does not match")
-	assert.Equal(t, "/tmp", config.PersistentRepoClonePath, "Persistent Repo Clone Path Doesn't match")
-	assert.Equal(t, 30000, config.SyncTimeIntervalMs, "SyncTimeIntervalMs does not match")
-	assert.Equal(t, false, config.AutoHealDisabled, "AutoHealDisabled does not match")
-	assert.Equal(t, false, config.AutomatedSyncDisabled, "AutomatedSyncDisabled does not match")
-	assert.Equal(t, false, config.CascadeDeletion, "CascadeDeletion Field does not match")
-	assert.Equal(t, "group=apps,kind=Deployment;"+
-		"group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;group=,kind=Namespace;"+
-		"group=numaflow.numaproj.io,kind=;"+
-		"group=numaplane.numaproj.io,kind=;"+
-		"group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role",
-		config.IncludedResources, "IncludedResources does not match")
-
+	assert.Equal(t, 3, config.LogLevel, "Log Level does not match")
 	// now verify that if we modify the file, it will still be okay
 	originalFile := "../../../tests/config/testconfig.yaml"
 	fileToCopy := "../../../tests/config/testconfig2.yaml"
@@ -52,9 +39,6 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	time.Sleep(10 * time.Second) // need to give it time to make sure that the file was reloaded
 	config, err = configManager.GetConfig()
 	assert.NoError(t, err)
-
-	assert.Equal(t, "staging-usw2-k8s", config.ClusterName, "ClusterName does not match")
-	assert.Equal(t, 30000, config.SyncTimeIntervalMs, "SyncTimeIntervalMs does not match")
 
 }
 
@@ -180,8 +164,7 @@ func TestGetConfigManagerInstanceSingleton(t *testing.T) {
 
 func TestCloneWithSerialization(t *testing.T) {
 	original := &GlobalConfig{
-		ClusterName:        "testCluster",
-		SyncTimeIntervalMs: 60000,
+		LogLevel: 0,
 	}
 
 	cloned, err := CloneWithSerialization(original)
@@ -196,16 +179,15 @@ func TestCloneWithSerialization(t *testing.T) {
 		t.Errorf("Cloned object is not deeply equal to the original")
 	}
 
-	cloned.ClusterName = "modifiedCluster"
-	if original.ClusterName == "modifiedCluster" {
+	cloned.LogLevel = 1
+	if original.LogLevel == 1 {
 		t.Errorf("Modifying clone affected the original object")
 	}
 }
 
 func createGlobalConfigForBenchmarking() *GlobalConfig {
 	return &GlobalConfig{
-		ClusterName:        "testCluster",
-		SyncTimeIntervalMs: 60000,
+		LogLevel: 0,
 	}
 }
 
