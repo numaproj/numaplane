@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo } from "react";
 import { ArgoPropType, History, Node } from "../ArgoPropType";
 import { Box, Chip, Paper } from "@mui/material";
+import CheckBoxIcon from "@mui/icons-material/CheckBox";
+import CancelIcon from "@mui/icons-material/Cancel";
 
 export const RolloutComponentWrapper = (props: ArgoPropType) => {
   const currentNodeKind = props.resource.kind;
@@ -39,7 +41,6 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
           return (
             <Box key={node.uid}>
               <Box>Pipeline Name : {node.name}</Box>
-              <Box>Name : {node.name}</Box>
               <Box>
                 Pipeline Status :{" "}
                 <Chip
@@ -56,23 +57,49 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
         })}
       </Paper>
       <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
-        <h5>Meta Data</h5>
-        {nodeKindToNodeArrayMap.get(currentNodeKind)?.map((node) => {
-          return (
-            <Box key={node.uid}>
-              <Box>Kind : {node.kind}</Box>
-              <Box>Name : {node.name}</Box>
-              <Box>Namespace : {node.namespace}</Box>
-              <Box>Resource Version : {node.resourceVersion}</Box>
-              <Box>Created at : {new Date(node.createdAt).toTimeString()}</Box>
-            </Box>
-          );
-        })}
+        <h5>Rollout Status</h5>
+        <Box sx={{ display: "flex" }}>
+          {props.application.status.resources.map((resource) => {
+            return (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  marginLeft: "1rem",
+                }}
+                key={resource.name}
+              >
+                <Box sx={{ display: "flex" }}>
+                  Resource Name : {resource.name}
+                </Box>
+                <Box sx={{ display: "flex" }}>
+                  Resource Kind : {resource.kind}
+                </Box>
+                <Box sx={{ display: "flex" }}>
+                  Resource Status :{" "}
+                  {resource.status === "Synced" ? (
+                    <CheckBoxIcon sx={{ color: "green" }} />
+                  ) : (
+                    <CancelIcon sx={{ color: "red" }} />
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
       </Paper>
-
       <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
         <h5>Status Data</h5>
-        <Box> Status : {currentStatusResource[0].status}</Box>
+        <Box>
+          {" "}
+          Status :{" "}
+          <Chip
+            label={currentStatusResource[0].status}
+            color={
+              currentStatusResource[0].status === "Synced" ? "success" : "error"
+            }
+          />
+        </Box>
         <Box>
           {" "}
           Repo URL :{" "}
@@ -90,15 +117,30 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
               <Box key={revision.id}>
                 <Box>
                   Revision :{" "}
-                  <a href={getRevisionURL(revision)}>{`Revision ${
-                    index + 1
-                  }`}</a>
+                  <a
+                    href={getRevisionURL(revision)}
+                    target="_blank"
+                  >{`Revision ${index + 1}`}</a>
                 </Box>
                 <Box>Deployed At : {`${revision.deployedAt}`}</Box>
               </Box>
             );
           })}
         </Box>
+      </Paper>
+      <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
+        <h5>Meta Data</h5>
+        {nodeKindToNodeArrayMap.get(currentNodeKind)?.map((node) => {
+          return (
+            <Box key={node.uid}>
+              <Box>Kind : {node.kind}</Box>
+              <Box>Name : {node.name}</Box>
+              <Box>Namespace : {node.namespace}</Box>
+              <Box>Resource Version : {node.resourceVersion}</Box>
+              <Box>Created at : {new Date(node.createdAt).toTimeString()}</Box>
+            </Box>
+          );
+        })}
       </Paper>
     </Box>
   );
