@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -183,6 +184,19 @@ var _ = Describe("PipelineRollout Controller", func() {
 				}
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
+
+			By("Verifying the spec hash stored in the PipelineRollout annotations")
+			var pipelineSpecAsMap map[string]any
+			Expect(json.Unmarshal(pipelineSpecRaw, &pipelineSpecAsMap)).ToNot(HaveOccurred())
+			pipelineSpecHash := util.MustHash(pipelineSpecAsMap)
+			Eventually(func() (string, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return "", err
+				}
+				return updatedResource.Annotations[apiv1.KeyHash], nil
+			}, timeout, interval).Should(Equal(pipelineSpecHash))
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {

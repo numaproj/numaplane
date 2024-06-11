@@ -203,7 +203,9 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
 	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
+	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
 		return true
 	}
 	return false

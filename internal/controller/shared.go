@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -83,10 +84,15 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 		},
 	}
 
-	childResouceSpecHash := util.MustHash(childResourceSpec)
+	var childResourceSpecAsMap map[string]any
+	err := json.Unmarshal(childResourceSpec.Raw, &childResourceSpecAsMap)
+	if err != nil {
+		return nil, RolloutChildNone, fmt.Errorf("unable to unmarshal %s spec to map: %v", kind, err)
+	}
+	childResouceSpecHash := util.MustHash(childResourceSpecAsMap)
 
 	rolloutChildOp := RolloutChildNone
-	_, err := kubernetes.GetCR(ctx, restConfig, &obj, pluralName)
+	_, err = kubernetes.GetCR(ctx, restConfig, &obj, pluralName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			rolloutChildOp = RolloutChildNew
