@@ -4,9 +4,7 @@ metadata:
   name: numaplane-controller-config
 data:
   config.yaml: |
-    syncTimeIntervalMs: 30000
+    logLevel: 3
     includedResources: "group=apps,kind=Deployment;\
     group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;\
-    group=numaflow.numaproj.io,kind=;\
-    group=numaplane.numaproj.io,kind=;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
