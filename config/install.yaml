@@ -764,7 +764,7 @@ data:
                     - controller
                   env:
                     - name: NUMAFLOW_IMAGE
-                      value: quay.io/numaproj/numaflow:latest
+                      value: quay.io/numaproj/numaflow:v1.2.1
                     - name: NAMESPACE
                       valueFrom:
                         fieldRef:
@@ -784,10 +784,28 @@ data:
                     - name: NUMAFLOW_LEADER_ELECTION_DISABLED
                       valueFrom:
                         configMapKeyRef:
-                          key: controller.disable.leader.election
+                          key: controller.leader.election.disabled
                           name: numaflow-cmd-params-config
                           optional: true
-                  image: quay.io/numaproj/numaflow:latest
+                    - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
+                      valueFrom:
+                        configMapKeyRef:
+                          key: controller.leader.election.lease.duration
+                          name: numaflow-cmd-params-config
+                          optional: true
+                    - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
+                      valueFrom:
+                        configMapKeyRef:
+                          key: controller.leader.election.lease.renew.deadline
+                          name: numaflow-cmd-params-config
+                          optional: true
+                    - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
+                      valueFrom:
+                        configMapKeyRef:
+                          key: controller.leader.election.lease.renew.period
+                          name: numaflow-cmd-params-config
+                          optional: true
+                  image: quay.io/numaproj/numaflow:v1.2.1
                   imagePullPolicy: Always
                   livenessProbe:
                     httpGet:
@@ -824,6 +842,11 @@ data:
         apiVersion: v1
         data:
           controller-config.yaml: |
+            defaults:
+              containerResources: |
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
             isbsvc:
               redis:
                 # Default Redis settings, could be overridden by InterStepBufferService specs
@@ -853,6 +876,11 @@ data:
                   redisImage: bitnami/redis:7.0.11-debian-11-r3
                   sentinelImage: bitnami/redis-sentinel:7.0.11-debian-11-r3
                   redisExporterImage: bitnami/redis-exporter:1.50.0-debian-11-r4
+                  initContainerImage: debian:latest
+                - version: 7.0.15
+                  redisImage: bitnami/redis:7.0.15-debian-11-r2
+                  sentinelImage: bitnami/redis-sentinel:7.0.15-debian-11-r2
+                  redisExporterImage: bitnami/redis-exporter:1.56.0-debian-11-r2
                   initContainerImage: debian:latest
               jetstream:
                 # Default JetStream settings, could be overridden by InterStepBufferService specs
@@ -952,6 +980,11 @@ data:
                   startCommand: /nats-server
                 - version: 2.10.3
                   natsImage: nats:2.10.3
+                  metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                  configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                  startCommand: /nats-server
+                - version: 2.10.11
+                  natsImage: nats:2.10.11
                   metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
                   configReloaderImage: natsio/nats-server-config-reloader:0.7.0
                   startCommand: /nats-server
