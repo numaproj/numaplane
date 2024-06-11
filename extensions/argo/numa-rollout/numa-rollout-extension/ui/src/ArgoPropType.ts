@@ -168,7 +168,7 @@ interface Sync2 {
 interface SyncStrategy {
   hook: _;
 }
-interface History {
+export interface History {
   revision: string;
   deployedAt: string;
   id: number;

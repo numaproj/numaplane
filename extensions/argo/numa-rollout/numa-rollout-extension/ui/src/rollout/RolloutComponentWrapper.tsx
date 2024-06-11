@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
-import { ArgoPropType, Node } from "../ArgoPropType";
-import { Box, Paper } from "@mui/material";
+import React, { useCallback, useMemo } from "react";
+import { ArgoPropType, History, Node } from "../ArgoPropType";
+import { Box, Chip, Paper } from "@mui/material";
 
 export const RolloutComponentWrapper = (props: ArgoPropType) => {
   const currentNodeKind = props.resource.kind;
@@ -23,10 +23,39 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
     }
     return nodeKindToNodeArrayMap;
   }, [props.tree]);
+
+  const getRevisionURL = useCallback((revision: History) => {
+    return `${props.application.spec.source.repoURL}/commit/${revision.revision}`.replace(
+      ".git",
+      ""
+    );
+  }, []);
   return (
     <Box>
       <h4>This is Numarollout Component for {currentNodeKind}</h4>
-      <Paper sx={{ padding: "1rem" }}>
+      <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
+        <h5>Pipeline Data</h5>
+        {nodeKindToNodeArrayMap.get("Pipeline")?.map((node) => {
+          return (
+            <Box key={node.uid}>
+              <Box>Pipeline Name : {node.name}</Box>
+              <Box>Name : {node.name}</Box>
+              <Box>
+                Pipeline Status :{" "}
+                <Chip
+                  label={props.resource.status.phase}
+                  color={
+                    props.resource.status.phase === "Running"
+                      ? "success"
+                      : "error"
+                  }
+                />
+              </Box>
+            </Box>
+          );
+        })}
+      </Paper>
+      <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
         <h5>Meta Data</h5>
         {nodeKindToNodeArrayMap.get(currentNodeKind)?.map((node) => {
           return (
@@ -56,11 +85,16 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
       <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
         <h5>Revision Data</h5>
         <Box>
-          {props.application.status.history.map((revision) => {
+          {props.application.status.history.map((revision, index) => {
             return (
               <Box key={revision.id}>
-                <Box>Revision Hash : {revision.revision}</Box>
-                <Box>Deployed At : {revision.deployedAt}</Box>
+                <Box>
+                  Revision :{" "}
+                  <a href={getRevisionURL(revision)}>{`Revision ${
+                    index + 1
+                  }`}</a>
+                </Box>
+                <Box>Deployed At : {`${revision.deployedAt}`}</Box>
               </Box>
             );
           })}
