@@ -153,6 +153,24 @@ var _ = Describe("PipelineRollout Controller", func() {
 			currentPipelineRollout := &apiv1.PipelineRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 
+			var lastTransitionTime time.Time
+			Eventually(func() (time.Time, error) {
+				currentResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, currentResource)
+				if err != nil {
+					return time.Time{}, err
+				}
+
+				for _, cond := range currentPipelineRollout.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						lastTransitionTime = cond.LastTransitionTime.Time
+						return lastTransitionTime, nil
+					}
+				}
+
+				return time.Time{}, nil
+			}, timeout, interval).Should(Not(Equal(time.Time{})))
+
 			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
 			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 			Expect(err).ToNot(HaveOccurred())
@@ -197,6 +215,47 @@ var _ = Describe("PipelineRollout Controller", func() {
 				}
 				return updatedResource.Annotations[apiv1.KeyHash], nil
 			}, timeout, interval).Should(Equal(pipelineSpecHash))
+
+			By("Verifying the LastTransitionTime of the Configured condition of the PipelineRollout is after the time of the initial configuration")
+			Eventually(func() (bool, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return false, err
+				}
+
+				for _, cond := range updatedResource.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
+						lastTransitionTime = cond.LastTransitionTime.Time
+						return isAfter, nil
+					}
+				}
+
+				return false, nil
+			}, time.Second, interval).Should(BeTrue())
+
+			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change) and the hash spec annotation should not change")
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
+			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
+			Eventually(func() (bool, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return false, err
+				}
+
+				equalHash := updatedResource.Annotations[apiv1.KeyHash] == pipelineSpecHash
+
+				for _, cond := range updatedResource.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						equalTime := cond.LastTransitionTime.Time.Equal(lastTransitionTime)
+						return equalTime && equalHash, nil
+					}
+				}
+
+				return false, nil
+			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
