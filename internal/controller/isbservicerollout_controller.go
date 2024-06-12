@@ -157,6 +157,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 			return err
 		}
+
+		kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, childResouceSpecHash)
 	}
 
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
@@ -168,7 +170,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
-	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, childResouceSpecHash)
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil

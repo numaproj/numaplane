@@ -166,6 +166,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if err != nil {
 			return false, err
 		}
+
+		kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
 	} else {
 		// If the pipeline already exists, first check if the pipeline status
 		// is pausing. If so, re-enqueue immediately.
@@ -193,7 +195,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp)
+			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -215,7 +217,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp)
+			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -223,13 +225,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 
 		// If no need to pause, just apply the spec
-		err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp)
+		err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
 		if err != nil {
 			return false, err
 		}
 	}
 
-	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
 	pipelineRollout.Status.MarkRunning()
 
 	return false, nil
@@ -338,6 +339,7 @@ func applyPipelineSpec(
 	obj *kubernetes.GenericObject,
 	pipelineRollout *apiv1.PipelineRollout,
 	rolloutChildOp RolloutChildOperation,
+	childResouceSpecHash string,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
@@ -349,6 +351,8 @@ func applyPipelineSpec(
 			pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
 			return err
 		}
+
+		kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
 	} else {
 		numaLogger.Debug("Pipeline spec is unchanged. No updates will be performed")
 	}
