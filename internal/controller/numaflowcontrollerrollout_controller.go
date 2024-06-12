@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	finalizerName = "numaplane-controller"
+	finalizerName = "numaplane.numaproj.io/numaplane-controller"
 )
 
 const (
