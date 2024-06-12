@@ -226,7 +226,7 @@ func TestDeleteManagedObjectsGitSync(t *testing.T) {
 	assert.True(t, k8sClient.IgnoreNotFound(err) == nil)
 }
 
-func Test_setAnnotation(t *testing.T) {
+func TestSetAnnotation(t *testing.T) {
 	key1, value1 := "some_key_1", "some_value_1"
 	key2, value2 := "some_key_2", "some_value_2"
 
