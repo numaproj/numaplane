@@ -392,3 +392,14 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 
 	return &genericObject, err
 }
+
+func SetAnnotation(obj metav1.Object, key, value string) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	annotations[key] = value
+
+	obj.SetAnnotations(annotations)
+}

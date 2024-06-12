@@ -44,13 +44,14 @@ const (
 )
 
 // makeChildResourceFromRolloutAndUpdateSpecHash makes a new kubernetes.GenericObject based on the given rolloutObj.
-// It returns the child resource object ready to be created and an operation to be performed with the returned object.
+// It returns the child resource object ready to be created, an operation to be performed with the returned object,
+// and the calculated hash of the raw spec of the rollout to be set in the rollout annotations after succesful deployment.
 // The operations are defined by the RolloutChildOperation constants.
 func makeChildResourceFromRolloutAndUpdateSpecHash(
 	ctx context.Context,
 	restConfig *rest.Config,
 	rolloutObj metav1.Object,
-) (*kubernetes.GenericObject, RolloutChildOperation, error) {
+) (*kubernetes.GenericObject, RolloutChildOperation, string, error) {
 	kind := ""
 	pluralName := ""
 	var groupVersionKind schema.GroupVersionKind
@@ -69,7 +70,7 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 		groupVersionKind = apiv1.ISBServiceRolloutGroupVersionKind
 		childResourceSpec = ro.Spec.InterStepBufferService
 	default:
-		return nil, RolloutChildNoop, errors.New("invalid rollout type")
+		return nil, RolloutChildNoop, "", errors.New("invalid rollout type")
 	}
 
 	obj := kubernetes.GenericObject{
@@ -87,7 +88,7 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 	var childResourceSpecAsMap map[string]any
 	err := json.Unmarshal(childResourceSpec.Raw, &childResourceSpecAsMap)
 	if err != nil {
-		return nil, RolloutChildNoop, fmt.Errorf("unable to unmarshal %s spec to map: %v", kind, err)
+		return nil, RolloutChildNoop, "", fmt.Errorf("unable to unmarshal %s spec to map: %v", kind, err)
 	}
 	childResouceSpecHash := util.MustHash(childResourceSpecAsMap)
 
@@ -97,7 +98,7 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 		if apierrors.IsNotFound(err) {
 			rolloutChildOp = RolloutChildNew
 		} else {
-			return nil, RolloutChildNoop, fmt.Errorf("unable to get %s %s/%s: %v", kind, obj.Namespace, obj.Name, err)
+			return nil, RolloutChildNoop, "", fmt.Errorf("unable to get %s %s/%s: %v", kind, obj.Namespace, obj.Name, err)
 		}
 	}
 
@@ -108,19 +109,7 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 		}
 	}
 
-	setAnnotation(rolloutObj, apiv1.KeyHash, childResouceSpecHash)
 	obj.Spec = childResourceSpec
 
-	return &obj, rolloutChildOp, nil
-}
-
-func setAnnotation(obj metav1.Object, key, value string) {
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[key] = value
-
-	obj.SetAnnotations(annotations)
+	return &obj, rolloutChildOp, childResouceSpecHash, nil
 }

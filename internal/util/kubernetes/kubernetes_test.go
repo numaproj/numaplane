@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/argoproj/gitops-engine/pkg/utils/kube"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -223,4 +224,46 @@ func TestDeleteManagedObjectsGitSync(t *testing.T) {
 	err = fakeClient.Get(ctx, namespacedName, resource)
 	assert.Error(t, err)
 	assert.True(t, k8sClient.IgnoreNotFound(err) == nil)
+}
+
+func Test_setAnnotation(t *testing.T) {
+	key1, value1 := "some_key_1", "some_value_1"
+	key2, value2 := "some_key_2", "some_value_2"
+
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pipeline-test",
+			Namespace: "default",
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: runtime.RawExtension{Raw: []byte(`{"key":"value"}`)},
+		},
+	}
+
+	// Invoke the method under test
+	SetAnnotation(pipelineRollout, key1, value1)
+
+	// Check if the annotation was correctly set
+	annotations := pipelineRollout.GetAnnotations()
+	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
+	assert.Contains(t, annotations, key1, "Expected the key to be set in the annotations")
+	assert.Equal(t, value1, annotations[key1], "Expected the value to be set for the key in the annotations")
+
+	// Overwrite existing annotation
+	newValue := "new_value"
+	SetAnnotation(pipelineRollout, key1, newValue)
+
+	// Check if the annotation was correctly updated
+	annotations = pipelineRollout.GetAnnotations()
+	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
+	assert.Contains(t, annotations, key1, "Expected the key to be set in the annotations")
+	assert.NotEqual(t, value1, annotations[key1], "Expected the old value to be replaced")
+	assert.Equal(t, newValue, annotations[key1], "Expected the new value to be set for the key in the annotations")
+
+	// Add one more annotation
+	SetAnnotation(pipelineRollout, key2, value2)
+	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
+	assert.Len(t, annotations, 2, "Expected annotations to be of length 2")
+	assert.Contains(t, annotations, key2, "Expected the key to be set in the annotations")
+	assert.Equal(t, value2, annotations[key2], "Expected the value to be set for the key in the annotations")
 }

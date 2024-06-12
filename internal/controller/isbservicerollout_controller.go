@@ -143,7 +143,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// make an InterStepBufferService object and add/update spec hash on the ISBServiceRollout object
-	obj, rolloutChildOp, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, isbServiceRollout)
+	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, isbServiceRollout)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to make an InterStepBufferService object and to update the ISBServiceRollout: %v", err)
 		return err
@@ -168,6 +168,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
+	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, childResouceSpecHash)
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil

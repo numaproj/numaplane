@@ -155,7 +155,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// make a Pipeline object and add/update spec hash on the PipelineRollout object
-	obj, rolloutChildOp, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, pipelineRollout)
+	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, pipelineRollout)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to make a Pipeline object and to update the PipelineRollout: %v", err)
 		return false, err
@@ -229,6 +229,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
+	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
 	pipelineRollout.Status.MarkRunning()
 
 	return false, nil
