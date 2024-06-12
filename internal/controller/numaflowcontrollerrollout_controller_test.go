@@ -30,14 +30,17 @@ import (
 )
 
 var _ = Describe("NumaflowControllerRollout Controller", func() {
+	const (
+		namespace = "default"
+	)
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "numaflow-controller"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: namespace, // TODO(user):Modify as needed
 		}
 		numaflowcontrollerrollout := &apiv1.NumaflowControllerRollout{}
 
@@ -48,7 +51,7 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 				resource := &apiv1.NumaflowControllerRollout{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: namespace,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -65,6 +68,23 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 			By("Cleanup the specific resource instance NumaflowControllerRollout")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
+		It("Should throw a CR validation error", func() {
+			By("Creating a NumaflowControllerRollout resource with an invalid name")
+			resource := &apiv1.NumaflowControllerRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-numaflow-controller", // invalid name: only supported name is "numaflow-controller"
+					Namespace: namespace,
+				},
+				Spec: apiv1.NumaflowControllerRolloutSpec{
+					Controller: apiv1.Controller{Version: "1.2.1"},
+				},
+			}
+			err := k8sClient.Create(ctx, resource)
+			Expect(err).NotTo(Succeed())
+			Expect(err.Error()).To(ContainSubstring("The metadata name must be 'numaflow-controller'"))
+		})
+
 		// It("should successfully reconcile the resource", func() {
 		// 	By("Reconciling the created resource")
 		// 	controllerReconciler := &NumaflowControllerRolloutReconciler{
