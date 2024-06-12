@@ -40,7 +40,7 @@ const (
 	// The child resource exists on the cluster but needs to be update
 	RolloutChildUpdate RolloutChildOperation = "UPDATE_CHILD_RESOURCE"
 	// The child resource exists on the cluster and does not need to be update
-	RolloutChildNone RolloutChildOperation = "DO_NOTHING"
+	RolloutChildNoop RolloutChildOperation = "DO_NOTHING"
 )
 
 // makeChildResourceFromRolloutAndUpdateSpecHash makes a new kubernetes.GenericObject based on the given rolloutObj.
@@ -69,7 +69,7 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 		groupVersionKind = apiv1.ISBServiceRolloutGroupVersionKind
 		childResourceSpec = ro.Spec.InterStepBufferService
 	default:
-		return nil, RolloutChildNone, errors.New("invalid rollout type")
+		return nil, RolloutChildNoop, errors.New("invalid rollout type")
 	}
 
 	obj := kubernetes.GenericObject{
@@ -87,21 +87,21 @@ func makeChildResourceFromRolloutAndUpdateSpecHash(
 	var childResourceSpecAsMap map[string]any
 	err := json.Unmarshal(childResourceSpec.Raw, &childResourceSpecAsMap)
 	if err != nil {
-		return nil, RolloutChildNone, fmt.Errorf("unable to unmarshal %s spec to map: %v", kind, err)
+		return nil, RolloutChildNoop, fmt.Errorf("unable to unmarshal %s spec to map: %v", kind, err)
 	}
 	childResouceSpecHash := util.MustHash(childResourceSpecAsMap)
 
-	rolloutChildOp := RolloutChildNone
+	rolloutChildOp := RolloutChildNoop
 	_, err = kubernetes.GetCR(ctx, restConfig, &obj, pluralName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			rolloutChildOp = RolloutChildNew
 		} else {
-			return nil, RolloutChildNone, fmt.Errorf("unable to get %s %s/%s: %v", kind, obj.Namespace, obj.Name, err)
+			return nil, RolloutChildNoop, fmt.Errorf("unable to get %s %s/%s: %v", kind, obj.Namespace, obj.Name, err)
 		}
 	}
 
-	if rolloutChildOp == RolloutChildNone {
+	if rolloutChildOp == RolloutChildNoop {
 		annotations := rolloutObj.GetAnnotations()
 		if annotation, exists := annotations[apiv1.KeyHash]; exists && annotation != childResouceSpecHash {
 			rolloutChildOp = RolloutChildUpdate

@@ -150,7 +150,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// TODO: instead of doing this, modify the ApplyCRSpec below to be similar to what is done on the PipelineRollout controller code
-	if rolloutChildOp == RolloutChildNone {
+	if rolloutChildOp == RolloutChildNoop {
 		numaLogger.Debug("InterStepBufferService spec is unchanged. No updates will be performed")
 		return nil
 	}

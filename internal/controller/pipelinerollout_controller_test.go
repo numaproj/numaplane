@@ -127,6 +127,19 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 			By("Verifying the content of the pipeline spec field")
 			Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
+
+			By("Verifying the spec hash stored in the PipelineRollout annotations after creation")
+			var pipelineSpecAsMap map[string]any
+			Expect(json.Unmarshal(pipelineSpecRaw, &pipelineSpecAsMap)).ToNot(HaveOccurred())
+			pipelineSpecHash := util.MustHash(pipelineSpecAsMap)
+			Eventually(func() (string, error) {
+				createdResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				if err != nil {
+					return "", err
+				}
+				return createdResource.Annotations[apiv1.KeyHash], nil
+			}, timeout, interval).Should(Equal(pipelineSpecHash))
 		})
 
 		It("Should create a Numaflow Pipeline", func() {
@@ -207,7 +220,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			By("Verifying the spec hash stored in the PipelineRollout annotations")
+			By("Verifying the spec hash stored in the PipelineRollout annotations after update")
 			var pipelineSpecAsMap map[string]any
 			Expect(json.Unmarshal(pipelineSpecRaw, &pipelineSpecAsMap)).ToNot(HaveOccurred())
 			pipelineSpecHash := util.MustHash(pipelineSpecAsMap)
