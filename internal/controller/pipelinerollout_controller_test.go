@@ -33,8 +33,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 

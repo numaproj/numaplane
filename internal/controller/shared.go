@@ -22,8 +22,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/numaproj/numaplane/internal/kubernetes"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
