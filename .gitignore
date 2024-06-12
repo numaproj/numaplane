@@ -1,4 +1,4 @@
-# If you prefer the allow list template instead of the deny list, see community template:
+ß# If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
@@ -32,3 +32,5 @@ go.work
 config/crd/bases/_.yaml
 .idea
 extensions/argo/numa-rollout/numa-rollout-extension/node_modules
+
+config/crd/external/
