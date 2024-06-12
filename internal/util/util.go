@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 )
 
+// MustHash returns a sha256 encoded string based on the given argument.
 func MustHash(v any) string {
 	switch data := v.(type) {
 	case []byte:
@@ -37,6 +38,8 @@ func MustHash(v any) string {
 	}
 }
 
+// MustJSON makes sure the in argument is a valid JSON struct
+// and returns its marshalled string version.
 func MustJSON(in any) string {
 	if data, err := json.Marshal(in); err != nil {
 		panic(err)
