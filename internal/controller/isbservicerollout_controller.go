@@ -150,16 +150,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// TODO: instead of doing this, modify the ApplyCRSpec below to be similar to what is done on the PipelineRollout controller code
-	if rolloutChildOp == RolloutChildNoop {
-		numaLogger.Debug("InterStepBufferService spec is unchanged. No updates will be performed")
-		return nil
-	}
-
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, obj, "interstepbufferservices")
-	if err != nil {
-		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-		return err
+	if rolloutChildOp != RolloutChildNoop {
+		err = kubernetes.ApplyCRSpec(ctx, r.restConfig, obj, "interstepbufferservices")
+		if err != nil {
+			numaLogger.Errorf(err, "failed to apply CR: %v", err)
+			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
+			return err
+		}
 	}
 
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
