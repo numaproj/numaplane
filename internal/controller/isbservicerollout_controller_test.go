@@ -199,12 +199,12 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 
 			Expect(k8sClient.Create(ctx, &apiv1.ISBServiceRollout{
 				ObjectMeta: isbServiceRollout.ObjectMeta,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.ISBServiceRollout{
 				ObjectMeta: isbServiceRollout.ObjectMeta,
 				Spec:       apiv1.ISBServiceRolloutSpec{},
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 		})
 	})
 })
