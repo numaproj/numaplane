@@ -79,33 +79,32 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the content of the ISBServiceRollout spec field")
-			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
+			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
 			Expect(json.Unmarshal(createdResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
-			Expect(createdResource.Spec).Should(Equal(isbServiceRollout.Spec))
+
+			By("Verifying the content of the ISBServiceRollout spec field")
+			Expect(createdInterStepBufferServiceSpec).Should(Equal(isbsSpec))
 		})
 
-		It("Should have created an ISBServiceRollout", func() {
-			createdISBR := &apiv1.ISBServiceRollout{}
+		It("Should have created an InterStepBufferService ", func() {
+			createdISBResource := &numaflowv1.InterStepBufferService{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, createdISBR)
+				err := k8sClient.Get(ctx, resourceLookupKey, createdISBResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the content of the ISBServiceRollout spec")
-			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
-			Expect(json.Unmarshal(createdISBR.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
-			Expect(createdISBR.Spec).Should(Equal(isbServiceRollout.Spec))
+			By("Verifying the content of the InterStepBufferService spec")
+			Expect(createdISBResource.Spec).Should(Equal(isbsSpec))
 		})
 
 		It("Should have the ISBServiceRollout Status Phase as Running", func() {
 			Consistently(func() (apiv1.Phase, error) {
-				createdISBR := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdISBR)
+				createdISBResource := &apiv1.ISBServiceRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, createdISBResource)
 				if err != nil {
 					return apiv1.Phase(""), err
 				}
-				return createdISBR.Status.Phase, nil
+				return createdISBResource.Status.Phase, nil
 			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
 		})
 
@@ -130,24 +129,37 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Update the spec
-			currentISBServiceRollout.Spec.InterStepBufferService = runtime.RawExtension{Raw: newIsbsSpecRaw}
+			currentISBServiceRollout.Spec.InterStepBufferService.Raw = newIsbsSpecRaw //runtime.RawExtension{Raw: newIsbsSpecRaw}
 
 			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
 
-			By("Verifying the content of the ISBServiceRollout spec field")
-			Eventually(func() apiv1.ISBServiceRolloutSpec {
+			By("Verifying the content of the ISBServiceRollout")
+			Eventually(func() (numaflowv1.InterStepBufferServiceSpec, error) {
 				updatedResource := &apiv1.ISBServiceRollout{}
-				_ = k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return numaflowv1.InterStepBufferServiceSpec{}, err
+				}
 
-				createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferService{}
+				createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
 				Expect(json.Unmarshal(updatedResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
 
-				return updatedResource.Spec
-			}, timeout, interval).Should(Equal(currentISBServiceRollout.Spec))
+				return createdInterStepBufferServiceSpec, nil
+			}, timeout, interval).Should(Equal(newIsbsSpec))
+
+			By("Verifying the content of the InterStepBufferService ")
+			Eventually(func() (numaflowv1.InterStepBufferServiceSpec, error) {
+				updatedChildResource := &numaflowv1.InterStepBufferService{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
+				if err != nil {
+					return numaflowv1.InterStepBufferServiceSpec{}, err
+				}
+				return updatedChildResource.Spec, nil
+			}, timeout, interval).Should(Equal(newIsbsSpec))
 
 		})
 
-		It("Should delete the ISBServiceRollout", func() {
+		It("Should delete the ISBServiceRollout and InterStepBufferService", func() {
 			Expect(k8sClient.Delete(ctx, &apiv1.ISBServiceRollout{
 				ObjectMeta: isbServiceRollout.ObjectMeta,
 			})).Should(Succeed())
@@ -157,6 +169,15 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
+
+			deletingChildResource := &numaflowv1.InterStepBufferService{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
+			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
 
 			// TODO: use this on real cluster for e2e tests
 			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
@@ -174,7 +195,7 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 		It("Should not create the ISBServiceRollout", func() {
 			Expect(k8sClient.Create(ctx, &apiv1.ISBServiceRollout{
 				Spec: isbServiceRollout.Spec,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.ISBServiceRollout{
 				ObjectMeta: isbServiceRollout.ObjectMeta,
