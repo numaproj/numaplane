@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	finalizerName = "numaplane-controller"
+	finalizerName = "numaplane.numaproj.io/numaplane-controller"
 )
 
 const (
@@ -120,7 +120,7 @@ func loadDefinitions() (map[string]string, error) {
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// update the Base Logger's level according to the Numaplane Config
 	logger.RefreshBaseLoggerLevel()
-	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
+	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 
 	// TODO: only allow one controllerRollout per namespace.
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}

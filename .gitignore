@@ -31,3 +31,5 @@ go.work
 
 config/crd/bases/_.yaml
 .idea
+
+config/crd/external/
