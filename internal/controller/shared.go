@@ -104,7 +104,7 @@ func makeChildResourceFromRolloutAndCalculateSpecHash(
 
 	if rolloutChildOp == RolloutChildNoop {
 		annotations := rolloutObj.GetAnnotations()
-		if annotation, exists := annotations[apiv1.KeyHash]; exists && annotation != childResouceSpecHash {
+		if annotation := annotations[apiv1.KeyHash]; annotation != childResouceSpecHash {
 			rolloutChildOp = RolloutChildUpdate
 		}
 	}
