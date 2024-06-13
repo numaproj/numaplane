@@ -21,7 +21,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -77,7 +76,7 @@ func NewISBServiceRolloutReconciler(
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// update the Base Logger's level according to the Numaplane Config
 	logger.RefreshBaseLoggerLevel()
-	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("isbservicerollout", req.NamespacedName)
+	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
@@ -143,29 +142,28 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	// apply ISBService
-	// todo: store hash of spec in annotation; use to compare to determine if anything needs to be updated
-	obj := kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "InterStepBufferService",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            isbServiceRollout.Name,
-			Namespace:       isbServiceRollout.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
-		},
-		Spec: isbServiceRollout.Spec.InterStepBufferService,
+	// make an InterStepBufferService object and add/update spec hash on the ISBServiceRollout object
+	obj, rolloutChildOp, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, isbServiceRollout)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to make an InterStepBufferService object and to update the ISBServiceRollout: %v", err)
+		return err
 	}
 
-	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
+	// TODO: instead of doing this, modify the ApplyCRSpec below to be similar to what is done on the PipelineRollout controller code
+	if rolloutChildOp == RolloutChildNoop {
+		numaLogger.Debug("InterStepBufferService spec is unchanged. No updates will be performed")
+		return nil
+	}
+
+	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
+
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
+	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
 		return err
@@ -206,7 +204,9 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
 	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
+	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
 		return true
 	}
 	return false
