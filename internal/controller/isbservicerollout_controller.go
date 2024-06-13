@@ -142,10 +142,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	// make an InterStepBufferService object and add/update spec hash on the ISBServiceRollout object
-	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, isbServiceRollout)
+	// make an InterStepBufferService object and calculate the spec hash
+	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, r.restConfig, isbServiceRollout)
 	if err != nil {
-		numaLogger.Errorf(err, "failed to make an InterStepBufferService object and to update the ISBServiceRollout: %v", err)
+		numaLogger.Errorf(err, "failed to make an InterStepBufferService object and to calculate the spec hash: %v", err)
 		return err
 	}
 

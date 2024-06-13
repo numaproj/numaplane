@@ -154,10 +154,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	// make a Pipeline object and add/update spec hash on the PipelineRollout object
-	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, pipelineRollout)
+	// make a Pipeline object and calculate the spec hash
+	obj, rolloutChildOp, childResouceSpecHash, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, r.restConfig, pipelineRollout)
 	if err != nil {
-		numaLogger.Errorf(err, "failed to make a Pipeline object and to update the PipelineRollout: %v", err)
+		numaLogger.Errorf(err, "failed to make a Pipeline object and to calculate the spec hash: %v", err)
 		return false, err
 	}
 
@@ -168,7 +168,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 
 		kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
-	} else {
+	} else if rolloutChildOp != RolloutChildNoop {
 		// If the pipeline already exists, first check if the pipeline status
 		// is pausing. If so, re-enqueue immediately.
 		pipeline, err := kubernetes.GetCR(ctx, r.restConfig, obj, "pipelines")
@@ -195,7 +195,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
+			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, childResouceSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -217,7 +217,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
+			err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, childResouceSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -225,10 +225,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 
 		// If no need to pause, just apply the spec
-		err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, rolloutChildOp, childResouceSpecHash)
+		err = applyPipelineSpec(ctx, r.restConfig, obj, pipelineRollout, childResouceSpecHash)
 		if err != nil {
 			return false, err
 		}
+	} else {
+		numaLogger.Debug("Pipeline spec is unchanged. No updates will be performed")
 	}
 
 	pipelineRollout.Status.MarkRunning()
@@ -338,24 +340,19 @@ func applyPipelineSpec(
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 	pipelineRollout *apiv1.PipelineRollout,
-	rolloutChildOp RolloutChildOperation,
 	childResouceSpecHash string,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	if rolloutChildOp != RolloutChildNoop {
-		// TODO: use UpdateSpec instead
-		err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
-		if err != nil {
-			numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
-			pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
-			return err
-		}
-
-		kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
-	} else {
-		numaLogger.Debug("Pipeline spec is unchanged. No updates will be performed")
+	// TODO: use UpdateSpec instead
+	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
+	if err != nil {
+		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
+		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
+		return err
 	}
+
+	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, childResouceSpecHash)
 
 	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
 	pipeline, err := kubernetes.GetCR(ctx, restConfig, obj, "pipelines")

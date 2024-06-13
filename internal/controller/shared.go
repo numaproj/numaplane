@@ -43,11 +43,11 @@ const (
 	RolloutChildNoop RolloutChildOperation = "DO_NOTHING"
 )
 
-// makeChildResourceFromRolloutAndUpdateSpecHash makes a new kubernetes.GenericObject based on the given rolloutObj.
+// makeChildResourceFromRolloutAndCalculatepecHash makes a new kubernetes.GenericObject based on the given rolloutObj.
 // It returns the child resource object ready to be created, an operation to be performed with the returned object,
 // and the calculated hash of the raw spec of the rollout to be set in the rollout annotations after succesful deployment.
 // The operations are defined by the RolloutChildOperation constants.
-func makeChildResourceFromRolloutAndUpdateSpecHash(
+func makeChildResourceFromRolloutAndCalculateSpecHash(
 	ctx context.Context,
 	restConfig *rest.Config,
 	rolloutObj metav1.Object,

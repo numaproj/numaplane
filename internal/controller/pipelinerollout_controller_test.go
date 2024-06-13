@@ -325,19 +325,19 @@ var _ = Describe("PipelineRollout Controller", func() {
 	})
 })
 
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_InvalidType(t *testing.T) {
+func Test_makeChildResourceFromRolloutAndCalculateSpecHash_InvalidType(t *testing.T) {
 	ctx := context.Background()
 	restConfig := &rest.Config{}
 
 	invalidType := kubernetes.GenericObject{}
 
-	_, _, _, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, &invalidType)
+	_, _, _, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, restConfig, &invalidType)
 
 	assert.Error(t, err)
 	assert.Equal(t, "invalid rollout type", err.Error())
 }
 
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_PipelineRollout_UnmarshalError(t *testing.T) {
+func Test_makeChildResourceFromRolloutAndCalculateSpecHash_PipelineRollout_UnmarshalError(t *testing.T) {
 	ctx := context.Background()
 	restConfig := &rest.Config{}
 
@@ -352,6 +352,6 @@ func Test_makeChildResourceFromRolloutAndUpdateSpecHash_PipelineRollout_Unmarsha
 		},
 	}
 
-	_, _, _, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, pipelineRolloutInvalidSpec)
+	_, _, _, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, restConfig, pipelineRolloutInvalidSpec)
 	assert.Error(t, err)
 }
