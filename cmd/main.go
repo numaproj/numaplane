@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -58,6 +59,10 @@ func init() {
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 
 	utilruntime.Must(numaflowv1.AddToScheme(scheme))
+
+	if err := kubernetes.StartConfigMapWatcher(context.Background(), ctrl.GetConfigOrDie(), os.Getenv("MOUNT_PATH")); err != nil {
+		numaLogger.Fatal(err, "Failed to start configmap watcher")
+	}
 }
 
 func main() {

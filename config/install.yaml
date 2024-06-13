@@ -1175,6 +1175,9 @@ spec:
         - --leader-elect
         command:
         - /manager
+        env:
+        - name: MOUNT_PATH
+          value: /etc/numarollout
         image: quay.io/numaproj/numaplane-controller:latest
         livenessProbe:
           httpGet:
@@ -1201,8 +1204,6 @@ spec:
         volumeMounts:
         - mountPath: /etc/numaplane
           name: config-volume
-        - mountPath: /etc/numarollout
-          name: numarollout-volume
       initContainers: []
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
@@ -1210,6 +1211,3 @@ spec:
       - configMap:
           name: numaplane-controller-config
         name: config-volume
-      - configMap:
-          name: numaflow-controller-definitions-config
-        name: numarollout-volume

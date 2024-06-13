@@ -57,6 +57,9 @@ spec:
             - --leader-elect
           image: quay.io/numaproj/numaplane-controller:latest
           name: manager
+          env:
+            - name: "MOUNT_PATH"
+              value: "/etc/numarollout"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -83,14 +86,14 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /etc/numaplane
-            - name: numarollout-volume
-              mountPath: /etc/numarollout
+#            - name: numarollout-volume
+#              mountPath: /etc/numarollout
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
       volumes:
         - name: config-volume
           configMap:
             name: numaplane-controller-config
-        - name: numarollout-volume
-          configMap:
-            name: numaflow-controller-definitions-config
+#        - name: numarollout-volume
+#          configMap:
+#            name: numaflow-controller-definitions-config
