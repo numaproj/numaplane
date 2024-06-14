@@ -19,22 +19,18 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -324,34 +320,3 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 	})
 })
-
-func Test_makeChildResourceFromRolloutAndCalculateSpecHash_InvalidType(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	invalidType := kubernetes.GenericObject{}
-
-	_, _, _, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, restConfig, &invalidType)
-
-	assert.Error(t, err)
-	assert.Equal(t, "invalid rollout type", err.Error())
-}
-
-func Test_makeChildResourceFromRolloutAndCalculateSpecHash_PipelineRollout_UnmarshalError(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	pipelineRolloutInvalidSpec := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pipeline-test",
-			Namespace: "default",
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			// providing invalid JSON for unmarshal error
-			Pipeline: runtime.RawExtension{Raw: []byte(`{"key":"value"`)},
-		},
-	}
-
-	_, _, _, err := makeChildResourceFromRolloutAndCalculateSpecHash(ctx, restConfig, pipelineRolloutInvalidSpec)
-	assert.Error(t, err)
-}

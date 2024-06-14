@@ -260,7 +260,7 @@ func GetResource(
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
 // TODO: use CreateCR and UpdateCR instead
-func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string, specHash string, rolloutHashAnnotation string) error {
 	numaLogger := logger.FromContext(ctx)
 
 	client, err := dynamic.NewForConfig(restConfig)
@@ -303,8 +303,12 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 
 	} else {
 		numaLogger.Debugf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource)
-		// todo:
-		//   If the existing annotation matches the new hash, then nothing to do: log and return
+
+		// If the existing annotation matches the new hash, then nothing to do: log and return
+		if rolloutHashAnnotation == specHash {
+			numaLogger.Debug("Rollout spec is unchanged (by spec hash comparison). No updates will be performed")
+			return nil
+		}
 
 		// replace the Object's Spec
 		resource.Object["spec"] = object.Spec
