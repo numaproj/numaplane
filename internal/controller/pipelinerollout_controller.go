@@ -287,7 +287,9 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch Pipelines
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}), &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
+		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
 	}
 
