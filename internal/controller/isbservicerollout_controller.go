@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -114,7 +115,16 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		if err := r.client.Status().Update(ctx, isbServiceRollout); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latestISBServiceRollout := &apiv1.ISBServiceRollout{}
+			if err := r.client.Get(ctx, req.NamespacedName, latestISBServiceRollout); err != nil {
+				return err
+			}
+
+			latestISBServiceRollout.Status = isbServiceRollout.Status
+			return r.client.Status().Update(ctx, latestISBServiceRollout)
+		})
+		if err != nil {
 			numaLogger.Error(err, "Error Updating isbServiceRollout Status", "isbServiceRollout", isbServiceRollout)
 			return ctrl.Result{}, err
 		}

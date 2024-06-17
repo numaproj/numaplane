@@ -248,6 +248,16 @@ var _ = Describe("PipelineRollout Controller", func() {
 				return false, nil
 			}, time.Second, interval).Should(BeTrue())
 
+			By("Verifying that the PipelineRollout Status Phase is Running")
+			Consistently(func() (apiv1.Phase, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return apiv1.Phase(""), err
+				}
+				return updatedResource.Status.Phase, nil
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+
 			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change) and the hash spec annotation should not change")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
