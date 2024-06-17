@@ -214,7 +214,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return nil
 }
 
-// applyOwnershipToManifests Applies GitSync ownership to Kubernetes manifests, returning modified manifests or an error.
+// applyOwnershipToManifests Applies NumaflowControllerRollout ownership to
+// Kubernetes manifests, returning modified manifests or an error.
 func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
 	manifestsWithOwnership := make([]string, 0, len(manifests))
 	for _, v := range manifests {

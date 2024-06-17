@@ -5,16 +5,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/argoproj/gitops-engine/pkg/utils/kube"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
@@ -49,21 +45,21 @@ func TestIsValidKubernetesNamespace(t *testing.T) {
 	}
 }
 
-func TestGetGitSyncInstanceLabel(t *testing.T) {
+func TestGetNumaplaneInstanceLabel(t *testing.T) {
 	yamlBytes, err := os.ReadFile("testdata/svc.yaml")
 	assert.Nil(t, err)
 	var obj unstructured.Unstructured
 	err = yaml.Unmarshal(yamlBytes, &obj)
 	assert.Nil(t, err)
-	err = SetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance, "my-gitsync")
+	err = SetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance, "my-example")
 	assert.Nil(t, err)
 
 	label, err := GetNumaplaneInstanceLabel(&obj, common.LabelKeyNumaplaneInstance)
 	assert.Nil(t, err)
-	assert.Equal(t, "my-gitsync", label)
+	assert.Equal(t, "my-example", label)
 }
 
-func TestGetGitSyncInstanceLabelWithInvalidData(t *testing.T) {
+func TestGetNumaplaneInstanceLabelWithInvalidData(t *testing.T) {
 	yamlBytes, err := os.ReadFile("testdata/svc-with-invalid-data.yaml")
 	assert.Nil(t, err)
 	var obj unstructured.Unstructured
@@ -157,73 +153,6 @@ func TestIsValidKubernetesManifestFile(t *testing.T) {
 		})
 	}
 
-}
-
-func TestDeleteKubernetesResource(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := corev1.AddToScheme(scheme)
-	assert.NoError(t, err)
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "numaplane-test",
-		},
-	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
-	err = DeleteKubernetesResource(context.Background(), fakeClient, pod)
-	assert.NoError(t, err)
-}
-
-func TestDeleteKubernetesResourceNotFound(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := corev1.AddToScheme(scheme)
-	assert.NoError(t, err)
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "numaplane-test",
-		},
-	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	err = DeleteKubernetesResource(context.Background(), fakeClient, pod)
-	assert.NoError(t, err)
-}
-
-func TestDeleteManagedObjectsGitSync(t *testing.T) {
-	ctx := context.TODO()
-	scheme := runtime.NewScheme()
-	err := corev1.AddToScheme(scheme)
-	assert.NoError(t, err)
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	resource := &unstructured.Unstructured{}
-	resource.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "testgroup",
-		Version: "v1",
-		Kind:    "TestKind",
-	})
-	resource.SetNamespace("test-namespace")
-	resource.SetName("test-name")
-	err = fakeClient.Create(ctx, resource)
-	assert.NoError(t, err)
-
-	objs := map[kube.ResourceKey]*unstructured.Unstructured{
-		{
-			Name:      "test-name",
-			Namespace: "test-namespace",
-		}: resource,
-	}
-	// Now call DeleteManagedObjectsGitSync
-	err = DeleteManagedObjects(ctx, fakeClient, objs)
-	assert.NoError(t, err)
-	assert.Nil(t, err)
-
-	// Verify the resources were deleted
-	namespacedName := types.NamespacedName{Name: "test-name", Namespace: "test-namespace"}
-	err = fakeClient.Get(ctx, namespacedName, resource)
-	assert.Error(t, err)
-	assert.True(t, k8sClient.IgnoreNotFound(err) == nil)
 }
 
 func TestSetAnnotation(t *testing.T) {
