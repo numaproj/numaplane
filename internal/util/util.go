@@ -20,6 +20,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // MustHash returns a sha256 encoded string based on the given argument.
@@ -46,4 +49,15 @@ func MustJSON(in any) string {
 	} else {
 		return string(data)
 	}
+}
+
+// CalculateSpecHash returns the calculated hash of the RawExtension spec Raw field converted to a map.
+func CalculateSpecHash(spec runtime.RawExtension) (string, error) {
+	var specAsMap map[string]any
+	err := json.Unmarshal(spec.Raw, &specAsMap)
+	if err != nil {
+		return "", fmt.Errorf("unable to unmarshal spec to map: %v", err)
+	}
+
+	return MustHash(specAsMap), nil
 }
