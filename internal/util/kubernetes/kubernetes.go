@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/argoproj/gitops-engine/pkg/utils/kube"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -115,34 +114,12 @@ func GetSecret(ctx context.Context, client k8sClient.Client, namespace, secretNa
 	return secret, nil
 }
 
-func DeleteKubernetesResource(ctx context.Context, client k8sClient.Client, item k8sClient.Object) error {
-	numaLogger := logger.FromContext(ctx)
-	if err := client.Delete(ctx, item); err != nil {
-		if apierrors.IsNotFound(err) {
-			numaLogger.Info("Object not found", item)
-			return nil
-		}
-		return fmt.Errorf("error deleting resource %s/%s: %v", item.GetNamespace(), item.GetName(), err)
-	}
-	return nil
-}
-
 func IsValidKubernetesManifestFile(fileName string) bool {
 	fileExt := strings.Split(fileName, ".")
 	if _, ok := validManifestExtensions[fileExt[len(fileExt)-1]]; ok {
 		return true
 	}
 	return false
-}
-
-// DeleteManagedObjects deletes Kubernetes resources from a map sequentially, returning an error if any deletion fails.
-func DeleteManagedObjects(ctx context.Context, client k8sClient.Client, objs map[kube.ResourceKey]*unstructured.Unstructured) error {
-	for _, obj := range objs {
-		if err := DeleteKubernetesResource(ctx, client, obj); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // ownerExists checks if an owner reference already exists in the list of owner references.
