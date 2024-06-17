@@ -19,22 +19,18 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -324,76 +320,3 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 	})
 })
-
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_InvalidType(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	invalidType := kubernetes.GenericObject{}
-
-	_, _, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, &invalidType)
-
-	assert.Error(t, err)
-	assert.Equal(t, "invalid rollout type", err.Error())
-}
-
-func Test_makeChildResourceFromRolloutAndUpdateSpecHash_PipelineRollout_UnmarshalError(t *testing.T) {
-	ctx := context.Background()
-	restConfig := &rest.Config{}
-
-	pipelineRolloutInvalidSpec := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pipeline-test",
-			Namespace: "default",
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			// providing invalid JSON for unmarshal error
-			Pipeline: runtime.RawExtension{Raw: []byte(`{"key":"value"`)},
-		},
-	}
-
-	_, _, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, restConfig, pipelineRolloutInvalidSpec)
-	assert.Error(t, err)
-}
-
-func Test_setAnnotation(t *testing.T) {
-	key1, value1 := "some_key_1", "some_value_1"
-	key2, value2 := "some_key_2", "some_value_2"
-
-	pipelineRollout := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pipeline-test",
-			Namespace: "default",
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: runtime.RawExtension{Raw: []byte(`{"key":"value"}`)},
-		},
-	}
-
-	// Invoke the method under test
-	setAnnotation(pipelineRollout, key1, value1)
-
-	// Check if the annotation was correctly set
-	annotations := pipelineRollout.GetAnnotations()
-	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
-	assert.Contains(t, annotations, key1, "Expected the key to be set in the annotations")
-	assert.Equal(t, value1, annotations[key1], "Expected the value to be set for the key in the annotations")
-
-	// Overwrite existing annotation
-	newValue := "new_value"
-	setAnnotation(pipelineRollout, key1, newValue)
-
-	// Check if the annotation was correctly updated
-	annotations = pipelineRollout.GetAnnotations()
-	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
-	assert.Contains(t, annotations, key1, "Expected the key to be set in the annotations")
-	assert.NotEqual(t, value1, annotations[key1], "Expected the old value to be replaced")
-	assert.Equal(t, newValue, annotations[key1], "Expected the new value to be set for the key in the annotations")
-
-	// Add one more annotation
-	setAnnotation(pipelineRollout, key2, value2)
-	assert.NotNil(t, annotations, "Expected annotations to be set on the pipelineRollout object")
-	assert.Len(t, annotations, 2, "Expected annotations to be of length 2")
-	assert.Contains(t, annotations, key2, "Expected the key to be set in the annotations")
-	assert.Equal(t, value2, annotations[key2], "Expected the value to be set for the key in the annotations")
-}

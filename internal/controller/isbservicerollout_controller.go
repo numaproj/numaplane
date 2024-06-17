@@ -32,9 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -142,28 +144,37 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	// make an InterStepBufferService object and add/update spec hash on the ISBServiceRollout object
-	obj, rolloutChildOp, err := makeChildResourceFromRolloutAndUpdateSpecHash(ctx, r.restConfig, isbServiceRollout)
+	obj := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "InterStepBufferService",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            isbServiceRollout.Name,
+			Namespace:       isbServiceRollout.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
+		},
+		Spec: isbServiceRollout.Spec.InterStepBufferService,
+	}
+
+	specHash, err := util.CalculateSpecHash(isbServiceRollout.Spec.InterStepBufferService)
 	if err != nil {
-		numaLogger.Errorf(err, "failed to make an InterStepBufferService object and to update the ISBServiceRollout: %v", err)
+		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
+		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
 
-	// TODO: instead of doing this, modify the ApplyCRSpec below to be similar to what is done on the PipelineRollout controller code
-	if rolloutChildOp == RolloutChildNoop {
-		numaLogger.Debug("InterStepBufferService spec is unchanged. No updates will be performed")
-		return nil
-	}
-
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, obj, "interstepbufferservices")
+	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", specHash, isbServiceRollout.Annotations[apiv1.KeyHash])
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
 
+	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, specHash)
+
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
+	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
 		return err
