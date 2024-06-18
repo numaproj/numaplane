@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -178,13 +179,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
 	isbsvcSpecHash := ""
 	if currentRolloutSpecHash == previousRolloutSpecHash {
-		isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
-		if err != nil {
-			numaLogger.Errorf(err, "failed to get ISBService: %v", err)
-			return err
-		}
-
-		isbsvcSpecHash, err = util.CalculateSpecHash(isbsvc.Spec)
+		isbsvcSpecHash, err = r.calculateChildSpecHash(ctx, &obj)
 		if err != nil {
 			numaLogger.Errorf(err, "failed to calculate spec hash from ISBService CR: %v", err)
 			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
@@ -213,6 +208,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) calculateChildSpecHash(ctx context.Context, obj *kubernetes.GenericObject) (string, error) {
+	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
+	if err != nil {
+		return "", fmt.Errorf("error retrieving InterStepBufferService CR: %v", err)
+	}
+
+	return util.CalculateSpecHash(isbsvc.Spec)
 }
 
 func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {

@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -202,15 +204,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
 		pipelineSpecHash := ""
 		if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] {
-			pipelineObj, err := kubernetes.UnstructuredToObject(pipeline)
-			if err != nil {
-				numaLogger.Errorf(err, "failed to get parse Pipeline: %v", err)
-				return false, err
-			}
-
-			// TODO: remove Lifecycle from pipelineObj.Spec (or make a copy of the object without it) before calculating the hash
-
-			pipelineSpecHash, err = util.CalculateSpecHash(pipelineObj.Spec)
+			pipelineSpecHash, err = calculateChildSpecHash(pipeline)
 			if err != nil {
 				numaLogger.Errorf(err, "failed to calculate spec hash from Pipeline CR: %v", err)
 				return false, err
@@ -282,6 +276,32 @@ func (r *PipelineRolloutReconciler) reconcile(
 	pipelineRollout.Status.MarkRunning()
 
 	return false, nil
+}
+
+func calculateChildSpecHash(pipeline *unstructured.Unstructured) (string, error) {
+	pipelineObj, err := kubernetes.UnstructuredToObject(pipeline)
+	if err != nil {
+		return "", fmt.Errorf("unable to parse Pipeline object: %v", err)
+	}
+
+	// Remove the lifecycle field from pipelineObj.Spec before calculating the hash
+
+	pipelineRawSpecAsMap := map[string]any{}
+	err = json.Unmarshal(pipelineObj.Spec.Raw, &pipelineRawSpecAsMap)
+	if err != nil {
+		return "", fmt.Errorf("unable to unmarshal Pipeline object spec to map: %v", err)
+	}
+
+	delete(pipelineRawSpecAsMap, "lifecycle")
+
+	rawSpec, err := json.Marshal(pipelineRawSpecAsMap)
+	if err != nil {
+		return "", fmt.Errorf("unable to marshal map to Pipeline object spec: %v", err)
+	}
+
+	pipelineObj.Spec.Raw = rawSpec
+
+	return util.CalculateSpecHash(pipelineObj.Spec)
 }
 
 // Set the Condition in the Status for child resource health
