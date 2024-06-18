@@ -18,53 +18,67 @@ package controller
 
 import (
 	"context"
-	"strings"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"strings"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var _ = Describe("NumaflowControllerRollout Controller", func() {
+	const (
+		namespace = "default"
+	)
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "numaflow-controller"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: namespace, // TODO(user):Modify as needed
 		}
-		numaflowcontrollerrollout := &apiv1.NumaflowControllerRollout{}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind NumaflowControllerRollout")
-			err := k8sClient.Get(ctx, typeNamespacedName, numaflowcontrollerrollout)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &apiv1.NumaflowControllerRollout{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+		numaflowControllerRollout := apiv1.NumaflowControllerRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: namespace,
+			},
+			Spec: apiv1.NumaflowControllerRolloutSpec{
+				Controller: apiv1.Controller{Version: "1.2.1"},
+			},
+		}
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			// Cleanup the resource after each test and ignore the error if it doesn't exist
 			resource := &apiv1.NumaflowControllerRollout{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance NumaflowControllerRollout")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_ = k8sClient.Get(ctx, typeNamespacedName, resource)
+			_ = k8sClient.Delete(ctx, resource)
 		})
+
+		It("Should throw a CR validation error", func() {
+			By("Creating a NumaflowControllerRollout resource with an invalid name")
+			resource := numaflowControllerRollout
+			resource.Name = "test-numaflow-controller"
+			err := k8sClient.Create(ctx, &resource)
+			Expect(err).NotTo(Succeed())
+			Expect(err.Error()).To(ContainSubstring("The metadata name must be 'numaflow-controller'"))
+		})
+
+		It("Should throw duplicate resource error", func() {
+			By("Creating duplicate NumaflowControllerRollout resource with the same name")
+			resource := numaflowControllerRollout
+			err := k8sClient.Create(ctx, &resource)
+			Expect(err).To(Succeed())
+
+			resource.ResourceVersion = "" // Reset the resource version to create a new resource
+			err = k8sClient.Create(ctx, &resource)
+			Expect(err).NotTo(Succeed())
+			Expect(err.Error()).To(ContainSubstring("numaflowcontrollerrollouts.numaplane.numaproj.io \"numaflow-controller\" already exists"))
+		})
+
 		// It("should successfully reconcile the resource", func() {
 		// 	By("Reconciling the created resource")
 		// 	controllerReconciler := &NumaflowControllerRolloutReconciler{
