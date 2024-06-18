@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -119,7 +120,16 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		if err := r.client.Status().Update(ctx, pipelineRollout); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latestPipelineRollout := &apiv1.PipelineRollout{}
+			if err := r.client.Get(ctx, req.NamespacedName, latestPipelineRollout); err != nil {
+				return err
+			}
+
+			latestPipelineRollout.Status = pipelineRollout.Status
+			return r.client.Status().Update(ctx, latestPipelineRollout)
+		})
+		if err != nil {
 			numaLogger.Error(err, "Error Updating PipelineRollout Status", "PipelineRollout", pipelineRollout)
 			return ctrl.Result{}, err
 		}
