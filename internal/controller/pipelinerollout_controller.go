@@ -179,7 +179,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		Spec: pipelineRollout.Spec.Pipeline,
 	}
 
-	specHash, err := util.CalculateSpecHash(pipelineRollout.Spec.Pipeline)
+	currentRolloutSpecHash, err := util.CalculateSpecHash(pipelineRollout.Spec.Pipeline)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
 		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
@@ -187,7 +187,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Get the object to see if it exists
-	_, err = kubernetes.GetResource(ctx, r.restConfig, &obj, "pipelines")
+	pipeline, err := kubernetes.GetResource(ctx, r.restConfig, &obj, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -196,9 +196,27 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 
-			kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, specHash)
+			kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, currentRolloutSpecHash)
 		}
 	} else {
+		// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
+		pipelineSpecHash := ""
+		if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] {
+			pipelineObj, err := kubernetes.UnstructuredToObject(pipeline)
+			if err != nil {
+				numaLogger.Errorf(err, "failed to get parse Pipeline: %v", err)
+				return false, err
+			}
+
+			// TODO: remove Lifecycle from pipelineObj.Spec (or make a copy of the object without it) before calculating the hash
+
+			pipelineSpecHash, err = util.CalculateSpecHash(pipelineObj.Spec)
+			if err != nil {
+				numaLogger.Errorf(err, "failed to calculate spec hash from Pipeline CR: %v", err)
+				return false, err
+			}
+		}
+
 		// If the pipeline already exists, first check if the pipeline status
 		// is pausing. If so, re-enqueue immediately.
 		pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
@@ -225,7 +243,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = *newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, specHash)
+			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -247,7 +265,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			obj = *newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, specHash)
+			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
 			if err != nil {
 				return false, err
 			}
@@ -255,7 +273,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 
 		// If no need to pause, just apply the spec
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, specHash)
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
 		if err != nil {
 			return false, err
 		}
@@ -370,19 +388,20 @@ func applyPipelineSpec(
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 	pipelineRollout *apiv1.PipelineRollout,
-	specHash string,
+	currentRolloutSpecHash string,
+	pipelineSpecHash string,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
 	// TODO: use UpdateSpec instead
-	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", specHash, pipelineRollout.Annotations[apiv1.KeyHash])
+	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", currentRolloutSpecHash, pipelineRollout.Annotations[apiv1.KeyHash], pipelineSpecHash)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
 		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
 		return err
 	}
 
-	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, specHash)
+	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, currentRolloutSpecHash)
 
 	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
 	pipeline, err := kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
