@@ -281,6 +281,32 @@ var _ = Describe("PipelineRollout Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
+		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
+			By("updating the Numaflow Pipeline")
+			currentPipeline := &numaflowv1.Pipeline{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipeline)).To(Succeed())
+
+			originalISBServiceName := currentPipeline.Spec.InterStepBufferServiceName
+			newISBServiceName := "my-isbsvc-updated-in-child"
+			currentPipeline.Spec.InterStepBufferServiceName = newISBServiceName
+
+			Expect(k8sClient.Update(ctx, currentPipeline)).ToNot(HaveOccurred())
+
+			By("Verifying the changed field of the Numaflow Pipeline is the same as the original and not the modified version")
+			e := Consistently(func() (string, error) {
+				updatedResource := &numaflowv1.Pipeline{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return "", err
+				}
+
+				return updatedResource.Spec.InterStepBufferServiceName, nil
+			}, duration, interval)
+
+			e.Should(Equal(originalISBServiceName))
+			e.ShouldNot(Equal(newISBServiceName))
+		})
+
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
 			Expect(k8sClient.Delete(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: pipelineRollout.ObjectMeta,
