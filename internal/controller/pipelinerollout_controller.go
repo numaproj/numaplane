@@ -189,7 +189,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Get the object to see if it exists
-	pipeline, err := kubernetes.GetResource(ctx, r.restConfig, &obj, "pipelines")
+	pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -199,78 +199,79 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 
 			kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, currentRolloutSpecHash)
-		}
-	} else {
-		// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
-		pipelineSpecHash := ""
-		if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] {
-			pipelineSpecHash, err = calculateChildSpecHash(pipeline)
-			if err != nil {
-				numaLogger.Errorf(err, "failed to calculate spec hash from Pipeline CR: %v", err)
-				return false, err
-			}
-		}
 
-		// If the pipeline already exists, first check if the pipeline status
-		// is pausing. If so, re-enqueue immediately.
-		pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
-		if err != nil {
-			numaLogger.Errorf(err, "failed to get Pipeline: %v", err)
-			return false, err
-		}
-		pausing := isPipelinePausing(ctx, pipeline)
-		if pausing {
-			// re-enqueue
-			return true, nil
-		}
-
-		// Check if the pipeline status is paused. If so, apply the change and
-		// resume.
-		paused := isPipelinePaused(ctx, pipeline)
-		if paused {
-			// Apply the new spec and resume the pipeline
-			// TODO: in the future, need to take into account whether Numaflow Controller
-			//       or ISBService is being installed to determine whether it's safe to unpause
-			newObj, err := setPipelineDesiredStatus(&obj, "Running")
-			if err != nil {
-				return false, err
-			}
-			obj = *newObj
-
-			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
-			if err != nil {
-				return false, err
-			}
+			pipelineRollout.Status.MarkRunning()
 
 			return false, nil
 		}
 
-		// If pipeline status is not above, detect if pausing is required.
-		shouldPause, err := needsPausing(pipeline, &obj)
+		return false, fmt.Errorf("error getting Pipeline: %v", err)
+	}
+
+	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
+	pipelineSpecHash := ""
+	if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] {
+		pipelineSpecHash, err = calculateChildSpecHash(pipeline)
+		if err != nil {
+			numaLogger.Errorf(err, "failed to calculate spec hash from Pipeline CR: %v", err)
+			return false, err
+		}
+	}
+
+	// If the pipeline already exists, first check if the pipeline status
+	// is pausing. If so, re-enqueue immediately.
+	pausing := isPipelinePausing(ctx, pipeline)
+	if pausing {
+		// re-enqueue
+		return true, nil
+	}
+
+	// Check if the pipeline status is paused. If so, apply the change and
+	// resume.
+	paused := isPipelinePaused(ctx, pipeline)
+	if paused {
+		// Apply the new spec and resume the pipeline
+		// TODO: in the future, need to take into account whether Numaflow Controller
+		//       or ISBService is being installed to determine whether it's safe to unpause
+		newObj, err := setPipelineDesiredStatus(&obj, "Running")
 		if err != nil {
 			return false, err
 		}
-		if shouldPause {
-			// Use the existing spec, then pause and re-enqueue
-			obj.Spec = pipeline.Spec
-			newObj, err := setPipelineDesiredStatus(&obj, "Paused")
-			if err != nil {
-				return false, err
-			}
-			obj = *newObj
+		obj = *newObj
 
-			err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
-			if err != nil {
-				return false, err
-			}
-			return true, err
-		}
-
-		// If no need to pause, just apply the spec
 		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
 		if err != nil {
 			return false, err
 		}
+
+		return false, nil
+	}
+
+	// If pipeline status is not above, detect if pausing is required.
+	shouldPause, err := needsPausing(pipeline, &obj)
+	if err != nil {
+		return false, err
+	}
+	if shouldPause {
+		// Use the existing spec, then pause and re-enqueue
+		obj.Spec = pipeline.Spec
+		newObj, err := setPipelineDesiredStatus(&obj, "Paused")
+		if err != nil {
+			return false, err
+		}
+		obj = *newObj
+
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
+		if err != nil {
+			return false, err
+		}
+		return true, err
+	}
+
+	// If no need to pause, just apply the spec
+	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
+	if err != nil {
+		return false, err
 	}
 
 	pipelineRollout.Status.MarkRunning()
@@ -278,16 +279,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 	return false, nil
 }
 
-func calculateChildSpecHash(pipeline *unstructured.Unstructured) (string, error) {
-	pipelineObj, err := kubernetes.UnstructuredToObject(pipeline)
-	if err != nil {
-		return "", fmt.Errorf("unable to parse Pipeline object: %v", err)
-	}
-
+func calculateChildSpecHash(pipeline *kubernetes.GenericObject) (string, error) {
 	// Remove the lifecycle field from pipelineObj.Spec before calculating the hash
 
 	pipelineRawSpecAsMap := map[string]any{}
-	err = json.Unmarshal(pipelineObj.Spec.Raw, &pipelineRawSpecAsMap)
+	err := json.Unmarshal(pipeline.Spec.Raw, &pipelineRawSpecAsMap)
 	if err != nil {
 		return "", fmt.Errorf("unable to unmarshal Pipeline object spec to map: %v", err)
 	}
@@ -299,9 +295,7 @@ func calculateChildSpecHash(pipeline *unstructured.Unstructured) (string, error)
 		return "", fmt.Errorf("unable to marshal map to Pipeline object spec: %v", err)
 	}
 
-	pipelineObj.Spec.Raw = rawSpec
-
-	return util.CalculateSpecHash(pipelineObj.Spec)
+	return util.CalculateSpecHash(runtime.RawExtension{Raw: rawSpec})
 }
 
 // Set the Condition in the Status for child resource health
