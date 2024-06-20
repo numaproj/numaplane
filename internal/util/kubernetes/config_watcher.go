@@ -42,35 +42,34 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 func watchConfigMaps(ctx context.Context, client *kubernetes.Clientset, namespace string) {
 	numaLogger := logger.FromContext(ctx)
 	watcher, err := client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		numaLogger.Fatal(err, "failed to initialize watcher for configmaps")
+		return
+	}
 	for {
-		select {
-		case event, ok := <-watcher.ResultChan():
-			if !ok {
-				watcher, err = client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{})
-				if err != nil {
-					numaLogger.Error(err, "Failed to watch configmaps")
-				}
-				break
-			}
-			configMap, ok := event.Object.(*corev1.ConfigMap)
-			if !ok {
-				numaLogger.Error(fmt.Errorf("failed to convert object to configmap"), "")
-			}
+		event, ok := <-watcher.ResultChan()
+		if !ok {
+			numaLogger.Fatal(fmt.Errorf("watcher channel closed"), "failed to watch configmap")
+			break
+		}
+		configMap, ok := event.Object.(*corev1.ConfigMap)
+		if !ok {
+			numaLogger.Error(fmt.Errorf("failed to convert object to configmap"), "")
+		}
 
-			// Add or update the controller definition config based on a version if the configmap has the correct label
-			if value, ok := configMap.Labels[labelKey]; ok && value == labelValue {
-				for _, v := range configMap.Data {
-					var controllerConfig config.NumaflowControllerDefinitionConfig
-					if err := yaml.Unmarshal([]byte(v), &controllerConfig); err != nil {
-						numaLogger.Error(err, "Failed to unmarshal controller config")
-						continue
-					}
-					// controller config definition is immutable, so no need to update the existing config
-					if event.Type == watch.Added {
-						config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(controllerConfig)
-					} else if event.Type == watch.Deleted {
-						config.GetConfigManagerInstance().RemoveControllerDefinitionConfig(controllerConfig)
-					}
+		// Add or update the controller definition config based on a version if the configmap has the correct label
+		if value, ok := configMap.Labels[labelKey]; ok && value == labelValue {
+			for _, v := range configMap.Data {
+				var controllerConfig config.NumaflowControllerDefinitionConfig
+				if err := yaml.Unmarshal([]byte(v), &controllerConfig); err != nil {
+					numaLogger.Error(err, "Failed to unmarshal controller config")
+					continue
+				}
+				// controller config definition is immutable, so no need to update the existing config
+				if event.Type == watch.Added {
+					config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(controllerConfig)
+				} else if event.Type == watch.Deleted {
+					config.GetConfigManagerInstance().RemoveControllerDefinitionConfig(controllerConfig)
 				}
 			}
 		}
