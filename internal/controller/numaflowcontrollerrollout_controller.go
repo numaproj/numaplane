@@ -26,16 +26,21 @@ import (
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
 	gitopsSyncCommon "github.com/argoproj/gitops-engine/pkg/sync/common"
 	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
+	appv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -51,6 +56,7 @@ const (
 
 const (
 	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
+	NumaflowControllerDeploymentName    = "numaflow-controller"
 )
 
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
@@ -352,38 +358,27 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		// Reconcile NumaflowControllerRollouts when there's been a Generation changed (i.e. Spec change)
-		For(&apiv1.NumaflowControllerRollout{}).WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+	// Watch NumaflowControllerRollouts
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
+		return err
+	}
 
-	/*
-	   controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
+	// Watch Deployments of numaflow-controller (NOTE: could watch other resources as well)
+	numaflowControllerDeployments := appv1.Deployment{
+		ObjectMeta: v1.ObjectMeta{Name: NumaflowControllerDeploymentName},
+	}
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowControllerDeployments),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
+		predicate.GenerationChangedPredicate{}); err != nil {
+		return err
+	}
 
-	   	if err != nil {
-	   		return err
-	   	}
-
-	   // Watch NumaflowControllerRollouts
-
-	   	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
-	   		return err
-	   	}
-
-	   // Watch Deployments of numaflow-controller
-	   // Can add other resources as well
-	   numaflowControllerDeployments := appv1.Deployment{}
-	   numaflowControllerDeployments.Name = "numaflow-controller" // not sure if this would work or not
-	   if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowControllerDeployments),
-
-	   		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
-	   		predicate.GenerationChangedPredicate{}); err != nil {
-	   		return err
-	   	}
-
-	   return nil
-	*/
+	return nil
 }
 
 // SplitYAMLToString splits a YAML file into strings. Returns list of yamls
