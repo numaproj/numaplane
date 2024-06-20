@@ -2,6 +2,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: numaflow-controller-definitions-config
+  labels:
+    config: numaflow-controller-rollout
 data:
   controller_definitions.yaml: |
     controllerDefinitions:
