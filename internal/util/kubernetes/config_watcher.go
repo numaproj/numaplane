@@ -39,7 +39,7 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 }
 
 // watchConfigMaps watches for configmaps continuously and writes the data to the given directory based on an event type.
-func watchConfigMaps(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace string) {
 	numaLogger := logger.FromContext(ctx)
 	watcher, err := client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{})
 	if err != nil {

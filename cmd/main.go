@@ -58,10 +58,6 @@ func init() {
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 
 	utilruntime.Must(numaflowv1.AddToScheme(scheme))
-
-	if err := kubernetes.StartConfigMapWatcher(context.Background(), ctrl.GetConfigOrDie()); err != nil {
-		numaLogger.Fatal(err, "Failed to start configmap watcher")
-	}
 }
 
 func main() {
@@ -151,6 +147,10 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if err := kubernetes.StartConfigMapWatcher(context.Background(), mgr.GetConfig()); err != nil {
+		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
 	//+kubebuilder:scaffold:builder
