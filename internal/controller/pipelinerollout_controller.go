@@ -413,8 +413,13 @@ func applyPipelineSpec(
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
+	shouldUpdateCR := true
+	if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] && currentRolloutSpecHash == pipelineSpecHash {
+		shouldUpdateCR = false
+	}
+
 	// TODO: use UpdateSpec instead
-	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", currentRolloutSpecHash, pipelineRollout.Annotations[apiv1.KeyHash], pipelineSpecHash)
+	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", shouldUpdateCR)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
 		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())

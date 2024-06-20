@@ -187,7 +187,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 	}
 
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", currentRolloutSpecHash, previousRolloutSpecHash, isbsvcSpecHash)
+	shouldUpdateCR := true
+	if currentRolloutSpecHash == previousRolloutSpecHash && currentRolloutSpecHash == isbsvcSpecHash {
+		shouldUpdateCR = false
+	}
+
+	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", shouldUpdateCR)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
