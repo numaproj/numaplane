@@ -22,7 +22,7 @@ func Test_watchConfigMaps(t *testing.T) {
 
 	clientSet := fake.NewSimpleClientset()
 	go watchConfigMaps(ctx, clientSet, "default")
-	time.Sleep(20 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	data, err := os.ReadFile("../../../tests/config/controller-definitions-config.yaml")
 	assert.NoError(t, err)
@@ -45,8 +45,7 @@ func Test_watchConfigMaps(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Wait for the controller to process the ConfigMap
-	time.Sleep(10 * time.Second)
-
+	time.Sleep(5 * time.Second)
 	// Validate the controller definition config is set correctly
 	definition := config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
 	assert.Len(t, definition, 2)
@@ -56,8 +55,8 @@ func Test_watchConfigMaps(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Wait for the controller to process the ConfigMap
-	time.Sleep(10 * time.Second)
-
+	time.Sleep(5 * time.Second)
+	// Validate the controller definition config is updated correctly
 	definition = config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
 	assert.Len(t, definition, 0)
 }

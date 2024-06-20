@@ -75,6 +75,9 @@ func (cm *ConfigManager) RemoveControllerDefinitionConfig(config NumaflowControl
 }
 
 func (cm *ConfigManager) GetControllerDefinitionsConfig() map[string]string {
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
+
 	return cm.rolloutConfig
 }
 
