@@ -407,6 +407,8 @@ func applyPipelineSpec(
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
+	// TODO: compare the in-cluster Pipeline lifecycle state when implementing dedicated logic managing desired pipeline lifecycle.
+	// Ideally, create a function to perform various checks and return if the CR should be updated or not.
 	shouldUpdateCR := true
 	if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] && currentRolloutSpecHash == pipelineSpecHash {
 		shouldUpdateCR = false
