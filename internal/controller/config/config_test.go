@@ -42,26 +42,6 @@ func TestLoadConfigMatchValues(t *testing.T) {
 
 }
 
-func TestLoadNumaRolloutConfigMatchValues(t *testing.T) {
-	getwd, err := os.Getwd()
-	assert.Nil(t, err, "Failed to get working directory")
-	configPath := filepath.Join(getwd, "../../../", "tests", "config")
-	configManager := GetConfigManagerInstance()
-	err = configManager.LoadAllConfigs(func(err error) {}, WithDefConfigPath(configPath), WithDefConfigFileName("controller-definitions-config"))
-	assert.NoError(t, err)
-	config, err := configManager.GetControllerDefinitionsConfig()
-	assert.NoError(t, err)
-
-	assert.Nil(t, err, "Failed to load configuration")
-
-	assert.NotNil(t, config.ControllerDefinitions, "ControllerDefinitions should not be nil")
-
-	assert.Equal(t, "1.2.1", config.ControllerDefinitions[0].Version, "Version for ControllerDefinitions[0] does not match")
-	assert.Equal(t, "apiVersion: apps/v1\nkind: Deployment\n---\napiVersion: apps/v1\nkind: ConfigMap\n", config.ControllerDefinitions[0].FullSpec, "FullSpec for ControllerDefinitions[0] does not match")
-	assert.Equal(t, "1.1.7", config.ControllerDefinitions[1].Version, "Version for ControllerDefinitions[1] does not match")
-	assert.Equal(t, "", config.ControllerDefinitions[1].FullSpec, "FullSpec for ControllerDefinitions[1] does not match")
-}
-
 func copyFile(src, dst string) error {
 	source, err := os.Open(src)
 	if err != nil {

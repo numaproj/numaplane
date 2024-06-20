@@ -13,19 +13,19 @@ import (
 
 type ConfigManager struct {
 	config        *GlobalConfig
-	rolloutConfig *NumaflowControllerDefinitionConfig
+	rolloutConfig map[string]string
 	lock          *sync.RWMutex
 }
 
 var instance *ConfigManager
 var once sync.Once
 
-// GetConfigManagerInstance  returns a singleton config manager throughout the application
+// GetConfigManagerInstance returns a singleton config manager throughout the application
 func GetConfigManagerInstance() *ConfigManager {
 	once.Do(func() {
 		instance = &ConfigManager{
 			config:        &GlobalConfig{},
-			rolloutConfig: &NumaflowControllerDefinitionConfig{},
+			rolloutConfig: map[string]string{},
 			lock:          new(sync.RWMutex),
 		}
 	})
@@ -41,7 +41,7 @@ type GlobalConfig struct {
 }
 
 type NumaflowControllerDefinitionConfig struct {
-	ControllerDefinitions []apiv1.ControllerDefinitions `json:"controllerDefinitions" mapstructure:"controllerDefinitions"`
+	ControllerDefinitions []apiv1.ControllerDefinitions `json:"controllerDefinitions" yaml:"controllerDefinitions"`
 }
 
 func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
@@ -55,15 +55,27 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *ConfigManager) GetControllerDefinitionsConfig() (NumaflowControllerDefinitionConfig, error) {
-	cm.lock.RLock()
-	defer cm.lock.RUnlock()
+func (cm *ConfigManager) UpdateControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
 
-	config, err := CloneWithSerialization(cm.rolloutConfig)
-	if err != nil {
-		return NumaflowControllerDefinitionConfig{}, err
+	// Add or update the controller definition config based on a version
+	for _, controller := range config.ControllerDefinitions {
+		cm.rolloutConfig[controller.Version] = controller.FullSpec
 	}
-	return *config, nil
+}
+
+func (cm *ConfigManager) RemoveControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
+
+	for _, controller := range config.ControllerDefinitions {
+		delete(cm.rolloutConfig, controller.Version)
+	}
+}
+
+func (cm *ConfigManager) GetControllerDefinitionsConfig() map[string]string {
+	return cm.rolloutConfig
 }
 
 func (cm *ConfigManager) LoadAllConfigs(
@@ -77,13 +89,7 @@ func (cm *ConfigManager) LoadAllConfigs(
 		}
 	}
 	if opts.configFileName != "" {
-		err := cm.loadConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.fileType, false)
-		if err != nil {
-			return err
-		}
-	}
-	if opts.defConfigFileName != "" {
-		err := cm.loadConfig(onErrorReloading, opts.defConfigPath, opts.defConfigFileName, opts.fileType, true)
+		err := cm.loadConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.fileType)
 		if err != nil {
 			return err
 		}
@@ -94,7 +100,6 @@ func (cm *ConfigManager) LoadAllConfigs(
 func (cm *ConfigManager) loadConfig(
 	onErrorReloading func(error),
 	configsPath, configFileName, configFileType string,
-	rolloutConfig bool,
 ) error {
 	v := viper.New()
 	v.SetConfigName(configFileName)
@@ -107,31 +112,23 @@ func (cm *ConfigManager) loadConfig(
 	{
 		cm.lock.Lock()
 		defer cm.lock.Unlock()
-		if !rolloutConfig {
-			err = v.Unmarshal(cm.config)
-		} else {
-			err = v.Unmarshal(cm.rolloutConfig)
-		}
-
+		err = v.Unmarshal(cm.config)
 		if err != nil {
 			return fmt.Errorf("failed unmarshal configuration file. %w", err)
 		}
 	}
 
-	// Rollout Config is immutable
-	if !rolloutConfig {
-		v.OnConfigChange(func(e fsnotify.Event) {
-			cm.lock.Lock()
-			defer cm.lock.Unlock()
-			newConfig := GlobalConfig{}
-			err = v.Unmarshal(&newConfig)
-			if err != nil {
-				onErrorReloading(err)
-			}
-			cm.config = &newConfig
-		})
-		v.WatchConfig()
-	}
+	v.OnConfigChange(func(e fsnotify.Event) {
+		cm.lock.Lock()
+		defer cm.lock.Unlock()
+		newConfig := GlobalConfig{}
+		err = v.Unmarshal(&newConfig)
+		if err != nil {
+			onErrorReloading(err)
+		}
+		cm.config = &newConfig
+	})
+	v.WatchConfig()
 
 	return nil
 }

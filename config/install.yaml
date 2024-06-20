@@ -1128,6 +1128,8 @@ data:
 immutable: true
 kind: ConfigMap
 metadata:
+  labels:
+    config: numaflow-controller-rollout
   name: numaflow-controller-definitions-config
   namespace: numaplane-system
 ---
@@ -1175,9 +1177,6 @@ spec:
         - --leader-elect
         command:
         - /manager
-        env:
-        - name: MOUNT_PATH
-          value: /etc/numarollout
         image: quay.io/numaproj/numaplane-controller:latest
         livenessProbe:
           httpGet:

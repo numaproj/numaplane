@@ -60,9 +60,7 @@ type NumaflowControllerRolloutReconciler struct {
 	restConfig *rest.Config
 	rawConfig  *rest.Config
 	kubectl    kubeUtil.Kubectl
-
-	definitions map[string]string
-	stateCache  sync.LiveStateCache
+	stateCache sync.LiveStateCache
 }
 
 func NewNumaflowControllerRolloutReconciler(
@@ -80,32 +78,14 @@ func NewNumaflowControllerRolloutReconciler(
 	}
 
 	restConfig := rawConfig
-	definitions, err := loadDefinitions()
-	if err != nil {
-		return nil, err
-	}
 	return &NumaflowControllerRolloutReconciler{
 		client,
 		s,
 		restConfig,
 		rawConfig,
 		kubectl,
-		definitions,
 		stateCache,
 	}, nil
-}
-
-func loadDefinitions() (map[string]string, error) {
-	definitionsConfig, err := config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get the controller definitions config, %v", err)
-	}
-
-	definitions := make(map[string]string)
-	for _, definition := range definitionsConfig.ControllerDefinitions {
-		definitions[definition.Version] = definition.FullSpec
-	}
-	return definitions, nil
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollerrollouts,verbs=get;list;watch;create;update;patch;delete
@@ -233,9 +213,13 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	numaLogger *logger.NumaLogger,
 ) (gitopsSyncCommon.OperationPhase, error) {
 
-	// Get the target manifests
+	// Get the target manifests based on the version of the controller and throw an error if the definition not for a version.
 	version := rollout.Spec.Controller.Version
-	manifest := r.definitions[version]
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
+	manifest := definition[version]
+	if len(manifest) == 0 {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)
+	}
 
 	// Applying ownership reference
 	manifests, err := SplitYAMLToString([]byte(manifest))
@@ -251,7 +235,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	if err != nil {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("failed to parse the manifest, %w", err)
 	}
-	numaLogger.Debugf("found %d target objects associated with Numaflow Controller version %s; versions defined:%+v", len(targetObjs), version, r.definitions)
+	numaLogger.Debugf("found %d target objects associated with Numaflow Controller version %s; versions defined:%+v", len(targetObjs), version, definition)
 
 	var infoProvider kubeUtil.ResourceInfoProvider
 	clusterCache, err := r.stateCache.GetClusterCache()
