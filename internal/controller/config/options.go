@@ -1,11 +1,9 @@
 package config
 
 type options struct {
-	configsPath       string
-	configFileName    string
-	defConfigFileName string
-	defConfigPath     string
-	fileType          string
+	configsPath    string
+	configFileName string
+	fileType       string
 }
 
 type Option func(*options)
@@ -25,17 +23,5 @@ func WithConfigsPath(configsPath string) Option {
 func WithConfigFileName(configFileName string) Option {
 	return func(o *options) {
 		o.configFileName = configFileName
-	}
-}
-
-func WithDefConfigPath(defConfigPath string) Option {
-	return func(o *options) {
-		o.defConfigPath = defConfigPath
-	}
-}
-
-func WithDefConfigFileName(defConfigFileName string) Option {
-	return func(o *options) {
-		o.defConfigFileName = defConfigFileName
 	}
 }

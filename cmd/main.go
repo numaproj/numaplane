@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -47,9 +48,8 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 	// logger is the global logger for the controller-manager.
-	numaLogger    = logger.New().WithName("controller-manager")
-	configPath    = "/etc/numaplane" // Path in the volume mounted in the pod where yaml is present
-	defConfigPath = "/etc/numarollout"
+	numaLogger = logger.New().WithName("controller-manager")
+	configPath = "/etc/numaplane" // Path in the volume mounted in the pod where yaml is present
 )
 
 func init() {
@@ -109,9 +109,7 @@ func main() {
 		numaLogger.Error(err, "Failed to reload global configuration file")
 	},
 		config.WithConfigsPath(configPath),
-		config.WithConfigFileName("config"),
-		config.WithDefConfigPath(defConfigPath),
-		config.WithDefConfigFileName("controller_definitions"))
+		config.WithConfigFileName("config"))
 	if err != nil {
 		numaLogger.Fatal(err, "Failed to load config file")
 	}
@@ -149,6 +147,10 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if err := kubernetes.StartConfigMapWatcher(context.Background(), mgr.GetConfig()); err != nil {
+		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
 	//+kubebuilder:scaffold:builder

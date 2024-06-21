@@ -21,6 +21,6 @@ package v1alpha1
 // ControllerDefinitions stores the Numaflow controller definitions
 // for different versions.
 type ControllerDefinitions struct {
-	Version  string `json:"version" mapstructure:"version"`
-	FullSpec string `json:"fullSpec" mapstructure:"fullSpec"`
+	Version  string `json:"version" yaml:"version"`
+	FullSpec string `json:"fullSpec" yaml:"fullSpec"`
 }
