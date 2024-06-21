@@ -23,11 +23,17 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -37,11 +43,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/sync"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+
+const (
+	timeout  = 10 * time.Second
+	duration = 10 * time.Second
+	interval = 250 * time.Millisecond
+)
 
 var (
 	cfg             *rest.Config
@@ -125,6 +138,21 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	stateCache := sync.NewLiveStateCache(cfg)
+	err = stateCache.Init(nil)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&NumaflowControllerRolloutReconciler{
+		client:      k8sManager.GetClient(),
+		scheme:      k8sManager.GetScheme(),
+		restConfig:  cfg,
+		rawConfig:   cfg,
+		kubectl:     kubernetes.NewKubectl(),
+		definitions: getNumaflowControllerDefinitions(),
+		stateCache:  stateCache,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
@@ -163,4 +191,29 @@ func downloadCRD(url string, downloadDir string) {
 	// Write the response body to file
 	_, err = io.Copy(out, resp.Body)
 	Expect(err).ToNot(HaveOccurred())
+}
+
+func getNumaflowControllerDefinitions() map[string]string {
+	// Read definitions config file
+	data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
+	Expect(err).ToNot(HaveOccurred())
+
+	// Decode the yaml into a ConfigMap object
+	configMap := corev1.ConfigMap{}
+	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
+	mp := configMap.Data["controller_definitions.yaml"]
+	ncdc := config.NumaflowControllerDefinitionConfig{}
+	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Create definitions map
+	definitions := make(map[string]string)
+	for _, definition := range ncdc.ControllerDefinitions {
+		definitions[definition.Version] = definition.FullSpec
+	}
+
+	return definitions
 }

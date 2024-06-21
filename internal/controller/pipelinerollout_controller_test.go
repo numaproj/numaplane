@@ -36,13 +36,10 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var _ = Describe("PipelineRollout Controller", func() {
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
 	const (
 		namespace           = "default"
 		pipelineRolloutName = "pipelinerollout-test"
-		timeout             = 10 * time.Second
-		duration            = 10 * time.Second
-		interval            = 250 * time.Millisecond
 	)
 
 	ctx := context.Background()
@@ -295,7 +292,7 @@ var _ = Describe("PipelineRollout Controller", func() {
 			Expect(k8sClient.Update(ctx, currentPipeline)).ToNot(HaveOccurred())
 
 			By("Verifying the changed field of the Numaflow Pipeline is the same as the original and not the modified version")
-			e := Consistently(func() (string, error) {
+			e := Eventually(func() (string, error) {
 				updatedResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
 				if err != nil {

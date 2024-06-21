@@ -26,7 +26,7 @@ import (
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
 	gitopsSyncCommon "github.com/argoproj/gitops-engine/pkg/sync/common"
 	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
-	appv1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -141,7 +142,16 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	// Update the Status subresource
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		if err := r.client.Status().Update(ctx, numaflowControllerRollout); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latestNumaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
+			if err := r.client.Get(ctx, req.NamespacedName, latestNumaflowControllerRollout); err != nil {
+				return err
+			}
+
+			latestNumaflowControllerRollout.Status = numaflowControllerRollout.Status
+			return r.client.Status().Update(ctx, latestNumaflowControllerRollout)
+		})
+		if err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout Status", "NumaflowControllerRollout", numaflowControllerRollout)
 			return ctrl.Result{}, err
 		}
@@ -369,7 +379,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 	}
 
 	// Watch Deployments of numaflow-controller (NOTE: could watch other resources as well)
-	numaflowControllerDeployments := appv1.Deployment{
+	numaflowControllerDeployments := appsv1.Deployment{
 		ObjectMeta: v1.ObjectMeta{Name: NumaflowControllerDeploymentName},
 	}
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowControllerDeployments),

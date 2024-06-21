@@ -33,13 +33,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("ISBServiceRollout Controller", func() {
+var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 	const (
 		namespace             = "default"
 		isbServiceRolloutName = "isbservicerollout-test"
-		timeout               = 10 * time.Second
-		duration              = 10 * time.Second
-		interval              = 250 * time.Millisecond
 	)
 
 	ctx := context.Background()
@@ -268,7 +265,7 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 			Expect(k8sClient.Update(ctx, currentISBService)).ToNot(HaveOccurred())
 
 			By("Verifying the changed field of the InterStepBufferService is the same as the original and not the modified version")
-			e := Consistently(func() (string, error) {
+			e := Eventually(func() (string, error) {
 				updatedResource := &numaflowv1.InterStepBufferService{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
 				if err != nil {
