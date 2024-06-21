@@ -5,3 +5,5 @@ resources:
 - bases/numaplane.numaproj.io_pipelinerollouts.yaml
 - bases/numaplane.numaproj.io_numaflowcontrollerrollouts.yaml
 - bases/numaplane.numaproj.io_isbservicerollouts.yaml
+# install numaflow minimal CRDs as a dependency
+- https://github.com/numaproj/numaflow/config/advanced-install/minimal-crds?ref=stable
