@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: numaflow-controller-definitions-config
   labels:
-    config: numaflow-controller-rollout
+    "numaplane.numaproj.io/config": numaflow-controller-definitions
 data:
   controller_definitions.yaml: |
     controllerDefinitions:

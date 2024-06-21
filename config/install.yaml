@@ -1129,7 +1129,7 @@ immutable: true
 kind: ConfigMap
 metadata:
   labels:
-    config: numaflow-controller-rollout
+    numaplane.numaproj.io/config: numaflow-controller-definitions
   name: numaflow-controller-definitions-config
   namespace: numaplane-system
 ---

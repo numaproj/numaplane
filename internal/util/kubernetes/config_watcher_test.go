@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 )
 
 func Test_watchConfigMaps(t *testing.T) {
@@ -32,7 +34,7 @@ func Test_watchConfigMaps(t *testing.T) {
 			Name:      "numaflow-controller-definitions-config",
 			Namespace: "default",
 			Labels: map[string]string{
-				"config": "numaflow-controller-rollout",
+				common.LabelKeyNumaplaneControllerConfig: common.LabelValueNumaplaneControllerConfig,
 			},
 		},
 		Data: map[string]string{
