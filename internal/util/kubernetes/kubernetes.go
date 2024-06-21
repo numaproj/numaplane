@@ -2,13 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/argoproj/gitops-engine/pkg/utils/kube"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -17,10 +18,29 @@ import (
 
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 // validManifestExtensions contains the supported extension for raw file.
 var validManifestExtensions = map[string]struct{}{"yaml": {}, "yml": {}, "json": {}}
+
+type GenericObject struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   runtime.RawExtension `json:"spec"`
+	Status runtime.RawExtension `json:"status,omitempty"`
+}
+
+type GenericStatus struct {
+	Phase      string             `json:"phase,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
 
 func IsValidKubernetesNamespace(name string) bool {
 	// All namespace names must be valid RFC 1123 DNS labels.
@@ -94,34 +114,12 @@ func GetSecret(ctx context.Context, client k8sClient.Client, namespace, secretNa
 	return secret, nil
 }
 
-func DeleteKubernetesResource(ctx context.Context, client k8sClient.Client, item k8sClient.Object) error {
-	numaLogger := logger.FromContext(ctx)
-	if err := client.Delete(ctx, item); err != nil {
-		if apierrors.IsNotFound(err) {
-			numaLogger.Info("Object not found", item)
-			return nil
-		}
-		return fmt.Errorf("error deleting resource %s/%s: %v", item.GetNamespace(), item.GetName(), err)
-	}
-	return nil
-}
-
 func IsValidKubernetesManifestFile(fileName string) bool {
 	fileExt := strings.Split(fileName, ".")
 	if _, ok := validManifestExtensions[fileExt[len(fileExt)-1]]; ok {
 		return true
 	}
 	return false
-}
-
-// DeleteManagedObjects deletes Kubernetes resources from a map sequentially, returning an error if any deletion fails.
-func DeleteManagedObjects(ctx context.Context, client k8sClient.Client, objs map[kube.ResourceKey]*unstructured.Unstructured) error {
-	for _, obj := range objs {
-		if err := DeleteKubernetesResource(ctx, client, obj); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // ownerExists checks if an owner reference already exists in the list of owner references.
@@ -184,4 +182,203 @@ func ApplyOwnership(manifest string, controllerRollout *v1alpha1.NumaflowControl
 		return nil, err
 	}
 	return modifiedManifest, nil
+}
+
+func parseApiVersion(apiVersion string) (string, string, error) {
+	// should be separated by slash
+	index := strings.Index(apiVersion, "/")
+	if index == -1 {
+		// if there's no slash, it's just the version, and the group should be "core"
+		return "core", apiVersion, nil
+	} else if index == len(apiVersion)-1 {
+		return "", "", fmt.Errorf("apiVersion incorrectly formatted: unexpected slash at end: %q", apiVersion)
+	}
+	return apiVersion[0:index], apiVersion[index+1:], nil
+}
+
+func ParseStatus(obj *GenericObject) (GenericStatus, error) {
+	if len(obj.Status.Raw) == 0 {
+		return GenericStatus{}, nil
+	}
+
+	var status GenericStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return GenericStatus{}, err
+	}
+	return status, nil
+}
+
+func GetResource(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) (*unstructured.Unstructured, error) {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+
+	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+}
+
+// ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
+// first checking to see if there's a difference in Spec before applying
+// TODO: use CreateCR and UpdateCR instead
+func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string, shouldUpdateCR bool) error {
+	numaLogger := logger.FromContext(ctx)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return err
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+
+	// Get the object to see if it exists
+	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// create object as it doesn't exist
+			numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
+
+			unstruct, err := ObjectToUnstructured(object)
+			if err != nil {
+				return err
+			}
+
+			_, err = client.Resource(gvr).Namespace(object.Namespace).Create(ctx, unstruct, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+			}
+			numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
+		} else {
+			return fmt.Errorf("error attempting to Get resources; GVR=%+v err: %v", gvr, err)
+		}
+
+	} else {
+		numaLogger.Debugf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource)
+
+		if !shouldUpdateCR {
+			return nil
+		}
+
+		// replace the Object's Spec
+		resource.Object["spec"] = object.Spec
+
+		_, err = client.Resource(gvr).Namespace(object.Namespace).Update(ctx, resource, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+		}
+		numaLogger.Debugf("successfully updated resource %s/%s", object.Namespace, object.Name)
+
+	}
+	return nil
+}
+
+// look up a Resource
+func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
+	unstruc, err := GetResource(ctx, restConfig, object, pluralName)
+	if unstruc != nil {
+		return UnstructuredToObject(unstruc)
+	} else {
+		return nil, err
+	}
+}
+
+func CreateCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return err
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+
+	numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
+
+	unstruct, err := ObjectToUnstructured(object)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Resource(gvr).Namespace(object.Namespace).Create(ctx, unstruct, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+	}
+	numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
+	return nil
+}
+
+func ObjectToUnstructured(object *GenericObject) (*unstructured.Unstructured, error) {
+	asJsonBytes, err := json.Marshal(object)
+	if err != nil {
+		return nil, err
+	}
+	var asMap map[string]interface{}
+	err = json.Unmarshal(asJsonBytes, &asMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return &unstructured.Unstructured{Object: asMap}, nil
+}
+
+func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) {
+	asJsonBytes, err := json.Marshal(u.Object)
+	if err != nil {
+		return nil, err
+	}
+	var genericObject GenericObject
+	err = json.Unmarshal(asJsonBytes, &genericObject)
+
+	return &genericObject, err
+}
+
+func SetAnnotation(obj metav1.Object, key, value string) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	annotations[key] = value
+
+	obj.SetAnnotations(annotations)
 }

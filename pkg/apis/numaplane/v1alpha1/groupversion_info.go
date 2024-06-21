@@ -34,9 +34,6 @@ var (
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
 
-	GitSyncGroupVersionKind     = SchemeGroupVersion.WithKind("GitSync")
-	GitSyncGroupVersionResource = SchemeGroupVersion.WithResource("gitsyncs")
-
 	ISBServiceRolloutGroupVersionKind     = SchemeGroupVersion.WithKind("ISBServiceRollout")
 	ISBServiceRolloutGroupVersionResource = SchemeGroupVersion.WithResource("isbservicerollouts")
 

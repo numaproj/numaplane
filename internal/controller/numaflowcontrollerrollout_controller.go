@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	finalizerName = "numaplane-controller"
+	finalizerName = "numaplane.numaproj.io/numaplane-controller"
 )
 
 const (
@@ -100,7 +100,7 @@ func NewNumaflowControllerRolloutReconciler(
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// update the Base Logger's level according to the Numaplane Config
 	logger.RefreshBaseLoggerLevel()
-	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
+	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 
 	// TODO: only allow one controllerRollout per namespace.
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
@@ -194,7 +194,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return nil
 }
 
-// applyOwnershipToManifests Applies GitSync ownership to Kubernetes manifests, returning modified manifests or an error.
+// applyOwnershipToManifests Applies NumaflowControllerRollout ownership to
+// Kubernetes manifests, returning modified manifests or an error.
 func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
 	manifestsWithOwnership := make([]string, 0, len(manifests))
 	for _, v := range manifests {

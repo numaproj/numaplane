@@ -168,7 +168,7 @@ kind: Deployment
 metadata:
   name: my-app
   labels:
-    numaplane.numaproj.io/tracking-id: my-gitsync`)
+    numaplane.numaproj.io/tracking-id: my-example`)
 
 	managedObjs, err := clusterCache.GetManagedLiveObjs(testName, testNamespace, []*unstructured.Unstructured{targetDeploy})
 	require.NoError(t, err)

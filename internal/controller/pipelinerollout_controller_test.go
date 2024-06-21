@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,6 +31,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -122,6 +125,19 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 			By("Verifying the content of the pipeline spec field")
 			Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
+
+			By("Verifying the spec hash stored in the PipelineRollout annotations after creation")
+			var pipelineSpecAsMap map[string]any
+			Expect(json.Unmarshal(pipelineSpecRaw, &pipelineSpecAsMap)).ToNot(HaveOccurred())
+			pipelineSpecHash := util.MustHash(pipelineSpecAsMap)
+			Eventually(func() (string, error) {
+				createdResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				if err != nil {
+					return "", err
+				}
+				return createdResource.Annotations[apiv1.KeyHash], nil
+			}, timeout, interval).Should(Equal(pipelineSpecHash))
 		})
 
 		It("Should create a Numaflow Pipeline", func() {
@@ -151,6 +167,24 @@ var _ = Describe("PipelineRollout Controller", func() {
 
 			currentPipelineRollout := &apiv1.PipelineRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
+
+			var lastTransitionTime time.Time
+			Eventually(func() (time.Time, error) {
+				currentResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, currentResource)
+				if err != nil {
+					return time.Time{}, err
+				}
+
+				for _, cond := range currentPipelineRollout.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						lastTransitionTime = cond.LastTransitionTime.Time
+						return lastTransitionTime, nil
+					}
+				}
+
+				return time.Time{}, nil
+			}, timeout, interval).Should(Not(Equal(time.Time{})))
 
 			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
 			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
@@ -183,6 +217,96 @@ var _ = Describe("PipelineRollout Controller", func() {
 				}
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
+
+			By("Verifying the spec hash stored in the PipelineRollout annotations after update")
+			var pipelineSpecAsMap map[string]any
+			Expect(json.Unmarshal(pipelineSpecRaw, &pipelineSpecAsMap)).ToNot(HaveOccurred())
+			pipelineSpecHash := util.MustHash(pipelineSpecAsMap)
+			Eventually(func() (string, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return "", err
+				}
+				return updatedResource.Annotations[apiv1.KeyHash], nil
+			}, timeout, interval).Should(Equal(pipelineSpecHash))
+
+			By("Verifying the LastTransitionTime of the Configured condition of the PipelineRollout is after the time of the initial configuration")
+			Eventually(func() (bool, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return false, err
+				}
+
+				for _, cond := range updatedResource.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
+						lastTransitionTime = cond.LastTransitionTime.Time
+						return isAfter, nil
+					}
+				}
+
+				return false, nil
+			}, time.Second, interval).Should(BeTrue())
+
+			By("Verifying that the PipelineRollout Status Phase is Running")
+			Consistently(func() (apiv1.Phase, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return apiv1.Phase(""), err
+				}
+				return updatedResource.Status.Phase, nil
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+
+			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change) and the hash spec annotation should not change")
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
+			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
+			Eventually(func() (bool, error) {
+				updatedResource := &apiv1.PipelineRollout{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return false, err
+				}
+
+				equalHash := updatedResource.Annotations[apiv1.KeyHash] == pipelineSpecHash
+
+				for _, cond := range updatedResource.Status.Conditions {
+					if cond.Type == string(apiv1.ConditionConfigured) {
+						equalTime := cond.LastTransitionTime.Time.Equal(lastTransitionTime)
+						return equalTime && equalHash, nil
+					}
+				}
+
+				return false, nil
+			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
+			By("updating the Numaflow Pipeline")
+			currentPipeline := &numaflowv1.Pipeline{}
+			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipeline)).To(Succeed())
+
+			originalISBServiceName := currentPipeline.Spec.InterStepBufferServiceName
+			newISBServiceName := "my-isbsvc-updated-in-child"
+			currentPipeline.Spec.InterStepBufferServiceName = newISBServiceName
+
+			Expect(k8sClient.Update(ctx, currentPipeline)).ToNot(HaveOccurred())
+
+			By("Verifying the changed field of the Numaflow Pipeline is the same as the original and not the modified version")
+			e := Consistently(func() (string, error) {
+				updatedResource := &numaflowv1.Pipeline{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				if err != nil {
+					return "", err
+				}
+
+				return updatedResource.Spec.InterStepBufferServiceName, nil
+			}, duration, interval)
+
+			e.Should(Equal(originalISBServiceName))
+			e.ShouldNot(Equal(newISBServiceName))
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
@@ -221,16 +345,65 @@ var _ = Describe("PipelineRollout Controller", func() {
 		It("Should not create the PipelineRollout", func() {
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				Spec: pipelineRollout.Spec,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: pipelineRollout.ObjectMeta,
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: pipelineRollout.ObjectMeta,
 				Spec:       apiv1.PipelineRolloutSpec{},
-			})).To(HaveOccurred())
+			})).ShouldNot(Succeed())
 		})
 	})
 })
+
+func TestCalculateChildSpecHash(t *testing.T) {
+	pauseSeconds := int32(123456)
+
+	pipelineSpec := numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: "test-isbsvc",
+		Lifecycle: numaflowv1.Lifecycle{
+			DesiredPhase:            numaflowv1.PipelinePhasePaused,
+			PauseGracePeriodSeconds: &pauseSeconds,
+		},
+	}
+
+	It("Should calculate the hash of the pipeline spec without the lifecycle field", func() {
+		pipelineRawSpec, err := json.Marshal(pipelineSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		pipeline := kubernetes.GenericObject{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pipeline",
+				Namespace: "default",
+			},
+			Spec: runtime.RawExtension{
+				Raw: pipelineRawSpec,
+			},
+		}
+
+		pipelineRawSpecAsMap := map[string]any{}
+		Expect(json.Unmarshal(pipeline.Spec.Raw, &pipelineRawSpecAsMap)).To(Succeed())
+
+		// Hash with lifecycle field
+		rawSpec, err := json.Marshal(pipelineRawSpecAsMap)
+		Expect(err).NotTo(HaveOccurred())
+		hashWithLifecycle, err := util.CalculateSpecHash(runtime.RawExtension{Raw: rawSpec})
+		Expect(err).NotTo(HaveOccurred())
+
+		// // Hash without lifecycle field
+		delete(pipelineRawSpecAsMap, "lifecycle")
+		rawSpec, err = json.Marshal(pipelineRawSpecAsMap)
+		Expect(err).NotTo(HaveOccurred())
+		hashWithoutLifecycle, err := util.CalculateSpecHash(runtime.RawExtension{Raw: rawSpec})
+		Expect(err).NotTo(HaveOccurred())
+
+		actualHash, err := calculateChildSpecHash(&pipeline)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(actualHash).To(Equal(hashWithoutLifecycle))
+		Expect(actualHash).ToNot(Equal(hashWithLifecycle))
+	})
+}

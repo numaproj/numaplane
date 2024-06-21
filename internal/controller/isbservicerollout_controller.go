@@ -18,12 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -33,9 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/kubernetes"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -77,7 +80,7 @@ func NewISBServiceRolloutReconciler(
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// update the Base Logger's level according to the Numaplane Config
 	logger.RefreshBaseLoggerLevel()
-	numaLogger := logger.GetBaseLogger().WithName("reconciler").WithValues("isbservicerollout", req.NamespacedName)
+	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
@@ -113,7 +116,16 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		if err := r.client.Status().Update(ctx, isbServiceRollout); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latestISBServiceRollout := &apiv1.ISBServiceRollout{}
+			if err := r.client.Get(ctx, req.NamespacedName, latestISBServiceRollout); err != nil {
+				return err
+			}
+
+			latestISBServiceRollout.Status = isbServiceRollout.Status
+			return r.client.Status().Update(ctx, latestISBServiceRollout)
+		})
+		if err != nil {
 			numaLogger.Error(err, "Error Updating isbServiceRollout Status", "isbServiceRollout", isbServiceRollout)
 			return ctrl.Result{}, err
 		}
@@ -143,8 +155,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	// apply ISBService
-	// todo: store hash of spec in annotation; use to compare to determine if anything needs to be updated
 	obj := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
@@ -158,12 +168,39 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
+	previousRolloutSpecHash := isbServiceRollout.Annotations[apiv1.KeyHash]
+	currentRolloutSpecHash, err := util.CalculateSpecHash(isbServiceRollout.Spec.InterStepBufferService)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
+		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
+		return err
+	}
+
+	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
+	isbsvcSpecHash := ""
+	if currentRolloutSpecHash == previousRolloutSpecHash {
+		isbsvcSpecHash, err = r.calculateChildSpecHash(ctx, &obj)
+		if err != nil {
+			numaLogger.Errorf(err, "failed to calculate spec hash from ISBService CR: %v", err)
+			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
+			return err
+		}
+	}
+
+	shouldUpdateCR := true
+	if currentRolloutSpecHash == previousRolloutSpecHash && currentRolloutSpecHash == isbsvcSpecHash {
+		shouldUpdateCR = false
+	}
+
+	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", shouldUpdateCR)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
+
+	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, currentRolloutSpecHash)
+
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
 	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
@@ -176,6 +213,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) calculateChildSpecHash(ctx context.Context, obj *kubernetes.GenericObject) (string, error) {
+	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
+	if err != nil {
+		return "", fmt.Errorf("error retrieving InterStepBufferService CR: %v", err)
+	}
+
+	return util.CalculateSpecHash(isbsvc.Spec)
 }
 
 func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
@@ -206,7 +252,9 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
 	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
+	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
 		return true
 	}
 	return false
@@ -226,10 +274,11 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch InterStepBufferServices
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.InterStepBufferService{}), &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.InterStepBufferService{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()),
+		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
 	}
 
 	return nil
-
 }
