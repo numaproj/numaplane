@@ -142,14 +142,20 @@ var _ = BeforeSuite(func() {
 	err = stateCache.Init(nil)
 	Expect(err).ToNot(HaveOccurred())
 
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {
+		Expect(err).ToNot(HaveOccurred())
+	})
+	Expect(err).ToNot(HaveOccurred())
+	config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+
 	err = (&NumaflowControllerRolloutReconciler{
-		client:      k8sManager.GetClient(),
-		scheme:      k8sManager.GetScheme(),
-		restConfig:  cfg,
-		rawConfig:   cfg,
-		kubectl:     kubernetes.NewKubectl(),
-		definitions: getNumaflowControllerDefinitions(),
-		stateCache:  stateCache,
+		client:     k8sManager.GetClient(),
+		scheme:     k8sManager.GetScheme(),
+		restConfig: cfg,
+		rawConfig:  cfg,
+		kubectl:    kubernetes.NewKubectl(),
+		stateCache: stateCache,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -193,8 +199,9 @@ func downloadCRD(url string, downloadDir string) {
 	Expect(err).ToNot(HaveOccurred())
 }
 
-func getNumaflowControllerDefinitions() map[string]string {
+func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
 	// Read definitions config file
+	// TODO: use this file instead "../../tests/config/controller-definitions-config.yaml"
 	data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
 
@@ -209,11 +216,5 @@ func getNumaflowControllerDefinitions() map[string]string {
 	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Create definitions map
-	definitions := make(map[string]string)
-	for _, definition := range ncdc.ControllerDefinitions {
-		definitions[definition.Version] = definition.FullSpec
-	}
-
-	return definitions
+	return ncdc
 }
