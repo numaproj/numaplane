@@ -5,8 +5,9 @@ import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CancelIcon from "@mui/icons-material/Cancel";
 
 export const RolloutComponentWrapper = (props: ArgoPropType) => {
-  const currentNodeKind = props.resource.kind;
-  const currentStatusResource = props.application.status.resources.filter(
+  console.log("props", JSON.stringify(props, null, 2));
+  const currentNodeKind = props?.resource?.kind;
+  const currentStatusResource = props?.application?.status?.resources?.filter(
     (resource) => {
       return resource.kind === currentNodeKind;
     }
@@ -27,7 +28,7 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
   }, [props.tree]);
 
   const getRevisionURL = useCallback((revision: History) => {
-    return `${props.application.spec.source.repoURL}/commit/${revision.revision}`.replace(
+    return `${props?.application?.spec?.source?.repoURL}/commit/${revision?.revision}`.replace(
       ".git",
       ""
     );
@@ -55,38 +56,6 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
             </Box>
           );
         })}
-      </Paper>
-      <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
-        <h5>Rollout Status</h5>
-        <Box sx={{ display: "flex" }}>
-          {props.application.status.resources.map((resource) => {
-            return (
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  marginLeft: "1rem",
-                }}
-                key={resource.name}
-              >
-                <Box sx={{ display: "flex" }}>
-                  Resource Name : {resource.name}
-                </Box>
-                <Box sx={{ display: "flex" }}>
-                  Resource Kind : {resource.kind}
-                </Box>
-                <Box sx={{ display: "flex" }}>
-                  Resource Status :{" "}
-                  {resource.status === "Synced" ? (
-                    <CheckBoxIcon sx={{ color: "green" }} />
-                  ) : (
-                    <CancelIcon sx={{ color: "red" }} />
-                  )}
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
       </Paper>
       <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
         <h5>Status Data</h5>
@@ -141,6 +110,38 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
             </Box>
           );
         })}
+      </Paper>
+      <Paper sx={{ marginTop: "2rem", padding: "1rem" }}>
+        <h5>Rollout Status</h5>
+        <Box sx={{ display: "flex" }}>
+          {props.application.status.resources.map((resource) => {
+            return (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  marginLeft: "1rem",
+                }}
+                key={resource.name}
+              >
+                <Box sx={{ display: "flex" }}>
+                  Resource Name : {resource.name}
+                </Box>
+                <Box sx={{ display: "flex" }}>
+                  Resource Kind : {resource.kind}
+                </Box>
+                <Box sx={{ display: "flex" }}>
+                  Resource Status :{" "}
+                  {resource.status === "Synced" ? (
+                    <CheckBoxIcon sx={{ color: "green" }} />
+                  ) : (
+                    <CancelIcon sx={{ color: "red" }} />
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
       </Paper>
     </Box>
   );

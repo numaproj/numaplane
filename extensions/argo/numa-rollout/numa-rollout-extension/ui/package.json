@@ -7,8 +7,8 @@
     "@emotion/styled": "^11.11.5",
     "@mui/icons-material": "^5.15.19",
     "@mui/material": "^5.15.19",
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^13.4.0",
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^13.5.0",
     "@types/jest": "^27.5.2",
     "@types/node": "^16.18.98",
@@ -29,6 +29,7 @@
     "react-dom": "^16.9.3"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.2.0",
     "@types/react": "^17.0.44",
     "@types/react-dom": "^17.0.9",
     "@types/react-helmet": "^6.1.0",
@@ -53,7 +54,8 @@
   },
   "scripts": {
     "start": "webpack --config ./webpack.config.js --watch",
-    "build": "webpack --config ./webpack.config.js && tar -C dist -cvf extension.tar resources"
+    "build": "webpack --config ./webpack.config.js && tar -C dist -cvf extension.tar resources",
+    "test": "react-scripts test"
   },
   "eslintConfig": {
     "extends": [
