@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -237,7 +238,7 @@ func GetResource(
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
 // TODO: use CreateCR and UpdateCR instead
-func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string, shouldUpdateCR bool) error {
+func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
 	numaLogger := logger.FromContext(ctx)
 
 	client, err := dynamic.NewForConfig(restConfig)
@@ -281,7 +282,13 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 	} else {
 		numaLogger.Debugf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource)
 
-		if !shouldUpdateCR {
+		currentObj, err := UnstructuredToObject(resource)
+		if err != nil {
+			return fmt.Errorf("error attempting to convert unstructured resource to generic object: %v", err)
+		}
+
+		if reflect.DeepEqual(currentObj.Spec, object.Spec) {
+			numaLogger.Debugf("skipping update of resource %s/%s since not necessary", object.Namespace, object.Name)
 			return nil
 		}
 
@@ -370,15 +377,4 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	err = json.Unmarshal(asJsonBytes, &genericObject)
 
 	return &genericObject, err
-}
-
-func SetAnnotation(obj metav1.Object, key, value string) {
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[key] = value
-
-	obj.SetAnnotations(annotations)
 }

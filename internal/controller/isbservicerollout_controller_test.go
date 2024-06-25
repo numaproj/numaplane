@@ -28,18 +28,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("ISBServiceRollout Controller", func() {
+var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 	const (
 		namespace             = "default"
 		isbServiceRolloutName = "isbservicerollout-test"
-		timeout               = 10 * time.Second
-		duration              = 10 * time.Second
-		interval              = 250 * time.Millisecond
 	)
 
 	ctx := context.Background()
@@ -86,19 +82,6 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 
 			By("Verifying the content of the ISBServiceRollout spec field")
 			Expect(createdInterStepBufferServiceSpec).Should(Equal(isbsSpec))
-
-			By("Verifying the spec hash stored in the ISBServiceRollout annotations after creation")
-			var isbServiceSpecAsMap map[string]any
-			Expect(json.Unmarshal(isbsSpecRaw, &isbServiceSpecAsMap)).ToNot(HaveOccurred())
-			isbServiceSpecHash := util.MustHash(isbServiceSpecAsMap)
-			Eventually(func() (string, error) {
-				createdResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
-				if err != nil {
-					return "", err
-				}
-				return createdResource.Annotations[apiv1.KeyHash], nil
-			}, timeout, interval).Should(Equal(isbServiceSpecHash))
 		})
 
 		It("Should have created an InterStepBufferService ", func() {
@@ -190,19 +173,6 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(newIsbsSpec))
 
-			By("Verifying the spec hash stored in the ISBServiceRollout annotations after update")
-			var isbServiceSpecAsMap map[string]any
-			Expect(json.Unmarshal(newIsbsSpecRaw, &isbServiceSpecAsMap)).ToNot(HaveOccurred())
-			isbServiceSpecHash := util.MustHash(isbServiceSpecAsMap)
-			Eventually(func() (string, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return "", err
-				}
-				return updatedResource.Annotations[apiv1.KeyHash], nil
-			}, timeout, interval).Should(Equal(isbServiceSpecHash))
-
 			By("Verifying the LastTransitionTime of the Configured condition of the ISBServiceRollout is after the time of the initial configuration")
 			Eventually(func() (bool, error) {
 				updatedResource := &apiv1.ISBServiceRollout{}
@@ -232,7 +202,7 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 				return updatedResource.Status.Phase, nil
 			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
 
-			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change) and the hash spec annotation should not change")
+			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())
 			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
 			Eventually(func() (bool, error) {
@@ -242,12 +212,9 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 					return false, err
 				}
 
-				equalHash := updatedResource.Annotations[apiv1.KeyHash] == isbServiceSpecHash
-
 				for _, cond := range updatedResource.Status.Conditions {
 					if cond.Type == string(apiv1.ConditionConfigured) {
-						equalTime := cond.LastTransitionTime.Time.Equal(lastTransitionTime)
-						return equalTime && equalHash, nil
+						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}
 
@@ -256,30 +223,9 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 
 		})
 
-		It("Should auto heal the InterStepBufferService with the ISBServiceRollout interstepbufferservice spec when the InterStepBufferService spec is changed", func() {
-			By("updating the InterStepBufferService")
-			currentISBService := &numaflowv1.InterStepBufferService{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBService)).To(Succeed())
-
-			originalJetstreamVersion := currentISBService.Spec.JetStream.Version
-			newJetstreamVersion := "1.2.3"
-			currentISBService.Spec.JetStream.Version = newJetstreamVersion
-
-			Expect(k8sClient.Update(ctx, currentISBService)).ToNot(HaveOccurred())
-
-			By("Verifying the changed field of the InterStepBufferService is the same as the original and not the modified version")
-			e := Consistently(func() (string, error) {
-				updatedResource := &numaflowv1.InterStepBufferService{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return "", err
-				}
-
-				return updatedResource.Spec.JetStream.Version, nil
-			}, duration, interval)
-
-			e.Should(Equal(originalJetstreamVersion))
-			e.ShouldNot(Equal(newJetstreamVersion))
+		It("Should auto heal the InterStepBufferService with the ISBServiceRollout pipeline spec when the InterStepBufferService spec is changed", func() {
+			By("updating the InterStepBufferService and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, namespace, isbServiceRolloutName, "spec.jetstream.version", "1.2.3.4.5")
 		})
 
 		It("Should delete the ISBServiceRollout and InterStepBufferService", func() {

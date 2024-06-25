@@ -17,17 +17,27 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -37,11 +47,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/sync"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+
+const (
+	timeout  = 10 * time.Second
+	duration = 10 * time.Second
+	interval = 250 * time.Millisecond
+)
 
 var (
 	cfg             *rest.Config
@@ -125,6 +142,27 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	stateCache := sync.NewLiveStateCache(cfg)
+	err = stateCache.Init(nil)
+	Expect(err).ToNot(HaveOccurred())
+
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {
+		Expect(err).ToNot(HaveOccurred())
+	})
+	Expect(err).ToNot(HaveOccurred())
+	config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+
+	err = (&NumaflowControllerRolloutReconciler{
+		client:     k8sManager.GetClient(),
+		scheme:     k8sManager.GetScheme(),
+		restConfig: cfg,
+		rawConfig:  cfg,
+		kubectl:    kubernetes.NewKubectl(),
+		stateCache: stateCache,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
@@ -163,4 +201,67 @@ func downloadCRD(url string, downloadDir string) {
 	// Write the response body to file
 	_, err = io.Copy(out, resp.Body)
 	Expect(err).ToNot(HaveOccurred())
+}
+
+func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
+	// Read definitions config file
+	// TODO: use this file instead "../../tests/config/controller-definitions-config.yaml"
+	data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
+	Expect(err).ToNot(HaveOccurred())
+
+	// Decode the yaml into a ConfigMap object
+	configMap := corev1.ConfigMap{}
+	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
+	mp := configMap.Data["controller_definitions.yaml"]
+	ncdc := config.NumaflowControllerDefinitionConfig{}
+	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
+	Expect(err).ToNot(HaveOccurred())
+
+	return ncdc
+}
+
+// verifyAutoHealing tests the auto healing feature
+func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, pathToValue string, newValue any) {
+	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+	// Get current resource
+	currentResource := unstructured.Unstructured{}
+	currentResource.SetGroupVersionKind(gvk)
+	Eventually(func() error {
+		return k8sClient.Get(ctx, lookupKey, &currentResource)
+	}, timeout, interval).Should(Succeed())
+	Expect(currentResource.Object).ToNot(BeEmpty())
+
+	// Get the original value at the specified path (pathToValue)
+	pathSlice := strings.Split(pathToValue, ".")
+	originalValue, found, err := unstructured.NestedFieldNoCopy(currentResource.Object, pathSlice...)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(found).To(BeTrue())
+
+	// Set new value and update resource
+	err = unstructured.SetNestedField(currentResource.Object, newValue, pathSlice...)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(k8sClient.Update(ctx, &currentResource)).ToNot(HaveOccurred())
+
+	// Get updated resource and the value at the specified path (pathToValue)
+	e := Eventually(func() (any, error) {
+		updatedResource := unstructured.Unstructured{}
+		updatedResource.SetGroupVersionKind(gvk)
+		if err := k8sClient.Get(ctx, lookupKey, &updatedResource); err != nil {
+			return nil, err
+		}
+
+		currentValue, found, err := unstructured.NestedFieldNoCopy(updatedResource.Object, pathSlice...)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(found).To(BeTrue())
+
+		return currentValue, nil
+	}, timeout, interval)
+
+	// Verify that the value matches the original value and not the new value
+	e.Should(Equal(originalValue))
+	e.ShouldNot(Equal(newValue))
 }

@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -168,38 +166,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	previousRolloutSpecHash := isbServiceRollout.Annotations[apiv1.KeyHash]
-	currentRolloutSpecHash, err := util.CalculateSpecHash(isbServiceRollout.Spec.InterStepBufferService)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-		return err
-	}
-
-	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
-	isbsvcSpecHash := ""
-	if currentRolloutSpecHash == previousRolloutSpecHash {
-		isbsvcSpecHash, err = r.calculateChildSpecHash(ctx, &obj)
-		if err != nil {
-			numaLogger.Errorf(err, "failed to calculate spec hash from ISBService CR: %v", err)
-			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-			return err
-		}
-	}
-
-	shouldUpdateCR := true
-	if currentRolloutSpecHash == previousRolloutSpecHash && currentRolloutSpecHash == isbsvcSpecHash {
-		shouldUpdateCR = false
-	}
-
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", shouldUpdateCR)
+	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
-
-	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, currentRolloutSpecHash)
 
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
 	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
@@ -213,15 +185,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil
-}
-
-func (r *ISBServiceRolloutReconciler) calculateChildSpecHash(ctx context.Context, obj *kubernetes.GenericObject) (string, error) {
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
-	if err != nil {
-		return "", fmt.Errorf("error retrieving InterStepBufferService CR: %v", err)
-	}
-
-	return util.CalculateSpecHash(isbsvc.Spec)
 }
 
 func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
@@ -251,10 +214,7 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 	}
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
-	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
-	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
 		return true
 	}
 	return false
