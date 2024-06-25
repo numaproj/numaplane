@@ -14,6 +14,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	// restclient "k8s.io/client-go/rest"
 )
 
 const (
@@ -104,7 +105,7 @@ func (s *E2ESuite) Given() *Given {
 	return NewGiven(s.T(), s.k8sClient)
 }
 
-func (s *E2ESuite) TestCreatePipelineRollout() {
+func (s *E2ESuite) TestCreateUpdateDeletePipelineRollout() {
 	pipelineSpec := runtime.RawExtension{
 		Raw: []byte(`{
             "interStepBufferServiceName": "my-isbsvc",
@@ -162,6 +163,78 @@ func (s *E2ESuite) TestCreatePipelineRollout() {
 
 	Expect := NewExpect(s.T(), s.k8sClient)
 	Expect.AssertPipelineRolloutIsPresent("numaplane-system", "my-pipeline")
+
+	// Adding update operation here:
+
+	// Fetch the PipelineRollout
+	if err := s.k8sClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: "numaplane-system",
+		Name:      "my-pipeline",
+	}, pipelineRollout); err != nil {
+		s.T().Fatal(err)
+	}
+
+	// // Update the PipelineRollout
+	// updatedPipelineSpec := runtime.RawExtension{
+	// 	Raw: []byte(`{...}́`), // the updated pipeline spec JSON
+	// }
+
+	updatedPipelineSpec := runtime.RawExtension{
+		Raw: []byte(`{
+			"interStepBufferServiceName": "my-isbsvc-updated",
+			"vertices": [
+				{ "name": "in",
+					"source": {
+						"generator": {
+							"RPU": 5,
+							"Duration": "1s"
+						}
+					}
+				}
+			]
+		}`),
+	}
+
+	pipelineRollout.Spec.Pipeline = updatedPipelineSpec
+	if err := s.k8sClient.Update(context.Background(), pipelineRollout); err != nil {
+		s.T().Fatal(err, "Unable to update PipelineRollout")
+	}
+
+	// Fetch the PipelineRollout again
+	updatedPipelineRollout := &apiv1.PipelineRollout{}
+	if err := s.k8sClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: "numaplane-system",
+		Name:      "my-pipeline",
+	}, updatedPipelineRollout); err != nil {
+		s.T().Fatal(err)
+	}
+
+	// Assert that the PipelineRollout has been updated
+	ExpectUpdate := NewExpect(s.T(), s.k8sClient)
+	ExpectUpdate.AssertPipelineRolloutIsUpdated("numaplane-system", "my-pipeline", updatedPipelineRollout)
+
+	/// The DELETE Operation
+	pipelineRollout = &apiv1.PipelineRollout{}
+	if err := s.k8sClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: "numaplane-system",
+		Name:      "my-pipeline",
+	}, pipelineRollout); err != nil {
+		s.T().Fatal(err)
+	}
+
+	// Delete the PipelineRollout
+	if err := s.k8sClient.Delete(context.TODO(), pipelineRollout); err != nil {
+		s.T().Fatal(err)
+	}
+
+	// Fetch the PipelineRollout again, expect an error because it should have been deleted
+	err := s.k8sClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: "numaplane-system",
+		Name:      "my-pipeline",
+	}, pipelineRollout)
+	if err == nil {
+		s.T().Fatal("expected an error but got none")
+	}
 }
 
 func TestE2E(t *testing.T) {
