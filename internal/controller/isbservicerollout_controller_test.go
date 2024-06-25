@@ -33,13 +33,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("ISBServiceRollout Controller", func() {
+var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 	const (
 		namespace             = "default"
 		isbServiceRolloutName = "isbservicerollout-test"
-		timeout               = 10 * time.Second
-		duration              = 10 * time.Second
-		interval              = 250 * time.Millisecond
 	)
 
 	ctx := context.Background()
@@ -256,30 +253,9 @@ var _ = Describe("ISBServiceRollout Controller", func() {
 
 		})
 
-		It("Should auto heal the InterStepBufferService with the ISBServiceRollout interstepbufferservice spec when the InterStepBufferService spec is changed", func() {
-			By("updating the InterStepBufferService")
-			currentISBService := &numaflowv1.InterStepBufferService{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBService)).To(Succeed())
-
-			originalJetstreamVersion := currentISBService.Spec.JetStream.Version
-			newJetstreamVersion := "1.2.3"
-			currentISBService.Spec.JetStream.Version = newJetstreamVersion
-
-			Expect(k8sClient.Update(ctx, currentISBService)).ToNot(HaveOccurred())
-
-			By("Verifying the changed field of the InterStepBufferService is the same as the original and not the modified version")
-			e := Consistently(func() (string, error) {
-				updatedResource := &numaflowv1.InterStepBufferService{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return "", err
-				}
-
-				return updatedResource.Spec.JetStream.Version, nil
-			}, duration, interval)
-
-			e.Should(Equal(originalJetstreamVersion))
-			e.ShouldNot(Equal(newJetstreamVersion))
+		It("Should auto heal the InterStepBufferService with the ISBServiceRollout pipeline spec when the InterStepBufferService spec is changed", func() {
+			By("updating the InterStepBufferService and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, namespace, isbServiceRolloutName, "spec.jetstream.version", "1.2.3.4.5")
 		})
 
 		It("Should delete the ISBServiceRollout and InterStepBufferService", func() {

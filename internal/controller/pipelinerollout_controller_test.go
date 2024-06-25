@@ -36,13 +36,10 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var _ = Describe("PipelineRollout Controller", func() {
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
 	const (
 		namespace           = "default"
 		pipelineRolloutName = "pipelinerollout-test"
-		timeout             = 10 * time.Second
-		duration            = 10 * time.Second
-		interval            = 250 * time.Millisecond
 	)
 
 	ctx := context.Background()
@@ -284,29 +281,8 @@ var _ = Describe("PipelineRollout Controller", func() {
 		})
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
-			By("updating the Numaflow Pipeline")
-			currentPipeline := &numaflowv1.Pipeline{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipeline)).To(Succeed())
-
-			originalISBServiceName := currentPipeline.Spec.InterStepBufferServiceName
-			newISBServiceName := "my-isbsvc-updated-in-child"
-			currentPipeline.Spec.InterStepBufferServiceName = newISBServiceName
-
-			Expect(k8sClient.Update(ctx, currentPipeline)).ToNot(HaveOccurred())
-
-			By("Verifying the changed field of the Numaflow Pipeline is the same as the original and not the modified version")
-			e := Consistently(func() (string, error) {
-				updatedResource := &numaflowv1.Pipeline{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return "", err
-				}
-
-				return updatedResource.Spec.InterStepBufferServiceName, nil
-			}, duration, interval)
-
-			e.Should(Equal(originalISBServiceName))
-			e.ShouldNot(Equal(newISBServiceName))
+			By("updating the Numaflow Pipeline and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, namespace, pipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
