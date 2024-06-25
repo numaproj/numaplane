@@ -13,6 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	// numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 var k8sClient client.Client // global variable declaration
@@ -21,6 +24,14 @@ var (
 	kubeClient client.Client
 	scheme     = runtime.NewScheme()
 )
+
+func init() {
+	_ = clientgoscheme.AddToScheme(scheme)
+	// Add your CRD to the scheme
+	_ = apiv1.AddToScheme(scheme)
+}
+
+// ... Remaining part of your given.go ...
 
 type Given struct {
 	t *testing.T
