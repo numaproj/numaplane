@@ -18,8 +18,8 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -181,13 +180,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		Spec: pipelineRollout.Spec.Pipeline,
 	}
 
-	currentRolloutSpecHash, err := util.CalculateSpecHash(pipelineRollout.Spec.Pipeline)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
-		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
-		return false, err
-	}
-
 	// Get the object to see if it exists
 	pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
 	if err != nil {
@@ -198,24 +190,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 
-			kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, currentRolloutSpecHash)
-
 			pipelineRollout.Status.MarkRunning()
 
 			return false, nil
 		}
 
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
-	}
-
-	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
-	pipelineSpecHash := ""
-	if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] {
-		pipelineSpecHash, err = calculateChildSpecHash(pipeline)
-		if err != nil {
-			numaLogger.Errorf(err, "failed to calculate spec hash from Pipeline CR: %v", err)
-			return false, err
-		}
 	}
 
 	// If the pipeline already exists, first check if the pipeline status
@@ -239,7 +219,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		obj = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
 		if err != nil {
 			return false, err
 		}
@@ -261,7 +241,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		obj = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
 		if err != nil {
 			return false, err
 		}
@@ -269,7 +249,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, currentRolloutSpecHash, pipelineSpecHash)
+	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
 	if err != nil {
 		return false, err
 	}
@@ -277,25 +257,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 	pipelineRollout.Status.MarkRunning()
 
 	return false, nil
-}
-
-func calculateChildSpecHash(pipeline *kubernetes.GenericObject) (string, error) {
-	// Remove the lifecycle field from pipelineObj.Spec before calculating the hash
-
-	pipelineRawSpecAsMap := map[string]any{}
-	err := json.Unmarshal(pipeline.Spec.Raw, &pipelineRawSpecAsMap)
-	if err != nil {
-		return "", fmt.Errorf("unable to unmarshal Pipeline object spec to map: %v", err)
-	}
-
-	delete(pipelineRawSpecAsMap, "lifecycle")
-
-	rawSpec, err := json.Marshal(pipelineRawSpecAsMap)
-	if err != nil {
-		return "", fmt.Errorf("unable to marshal map to Pipeline object spec: %v", err)
-	}
-
-	return util.CalculateSpecHash(runtime.RawExtension{Raw: rawSpec})
 }
 
 // Set the Condition in the Status for child resource health
@@ -326,10 +287,7 @@ func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout)
 	}
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
-	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
-	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
 		return true
 	}
 	return false
@@ -384,6 +342,11 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 }
 
+// TODO: detect engine, now always not pause, enable to pause when we can detect spec change
+func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
+	return false, nil
+}
+
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
 	numaLogger := logger.FromContext(ctx)
 	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
@@ -402,17 +365,11 @@ func applyPipelineSpec(
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 	pipelineRollout *apiv1.PipelineRollout,
-	currentRolloutSpecHash string,
-	pipelineSpecHash string,
+	pipeline *kubernetes.GenericObject,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// TODO: compare the in-cluster Pipeline lifecycle state when implementing dedicated logic managing desired pipeline lifecycle.
-	// Ideally, create a function to perform various checks and return if the CR should be updated or not.
-	shouldUpdateCR := true
-	if currentRolloutSpecHash == pipelineRollout.Annotations[apiv1.KeyHash] && currentRolloutSpecHash == pipelineSpecHash {
-		shouldUpdateCR = false
-	}
+	shouldUpdateCR := !reflect.DeepEqual(pipeline.Spec, obj.Spec)
 
 	// TODO: use UpdateSpec instead
 	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", shouldUpdateCR)
@@ -422,10 +379,8 @@ func applyPipelineSpec(
 		return err
 	}
 
-	kubernetes.SetAnnotation(pipelineRollout, apiv1.KeyHash, currentRolloutSpecHash)
-
 	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
-	pipeline, err := kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
+	pipeline, err = kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get Pipeline: %v", err)
 		return err
@@ -433,9 +388,4 @@ func applyPipelineSpec(
 
 	processPipelineStatus(ctx, pipeline, pipelineRollout)
 	return nil
-}
-
-// TODO: detect engine, now always not pause, enable to pause when we can detect spec change
-func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
-	return false, nil
 }

@@ -282,6 +282,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		numaLogger.Debugf("found existing Resource definition for %s/%s: %+v", object.Namespace, object.Name, resource)
 
 		if !shouldUpdateCR {
+			numaLogger.Debugf("skipping update of resource %s/%s", object.Namespace, object.Name)
 			return nil
 		}
 
@@ -370,15 +371,4 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	err = json.Unmarshal(asJsonBytes, &genericObject)
 
 	return &genericObject, err
-}
-
-func SetAnnotation(obj metav1.Object, key, value string) {
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[key] = value
-
-	obj.SetAnnotations(annotations)
 }
