@@ -19,7 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
-
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -200,13 +200,22 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 	)
 
 	// Create the pdb only if it doesn't exist
-	if err := r.client.Get(ctx, client.ObjectKey{Name: pdb.Name, Namespace: pdb.Namespace}, pdb); err != nil {
+	existingPDB := &policyv1.PodDisruptionBudget{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: pdb.Name, Namespace: pdb.Namespace}, existingPDB); err != nil {
 		if apierrors.IsNotFound(err) {
 			if err = r.client.Create(ctx, pdb); err != nil {
 				return err
 			}
 		} else {
 			return err
+		}
+	} else {
+		// Update the pdb if needed
+		if existingPDB.Spec.MaxUnavailable != pdb.Spec.MaxUnavailable {
+			existingPDB.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
+			if err := r.client.Update(ctx, existingPDB); err != nil {
+				return err
+			}
 		}
 	}
 
