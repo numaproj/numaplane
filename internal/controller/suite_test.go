@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,9 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -217,4 +221,47 @@ func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfi
 	Expect(err).ToNot(HaveOccurred())
 
 	return ncdc
+}
+
+// verifyAutoHealing tests the auto healing feature
+func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, pathToValue string, newValue any) {
+	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+	// Get current resource
+	currentResource := unstructured.Unstructured{}
+	currentResource.SetGroupVersionKind(gvk)
+	Eventually(func() error {
+		return k8sClient.Get(ctx, lookupKey, &currentResource)
+	}, timeout, interval).Should(Succeed())
+	Expect(currentResource.Object).ToNot(BeEmpty())
+
+	// Get the original value at the specified path (pathToValue)
+	pathSlice := strings.Split(pathToValue, ".")
+	originalValue, found, err := unstructured.NestedFieldNoCopy(currentResource.Object, pathSlice...)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(found).To(BeTrue())
+
+	// Set new value and update resource
+	err = unstructured.SetNestedField(currentResource.Object, newValue, pathSlice...)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(k8sClient.Update(ctx, &currentResource)).ToNot(HaveOccurred())
+
+	// Get updated resource and the value at the specified path (pathToValue)
+	e := Eventually(func() (any, error) {
+		updatedResource := unstructured.Unstructured{}
+		updatedResource.SetGroupVersionKind(gvk)
+		if err := k8sClient.Get(ctx, lookupKey, &updatedResource); err != nil {
+			return nil, err
+		}
+
+		currentValue, found, err := unstructured.NestedFieldNoCopy(updatedResource.Object, pathSlice...)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(found).To(BeTrue())
+
+		return currentValue, nil
+	}, timeout, interval)
+
+	// Verify that the value matches the original value and not the new value
+	e.Should(Equal(originalValue))
+	e.ShouldNot(Equal(newValue))
 }

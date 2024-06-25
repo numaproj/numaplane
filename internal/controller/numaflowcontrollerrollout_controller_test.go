@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -75,34 +76,13 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		})
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {
-			By("updating the Numaflow Controller Deployment")
-			currentDeployment := &appsv1.Deployment{}
-			Eventually(func() (*appsv1.Deployment, error) {
-				if err := k8sClient.Get(ctx, typeNamespacedName, currentDeployment); err != nil {
-					return nil, err
-				}
+			By("updating the Numaflow Controller Deployment and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, appsv1.SchemeGroupVersion.WithKind("Deployment"), namespace, "numaflow-controller", "spec.template.spec.serviceAccountName", "someothersaname")
+		})
 
-				return currentDeployment, nil
-			}, timeout, interval).ShouldNot(BeNil())
-
-			originalImage := currentDeployment.Spec.Template.Spec.Containers[0].Image
-			newImage := "someimage:1.2.3"
-			currentDeployment.Spec.Template.Spec.Containers[0].Image = newImage
-
-			Expect(k8sClient.Update(ctx, currentDeployment)).ToNot(HaveOccurred())
-
-			By("Verifying the changed field of the Numaflow Controller Deployment is the same as the original and not the modified version")
-			e := Eventually(func() (string, error) {
-				updatedDeployment := &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, typeNamespacedName, updatedDeployment); err != nil {
-					return "", err
-				}
-
-				return updatedDeployment.Spec.Template.Spec.Containers[0].Image, nil
-			}, timeout, interval)
-
-			e.Should(Equal(originalImage))
-			e.ShouldNot(Equal(newImage))
+		It("Should auto heal the numaflow-cmd-params-config ConfigMap with the spec based on the NumaflowControllerRollout version field value when the ConfigMap spec is changed", func() {
+			By("updating the numaflow-cmd-params-config ConfigMap and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, corev1.SchemeGroupVersion.WithKind("ConfigMap"), namespace, "numaflow-cmd-params-config", "data.namespaced", "false")
 		})
 
 		AfterAll(func() {

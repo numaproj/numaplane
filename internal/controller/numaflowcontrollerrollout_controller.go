@@ -27,9 +27,10 @@ import (
 	gitopsSyncCommon "github.com/argoproj/gitops-engine/pkg/sync/common"
 	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -378,14 +379,13 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 		return err
 	}
 
-	// Watch Deployments of numaflow-controller (NOTE: could watch other resources as well)
-	numaflowControllerDeployments := appsv1.Deployment{
-		ObjectMeta: v1.ObjectMeta{Name: NumaflowControllerDeploymentName},
-	}
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowControllerDeployments),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
-		predicate.GenerationChangedPredicate{}); err != nil {
-		return err
+	// Watch NumaflowControllerRollout child resources: numaflow-controller Deployment, ConfigMap, ServiceAccount, Role, RoleBinding
+	for _, kind := range []client.Object{&appsv1.Deployment{}, &corev1.ConfigMap{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
+		if err := controller.Watch(source.Kind(mgr.GetCache(), kind),
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
+			predicate.GenerationChangedPredicate{}); err != nil {
+			return err
+		}
 	}
 
 	return nil
