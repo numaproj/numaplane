@@ -18,8 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -168,14 +166,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	shouldUpdateCR, err := r.shouldUpdateCR(ctx, &obj)
-	if err != nil {
-		numaLogger.Errorf(err, "unable to decide if CR should be applied: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-		return err
-	}
-
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", shouldUpdateCR)
+	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
 		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
@@ -194,19 +185,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	isbServiceRollout.Status.MarkRunning()
 
 	return nil
-}
-
-func (r *ISBServiceRolloutReconciler) shouldUpdateCR(ctx context.Context, obj *kubernetes.GenericObject) (bool, error) {
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return true, nil
-		}
-
-		return false, fmt.Errorf("error retrieving InterStepBufferService CR: %v", err)
-	}
-
-	return !reflect.DeepEqual(isbsvc.Spec, obj.Spec), nil
 }
 
 func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {

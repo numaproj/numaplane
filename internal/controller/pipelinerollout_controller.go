@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -219,7 +218,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		obj = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
 		if err != nil {
 			return false, err
 		}
@@ -241,7 +240,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		obj = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
+		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
 		if err != nil {
 			return false, err
 		}
@@ -249,7 +248,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout, pipeline)
+	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -365,14 +364,11 @@ func applyPipelineSpec(
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 	pipelineRollout *apiv1.PipelineRollout,
-	pipeline *kubernetes.GenericObject,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	shouldUpdateCR := !reflect.DeepEqual(pipeline.Spec, obj.Spec)
-
 	// TODO: use UpdateSpec instead
-	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines", shouldUpdateCR)
+	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
 		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
@@ -380,7 +376,7 @@ func applyPipelineSpec(
 	}
 
 	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
-	pipeline, err = kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
+	pipeline, err := kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get Pipeline: %v", err)
 		return err
