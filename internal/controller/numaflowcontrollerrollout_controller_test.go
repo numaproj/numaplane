@@ -18,27 +18,30 @@ package controller
 
 import (
 	"context"
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"strings"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var _ = Describe("NumaflowControllerRollout Controller", func() {
+var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 	const (
-		namespace = "default"
+		namespace    = "default"
+		resourceName = "numaflow-controller"
 	)
+
+	ctx := context.Background()
+
 	Context("When reconciling a resource", func() {
-		const resourceName = "numaflow-controller"
-
-		ctx := context.Background()
-
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: namespace, // TODO(user):Modify as needed
+			Namespace: namespace,
 		}
 
 		numaflowControllerRollout := apiv1.NumaflowControllerRollout{
@@ -50,13 +53,6 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 				Controller: apiv1.Controller{Version: "1.2.1"},
 			},
 		}
-
-		AfterEach(func() {
-			// Cleanup the resource after each test and ignore the error if it doesn't exist
-			resource := &apiv1.NumaflowControllerRollout{}
-			_ = k8sClient.Get(ctx, typeNamespacedName, resource)
-			_ = k8sClient.Delete(ctx, resource)
-		})
 
 		It("Should throw a CR validation error", func() {
 			By("Creating a NumaflowControllerRollout resource with an invalid name")
@@ -79,21 +75,22 @@ var _ = Describe("NumaflowControllerRollout Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("numaflowcontrollerrollouts.numaplane.numaproj.io \"numaflow-controller\" already exists"))
 		})
 
-		// It("should successfully reconcile the resource", func() {
-		// 	By("Reconciling the created resource")
-		// 	controllerReconciler := &NumaflowControllerRolloutReconciler{
-		// 		client:     k8sClient,
-		// 		scheme:     k8sClient.Scheme(),
-		// 		restConfig: cfg,
-		// 	}
+		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {
+			By("updating the Numaflow Controller Deployment and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, appsv1.SchemeGroupVersion.WithKind("Deployment"), namespace, "numaflow-controller", "spec.template.spec.serviceAccountName", "someothersaname")
+		})
 
-		// 	_, err := controllerReconciler.Reconcile(ctx, sigsReconcile.Request{
-		// 		NamespacedName: typeNamespacedName,
-		// 	})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-		// 	// Example: If you expect a certain status condition after reconciliation, verify it here.
-		// })
+		It("Should auto heal the numaflow-cmd-params-config ConfigMap with the spec based on the NumaflowControllerRollout version field value when the ConfigMap spec is changed", func() {
+			By("updating the numaflow-cmd-params-config ConfigMap and verifying the changed field is the same as the original and not the modified version")
+			verifyAutoHealing(ctx, corev1.SchemeGroupVersion.WithKind("ConfigMap"), namespace, "numaflow-cmd-params-config", "data.namespaced", "false")
+		})
+
+		AfterAll(func() {
+			// Cleanup the resource after each test and ignore the error if it doesn't exist
+			resource := &apiv1.NumaflowControllerRollout{}
+			_ = k8sClient.Get(ctx, typeNamespacedName, resource)
+			_ = k8sClient.Delete(ctx, resource)
+		})
 	})
 })
 
@@ -192,19 +189,19 @@ spec:
 				Namespace: "default",
 			},
 		}
-		It("should apply ownership reference correctly", func() {
 
+		It("should apply ownership reference correctly", func() {
 			manifests, err := applyOwnershipToManifests(manifests, resource)
 			Expect(err).To(BeNil())
 			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
 			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
 		})
+
 		It("should not apply ownership if it already exists", func() {
 			manifests, err := applyOwnershipToManifests(emanifests, resource)
 			Expect(err).To(BeNil())
 			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
 			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
-
 		})
 	})
 })
