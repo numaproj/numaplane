@@ -1,16 +1,19 @@
 package e2e
 
 import (
-	"os"
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 const (
@@ -22,46 +25,72 @@ const (
 
 type E2ESuite struct {
 	suite.Suite
-	restConfig *rest.Config
-	kubeClient kubernetes.Interface
-	stopch     chan struct{}
+	env       *envtest.Environment
+	k8sClient client.Client
 }
 
 func (s *E2ESuite) SetupSuite() {
 	var err error
-	s.stopch = make(chan struct{})
 
-	if os.Getenv("KUBERNETES_SERVICE_HOST") == "" && os.Getenv("KUBERNETES_SERVICE_PORT") == "" {
-		kubeconfig := os.Getenv("KUBECONFIG")
-		if kubeconfig == "" {
-			kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
-		}
-		s.restConfig, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		s.restConfig, err = rest.InClusterConfig()
-	}
+	scheme := runtime.NewScheme()
+	err = clientgoscheme.AddToScheme(scheme)
 	if err != nil {
 		s.T().Fatal(err)
 	}
 
-	s.kubeClient = kubernetes.NewForConfigOrDie(s.restConfig)
-	c, _ := client.New(s.restConfig, client.Options{})
-	kubeClient = c
+	err = apiv1.AddToScheme(scheme) // Register PipelineRollout to scheme
+	if err != nil {
+		s.T().Fatal(err)
+	}
+
+	s.env = &envtest.Environment{
+		// These paths contain the YAML manifests of the CRDs
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"), // assuming this is where the CRDs for  types reside
+			// externalCRDsDir,  // if there are more external CRDs needed
+		},
+		ErrorIfCRDPathMissing: true, // cause test to error if CRDs are not found
+	}
+
+	cfg, err := s.env.Start()
+	if err != nil {
+		s.T().Fatal(err)
+	}
+
+	s.k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		s.T().Fatal(err)
+	}
 }
 
-// Assuming you might need the following functions for your e2e tests,
-// If they're not needed, feel free to remove these.
-
 func (s *E2ESuite) TearDownSuite() {
-	// Implement your teardown logic
+	if err := s.env.Stop(); err != nil {
+		s.T().Fatal(err)
+	}
 }
 
 func (s *E2ESuite) BeforeTest(suiteName, testName string) {
-	// Implement any logic that needs to be done before every test
+	// Create a new namespace with a unique name for each test
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "numaplane-system",
+		},
+	}
+	if err := s.k8sClient.Create(context.Background(), ns); err != nil {
+		s.T().Fatal(err, "Unable to create namespace", ns.Name)
+	}
 }
 
 func (s *E2ESuite) AfterTest(suiteName, testName string) {
-	// Implement cleanup logic that needs to be done after every test
+	nsSpec := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "numaplane-system",
+		},
+	}
+	err := s.k8sClient.Delete(context.Background(), nsSpec)
+	if err != nil {
+		s.T().Fatal(err, "Unable to delete namespace", "numaplane-system")
+	}
 }
 
 func (s *E2ESuite) CheckError(err error) {
@@ -72,18 +101,67 @@ func (s *E2ESuite) CheckError(err error) {
 }
 
 func (s *E2ESuite) Given() *Given {
-	return NewGiven(s.T())
+	return NewGiven(s.T(), s.k8sClient)
 }
 
-func (s *E2ESuite) TestPipelineRollout() {
-	Given := s.Given()
-	Expect := NewExpect(s.T())
+func (s *E2ESuite) TestCreatePipelineRollout() {
+	pipelineSpec := runtime.RawExtension{
+		Raw: []byte(`{
+            "interStepBufferServiceName": "my-isbsvc",
+            "vertices": [
+                {
+                    "name": "in",
+                    "source": {
+                        "generator": {
+                            "RPU": 5,
+                            "Duration": "1s"
+                        }
+                    }
+                },
+                {
+                    "name": "cat",
+                    "UDF": {
+                        "builtin": {
+                            "name": "cat"
+                        }
+                    }
+                },
+                {
+                    "name": "out",
+                    "sink": {
+                        "log": {}
+                    }
+                }
+            ],
+            "edges": [
+                {
+                    "from": "in",
+                    "to": "cat"
+                },
+                {
+                    "from": "cat",
+                    "to": "out"
+                }
+            ]
+        }`),
+	}
 
-	samplePipelineRollout := "@../../config/samples/numaplane.numaproj.io_v1alpha1_pipelinerollout.yaml"
+	pipelineRollout := &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-pipeline",
+			Namespace: "numaplane-system",
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: pipelineSpec,
+		},
+	}
 
-	Given.PipelineRollout(samplePipelineRollout)
+	if err := s.k8sClient.Create(context.Background(), pipelineRollout); err != nil {
+		s.T().Fatal(err)
+	}
 
-	Expect.AssertPipelineRolloutIsPresent("<numaplane-system>", "my-pipeline") // Replace <ns> and <name> with actual values
+	Expect := NewExpect(s.T(), s.k8sClient)
+	Expect.AssertPipelineRolloutIsPresent("numaplane-system", "my-pipeline")
 }
 
 func TestE2E(t *testing.T) {

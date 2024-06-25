@@ -5,12 +5,16 @@ import (
 	"testing"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type When struct{ t *testing.T }
+type When struct {
+	t         *testing.T
+	k8sClient client.Client
+}
 
-func NewWhen(t *testing.T) *When {
-	return &When{t: t}
+func NewWhen(t *testing.T, k8sClient client.Client) *When {
+	return &When{t: t, k8sClient: k8sClient}
 }
 
 func (w *When) PipelineRolloutIsCreated() *When {
@@ -19,7 +23,7 @@ func (w *When) PipelineRolloutIsCreated() *When {
 		// Assuming Namespace and Name are set here
 	}
 
-	err := k8sClient.Create(context.TODO(), pipelineRollout)
+	err := w.k8sClient.Create(context.TODO(), pipelineRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -33,7 +37,7 @@ func (w *When) NumaflowControllerRolloutIsCreated() *When {
 		// Assuming Namespace and Name are set here
 	}
 
-	err := k8sClient.Create(context.TODO(), numaflowControllerRollout)
+	err := w.k8sClient.Create(context.TODO(), numaflowControllerRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -47,7 +51,7 @@ func (w *When) ISBServiceRolloutIsCreated() *When {
 		// Assuming Namespace and Name are set here
 	}
 
-	err := k8sClient.Create(context.TODO(), iSBServiceRollout)
+	err := w.k8sClient.Create(context.TODO(), iSBServiceRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}

@@ -8,15 +8,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Expect struct{ t *testing.T }
+type Expect struct {
+	t         *testing.T
+	k8sClient client.Client
+}
 
-func NewExpect(t *testing.T) *Expect {
-	return &Expect{t: t}
+func NewExpect(t *testing.T, k8sClient client.Client) *Expect {
+	return &Expect{t: t, k8sClient: k8sClient}
 }
 
 func (t *Expect) AssertPipelineRolloutIsPresent(ns, name string) *Expect {
 	pipelineRollout := &apiv1.PipelineRollout{}
-	err := k8sClient.Get(context.TODO(), client.ObjectKey{
+	err := t.k8sClient.Get(context.TODO(), client.ObjectKey{
 		Namespace: ns,
 		Name:      name,
 	}, pipelineRollout)
@@ -29,7 +32,7 @@ func (t *Expect) AssertPipelineRolloutIsPresent(ns, name string) *Expect {
 
 func (t *Expect) AssertNumaflowControllerRolloutIsPresent(ns, name string) *Expect {
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
-	err := k8sClient.Get(context.TODO(), client.ObjectKey{
+	err := t.k8sClient.Get(context.TODO(), client.ObjectKey{
 		Namespace: ns,
 		Name:      name,
 	}, numaflowControllerRollout)
@@ -42,7 +45,7 @@ func (t *Expect) AssertNumaflowControllerRolloutIsPresent(ns, name string) *Expe
 
 func (t *Expect) AssertISBServiceRolloutIsPresent(ns, name string) *Expect {
 	iSBServiceRollout := &apiv1.ISBServiceRollout{}
-	err := k8sClient.Get(context.TODO(), client.ObjectKey{
+	err := t.k8sClient.Get(context.TODO(), client.ObjectKey{
 		Namespace: ns,
 		Name:      name,
 	}, iSBServiceRollout)
