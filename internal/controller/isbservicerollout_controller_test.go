@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -104,6 +105,17 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 				return createdISBResource.Status.Phase, nil
 			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+		})
+
+		It("Should have created an PodDisruptionBudget for ISB ", func() {
+			isbPDB := &policyv1.PodDisruptionBudget{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, isbPDB)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the content of the InterStepBufferService spec")
+			Expect(isbPDB.Spec.MaxUnavailable.IntVal).Should(Equal(int32(1)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {

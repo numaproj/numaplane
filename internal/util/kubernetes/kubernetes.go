@@ -9,22 +9,22 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 )
 
 // validManifestExtensions contains the supported extension for raw file.
@@ -377,4 +377,23 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	err = json.Unmarshal(asJsonBytes, &genericObject)
 
 	return &genericObject, err
+}
+
+func NewPodDisruptionBudget(name, namespace string, maxUnavailable int32, ownerReference []metav1.OwnerReference) *policyv1.PodDisruptionBudget {
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			OwnerReferences: ownerReference,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: maxUnavailable},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/component":      "isbsvc",
+					"numaflow.numaproj.io/isbsvc-name": name,
+				},
+			},
+		},
+	}
 }
