@@ -204,21 +204,6 @@ func downloadCRD(url string, downloadDir string) {
 
 func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
 	// Read definitions config file
-	// TODO: use this file instead "../../tests/config/controller-definitions-config.yaml"
-	//data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
-	//Expect(err).ToNot(HaveOccurred())
-	//
-	//// Decode the yaml into a ConfigMap object
-	//configMap := corev1.ConfigMap{}
-	//err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
-	//Expect(err).ToNot(HaveOccurred())
-	//
-	//// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
-	//mp := configMap.Data["controller_definitions.yaml"]
-	//ncdc := config.NumaflowControllerDefinitionConfig{}
-	//err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
-	//Expect(err).ToNot(HaveOccurred())
-
 	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
 	var controllerConfig config.NumaflowControllerDefinitionConfig

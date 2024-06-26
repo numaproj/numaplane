@@ -32,7 +32,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var _ = Describe("Validate Numaflow CRD", Ordered, func() {
+var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 	const (
 		namespace = "default"
 		duration  = 20 * time.Second
