@@ -17,44 +17,23 @@ func NewWhen(t *testing.T, k8sClient client.Client) *When {
 	return &When{t: t, k8sClient: k8sClient}
 }
 
-func (w *When) PipelineRolloutIsCreated() *When {
-	pipelineRollout := &apiv1.PipelineRollout{
-		// add required spec status and metadata for creating a PipelineRollout
-		// Assuming Namespace and Name are set here
-	}
-
+func (w *When) PipelineRolloutIsCreated(pipelineRollout *apiv1.PipelineRollout) {
 	err := w.k8sClient.Create(context.TODO(), pipelineRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}
-
-	return w
 }
 
-func (w *When) NumaflowControllerRolloutIsCreated() *When {
-	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{
-		// add the required spec status and metadata for creating a NumaflowControllerRollout
-		// Assuming Namespace and Name are set here
-	}
-
-	err := w.k8sClient.Create(context.TODO(), numaflowControllerRollout)
+func (w *When) PipelineRolloutIsUpdated(pipelineRollout *apiv1.PipelineRollout) {
+	err := w.k8sClient.Update(context.TODO(), pipelineRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}
-
-	return w
 }
 
-func (w *When) ISBServiceRolloutIsCreated() *When {
-	iSBServiceRollout := &apiv1.ISBServiceRollout{
-		//add the required spec status and metadata for creating an ISBServiceRollout
-		// Assuming Namespace and Name are set here
-	}
-
-	err := w.k8sClient.Create(context.TODO(), iSBServiceRollout)
+func (w *When) PipelineRolloutIsDeleted(pipelineRollout *apiv1.PipelineRollout) {
+	err := w.k8sClient.Delete(context.TODO(), pipelineRollout)
 	if err != nil {
 		w.t.Fatal(err)
 	}
-
-	return w
 }
