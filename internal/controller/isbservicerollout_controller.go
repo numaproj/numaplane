@@ -18,9 +18,12 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -36,7 +39,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -180,9 +182,43 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return err
 	}
 
+	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
+		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
+		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
+	}
+
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
 	isbServiceRollout.Status.MarkRunning()
+
+	return nil
+}
+
+// Apply pod disruption budget for the ISBService
+func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	pdb := kubernetes.NewPodDisruptionBudget(isbServiceRollout.Name, isbServiceRollout.Namespace, 1,
+		[]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
+	)
+
+	// Create the pdb only if it doesn't exist
+	existingPDB := &policyv1.PodDisruptionBudget{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: pdb.Name, Namespace: pdb.Namespace}, existingPDB); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err = r.client.Create(ctx, pdb); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	} else {
+		// Update the pdb if needed
+		if existingPDB.Spec.MaxUnavailable != pdb.Spec.MaxUnavailable {
+			existingPDB.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
+			if err := r.client.Update(ctx, existingPDB); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
