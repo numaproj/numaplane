@@ -32,4 +32,6 @@ go.work
 config/crd/bases/_.yaml
 .idea
 
+extensions/argo/numa-rollout/numa-rollout-extension/node_modules
+
 config/crd/external/
