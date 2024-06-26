@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,23 +32,20 @@ import (
 )
 
 var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
-	const (
-		namespace = "default"
-		duration  = 20 * time.Second
-		interval  = 1 * time.Second
-	)
+	const namespace = "default"
+
 	Context("When creating a NumaflowControllerRollout resource", func() {
 		ctx := context.Background()
 
 		resourceLookupKey := types.NamespacedName{
 			Name:      "numaflow-controller",
-			Namespace: "default",
+			Namespace: namespace,
 		}
 
 		numaflowControllerResource := apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "numaflow-controller",
-				Namespace: "default",
+				Namespace: namespace,
 			},
 			Spec: apiv1.NumaflowControllerRolloutSpec{
 				Controller: apiv1.Controller{Version: "1.2.0"},
@@ -82,7 +78,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			// Loop until the API call returns the desired response or a timeout occurs
 			Eventually(func() (apiv1.Phase, error) {
 				createdResource := &apiv1.NumaflowControllerRollout{}
-				_ = k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				Expect(k8sClient.Get(ctx, resourceLookupKey, createdResource)).To(Succeed())
 				return createdResource.Status.Phase, nil
 			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 
