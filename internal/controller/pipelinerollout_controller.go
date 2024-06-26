@@ -166,7 +166,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	obj := kubernetes.GenericObject{
+	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
@@ -180,11 +180,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Get the object to see if it exists
-	pipeline, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "pipelines")
+	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, &newPipelineDef, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-			err = kubernetes.CreateCR(ctx, r.restConfig, &obj, "pipelines")
+			err = kubernetes.CreateCR(ctx, r.restConfig, &newPipelineDef, "pipelines")
 			if err != nil {
 				return false, err
 			}
@@ -197,9 +197,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
+	// propagate the pipeline's status into PipelineRollout's status
+	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout)
+
 	// If the pipeline already exists, first check if the pipeline status
 	// is pausing. If so, re-enqueue immediately.
-	pausing := isPipelinePausing(ctx, pipeline)
+	pausing := isPipelinePausing(ctx, existingPipelineDef)
 	if pausing {
 		// re-enqueue
 		return true, nil
@@ -207,18 +210,18 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Check if the pipeline status is paused. If so, apply the change and
 	// resume.
-	paused := isPipelinePaused(ctx, pipeline)
+	paused := isPipelinePaused(ctx, existingPipelineDef)
 	if paused {
 		// Apply the new spec and resume the pipeline
 		// TODO: in the future, need to take into account whether Numaflow Controller
 		//       or ISBService is being installed to determine whether it's safe to unpause
-		newObj, err := setPipelineDesiredStatus(&obj, "Running")
+		newObj, err := setPipelineDesiredStatus(&newPipelineDef, "Running")
 		if err != nil {
 			return false, err
 		}
-		obj = *newObj
+		newPipelineDef = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
+		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
 		if err != nil {
 			return false, err
 		}
@@ -227,20 +230,20 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// If pipeline status is not above, detect if pausing is required.
-	shouldPause, err := needsPausing(pipeline, &obj)
+	shouldPause, err := needsPausing(existingPipelineDef, &newPipelineDef)
 	if err != nil {
 		return false, err
 	}
 	if shouldPause {
 		// Use the existing spec, then pause and re-enqueue
-		obj.Spec = pipeline.Spec
-		newObj, err := setPipelineDesiredStatus(&obj, "Paused")
+		newPipelineDef.Spec = existingPipelineDef.Spec
+		newObj, err := setPipelineDesiredStatus(&newPipelineDef, "Paused")
 		if err != nil {
 			return false, err
 		}
-		obj = *newObj
+		newPipelineDef = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
+		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
 		if err != nil {
 			return false, err
 		}
@@ -248,7 +251,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, &obj, pipelineRollout)
+	err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -374,14 +377,5 @@ func applyPipelineSpec(
 		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
 		return err
 	}
-
-	// after the Apply, Get the Pipeline so that we can propagate its health into our Status
-	pipeline, err := kubernetes.GetCR(ctx, restConfig, obj, "pipelines")
-	if err != nil {
-		numaLogger.Errorf(err, "failed to get Pipeline: %v", err)
-		return err
-	}
-
-	processPipelineStatus(ctx, pipeline, pipelineRollout)
 	return nil
 }
