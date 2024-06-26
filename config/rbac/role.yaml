@@ -36,3 +36,6 @@ rules:
       - deployments
     verbs:
       - '*'
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
