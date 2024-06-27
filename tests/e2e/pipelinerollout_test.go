@@ -19,7 +19,7 @@ var _ = Describe("PipelineRollout E2E", func() {
 	const (
 		timeout             = time.Second * 10
 		interval            = time.Millisecond * 250
-		namespace           = "default"
+		namespace           = "numaplane-system"
 		pipelineRolloutName = "test-pipeline-rollout"
 	)
 
