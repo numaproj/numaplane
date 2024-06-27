@@ -3,7 +3,10 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,10 +27,11 @@ import (
 )
 
 var (
-	k8sClient client.Client
-	testEnv   *envtest.Environment
-	ctx       context.Context
-	cancel    context.CancelFunc
+	k8sClient       client.Client
+	testEnv         *envtest.Environment
+	ctx             context.Context
+	cancel          context.CancelFunc
+	externalCRDsDir string
 )
 
 func TestE2E(t *testing.T) {
@@ -49,11 +53,21 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	err = numaflowv1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
+	// Download Numaflow CRDs
+	crdsURLs := []string{
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
+	}
+	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
+	for _, crdURL := range crdsURLs {
+		downloadCRD(crdURL, externalCRDsDir)
+	}
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
-			filepath.Join("..", "..", "config", "crd", "numaflow"),
+			externalCRDsDir,
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -102,4 +116,29 @@ var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+
+	err = os.RemoveAll(externalCRDsDir)
+	Expect(err).NotTo(HaveOccurred())
 })
+
+func downloadCRD(url string, downloadDir string) {
+	// Create the download directory
+	err := os.MkdirAll(downloadDir, os.ModePerm)
+	Expect(err).ToNot(HaveOccurred())
+
+	// Create the file
+	fileName := filepath.Base(url)
+	filePath := filepath.Join(downloadDir, fileName)
+	out, err := os.Create(filePath)
+	Expect(err).ToNot(HaveOccurred())
+	defer out.Close()
+
+	// Download the file
+	resp, err := http.Get(url)
+	Expect(err).ToNot(HaveOccurred())
+	defer resp.Body.Close()
+
+	// Write the response body to file
+	_, err = io.Copy(out, resp.Body)
+	Expect(err).ToNot(HaveOccurred())
+}
