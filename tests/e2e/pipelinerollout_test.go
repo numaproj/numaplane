@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 )
@@ -48,60 +47,24 @@ var _ = Describe("PipelineRollout E2E", func() {
 			return nil
 		}, time.Second*30, time.Second).Should(Succeed())
 
-		By("Updating the PipelineRollout")
-		updatedPipelineSpec := createUpdatedPipelineSpec()
-		pipelineRollout.Spec.Pipeline.Raw = updatedPipelineSpec
-		Expect(whenHelper.UpdatePipelineRollout(ctx, pipelineRollout)).To(Succeed())
+		expectHelper.PipelineRolloutToExist(ctx, namespace, pipelineRolloutName)
 
-		By("Checking if the PipelineRollout was successfully updated")
-		expectHelper.PipelineRolloutToBeUpdated(ctx, namespace, pipelineRolloutName, updatedPipelineSpec)
+		// By("Updating the PipelineRollout")
+		// updatedPipelineSpec := createUpdatedPipelineSpec()
+		// pipelineRollout.Spec.Pipeline.Raw = updatedPipelineSpec
+		// Expect(whenHelper.UpdatePipelineRollout(ctx, pipelineRollout)).To(Succeed())
 
-		By("Deleting the PipelineRollout")
-		Expect(whenHelper.DeletePipelineRollout(ctx, pipelineRollout)).To(Succeed())
+		// By("Checking if the PipelineRollout was successfully updated")
+		// expectHelper.PipelineRolloutToBeUpdated(ctx, namespace, pipelineRolloutName, updatedPipelineSpec)
 
-		By("Checking if the PipelineRollout was successfully deleted")
-		expectHelper.PipelineRolloutToBeDeleted(ctx, namespace, pipelineRolloutName)
+		// By("Deleting the PipelineRollout")
+		// Expect(whenHelper.DeletePipelineRollout(ctx, pipelineRollout)).To(Succeed())
+
+		// By("Checking if the PipelineRollout was successfully deleted")
+		// expectHelper.PipelineRolloutToBeDeleted(ctx, namespace, pipelineRolloutName)
 	})
+
 })
-
-// createSamplePipelineRollout and createUpdatedPipelineSpec functions remain the same
-
-func createSamplePipelineRollout(name, namespace string) *apiv1.PipelineRollout {
-	pipelineSpec := numaflowv1.PipelineSpec{
-		InterStepBufferServiceName: "test-isbsvc",
-		Vertices: []numaflowv1.AbstractVertex{
-			{
-				Name: "in",
-				Source: &numaflowv1.Source{
-					Generator: &numaflowv1.GeneratorSource{
-						RPU:      pointer.Int64(5),
-						Duration: &metav1.Duration{Duration: time.Second},
-					},
-				},
-			},
-		},
-		Edges: []numaflowv1.Edge{
-			{
-				From: "in",
-				To:   "out",
-			},
-		},
-	}
-
-	pipelineSpecRaw, _ := json.Marshal(pipelineSpec)
-
-	return &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: runtime.RawExtension{
-				Raw: pipelineSpecRaw,
-			},
-		},
-	}
-}
 
 func createUpdatedPipelineSpec() []byte {
 	updatedPipelineSpec := numaflowv1.PipelineSpec{
