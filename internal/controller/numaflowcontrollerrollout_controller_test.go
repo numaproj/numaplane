@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,13 +39,13 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		ctx := context.Background()
 
 		resourceLookupKey := types.NamespacedName{
-			Name:      "numaflow-controller",
+			Name:      NumaflowControllerDeploymentName,
 			Namespace: namespace,
 		}
 
 		numaflowControllerResource := apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "numaflow-controller",
+				Name:      NumaflowControllerDeploymentName,
 				Namespace: namespace,
 			},
 			Spec: apiv1.NumaflowControllerRolloutSpec{
@@ -85,7 +86,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: "numaflow-controller", Namespace: namespace}, numaflowDeployment)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				return err == nil
 			}, duration, interval).Should(BeTrue())
 		})
@@ -101,7 +102,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment image version")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: "numaflow-controller", Namespace: namespace}, numaflowDeployment)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				if err == nil {
 					return numaflowDeployment.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.2.1"
 				}
@@ -120,10 +121,26 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			// Cleanup the resource after each test and ignore the error if it doesn't exist
-			resource := &apiv1.NumaflowControllerRollout{}
-			_ = k8sClient.Get(ctx, resourceLookupKey, resource)
-			_ = k8sClient.Delete(ctx, resource)
+			// Cleanup the resource after the tests
+			Expect(k8sClient.Delete(ctx, &apiv1.NumaflowControllerRollout{
+				ObjectMeta: numaflowControllerResource.ObjectMeta,
+			})).Should(Succeed())
+
+			deletedResource := &apiv1.NumaflowControllerRollout{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
+				return errors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
+
+			deletingChildResource := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
+			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
+
 		})
 	})
 })
