@@ -104,7 +104,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return createdISBResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
 		})
 
 		It("Should have created an PodDisruptionBudget for ISB ", func() {
@@ -212,7 +212,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return updatedResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
 
 			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())

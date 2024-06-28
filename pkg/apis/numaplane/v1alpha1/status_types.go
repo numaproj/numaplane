@@ -27,14 +27,14 @@ import (
 // ConditionType is a valid value of Condition.Type
 type ConditionType string
 
-// +kubebuilder:validation:Enum="";Pending;Running;Failed;NotApplicable
+// +kubebuilder:validation:Enum="";Pending;Deployed;Failed;NotApplicable
 type Phase string
 
 const (
-	PhasePending Phase = "Pending"
-	PhaseRunning Phase = "Running"
-	PhaseFailed  Phase = "Failed"
-	PhaseNA      Phase = "NotApplicable"
+	PhasePending  Phase = "Pending"
+	PhaseDeployed Phase = "Deployed"
+	PhaseFailed   Phase = "Failed"
+	PhaseNA       Phase = "NotApplicable"
 
 	// ConditionConfigured indicates valid configuration.
 	ConditionConfigured ConditionType = "Configured"
@@ -55,6 +55,9 @@ type Status struct {
 
 	// Message is added if Phase is PhaseFailed.
 	Message string `json:"message,omitempty"`
+
+	// ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1 Condition struct related field)
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // InitializeConditions initializes the conditions to Unknown
@@ -152,10 +155,10 @@ func (status *Status) InitConditions() {
 	status.SetPhase(PhasePending, "")
 }
 
-// MarkRunning sets conditions to True state and Phase to Running.
-func (status *Status) MarkRunning() {
+// MarkDeployed sets conditions to True state and Phase to Deployed.
+func (status *Status) MarkDeployed() {
 	status.MarkTrue(ConditionConfigured)
-	status.SetPhase(PhaseRunning, "")
+	status.SetPhase(PhaseDeployed, "")
 }
 
 // MarkFailed sets conditions to False state and Phase to Failed.
@@ -170,4 +173,8 @@ func (status *Status) MarkChildResourcesHealthy() {
 
 func (status *Status) MarkChildResourcesUnhealthy(reason, message string) {
 	status.MarkFalse(ConditionChildResourcesHealthy, reason, message)
+}
+
+func (status *Status) SetObservedGeneration(generation int64) {
+	status.ObservedGeneration = generation
 }
