@@ -81,7 +81,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 				createdResource := &apiv1.NumaflowControllerRollout{}
 				Expect(k8sClient.Get(ctx, resourceLookupKey, createdResource)).To(Succeed())
 				return createdResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
 
 			By("Verifying the numaflow controller deployment")
 			Eventually(func() bool {

@@ -174,7 +174,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
+	existingISBService, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
 		return err
@@ -185,9 +185,17 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
 
-	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
+	processISBServiceStatus(ctx, existingISBService, isbServiceRollout)
 
-	isbServiceRollout.Status.MarkRunning()
+	// Set ISBServiceRollout CR status Phase and ObservedGeneration only if the ISBService has completely reconciled: Generation == ObservedGeneration
+	existingISBServiceStatus, err := kubernetes.ParseStatus(existingISBService)
+	if err != nil {
+		return fmt.Errorf("unable to parse status for existing ISBService %s/%s: %v", existingISBService.Namespace, existingISBService.Name, err)
+	}
+	if existingISBService.Generation == existingISBServiceStatus.ObservedGeneration {
+		isbServiceRollout.Status.MarkDeployed()
+		isbServiceRollout.Status.SetObservedGeneration(isbServiceRollout.Generation)
+	}
 
 	return nil
 }

@@ -187,8 +187,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 
-			pipelineRollout.Status.MarkRunning()
-
 			return false, nil
 		}
 
@@ -254,7 +252,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, err
 	}
 
-	pipelineRollout.Status.MarkRunning()
+	// Set PipelineRollout CR status Phase and ObservedGeneration only if the Pipeline has completely reconciled: Generation == ObservedGeneration
+	existingPipelineDefStatus, err := kubernetes.ParseStatus(existingPipelineDef)
+	if err != nil {
+		return false, fmt.Errorf("unable to parse status for existing Pipeline %s/%s: %v", existingPipelineDef.Namespace, existingPipelineDef.Name, err)
+	}
+	if existingPipelineDef.Generation == existingPipelineDefStatus.ObservedGeneration {
+		pipelineRollout.Status.MarkDeployed()
+		pipelineRollout.Status.SetObservedGeneration(pipelineRollout.Generation)
+	}
 
 	return false, nil
 }

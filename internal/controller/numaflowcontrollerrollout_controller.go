@@ -31,6 +31,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -204,7 +205,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return fmt.Errorf("sync operation is not successful")
 	}
 
-	controllerRollout.Status.MarkRunning()
+	r.prepStatusForUpdate(ctx, controllerRollout)
+
 	return nil
 }
 
@@ -362,6 +364,46 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 		return nil, nil, fmt.Errorf("error creating kubectl ResourceOperations: %w", err)
 	}
 	return ops, cleanup, nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// Try to get the Numaflow Controller Deployment
+	deployment := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "deployment.apps/numaflow-controller",
+			Namespace: controllerRollout.Namespace,
+		},
+	}
+	existingDeployment, err := kubernetes.GetCR(ctx, r.restConfig, &deployment, "deployments")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// This could just mean that the deployment has not yet been created.
+			// Log and return to wait for next reconcile call once the deployment is created triggering the reconciliation.
+			numaLogger.Warnf("Numaflow Controller Deployment not found. It may still have to be created.")
+		}
+
+		return fmt.Errorf("error getting the Numaflow Controller Deployment for NumaflowControllerRollout %s/%s: %v", controllerRollout.Namespace, controllerRollout.Name, err)
+	}
+
+	// Parse the status of the existing Numaflow Controller Deployment
+	existingDeploymentStatus, err := kubernetes.ParseStatus(existingDeployment)
+	if err != nil {
+		return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", existingDeployment.Namespace, existingDeployment.Name, err)
+	}
+
+	// Set NumaflowControllerRollout CR status Phase and ObservedGeneration only if the Numaflow Controller Deployment has completely reconciled (Generation == ObservedGeneration)
+	if existingDeployment.Generation == existingDeploymentStatus.ObservedGeneration {
+		controllerRollout.Status.MarkDeployed()
+		controllerRollout.Status.SetObservedGeneration(controllerRollout.Generation)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

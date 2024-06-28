@@ -140,7 +140,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return createdResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
@@ -226,7 +226,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return updatedResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
 
 			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
