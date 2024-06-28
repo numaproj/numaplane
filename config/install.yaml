@@ -181,12 +181,17 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
+                  Condition struct related field)
+                format: int64
+                type: integer
               phase:
                 description: Phase indicates the current phase of the resource.
                 enum:
                 - ""
                 - Pending
-                - Running
+                - Deployed
                 - Failed
                 - NotApplicable
                 type: string
@@ -335,12 +340,17 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
+                  Condition struct related field)
+                format: int64
+                type: integer
               phase:
                 description: Phase indicates the current phase of the resource.
                 enum:
                 - ""
                 - Pending
-                - Running
+                - Deployed
                 - Failed
                 - NotApplicable
                 type: string
@@ -485,12 +495,17 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
+                  Condition struct related field)
+                format: int64
+                type: integer
               phase:
                 description: Phase indicates the current phase of the resource.
                 enum:
                 - ""
                 - Pending
-                - Running
+                - Deployed
                 - Failed
                 - NotApplicable
                 type: string
