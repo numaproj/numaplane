@@ -78,7 +78,7 @@ func NewNumaflowControllerRolloutReconciler(
 	kubectl kubeUtil.Kubectl,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig)
-	logger.RefreshBaseLoggerLevel()
+	//logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
 	err := stateCache.Init(numaLogger)
 	if err != nil {
@@ -107,7 +107,7 @@ func NewNumaflowControllerRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// update the Base Logger's level according to the Numaplane Config
-	logger.RefreshBaseLoggerLevel()
+	//logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 
 	// TODO: only allow one controllerRollout per namespace.
@@ -233,7 +233,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 
 	// Get the target manifests based on the version of the controller and throw an error if the definition not for a version.
 	version := rollout.Spec.Controller.Version
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetControllerDefinitionsConfig()
 	manifest := definition[version]
 	if len(manifest) == 0 {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)

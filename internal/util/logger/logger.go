@@ -147,6 +147,9 @@ func (in *NumaLogger) DeepCopy() *NumaLogger {
 	}
 	out := new(NumaLogger)
 	out.LogLevel = in.LogLevel
+	if out.LogLevel == 0 {
+		out.LogLevel = InfoLevel
+	}
 	out.LogrLogger = new(logr.Logger)
 	*(out.LogrLogger) = *(in.LogrLogger)
 	return out
@@ -246,6 +249,11 @@ func (nl *NumaLogger) Verbosef(msg string, args ...any) {
 
 // SetLevel sets/changes the log level.
 func (nl *NumaLogger) SetLevel(level int) {
+	// default to INFO level if not defined
+	if level == 0 {
+		level = InfoLevel
+	}
+
 	nl.LogLevel = level
 	sink := nl.LogrLogger.GetSink().(*LogSink)
 	zl := setLoggerLevel(sink.l, level)
