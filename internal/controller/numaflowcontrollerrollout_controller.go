@@ -78,7 +78,6 @@ func NewNumaflowControllerRolloutReconciler(
 	kubectl kubeUtil.Kubectl,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig)
-	//logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
 	err := stateCache.Init(numaLogger)
 	if err != nil {

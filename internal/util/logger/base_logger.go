@@ -31,27 +31,6 @@ func GetBaseLogger() *NumaLogger {
 }
 
 // Refresh the Logger's LogLevel based on current config value
-/*func RefreshBaseLoggerLevel() {
-
-	// get the log level from the config
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		baseLogger.Error(err, "error getting the global config")
-	}
-
-	// if it changed, propagate it to our Base Logger
-	if globalConfig.LogLevel != baseLogger.LogLevel {
-
-		baseLoggerMutex.Lock()
-		defer baseLoggerMutex.Unlock()
-
-		// update the logger with the new log level
-		baseLogger.SetLevel(globalConfig.LogLevel)
-		baseLogger.Infof("log level=%d\n", globalConfig.LogLevel)
-	}
-}*/
-
-// Refresh the Logger's LogLevel based on current config value
 func refreshBaseLoggerLevel(newConfig config.GlobalConfig) {
 
 	// if it changed, propagate it to our Base Logger
