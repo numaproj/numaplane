@@ -146,6 +146,7 @@ func (cm *ConfigManager) loadGlobalConfig(
 		}
 		cm.config = &newConfig
 
+		// call any registered callbacks
 		for _, f := range cm.callbacks {
 			f(*cm.config)
 		}
@@ -167,6 +168,7 @@ func CloneWithSerialization[T NumaflowControllerDefinitionConfig | GlobalConfig]
 	return &clone, nil
 }
 
+// RegisterCallback adds a callback to be called when the config changes
 func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
