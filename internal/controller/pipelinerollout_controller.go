@@ -276,7 +276,7 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 		pipelineRollout.Status.MarkChildResourcesHealthy()
 	}
 
-	// Set PipelineRollout CR status Phase only if the Pipeline has completely reconciled: Generation == ObservedGeneration
+	// Set PipelineRollout CR status to Deployed only if the Pipeline has completely reconciled: Generation == ObservedGeneration
 	if pipeline.Generation == pipelineStatus.ObservedGeneration {
 		pipelineRollout.Status.MarkDeployed()
 	}
