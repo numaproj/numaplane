@@ -150,9 +150,13 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 }
 
 // Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
-func (status *Status) Init() {
+func (status *Status) Init(generation int64) {
 	status.InitializeConditions(ConditionConfigured, ConditionChildResourcesHealthy)
-	status.SetPhase(PhasePending, "")
+
+	if generation != status.ObservedGeneration {
+		status.SetObservedGeneration(generation)
+		status.SetPhase(PhasePending, "")
+	}
 }
 
 // MarkDeployed sets conditions to True state and Phase to Deployed.

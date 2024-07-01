@@ -98,7 +98,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRolloutOrig := pipelineRollout
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
-	pipelineRollout.Status.Init()
+	pipelineRollout.Status.Init(pipelineRollout.Generation)
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
@@ -279,7 +279,6 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 	// Set PipelineRollout CR status Phase and ObservedGeneration only if the Pipeline has completely reconciled: Generation == ObservedGeneration
 	if pipeline.Generation == pipelineStatus.ObservedGeneration {
 		pipelineRollout.Status.MarkDeployed()
-		pipelineRollout.Status.SetObservedGeneration(pipelineRollout.Generation)
 	}
 }
 

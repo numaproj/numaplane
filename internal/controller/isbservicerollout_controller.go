@@ -94,7 +94,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
-	isbServiceRollout.Status.Init()
+	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -242,7 +242,6 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	// Set ISBServiceRollout CR status Phase and ObservedGeneration only if the ISBService has completely reconciled: Generation == ObservedGeneration
 	if isbsvc.Generation == isbsvcStatus.ObservedGeneration {
 		rollout.Status.MarkDeployed()
-		rollout.Status.SetObservedGeneration(rollout.Generation)
 	}
 }
 
