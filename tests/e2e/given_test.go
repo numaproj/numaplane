@@ -7,20 +7,21 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/pointer"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type GivenHelper struct {
-	client client.Client
+	client dynamic.Interface
 }
 
-func NewGivenHelper(client client.Client) *GivenHelper {
+func NewGivenHelper(client dynamic.Interface) *GivenHelper {
 	return &GivenHelper{client: client}
 }
 
-func (g *GivenHelper) APipelineRollout(name, namespace string) *apiv1.PipelineRollout {
+func (g *GivenHelper) APipelineRollout(name, namespace string) *unstructured.Unstructured {
 	pipelineSpec := numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "test-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
@@ -52,7 +53,11 @@ func (g *GivenHelper) APipelineRollout(name, namespace string) *apiv1.PipelineRo
 
 	pipelineSpecRaw, _ := json.Marshal(pipelineSpec)
 
-	return &apiv1.PipelineRollout{
+	PipelineRollout := &apiv1.PipelineRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "PipelineRollout",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -63,4 +68,7 @@ func (g *GivenHelper) APipelineRollout(name, namespace string) *apiv1.PipelineRo
 			},
 		},
 	}
+
+	unstructuredObj, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(PipelineRollout)
+	return &unstructured.Unstructured{Object: unstructuredObj}
 }
