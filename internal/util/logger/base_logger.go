@@ -20,6 +20,7 @@ func SetBaseLogger(nl *NumaLogger) {
 	defer baseLoggerMutex.Unlock()
 
 	baseLogger = nl.DeepCopy()
+	// if the Global ConfigMap changes, update the BaseLogger's log level
 	config.GetConfigManagerInstance().RegisterCallback(refreshBaseLoggerLevel)
 }
 
