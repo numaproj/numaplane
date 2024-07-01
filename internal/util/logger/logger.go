@@ -73,6 +73,18 @@ type LogSink struct {
 	depth int
 }
 
+func init() {
+	// Global-level definitions for zerolog
+	zerolog.MessageFieldName = messageFieldName
+	zerolog.TimestampFieldName = timestampFieldName
+	zerolog.TimeFieldFormat = time.RFC3339Nano
+	zerolog.CallerMarshalFunc = zerologCallerMarshalFunc
+	zerolog.LevelFieldMarshalFunc = zerologLevelFieldMarshalFunc
+
+	// Set zerolog global level to the most verbose level
+	zerolog.SetGlobalLevel(getZerologLevelFromLogrVerbosity(VerboseLevel))
+}
+
 // New returns a new NumaLogger with a logr.Logger instance with a
 // default setup for zerolog, os.Stdout writer, and info level.
 func New() *NumaLogger {
@@ -93,15 +105,6 @@ func New() *NumaLogger {
 // The writer argument sets the output the logs will be written to. If it is nil, os.Stdout will be used.
 // The level argument sets the log level value for this logger instance.
 func newNumaLogger(writer *io.Writer, level *int) *NumaLogger {
-	// Set some zerolog customization
-	zerolog.MessageFieldName = messageFieldName
-	zerolog.TimestampFieldName = timestampFieldName
-	zerolog.TimeFieldFormat = time.RFC3339Nano
-	zerolog.CallerMarshalFunc = zerologCallerMarshalFunc
-	zerolog.LevelFieldMarshalFunc = zerologLevelFieldMarshalFunc
-
-	// Set zerolog global level to the most verbose level
-	zerolog.SetGlobalLevel(getZerologLevelFromLogrVerbosity(VerboseLevel))
 
 	w := io.Writer(os.Stdout)
 	if writer != nil {
