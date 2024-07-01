@@ -208,7 +208,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return fmt.Errorf("sync operation is not successful")
 	}
 
-	r.prepStatusForUpdate(ctx, controllerRollout)
+	err = r.prepStatusForUpdate(ctx, controllerRollout)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -379,7 +382,7 @@ func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Co
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "deployment.apps/numaflow-controller",
+			Name:      "numaflow-controller",
 			Namespace: controllerRollout.Namespace,
 		},
 	}

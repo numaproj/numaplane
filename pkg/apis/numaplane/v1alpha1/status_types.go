@@ -149,8 +149,8 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 	status.Message = msg
 }
 
-// InitConditions sets conditions to Unknown state and Phase to Pending.
-func (status *Status) InitConditions() {
+// Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
+func (status *Status) Init() {
 	status.InitializeConditions(ConditionConfigured, ConditionChildResourcesHealthy)
 	status.SetPhase(PhasePending, "")
 }
