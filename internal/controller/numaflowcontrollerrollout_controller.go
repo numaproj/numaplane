@@ -123,6 +123,8 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	numaflowControllerRolloutOrig := numaflowControllerRollout
 	numaflowControllerRollout = numaflowControllerRolloutOrig.DeepCopy()
 
+	numaflowControllerRollout.Status.Init(numaflowControllerRollout.Generation)
+
 	err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
