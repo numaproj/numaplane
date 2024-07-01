@@ -402,10 +402,9 @@ func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Co
 		return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", existingDeployment.Namespace, existingDeployment.Name, err)
 	}
 
-	// Set NumaflowControllerRollout CR status Phase and ObservedGeneration only if the Numaflow Controller Deployment has completely reconciled (Generation == ObservedGeneration)
+	// Set NumaflowControllerRollout CR status Phase only if the Numaflow Controller Deployment has completely reconciled (Generation == ObservedGeneration)
 	if existingDeployment.Generation == existingDeploymentStatus.ObservedGeneration {
 		controllerRollout.Status.MarkDeployed()
-		controllerRollout.Status.SetObservedGeneration(controllerRollout.Generation)
 	}
 
 	return nil

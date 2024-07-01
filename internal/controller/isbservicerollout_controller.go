@@ -239,7 +239,7 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 		rollout.Status.MarkChildResourcesHealthy()
 	}
 
-	// Set ISBServiceRollout CR status Phase and ObservedGeneration only if the ISBService has completely reconciled: Generation == ObservedGeneration
+	// Set ISBServiceRollout CR status Phase only if the ISBService has completely reconciled: Generation == ObservedGeneration
 	if isbsvc.Generation == isbsvcStatus.ObservedGeneration {
 		rollout.Status.MarkDeployed()
 	}
