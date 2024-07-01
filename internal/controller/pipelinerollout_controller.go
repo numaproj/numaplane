@@ -98,7 +98,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRolloutOrig := pipelineRollout
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
-	pipelineRollout.Status.InitConditions()
+	pipelineRollout.Status.Init()
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
@@ -252,16 +252,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, err
 	}
 
-	// Set PipelineRollout CR status Phase and ObservedGeneration only if the Pipeline has completely reconciled: Generation == ObservedGeneration
-	existingPipelineDefStatus, err := kubernetes.ParseStatus(existingPipelineDef)
-	if err != nil {
-		return false, fmt.Errorf("unable to parse status for existing Pipeline %s/%s: %v", existingPipelineDef.Namespace, existingPipelineDef.Name, err)
-	}
-	if existingPipelineDef.Generation == existingPipelineDefStatus.ObservedGeneration {
-		pipelineRollout.Status.MarkDeployed()
-		pipelineRollout.Status.SetObservedGeneration(pipelineRollout.Generation)
-	}
-
 	return false, nil
 }
 
@@ -284,6 +274,12 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 		// this will have been set to Unknown in the call to InitConditions()
 	default:
 		pipelineRollout.Status.MarkChildResourcesHealthy()
+	}
+
+	// Set PipelineRollout CR status Phase and ObservedGeneration only if the Pipeline has completely reconciled: Generation == ObservedGeneration
+	if pipeline.Generation == pipelineStatus.ObservedGeneration {
+		pipelineRollout.Status.MarkDeployed()
+		pipelineRollout.Status.SetObservedGeneration(pipelineRollout.Generation)
 	}
 }
 

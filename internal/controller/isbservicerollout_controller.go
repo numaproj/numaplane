@@ -94,7 +94,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
-	isbServiceRollout.Status.InitConditions()
+	isbServiceRollout.Status.Init()
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -187,16 +187,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, existingISBService, isbServiceRollout)
 
-	// Set ISBServiceRollout CR status Phase and ObservedGeneration only if the ISBService has completely reconciled: Generation == ObservedGeneration
-	existingISBServiceStatus, err := kubernetes.ParseStatus(existingISBService)
-	if err != nil {
-		return fmt.Errorf("unable to parse status for existing ISBService %s/%s: %v", existingISBService.Namespace, existingISBService.Name, err)
-	}
-	if existingISBService.Generation == existingISBServiceStatus.ObservedGeneration {
-		isbServiceRollout.Status.MarkDeployed()
-		isbServiceRollout.Status.SetObservedGeneration(isbServiceRollout.Generation)
-	}
-
 	return nil
 }
 
@@ -247,6 +237,12 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 		// this will have been set to Unknown in the call to InitConditions()
 	default:
 		rollout.Status.MarkChildResourcesHealthy()
+	}
+
+	// Set ISBServiceRollout CR status Phase and ObservedGeneration only if the ISBService has completely reconciled: Generation == ObservedGeneration
+	if isbsvc.Generation == isbsvcStatus.ObservedGeneration {
+		rollout.Status.MarkDeployed()
+		rollout.Status.SetObservedGeneration(rollout.Generation)
 	}
 }
 
