@@ -150,7 +150,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
 	err = (&NumaflowControllerRolloutReconciler{
 		client:     k8sManager.GetClient(),
