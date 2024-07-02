@@ -274,7 +274,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 			if err != nil {
 				return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
 			}
-			numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
+			numaLogger.Infof("successfully created resource %s/%s", object.Namespace, object.Name)
 		} else {
 			return fmt.Errorf("error attempting to Get resources; GVR=%+v err: %v", gvr, err)
 		}
@@ -299,7 +299,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		if err != nil {
 			return fmt.Errorf("failed to update Resource %s/%s, err=%v", object.Namespace, object.Name, err)
 		}
-		numaLogger.Debugf("successfully updated resource %s/%s", object.Namespace, object.Name)
+		numaLogger.Infof("successfully updated resource %s/%s", object.Namespace, object.Name)
 
 	}
 	return nil

@@ -12,7 +12,15 @@ import (
 )
 
 type ConfigManager struct {
-	config        *GlobalConfig
+	config *GlobalConfig
+	lock   *sync.RWMutex
+	// if the configmap changes, these callbacks will be called
+	callbacks []func(config GlobalConfig)
+
+	controllerDefMgr ControllerDefinitionsManager
+}
+
+type ControllerDefinitionsManager struct {
 	rolloutConfig map[string]string
 	lock          *sync.RWMutex
 }
@@ -24,12 +32,19 @@ var once sync.Once
 func GetConfigManagerInstance() *ConfigManager {
 	once.Do(func() {
 		instance = &ConfigManager{
-			config:        &GlobalConfig{},
-			rolloutConfig: map[string]string{},
-			lock:          new(sync.RWMutex),
+			config: &GlobalConfig{},
+			lock:   new(sync.RWMutex),
+			controllerDefMgr: ControllerDefinitionsManager{
+				rolloutConfig: map[string]string{},
+				lock:          new(sync.RWMutex),
+			},
 		}
 	})
 	return instance
+}
+
+func (*ConfigManager) GetControllerDefinitionsMgr() *ControllerDefinitionsManager {
+	return &instance.controllerDefMgr
 }
 
 // GlobalConfig is the configuration for the controllers, it is
@@ -55,7 +70,7 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *ConfigManager) UpdateControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *ControllerDefinitionsManager) UpdateControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -65,7 +80,7 @@ func (cm *ConfigManager) UpdateControllerDefinitionConfig(config NumaflowControl
 	}
 }
 
-func (cm *ConfigManager) RemoveControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *ControllerDefinitionsManager) RemoveControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -74,7 +89,7 @@ func (cm *ConfigManager) RemoveControllerDefinitionConfig(config NumaflowControl
 	}
 }
 
-func (cm *ConfigManager) GetControllerDefinitionsConfig() map[string]string {
+func (cm *ControllerDefinitionsManager) GetControllerDefinitionsConfig() map[string]string {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -92,7 +107,7 @@ func (cm *ConfigManager) LoadAllConfigs(
 		}
 	}
 	if opts.configFileName != "" {
-		err := cm.loadConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.fileType)
+		err := cm.loadGlobalConfig(onErrorReloading, opts.configsPath, opts.configFileName, opts.fileType)
 		if err != nil {
 			return err
 		}
@@ -100,7 +115,7 @@ func (cm *ConfigManager) LoadAllConfigs(
 	return nil
 }
 
-func (cm *ConfigManager) loadConfig(
+func (cm *ConfigManager) loadGlobalConfig(
 	onErrorReloading func(error),
 	configsPath, configFileName, configFileType string,
 ) error {
@@ -130,6 +145,11 @@ func (cm *ConfigManager) loadConfig(
 			onErrorReloading(err)
 		}
 		cm.config = &newConfig
+
+		// call any registered callbacks
+		for _, f := range cm.callbacks {
+			f(*cm.config)
+		}
 	})
 	v.WatchConfig()
 
@@ -146,4 +166,12 @@ func CloneWithSerialization[T NumaflowControllerDefinitionConfig | GlobalConfig]
 		return nil, err
 	}
 	return &clone, nil
+}
+
+// RegisterCallback adds a callback to be called when the config changes
+func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
+
+	cm.callbacks = append(cm.callbacks, f)
 }
