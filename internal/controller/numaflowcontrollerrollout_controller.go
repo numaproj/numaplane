@@ -208,10 +208,12 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return fmt.Errorf("sync operation is not successful")
 	}
 
-	err = r.prepStatusForUpdate(ctx, controllerRollout)
+	err = r.processNumaflowControllerStatus(ctx, controllerRollout)
 	if err != nil {
 		return err
 	}
+
+	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
 	return nil
 }
@@ -372,7 +374,7 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 	return ops, cleanup, nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
 	// Try to get the Numaflow Controller Deployment
@@ -407,13 +409,13 @@ func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Co
 	}
 
 	if existingDeployment.Generation == existingDeploymentStatus.ObservedGeneration {
-		controllerRollout.Status.MarkDeployed()
-
 		if existingDeploymentStatus.Replicas == existingDeploymentStatus.ReadyReplicas {
-			controllerRollout.Status.MarkChildResourcesHealthy()
+			controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
 		} else {
-			controllerRollout.Status.MarkChildResourcesUnhealthy("ReplicasMismatch", "Available replicas mismatch the desired replicas")
+			controllerRollout.Status.MarkChildResourcesUnhealthy("ReplicasMismatch", "Available replicas mismatch the desired replicas", controllerRollout.Generation)
 		}
+	} else {
+		controllerRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Numaflow Controller Deployment Generation mismatch the ObservedGeneration", controllerRollout.Generation)
 	}
 
 	return nil

@@ -256,7 +256,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, err
 	}
 
-	pipelineRollout.Status.MarkDeployed()
+	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 	return false, nil
 }
@@ -279,16 +279,18 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed")
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelinePause", "Pipeline Pausing or Paused")
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelinePause", "Pipeline Pausing or Paused", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhaseUnknown:
-		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown")
+		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhaseDeleting:
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting")
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	default:
 		if pipeline.Generation == pipelineStatus.ObservedGeneration {
-			pipelineRollout.Status.MarkChildResourcesHealthy()
+			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
+		} else {
+			pipelineRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Pipeline Generation mismatch the ObservedGeneration", pipelineRollout.Generation)
 		}
 	}
 }

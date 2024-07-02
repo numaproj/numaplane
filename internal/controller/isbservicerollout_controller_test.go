@@ -133,7 +133,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range currentISBServiceRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildDeployed) {
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return lastTransitionTime, nil
 					}
@@ -194,7 +194,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildDeployed) {
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
 						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return isAfter, nil
@@ -225,7 +225,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildDeployed) {
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
 						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}

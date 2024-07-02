@@ -138,9 +138,8 @@ spec:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
               observedGeneration:
-                description: |-
-                  TODO: consider using the ObservedGeneration in Conditions to have more fine-grained status
-                  ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1 Condition struct related field)
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
                 format: int64
                 type: integer
               phase:

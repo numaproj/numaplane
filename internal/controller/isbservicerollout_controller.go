@@ -187,7 +187,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
-	isbServiceRollout.Status.MarkDeployed()
+	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
 	return nil
 }
@@ -234,14 +234,16 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
 	switch isbSvcPhase {
 	case numaflowv1.ISBSvcPhaseFailed:
-		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed")
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed", rollout.Generation)
 	case numaflowv1.ISBSvcPhasePending:
-		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending")
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending", rollout.Generation)
 	case numaflowv1.ISBSvcPhaseUnknown:
-		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown")
+		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
 		if rollout.Generation == isbsvcStatus.ObservedGeneration {
-			rollout.Status.MarkChildResourcesHealthy()
+			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
+		} else {
+			rollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "ISBService Generation mismatch the ObservedGeneration", rollout.Generation)
 		}
 	}
 }
