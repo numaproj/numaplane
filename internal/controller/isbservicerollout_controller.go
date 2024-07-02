@@ -95,6 +95,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
 	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
+	// TODO: update status of CR throughout the reconciliation process (write a function to encapsulate the retry logic below)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -187,6 +188,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
+	isbServiceRollout.Status.MarkDeployed()
+
 	return nil
 }
 
@@ -237,11 +240,6 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 		// this will have been set to Unknown in the call to InitConditions()
 	default:
 		rollout.Status.MarkChildResourcesHealthy()
-	}
-
-	// Set ISBServiceRollout CR status to Deployed only if the ISBService has completely reconciled: Generation == ObservedGeneration
-	if isbsvc.Generation == isbsvcStatus.ObservedGeneration {
-		rollout.Status.MarkDeployed()
 	}
 }
 

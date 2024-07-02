@@ -140,7 +140,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return createdResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
@@ -158,7 +158,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range currentPipelineRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return lastTransitionTime, nil
 					}
@@ -199,7 +199,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			By("Verifying the LastTransitionTime of the Configured condition of the PipelineRollout is after the time of the initial configuration")
+			By("Verifying the LastTransitionTime of the Deployed condition of the PipelineRollout is after the time of the initial configuration")
 			Eventually(func() (bool, error) {
 				updatedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
@@ -208,7 +208,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return isAfter, nil
@@ -226,7 +226,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					return apiv1.Phase(""), err
 				}
 				return updatedResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
+			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
 
 			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
@@ -239,7 +239,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}
