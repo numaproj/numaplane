@@ -68,17 +68,17 @@ jobs:
       - name: Create a cluster
         run: |
           k3d cluster create e2e
-          k3d kubeconfig get e2e > ~/.kube/numaplane-e2e-config
+          k3d kubeconfig get e2e > ~/.kube/config
           echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
       - name: Install Numaplane
         env:
           GOPATH: /home/runner/go
         run: |
-          KUBECONFIG=~/.kube/numaplane-e2e-config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
       - name: Run tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/numaplane-e2e-config VERSION=${{ github.sha }} DOCKER_PUSH=true make test
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test
 
   lint:
     name: Lint
