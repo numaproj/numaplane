@@ -19,6 +19,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -397,14 +398,22 @@ func (r *NumaflowControllerRolloutReconciler) prepStatusForUpdate(ctx context.Co
 	}
 
 	// Parse the status of the existing Numaflow Controller Deployment
-	existingDeploymentStatus, err := kubernetes.ParseStatus(existingDeployment)
-	if err != nil {
-		return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", existingDeployment.Namespace, existingDeployment.Name, err)
+	var existingDeploymentStatus appsv1.DeploymentStatus
+	if len(existingDeployment.Status.Raw) > 0 {
+		err = json.Unmarshal(existingDeployment.Status.Raw, &existingDeploymentStatus)
+		if err != nil {
+			return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", existingDeployment.Namespace, existingDeployment.Name, err)
+		}
 	}
 
-	// Set NumaflowControllerRollout CR status to Deployed only if the Numaflow Controller Deployment has completely reconciled (Generation == ObservedGeneration)
 	if existingDeployment.Generation == existingDeploymentStatus.ObservedGeneration {
 		controllerRollout.Status.MarkDeployed()
+
+		if existingDeploymentStatus.Replicas == existingDeploymentStatus.ReadyReplicas {
+			controllerRollout.Status.MarkChildResourcesHealthy()
+		} else {
+			controllerRollout.Status.MarkChildResourcesUnhealthy("ReplicasMismatch", "Available replicas mismatch the desired replicas")
+		}
 	}
 
 	return nil

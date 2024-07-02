@@ -99,7 +99,6 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
 	pipelineRollout.Status.Init(pipelineRollout.Generation)
-	// TODO: update status of CR throughout the reconciliation process (write a function to encapsulate the retry logic below)
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
@@ -119,6 +118,10 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
+		// TODO: retry in case of error updating the state
+		// TODO: write a reusable function for this
+		// TODO: use the reusable func to update state when there are errors elsewhere during reconciliation
+		// TODO: do this for all 3 controllers
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latestPipelineRollout := &apiv1.PipelineRollout{}
 			if err := r.client.Get(ctx, req.NamespacedName, latestPipelineRollout); err != nil {
@@ -269,19 +272,22 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
-	// TODO: make string comparison instead of using numaflowv1 import (it defeats the purpose of having RawExtension)
+	// TODO: make string comparison instead of using numaflowv1 import (it defeats the purpose of having RawExtension).
+	// Create a function to convert/parse/check string instead of numaflowv1.Phase
+	// Do this for all 3 controllers
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed")
-	case numaflowv1.PipelinePhaseUnknown:
-		// this will have been set to Unknown in the call to InitConditions()
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
-		pipelineRollout.Status.MarkPaused()
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelinePause", "Pipeline Pausing or Paused")
+	case numaflowv1.PipelinePhaseUnknown:
+		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown")
+	case numaflowv1.PipelinePhaseDeleting:
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting")
 	default:
-		// Set PipelineRollout CR status to Deployed only if the Pipeline has completely reconciled: Generation == ObservedGeneration
-		if pipelineStatus.ObservedGeneration == 0 || pipeline.Generation == pipelineStatus.ObservedGeneration {
+		if pipeline.Generation == pipelineStatus.ObservedGeneration {
 			pipelineRollout.Status.MarkChildResourcesHealthy()
 		}
 	}

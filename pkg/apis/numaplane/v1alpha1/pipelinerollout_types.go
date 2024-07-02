@@ -21,15 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	// ConditionPipelinePaused indicates the Pipeline is either paused or pausing.
-	ConditionPipelinePaused ConditionType = "PipelinePaused"
-
-	// TODO: should we also consider including the following conditions from Numaflow Pipeline conditions?
-	// PipelinePhaseSucceeded PipelinePhase = "Succeeded"
-	// PipelinePhaseDeleting  PipelinePhase = "Deleting"
-)
-
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -68,9 +59,4 @@ type PipelineRolloutList struct {
 
 func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
-}
-
-// MarkPaused sets ConditionPipelinePaused to True
-func (status *Status) MarkPaused() {
-	status.MarkTrue(ConditionPipelinePaused)
 }

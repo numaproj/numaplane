@@ -27,28 +27,22 @@ import (
 // ConditionType is a valid value of Condition.Type
 type ConditionType string
 
-// +kubebuilder:validation:Enum="";Pending;Deployed;Failed;NotApplicable
+// +kubebuilder:validation:Enum="";Pending;Deployed;Failed;Unknown
 type Phase string
 
 const (
-	// PhasePending set at the start of the reconciliation process once the rollout spec is read
-	// and should go until the controller tries to apply the child spec.
+	// PhasePending indicates that a reconciliation operation on the rollout spec has started.
+	// In this phase, the reconciliation process could take some time and/or happen with multiple reconciliation calls.
 	PhasePending Phase = "Pending"
-	// PhaseRunning indicates that the child resource is "running" on the current version of the spec.
-	// "running" has a different meaning based on the child resource "running" meaning (Pipeline, ISBS, Numaflow Controller).
-	PhaseRunning Phase = "Running"
+
+	// PhaseDeployed indicates that the child resource has been applied to the cluster.
+	PhaseDeployed Phase = "Deployed"
+
 	// PhaseFailed indicates that one or more errors have occurred during reconciliation.
 	PhaseFailed Phase = "Failed"
-	// PhaseUnknown indicates that the parent resource exists but could not be read to be able to perform operations with it
-	PhaseUnknown Phase = "Unknown"
 
-	// ConditionDeployed indicates that the rollout succesfully deployed the child resource.
-	// The child's health is not considered to indicate deployment success.
-	ConditionDeployed ConditionType = "Deployed"
-
-	// ConditionChildResourcesHealthy means that the child Phase is not failed nor unknown.
-	// In the case of a pipeline, it means that the pipeline is also not paused nor pausing (in addition to not being failed nor unknown)
-	// and that the pipeline ObservedGeneration is either unavailable or equal to its generation.
+	// ConditionChildResourcesHealthy indicates if the child resource is in a healthy phase (ex: not pending, not paused, not deleting, etc.).
+	// Child health is set to True only if the child resource generation is equal to its own observedGeneration.
 	ConditionChildResourcesHealthy ConditionType = "ChildResourcesHealthy"
 )
 
@@ -162,7 +156,7 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 
 // Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
 func (status *Status) Init(generation int64) {
-	status.InitializeConditions(ConditionDeployed, ConditionChildResourcesHealthy)
+	status.InitializeConditions(ConditionChildResourcesHealthy)
 
 	if generation != status.ObservedGeneration {
 		status.SetObservedGeneration(generation)
@@ -170,16 +164,13 @@ func (status *Status) Init(generation int64) {
 	}
 }
 
-// MarkDeployed sets conditions to True state and Phase to Deployed.
+// MarkDeployed sets Phase to Deployed
 func (status *Status) MarkDeployed() {
-	status.MarkTrue(ConditionDeployed)
-	// TODO: should we also set the Phase to a specific state?
-	// status.SetPhase(PhaseDeployed, "")
+	status.SetPhase(PhaseDeployed, "")
 }
 
-// MarkFailed sets conditions to False state and Phase to Failed.
+// MarkFailed sets Phase to Failed
 func (status *Status) MarkFailed(reason, message string) {
-	status.MarkFalse(ConditionDeployed, reason, message)
 	status.SetPhase(PhaseFailed, message)
 }
 
@@ -189,6 +180,10 @@ func (status *Status) MarkChildResourcesHealthy() {
 
 func (status *Status) MarkChildResourcesUnhealthy(reason, message string) {
 	status.MarkFalse(ConditionChildResourcesHealthy, reason, message)
+}
+
+func (status *Status) MarkChildResourcesHealthUnknown(reason, message string) {
+	status.MarkUnknown(ConditionChildResourcesHealthy, reason, message)
 }
 
 func (status *Status) SetObservedGeneration(generation int64) {

@@ -95,7 +95,6 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
 	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
-	// TODO: update status of CR throughout the reconciliation process (write a function to encapsulate the retry logic below)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -236,10 +235,14 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	switch isbSvcPhase {
 	case numaflowv1.ISBSvcPhaseFailed:
 		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed")
+	case numaflowv1.ISBSvcPhasePending:
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending")
 	case numaflowv1.ISBSvcPhaseUnknown:
-		// this will have been set to Unknown in the call to InitConditions()
+		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown")
 	default:
-		rollout.Status.MarkChildResourcesHealthy()
+		if rollout.Generation == isbsvcStatus.ObservedGeneration {
+			rollout.Status.MarkChildResourcesHealthy()
+		}
 	}
 }
 
