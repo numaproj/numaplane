@@ -1,4 +1,3 @@
-
 name: CI
 on:
   push:
@@ -43,6 +42,43 @@ jobs:
 
       - name: Ensure nothing changed
         run: git diff --exit-code
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Restore go build cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-v1-${{ hashFiles('**/go.mod') }}
+      - name: Setup Golang
+        uses: actions/setup-go@v4.0.0
+        with:
+          go-version: '1.21'
+      - name: Add bins to PATH
+        run: |
+          echo /home/runner/go/bin >> $GITHUB_PATH
+          echo /usr/local/bin >> $GITHUB_PATH
+      - name: Install k3d
+        run: curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash &
+      - name: Create a cluster
+        run: |
+          k3d cluster create e2e
+          k3d kubeconfig get e2e > ~/.kube/numaplane-e2e-config
+          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
+      - name: Install Numaplane
+        env:
+          GOPATH: /home/runner/go
+        run: |
+          KUBECONFIG=~/.kube/numaplane-e2e-config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+      - name: Run tests
+        env:
+          GOPATH: /home/runner/go
+        run: KUBECONFIG=~/.kube/numaplane-e2e-config VERSION=${{ github.sha }} DOCKER_PUSH=true make test
 
   lint:
     name: Lint
