@@ -158,7 +158,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range currentPipelineRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionDeployed) {
+					if cond.Type == string(apiv1.ConditionChildDeployed) {
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return lastTransitionTime, nil
 					}
@@ -208,7 +208,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionDeployed) {
+					if cond.Type == string(apiv1.ConditionChildDeployed) {
 						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return isAfter, nil
@@ -239,7 +239,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionDeployed) {
+					if cond.Type == string(apiv1.ConditionChildDeployed) {
 						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}

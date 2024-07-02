@@ -45,8 +45,8 @@ const (
 	// Child health is set to True only if the child resource generation is equal to its own observedGeneration.
 	ConditionChildResourcesHealthy ConditionType = "ChildResourcesHealthy"
 
-	// ConditionDeployed tracks the latest deployment event in the conditions.
-	ConditionDeployed ConditionType = "Deployed"
+	// ConditionChildDeployed indicates that the child resource was deployed.
+	ConditionChildDeployed ConditionType = "ChildDeployed"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -159,7 +159,7 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 
 // Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
 func (status *Status) Init(generation int64) {
-	status.InitializeConditions(ConditionDeployed, ConditionChildResourcesHealthy)
+	status.InitializeConditions(ConditionChildDeployed, ConditionChildResourcesHealthy)
 
 	if generation != status.ObservedGeneration {
 		status.SetObservedGeneration(generation)
@@ -169,15 +169,13 @@ func (status *Status) Init(generation int64) {
 
 // MarkDeployed sets Phase to Deployed
 func (status *Status) MarkDeployed() {
-	status.MarkTrue(ConditionDeployed)
+	status.MarkTrue(ConditionChildDeployed)
 	status.SetPhase(PhaseDeployed, "")
 }
 
 // MarkFailed sets Phase to Failed
 func (status *Status) MarkFailed(reason, message string) {
-	// TODO: consider either setting ConditionDeployed to False
-	// OR
-	// do not set ConditionDeployed to False so that it can be known when it was last successful Deployment
+	status.MarkFailed(reason, message)
 	status.SetPhase(PhaseFailed, message)
 }
 
