@@ -100,7 +100,8 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRolloutOrig := pipelineRollout
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
-	pipelineRollout.Status.InitConditions()
+	pipelineRollout.Status.Init(pipelineRollout.Generation)
+	// TODO: update status of CR throughout the reconciliation process (write a function to encapsulate the retry logic below)
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
@@ -189,8 +190,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 
-			pipelineRollout.Status.MarkRunning()
-
 			return false, nil
 		}
 
@@ -256,7 +255,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, err
 	}
 
-	pipelineRollout.Status.MarkRunning()
+	pipelineRollout.Status.MarkDeployed()
 
 	return false, nil
 }
@@ -272,14 +271,21 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
+	// TODO: make string comparison instead of using numaflowv1 import (it defeats the purpose of having RawExtension)
+
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed")
 	case numaflowv1.PipelinePhaseUnknown:
 		// this will have been set to Unknown in the call to InitConditions()
+	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
+		pipelineRollout.Status.MarkPaused()
 	default:
-		pipelineRollout.Status.MarkChildResourcesHealthy()
+		// Set PipelineRollout CR status to Deployed only if the Pipeline has completely reconciled: Generation == ObservedGeneration
+		if pipelineStatus.ObservedGeneration == 0 || pipeline.Generation == pipelineStatus.ObservedGeneration {
+			pipelineRollout.Status.MarkChildResourcesHealthy()
+		}
 	}
 }
 

@@ -133,7 +133,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range currentISBServiceRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return lastTransitionTime, nil
 					}
@@ -185,7 +185,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(newIsbsSpec))
 
-			By("Verifying the LastTransitionTime of the Configured condition of the ISBServiceRollout is after the time of the initial configuration")
+			By("Verifying the LastTransitionTime of the Deployed condition of the ISBServiceRollout is after the time of the initial configuration")
 			Eventually(func() (bool, error) {
 				updatedResource := &apiv1.ISBServiceRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
@@ -194,7 +194,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return isAfter, nil
@@ -225,7 +225,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionDeployed) {
 						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}

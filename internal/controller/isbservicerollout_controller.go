@@ -96,7 +96,8 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
-	isbServiceRollout.Status.InitConditions()
+	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
+	// TODO: update status of CR throughout the reconciliation process (write a function to encapsulate the retry logic below)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -189,7 +190,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
-	isbServiceRollout.Status.MarkRunning()
+	isbServiceRollout.Status.MarkDeployed()
 
 	return nil
 }
