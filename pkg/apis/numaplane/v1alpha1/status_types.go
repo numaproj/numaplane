@@ -27,7 +27,7 @@ import (
 // ConditionType is a valid value of Condition.Type
 type ConditionType string
 
-// +kubebuilder:validation:Enum="";Pending;Deployed;Failed;Unknown
+// +kubebuilder:validation:Enum="";Pending;Deployed;Failed
 type Phase string
 
 const (
@@ -44,6 +44,9 @@ const (
 	// ConditionChildResourcesHealthy indicates if the child resource is in a healthy phase (ex: not pending, not paused, not deleting, etc.).
 	// Child health is set to True only if the child resource generation is equal to its own observedGeneration.
 	ConditionChildResourcesHealthy ConditionType = "ChildResourcesHealthy"
+
+	// ConditionDeployed tracks the latest deployment event in the conditions.
+	ConditionDeployed ConditionType = "Deployed"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -156,7 +159,7 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 
 // Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
 func (status *Status) Init(generation int64) {
-	status.InitializeConditions(ConditionChildResourcesHealthy)
+	status.InitializeConditions(ConditionDeployed, ConditionChildResourcesHealthy)
 
 	if generation != status.ObservedGeneration {
 		status.SetObservedGeneration(generation)
@@ -166,11 +169,15 @@ func (status *Status) Init(generation int64) {
 
 // MarkDeployed sets Phase to Deployed
 func (status *Status) MarkDeployed() {
+	status.MarkTrue(ConditionDeployed)
 	status.SetPhase(PhaseDeployed, "")
 }
 
 // MarkFailed sets Phase to Failed
 func (status *Status) MarkFailed(reason, message string) {
+	// TODO: consider either setting ConditionDeployed to False
+	// OR
+	// do not set ConditionDeployed to False so that it can be known when it was last successful Deployment
 	status.SetPhase(PhaseFailed, message)
 }
 

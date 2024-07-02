@@ -182,8 +182,9 @@ spec:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
               observedGeneration:
-                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
-                  Condition struct related field)
+                description: |-
+                  TODO: consider using the ObservedGeneration in Conditions to have more fine-grained status
+                  ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1 Condition struct related field)
                 format: int64
                 type: integer
               phase:
@@ -193,7 +194,6 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
-                - NotApplicable
                 type: string
             type: object
         type: object
@@ -341,8 +341,9 @@ spec:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
               observedGeneration:
-                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
-                  Condition struct related field)
+                description: |-
+                  TODO: consider using the ObservedGeneration in Conditions to have more fine-grained status
+                  ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1 Condition struct related field)
                 format: int64
                 type: integer
               phase:
@@ -352,7 +353,6 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
-                - NotApplicable
                 type: string
             type: object
         type: object
@@ -496,8 +496,9 @@ spec:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
               observedGeneration:
-                description: ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1
-                  Condition struct related field)
+                description: |-
+                  TODO: consider using the ObservedGeneration in Conditions to have more fine-grained status
+                  ObservedGeneration (see k8s.io/apimachinery/pkg/apis/meta/v1 Condition struct related field)
                 format: int64
                 type: integer
               phase:
@@ -507,7 +508,6 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
-                - NotApplicable
                 type: string
             type: object
         required:

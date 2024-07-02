@@ -202,7 +202,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				return false, nil
-			}, time.Second, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying that the ISBServiceRollout Status Phase is Deployed")
 			Consistently(func() (apiv1.Phase, error) {

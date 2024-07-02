@@ -216,7 +216,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				return false, nil
-			}, time.Second, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 
 			By("Verifying that the PipelineRollout Status Phase is Deployed")
 			Consistently(func() (apiv1.Phase, error) {
