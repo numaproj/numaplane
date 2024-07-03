@@ -70,8 +70,11 @@ jobs:
           k3d cluster create e2e
           k3d kubeconfig get e2e > ~/.kube/config
           echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
+          echo 'Waiting for the cluster to be ready...'
+          until kubectl cluster-info; do sleep 1; done
       - name: Install Numaplane
         env:
+          KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
         run: |
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
