@@ -47,6 +47,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -64,6 +65,7 @@ var (
 	k8sClient       client.Client
 	testEnv         *envtest.Environment
 	externalCRDsDir string
+	customMetrics   *metrics.CustomMetrics
 )
 
 func TestControllers(t *testing.T) {
@@ -127,16 +129,18 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
+	customMetrics = metrics.RegisterCustomMetrics()
+
 	err = NewPipelineRolloutReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-		cfg).SetupWithManager(k8sManager)
+		cfg, customMetrics).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	err = NewISBServiceRolloutReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
-		cfg).SetupWithManager(k8sManager)
+		cfg, customMetrics).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg)
@@ -151,12 +155,13 @@ var _ = BeforeSuite(func() {
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
 	err = (&NumaflowControllerRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-		rawConfig:  cfg,
-		kubectl:    kubernetes.NewKubectl(),
-		stateCache: stateCache,
+		client:        k8sManager.GetClient(),
+		scheme:        k8sManager.GetScheme(),
+		restConfig:    cfg,
+		rawConfig:     cfg,
+		kubectl:       kubernetes.NewKubectl(),
+		stateCache:    stateCache,
+		customMetrics: customMetrics,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

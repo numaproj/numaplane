@@ -25,6 +25,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -43,8 +44,8 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -65,12 +66,15 @@ type PipelineRolloutReconciler struct {
 	queue workqueue.RateLimitingInterface
 	// shutdownWorkerWaitGroup is used when shutting down the workers processing the queue for them to indicate that they're done
 	shutdownWorkerWaitGroup *sync.WaitGroup
+	// customMetrics is used to generate the custom metrics for the Pipeline
+	customMetrics *metrics.CustomMetrics
 }
 
 func NewPipelineRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
+	customMetrics *metrics.CustomMetrics,
 ) *PipelineRolloutReconciler {
 
 	numaLogger := logger.GetBaseLogger().WithName(loggerName)
@@ -87,6 +91,7 @@ func NewPipelineRolloutReconciler(
 		restConfig,
 		pipelineRolloutQueue,
 		&sync.WaitGroup{},
+		customMetrics,
 	}
 
 	r.runWorkers(ctx)
@@ -178,6 +183,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
+
+	// generate the metrics for the Pipeline.
+	r.customMetrics.IncPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+
 	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
@@ -264,14 +273,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 	pipelineRollout *apiv1.PipelineRollout,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	// is PipelineRollout being deleted? need to remove the finalizer so it can
+	// is PipelineRollout being deleted? need to remove the finalizer, so it can
 	// (OwnerReference will delete the underlying Pipeline through Cascading deletion)
 	if !pipelineRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting PipelineRollout")
 		if controllerutil.ContainsFinalizer(pipelineRollout, finalizerName) {
 			controllerutil.RemoveFinalizer(pipelineRollout, finalizerName)
 		}
+		// generate the metrics for the Pipeline deletion.
+		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 		return false, nil
 	}
 

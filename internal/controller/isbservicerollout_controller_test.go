@@ -118,6 +118,11 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			Expect(isbPDB.Spec.MaxUnavailable.IntVal).Should(Equal(int32(1)))
 		})
 
+		It("Should have the metrics updated", func() {
+			By("Verifying the ISBService metric")
+			Expect(len(customMetrics.GetISBServiceCounterMap())).Should(Equal(1))
+		})
+
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
 			By("updating the ISBServiceRollout")
 
