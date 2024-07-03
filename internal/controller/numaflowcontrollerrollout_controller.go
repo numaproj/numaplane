@@ -401,6 +401,10 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 
 	// Parse the status of the existing Numaflow Controller Deployment
 	var existingDeploymentStatus appsv1.DeploymentStatus
+
+	// https://github.com/kubernetes/kubernetes/blob/cea1d4e20b4a7886d8ff65f34c6d4f95efcb4742/staging/src/k8s.io/kubectl/pkg/polymorphichelpers/rollout_status.go#L75
+	// DeploymentStatusViewer
+
 	if len(existingDeployment.Status.Raw) > 0 {
 		err = json.Unmarshal(existingDeployment.Status.Raw, &existingDeploymentStatus)
 		if err != nil {
@@ -414,6 +418,9 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 		} else {
 			controllerRollout.Status.MarkChildResourcesUnhealthy("ReplicasMismatch", "Available replicas mismatch the desired replicas", controllerRollout.Generation)
 		}
+
+		// TODO
+
 	} else {
 		controllerRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Numaflow Controller Deployment Generation mismatch the ObservedGeneration", controllerRollout.Generation)
 	}

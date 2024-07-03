@@ -281,7 +281,13 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 	case numaflowv1.PipelinePhaseFailed:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelinePause", "Pipeline Pausing or Paused", pipelineRollout.Generation)
+		// TODO: update string(pipelinePhase) when working on strng comparison changes
+		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(string(pipelinePhase), pipelineRollout.Generation)
+		if pipeline.Generation == pipelineStatus.ObservedGeneration {
+			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
+		} else {
+			pipelineRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Pipeline Generation mismatch the ObservedGeneration", pipelineRollout.Generation)
+		}
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhaseDeleting:
