@@ -28,6 +28,9 @@ var (
 
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	RunSpecs(t, "E2E Suite")
 }
 

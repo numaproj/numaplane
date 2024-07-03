@@ -99,7 +99,7 @@ jobs:
         env:
           KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
 
   lint:
     name: Lint
@@ -148,8 +148,15 @@ jobs:
       - name: Get dependencies
         run: go mod download
 
+      - name: Install kubectl
+        run: |
+          curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x ./kubectl
+          sudo mv ./kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
       - name: Test
-        run: make test
+        run: make unit-test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
