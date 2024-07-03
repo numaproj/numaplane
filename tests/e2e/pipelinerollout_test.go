@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/pointer"
-
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 var _ = Describe("PipelineRollout E2E", func() {
@@ -36,9 +34,6 @@ var _ = Describe("PipelineRollout E2E", func() {
 	})
 
 	It("Should create, update, and delete a PipelineRollout", func() {
-		// err := dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, pipelineRolloutName, metav1.DeleteOptions{})
-		// Expect(err).Should(Succeed())
-
 		By("Creating a new PipelineRollout")
 		pipelineRollout := createPipelineRolloutSpec(pipelineRolloutName, namespace)
 
@@ -106,6 +101,7 @@ var _ = Describe("PipelineRollout E2E", func() {
 })
 
 func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructured {
+	rpuVal := int64(5)
 	pipelineSpec := numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "test-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
@@ -113,7 +109,7 @@ func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructure
 				Name: "in",
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
-						RPU:      pointer.Int64(5),
+						RPU:      &rpuVal,
 						Duration: &metav1.Duration{Duration: time.Second},
 					},
 				},
