@@ -41,8 +41,7 @@ const (
 	// PhaseFailed indicates that one or more errors have occurred during reconciliation.
 	PhaseFailed Phase = "Failed"
 
-	// ConditionChildResourceHealthy indicates if the child resource is in a healthy phase (ex: not pending, not paused, not deleting, etc.).
-	// Child health is set to True only if the child resource generation is equal to its own observedGeneration.
+	// ConditionChildResourceHealthy indicates if the child resource is in a healthy state.
 	ConditionChildResourceHealthy ConditionType = "ChildResourcesHealthy"
 
 	// ConditionChildResourceDeployed indicates that the child resource was deployed.
