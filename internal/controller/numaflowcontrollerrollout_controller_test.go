@@ -81,14 +81,14 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 				createdResource := &apiv1.NumaflowControllerRollout{}
 				Expect(k8sClient.Get(ctx, resourceLookupKey, createdResource)).To(Succeed())
 				return createdResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseRunning))
+			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
 
 			By("Verifying the numaflow controller deployment")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				return err == nil
-			}, duration, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("Should reconcile the Numaflow Controller Rollout update", func() {
@@ -107,7 +107,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 					return numaflowDeployment.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.2.1"
 				}
 				return false
-			}, duration, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {

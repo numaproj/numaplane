@@ -94,7 +94,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
-	isbServiceRollout.Status.InitConditions()
+	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
@@ -187,7 +187,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
-	isbServiceRollout.Status.MarkRunning()
+	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
 	return nil
 }
@@ -234,11 +234,20 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
 	switch isbSvcPhase {
 	case numaflowv1.ISBSvcPhaseFailed:
-		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed")
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed", rollout.Generation)
+	case numaflowv1.ISBSvcPhasePending:
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending", rollout.Generation)
 	case numaflowv1.ISBSvcPhaseUnknown:
-		// this will have been set to Unknown in the call to InitConditions()
+		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
-		rollout.Status.MarkChildResourcesHealthy()
+		// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+		// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
+		// issues for Numaflow versions that do not have ObservedGeneration
+		if isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration {
+			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
+		} else {
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between ISBService Generation and ObservedGeneration", rollout.Generation)
+		}
 	}
 }
 

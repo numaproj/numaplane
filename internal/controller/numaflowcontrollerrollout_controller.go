@@ -19,6 +19,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -31,6 +32,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -122,6 +124,8 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	numaflowControllerRolloutOrig := numaflowControllerRollout
 	numaflowControllerRollout = numaflowControllerRolloutOrig.DeepCopy()
 
+	numaflowControllerRollout.Status.Init(numaflowControllerRollout.Generation)
+
 	err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -204,7 +208,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return fmt.Errorf("sync operation is not successful")
 	}
 
-	controllerRollout.Status.MarkRunning()
+	err = r.processNumaflowControllerStatus(ctx, controllerRollout)
+	if err != nil {
+		return err
+	}
+
+	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+
 	return nil
 }
 
@@ -364,6 +374,90 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 	return ops, cleanup, nil
 }
 
+func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
+	for _, cond := range status.Conditions {
+		if cond.Type == condType {
+			return &cond
+		}
+	}
+	return nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// Try to get the Numaflow Controller Deployment
+	deplObj := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "numaflow-controller",
+			Namespace: controllerRollout.Namespace,
+		},
+	}
+	deployment, err := kubernetes.GetCR(ctx, r.restConfig, &deplObj, "deployments")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// This could just mean that the deployment has not yet been created.
+			// Log and return to wait for next reconcile call once the deployment is created triggering the reconciliation.
+			numaLogger.Warnf("Numaflow Controller Deployment not found. It may still have to be created.")
+			return nil
+		}
+
+		return fmt.Errorf("error getting the Numaflow Controller Deployment for NumaflowControllerRollout %s/%s: %v", controllerRollout.Namespace, controllerRollout.Name, err)
+	}
+
+	// Parse the Deployment spec of the existing Numaflow Controller Deployment
+	var deploymentSpec appsv1.DeploymentSpec
+	if len(deployment.Spec.Raw) > 0 {
+		err = json.Unmarshal(deployment.Spec.Raw, &deploymentSpec)
+		if err != nil {
+			return fmt.Errorf("unable to parse spec for existing Numaflow Controller Deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
+		}
+	}
+
+	// Parse the Deployment status of the existing Numaflow Controller Deployment
+	var deploymentStatus appsv1.DeploymentStatus
+	if len(deployment.Status.Raw) > 0 {
+		err = json.Unmarshal(deployment.Status.Raw, &deploymentStatus)
+		if err != nil {
+			return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
+		}
+	}
+
+	// Health Check borrowed from argoproj/gitops-engine/pkg/health/health_deployment.go https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health_deployment.go#L27
+	if deployment.Generation <= deploymentStatus.ObservedGeneration {
+		cond := getDeploymentCondition(deploymentStatus, appsv1.DeploymentProgressing)
+		if cond != nil && cond.Reason == "ProgressDeadlineExceeded" {
+			msg := fmt.Sprintf("Deployment %q exceeded its progress deadline", deployment.Name)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Degraded", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		}
+	} else {
+		msg := "Waiting for Deployment rollout to finish: observed deployment generation less than desired generation"
+		controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+		return nil
+	}
+
+	controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
+
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
@@ -380,7 +474,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 	for _, kind := range []client.Object{&appsv1.Deployment{}, &corev1.ConfigMap{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
 		if err := controller.Watch(source.Kind(mgr.GetCache(), kind),
 			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
-			predicate.GenerationChangedPredicate{}); err != nil {
+			predicate.ResourceVersionChangedPredicate{}); err != nil {
 			return err
 		}
 	}

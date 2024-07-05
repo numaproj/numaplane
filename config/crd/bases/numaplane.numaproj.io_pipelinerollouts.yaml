@@ -130,14 +130,18 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
               phase:
                 description: Phase indicates the current phase of the resource.
                 enum:
                 - ""
                 - Pending
-                - Running
+                - Deployed
                 - Failed
-                - NotApplicable
                 type: string
             type: object
         required:

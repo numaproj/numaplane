@@ -39,8 +39,9 @@ type GenericObject struct {
 }
 
 type GenericStatus struct {
-	Phase      string             `json:"phase,omitempty"`
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Phase              string             `json:"phase,omitempty"`
+	Conditions         []metav1.Condition `json:"conditions,omitempty"`
+	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
 func IsValidKubernetesNamespace(name string) bool {
