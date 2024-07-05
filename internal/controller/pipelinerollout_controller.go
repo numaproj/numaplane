@@ -98,7 +98,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	pipelineRolloutOrig := pipelineRollout
 	pipelineRollout = pipelineRolloutOrig.DeepCopy()
 
-	pipelineRollout.Status.InitConditions()
+	pipelineRollout.Status.Init(pipelineRollout.Generation)
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
@@ -118,6 +118,10 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
+		// TODO: retry in case of error updating the state
+		// TODO: write a reusable function for this
+		// TODO: use the reusable func to update state when there are errors elsewhere during reconciliation
+		// TODO: do this for all 3 controllers
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latestPipelineRollout := &apiv1.PipelineRollout{}
 			if err := r.client.Get(ctx, req.NamespacedName, latestPipelineRollout); err != nil {
@@ -187,8 +191,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 
-			pipelineRollout.Status.MarkRunning()
-
 			return false, nil
 		}
 
@@ -254,9 +256,20 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, err
 	}
 
-	pipelineRollout.Status.MarkRunning()
+	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 	return false, nil
+}
+
+func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
+	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
+	// issues for Numaflow versions that do not have ObservedGeneration
+	if pipelineObservedGeneration == 0 || pipeline.Generation <= pipelineObservedGeneration {
+		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
+	} else {
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
+	}
 }
 
 // Set the Condition in the Status for child resource health
@@ -270,14 +283,25 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
+	// TODO: make string comparison instead of using numaflowv1 import (it defeats the purpose of having RawExtension).
+	// Create a function to convert/parse/check string instead of numaflowv1.Phase
+	// Do this for all 3 controllers
+
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed")
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
+	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
+		// TODO: update string(pipelinePhase) when working on strng comparison changes
+		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(string(pipelinePhase), pipelineRollout.Generation)
+
+		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	case numaflowv1.PipelinePhaseUnknown:
-		// this will have been set to Unknown in the call to InitConditions()
+		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
+	case numaflowv1.PipelinePhaseDeleting:
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	default:
-		pipelineRollout.Status.MarkChildResourcesHealthy()
+		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	}
 }
 
