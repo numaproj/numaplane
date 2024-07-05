@@ -261,6 +261,17 @@ func (r *PipelineRolloutReconciler) reconcile(
 	return false, nil
 }
 
+func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
+	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
+	// issues for Numaflow versions that do not have ObservedGeneration
+	if pipelineObservedGeneration == 0 || pipeline.Generation <= pipelineObservedGeneration {
+		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
+	} else {
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
+	}
+}
+
 // Set the Condition in the Status for child resource health
 func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) {
 	numaLogger := logger.FromContext(ctx)
@@ -283,21 +294,14 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
 		// TODO: update string(pipelinePhase) when working on strng comparison changes
 		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(string(pipelinePhase), pipelineRollout.Generation)
-		if pipeline.Generation == pipelineStatus.ObservedGeneration {
-			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
-		} else {
-			pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
-		}
+
+		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhaseDeleting:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	default:
-		if pipeline.Generation == pipelineStatus.ObservedGeneration {
-			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
-		} else {
-			pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
-		}
+		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	}
 }
 
