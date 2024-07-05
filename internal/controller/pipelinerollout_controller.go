@@ -395,18 +395,12 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
-	// TODO: make string comparison instead of using numaflowv1 import (it defeats the purpose of having RawExtension).
-	// Create a function to convert/parse/check string instead of numaflowv1.Phase
-	// Do this for all 3 controllers
-
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
-		// TODO: update string(pipelinePhase) when working on strng comparison changes
-		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(string(pipelinePhase), pipelineRollout.Generation)
-
+		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(fmt.Sprintf("Pipeline%s", string(pipelinePhase)), pipelineRollout.Generation)
 		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
