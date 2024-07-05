@@ -286,7 +286,7 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 		if pipeline.Generation == pipelineStatus.ObservedGeneration {
 			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 		} else {
-			pipelineRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Pipeline Generation mismatch the ObservedGeneration", pipelineRollout.Generation)
+			pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
 		}
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
@@ -296,7 +296,7 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 		if pipeline.Generation == pipelineStatus.ObservedGeneration {
 			pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 		} else {
-			pipelineRollout.Status.MarkChildResourcesUnhealthy("GenerationMismatch", "Pipeline Generation mismatch the ObservedGeneration", pipelineRollout.Generation)
+			pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
 		}
 	}
 }
