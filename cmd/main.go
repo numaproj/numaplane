@@ -81,6 +81,10 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	// Create a context to handle graceful shutdown when SIGINT or SIGTERM is caught
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
@@ -156,6 +160,7 @@ func main() {
 	//+kubebuilder:scaffold:builder
 
 	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
+		ctx,
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		mgr.GetConfig(),
@@ -204,4 +209,5 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
 }

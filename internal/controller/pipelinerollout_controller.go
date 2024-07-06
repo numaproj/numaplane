@@ -48,6 +48,7 @@ import (
 const (
 	ControllerPipelineRollout = "pipeline-rollout-controller"
 	loggerName                = "pipelinerollout-reconciler"
+	numWorkers                = 16 // can consider making configurable
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
@@ -60,16 +61,24 @@ type PipelineRolloutReconciler struct {
 }
 
 func NewPipelineRolloutReconciler(
+	ctx context.Context,
 	client client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 ) *PipelineRolloutReconciler {
-	return &PipelineRolloutReconciler{
+
+	pipelineRolloutQueue := util.NewWorkQueue("pipeline_rollout_queue")
+
+	r := &PipelineRolloutReconciler{
 		client,
 		s,
 		restConfig,
-		util.NewWorkQueue("pipeline_rollout_queue"),
+		pipelineRolloutQueue,
 	}
+
+	go r.runWorkers(ctx)
+
+	return r
 }
 
 // todo: argo-workflows calls `defer wfc.wfQueue.ShutDown()` - do the same?
@@ -91,10 +100,14 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
+
+	namespacedName := namespacedNameToKey(req.NamespacedName)
+	r.queue.AddRateLimited(namespacedName) // todo: verify this is what we want
+	return ctrl.Result{}, nil
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("namespacedName", namespacedName)
+	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 
@@ -160,6 +173,17 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
+func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
+
+	for i := 0; i < numWorkers; i++ {
+		go r.runWorker(ctx)
+	}
+
+	// once context is closed, stop the queue
+	<-ctx.Done()
+	r.queue.ShutDown()
+}
+
 func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
@@ -174,19 +198,29 @@ func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 		defer r.queue.Done(key)
 
 		// get namespace/name from key
+		namespacedName := keyToNamespacedName(key.(string))
 
 		result, err := r.processPipelineRollout(ctx, namespacedName)
 
 		if err != nil {
-			// add rate limited
+			r.queue.AddRateLimited(key)
 		} else {
 			if result.Requeue {
-				// add rate limited
+				r.queue.AddRateLimited(key)
 			} else if result.RequeueAfter > 0 {
-
+				r.queue.AddAfter(key, result.RequeueAfter)
 			}
 		}
 	}
+
+}
+
+func keyToNamespacedName(key string) k8stypes.NamespacedName {
+
+}
+
+func namespacedNameToKey(k8stypes.NamespacedName) string {
+
 }
 
 // reconcile does the real logic, it returns true if the event
