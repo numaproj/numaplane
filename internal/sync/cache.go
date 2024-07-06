@@ -236,7 +236,7 @@ func (c *liveStateCache) PopulateResourceInfo(un *unstructured.Unstructured, isR
 
 // getNumaplaneInstanceName gets the Numaplane Object that owns the resource from a label in the resource
 func getNumaplaneInstanceName(un *unstructured.Unstructured) string {
-	value, err := kubernetes.GetNumaplaneInstanceLabel(un, common.LabelKeyNumaplaneInstance)
+	value, err := kubernetes.GetLabel(un, common.LabelKeyNumaplaneInstance)
 	if err != nil {
 		return ""
 	}
