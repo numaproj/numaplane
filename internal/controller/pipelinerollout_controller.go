@@ -25,8 +25,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -36,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -44,6 +47,7 @@ import (
 
 const (
 	ControllerPipelineRollout = "pipeline-rollout-controller"
+	loggerName                = "pipelinerollout-reconciler"
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
@@ -51,6 +55,8 @@ type PipelineRolloutReconciler struct {
 	client     client.Client
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
+
+	queue workqueue.RateLimitingInterface
 }
 
 func NewPipelineRolloutReconciler(
@@ -62,8 +68,11 @@ func NewPipelineRolloutReconciler(
 		client,
 		s,
 		restConfig,
+		util.NewWorkQueue("pipeline_rollout_queue"),
 	}
 }
+
+// todo: argo-workflows calls `defer wfc.wfQueue.ShutDown()` - do the same?
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts/status,verbs=get;update;patch
@@ -79,17 +88,23 @@ func NewPipelineRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	numaLogger := logger.GetBaseLogger().WithName("pipelinerollout-reconciler").WithValues("pipelinerollout", req.NamespacedName)
+	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
+}
+
+func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
+	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("namespacedName", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 
 	// Get PipelineRollout CR
 	pipelineRollout := &apiv1.PipelineRollout{}
-	if err := r.client.Get(ctx, req.NamespacedName, pipelineRollout); err != nil {
+	if err := r.client.Get(ctx, namespacedName, pipelineRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			numaLogger.Error(err, "Unable to get PipelineRollout", "request", req)
+			numaLogger.Error(err, "Unable to get PipelineRollout")
 			return ctrl.Result{}, err
 		}
 	}
@@ -124,7 +139,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// TODO: do this for all 3 controllers
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latestPipelineRollout := &apiv1.PipelineRollout{}
-			if err := r.client.Get(ctx, req.NamespacedName, latestPipelineRollout); err != nil {
+			if err := r.client.Get(ctx, namespacedName, latestPipelineRollout); err != nil {
 				return err
 			}
 
@@ -143,6 +158,35 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
+	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
+
+	for {
+		key, quit := r.queue.Get()
+		if quit {
+			numaLogger.Info("PipelineRollout worker done")
+			return
+		}
+		defer r.queue.Done(key)
+
+		// get namespace/name from key
+
+		result, err := r.processPipelineRollout(ctx, namespacedName)
+
+		if err != nil {
+			// add rate limited
+		} else {
+			if result.Requeue {
+				// add rate limited
+			} else if result.RequeueAfter > 0 {
+
+			}
+		}
+	}
 }
 
 // reconcile does the real logic, it returns true if the event
