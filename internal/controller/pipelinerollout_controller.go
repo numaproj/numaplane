@@ -25,13 +25,17 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/internal"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -44,6 +48,7 @@ import (
 
 const (
 	ControllerPipelineRollout = "pipeline-rollout-controller"
+	numWorkers                = 16
 )
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
@@ -51,18 +56,57 @@ type PipelineRolloutReconciler struct {
 	client     client.Client
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
+
+	pipelineRolloutQueue workqueue.RateLimitingInterface
+	pipelineInformer     cache.SharedIndexInformer
 }
 
 func NewPipelineRolloutReconciler(
+	ctx context.Context,
 	client client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
-) *PipelineRolloutReconciler {
-	return &PipelineRolloutReconciler{
+) (*PipelineRolloutReconciler, error) {
+
+	pipelineEventHandlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+
+		},
+		UpdateFunc: func(oldObj, obj interface{}) {
+
+		},
+		DeleteFunc: func(obj interface{}) {
+
+		},
+	}
+
+	// create pipelineRolloutQueue
+
+	// start up a goroutine to process events from the Informer
+	pipelineInformer, err := kubernetes.StartDynamicInformer(ctx, restConfig, "numaflow.numaproj.io", "v1alpha1", "pipelines", pipelineEventHandlers)
+	if err != nil {
+		return nil, err
+	}
+	reconciler := &PipelineRolloutReconciler{
 		client,
 		s,
 		restConfig,
 	}
+
+	// start up workers to reconcile any PipelineRollouts on the queue
+	// todo: do we need to be able to stop these gracefully?
+	//util.RunWorkers(numWorkers, reconcileNextPipelineRollout)
+	for i := 0; i < numWorkers; i++ {
+		go reconciler.startWorker(ctx)
+	}
+
+	return reconciler, nil
+}
+
+func (r *PipelineRolloutReconciler) startWorker(ctx context.Context) {
+	// continually read from pipelineRolloutQueue
+	// if ctx is cancelled, would be good to finish the current PipelineRollout
+
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
@@ -307,7 +351,18 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch Pipelines
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}),
+	/*if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
+		predicate.ResourceVersionChangedPredicate{}); err != nil {
+		return err
+	}*/
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind:    "Pipeline",
+		Group:   "numaflow.numaproj.io",
+		Version: "v1alpha1",
+	})
+	if err := controller.Watch(internal.Kind{Cache: mgr.GetCache(), Type: u},
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err

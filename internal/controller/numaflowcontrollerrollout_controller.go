@@ -33,7 +33,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/yaml"
+	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -43,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -213,13 +215,61 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
 	manifestsWithOwnership := make([]string, 0, len(manifests))
 	for _, v := range manifests {
-		reference, err := kubernetes.ApplyOwnership(v, controllerRollout)
+		reference, err := applyOwnership(v, controllerRollout)
 		if err != nil {
 			return nil, err
 		}
 		manifestsWithOwnership = append(manifestsWithOwnership, string(reference))
 	}
 	return manifestsWithOwnership, nil
+}
+
+func applyOwnership(manifest string, controllerRollout *apiv1.NumaflowControllerRollout) ([]byte, error) {
+	// Decode YAML into an Unstructured object
+	decUnstructured := yamlserializer.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	obj := &unstructured.Unstructured{}
+	_, _, err := decUnstructured.Decode([]byte(manifest), nil, obj)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the new owner reference
+	ownerRef := map[string]interface{}{
+		"apiVersion":         controllerRollout.APIVersion,
+		"kind":               controllerRollout.Kind,
+		"name":               controllerRollout.Name,
+		"uid":                string(controllerRollout.UID),
+		"controller":         true,
+		"blockOwnerDeletion": true,
+	}
+
+	// Get existing owner references and check if our reference is already there
+	existingRefs, found, err := unstructured.NestedSlice(obj.Object, "metadata", "ownerReferences")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		existingRefs = []interface{}{}
+	}
+
+	// Check if the owner reference already exists to avoid duplication
+	alreadyExists := kubernetes.OwnerExists(existingRefs, ownerRef)
+
+	// Add the new owner reference if it does not exist
+	if !alreadyExists {
+		existingRefs = append(existingRefs, ownerRef)
+		err = unstructured.SetNestedSlice(obj.Object, existingRefs, "metadata", "ownerReferences")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Marshal the updated object into YAML
+	modifiedManifest, err := yaml.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return modifiedManifest, nil
 }
 
 func (r *NumaflowControllerRolloutReconciler) sync(
@@ -391,7 +441,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 // SplitYAMLToString splits a YAML file into strings. Returns list of yamls
 // found in the yaml. If an error occurs, returns objects that have been parsed so far too.
 func SplitYAMLToString(yamlData []byte) ([]string, error) {
-	d := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(yamlData), 4096)
+	d := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(yamlData), 4096)
 	var objs []string
 	for {
 		ext := runtime.RawExtension{}

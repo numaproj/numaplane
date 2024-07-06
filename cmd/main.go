@@ -155,11 +155,14 @@ func main() {
 
 	//+kubebuilder:scaffold:builder
 
-	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
+	pipelineRolloutReconciler, err := controller.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		mgr.GetConfig(),
 	)
+	if err != nil {
+		numaLogger.Fatal(err, "Failed to create PipelineRollout Reconciler")
+	}
 
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")

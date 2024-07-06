@@ -15,16 +15,16 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/util/logger"
-	"github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // validManifestExtensions contains the supported extension for raw file.
@@ -124,7 +124,7 @@ func IsValidKubernetesManifestFile(fileName string) bool {
 }
 
 // ownerExists checks if an owner reference already exists in the list of owner references.
-func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bool {
+func OwnerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bool {
 	var alreadyExists bool
 	for _, ref := range existingRefs {
 		if refMap, ok := ref.(map[string]interface{}); ok {
@@ -135,54 +135,6 @@ func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bo
 		}
 	}
 	return alreadyExists
-}
-
-func ApplyOwnership(manifest string, controllerRollout *v1alpha1.NumaflowControllerRollout) ([]byte, error) {
-	// Decode YAML into an Unstructured object
-	decUnstructured := yamlserializer.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-	obj := &unstructured.Unstructured{}
-	_, _, err := decUnstructured.Decode([]byte(manifest), nil, obj)
-	if err != nil {
-		return nil, err
-	}
-
-	// Construct the new owner reference
-	ownerRef := map[string]interface{}{
-		"apiVersion":         controllerRollout.APIVersion,
-		"kind":               controllerRollout.Kind,
-		"name":               controllerRollout.Name,
-		"uid":                string(controllerRollout.UID),
-		"controller":         true,
-		"blockOwnerDeletion": true,
-	}
-
-	// Get existing owner references and check if our reference is already there
-	existingRefs, found, err := unstructured.NestedSlice(obj.Object, "metadata", "ownerReferences")
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		existingRefs = []interface{}{}
-	}
-
-	// Check if the owner reference already exists to avoid duplication
-	alreadyExists := ownerExists(existingRefs, ownerRef)
-
-	// Add the new owner reference if it does not exist
-	if !alreadyExists {
-		existingRefs = append(existingRefs, ownerRef)
-		err = unstructured.SetNestedSlice(obj.Object, existingRefs, "metadata", "ownerReferences")
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Marshal the updated object into YAML
-	modifiedManifest, err := yaml.Marshal(obj)
-	if err != nil {
-		return nil, err
-	}
-	return modifiedManifest, nil
 }
 
 func parseApiVersion(apiVersion string) (string, string, error) {
@@ -215,6 +167,7 @@ func GetResource(
 	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
+	informer informers.GenericInformer,
 ) (*unstructured.Unstructured, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -232,13 +185,14 @@ func GetResource(
 		Resource: pluralName,
 	}
 
-	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	//return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	return informer.Lister().Get(object.GetNamespacedName()).(*unstructured.Unstructured), nil
 }
 
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
 // TODO: use CreateCR and UpdateCR instead
-func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string, informer cache.SharedIndexInformer) error {
 	numaLogger := logger.FromContext(ctx)
 
 	client, err := dynamic.NewForConfig(restConfig)
@@ -258,7 +212,8 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 	}
 
 	// Get the object to see if it exists
-	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	//resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	resource, err := informer.GetStore().GetByKey()
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -377,6 +332,41 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	err = json.Unmarshal(asJsonBytes, &genericObject)
 
 	return &genericObject, err
+}
+
+//TODO: can we create a separate dynamic client code file?
+
+// start up an Informer to cache the given resource type and add items to the queue using the given function for finding the key
+// from the resource
+func StartDynamicInformer(ctx context.Context, restConfig *rest.Config, group string, version string, pluralName string, eventHandlers cache.ResourceEventHandlerFuncs, /*queue workqueue.RateLimitingInterface,
+keyFunc func(*unstructured.Unstructured) (string, error)*/) error {
+
+	informer, err := NewDynamicInformer(restConfig, group, version, pluralName)
+	if err != nil {
+		return err
+	}
+
+}
+
+func NewDynamicInformer(restConfig *rest.Config, group string, version string, pluralName string) (cache.SharedIndexInformer, error) {
+	// Grab a dynamic interface that we can create informers from
+	dc, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	// Create a factory object to create Informer to watch resource
+	f := dynamicinformer.NewFilteredDynamicSharedInformerFactory(dc, 0, metav1.NamespaceAll, nil)
+
+	// Retrieve a "GroupVersionResource" type that we need when generating our informer from our dynamic factory
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}
+
+	// Create the informer
+	return f.ForResource(gvr).Informer(), nil
 }
 
 func NewPodDisruptionBudget(name, namespace string, maxUnavailable int32, ownerReference []metav1.OwnerReference) *policyv1.PodDisruptionBudget {
