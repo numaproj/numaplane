@@ -73,7 +73,6 @@ func TestControllers(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	ctx := context.Background()
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	// Download Numaflow CRDs
@@ -128,7 +127,7 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	err = NewPipelineRolloutReconciler(ctx,
+	err = NewPipelineRolloutReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
 		cfg).SetupWithManager(k8sManager)

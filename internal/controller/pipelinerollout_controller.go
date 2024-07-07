@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -58,11 +59,11 @@ type PipelineRolloutReconciler struct {
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	queue workqueue.RateLimitingInterface
+	queue                   workqueue.RateLimitingInterface
+	shutdownWorkerWaitGroup *sync.WaitGroup
 }
 
 func NewPipelineRolloutReconciler(
-	ctx context.Context,
 	client client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
@@ -70,7 +71,7 @@ func NewPipelineRolloutReconciler(
 
 	numaLogger := logger.GetBaseLogger().WithName(loggerName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
-	ctx = logger.WithLogger(ctx, numaLogger)
+	ctx := logger.WithLogger(context.Background(), numaLogger)
 
 	pipelineRolloutQueue := util.NewWorkQueue("pipeline_rollout_queue")
 
@@ -79,6 +80,7 @@ func NewPipelineRolloutReconciler(
 		s,
 		restConfig,
 		pipelineRolloutQueue,
+		&sync.WaitGroup{},
 	}
 
 	go r.runWorkers(ctx)
@@ -175,17 +177,22 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
-	numaLogger := logger.FromContext(ctx)
+func (r *PipelineRolloutReconciler) Shutdown() {
+	numaLogger := logger.GetBaseLogger().WithName(loggerName)
 
-	for i := 0; i < numWorkers; i++ {
-		go r.runWorker(ctx)
-	}
-
-	// once context is closed, stop the queue
-	<-ctx.Done()
 	numaLogger.Info("shutting down PipelineRollout queue")
 	r.queue.ShutDown()
+
+	// wait for all the workers to have stopped
+	r.shutdownWorkerWaitGroup.Wait()
+}
+
+func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
+
+	for i := 0; i < numWorkers; i++ {
+		r.shutdownWorkerWaitGroup.Add(numWorkers)
+		go r.runWorker(ctx)
+	}
 }
 
 func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
@@ -195,6 +202,7 @@ func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 		key, quit := r.queue.Get()
 		if quit {
 			numaLogger.Info("PipelineRollout worker done")
+			r.shutdownWorkerWaitGroup.Done()
 			return
 		}
 		r.processQueueKey(ctx, key.(string))

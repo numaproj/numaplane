@@ -187,7 +187,7 @@ func CreateCR(
 	if err != nil {
 		return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
 	}
-	numaLogger.Debugf("successfully created resource %s/%s", object.Namespace, object.Name)
+	numaLogger.Infof("successfully created resource %s/%s", object.Namespace, object.Name)
 	return nil
 }
 
