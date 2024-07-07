@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -81,8 +82,6 @@ func NewPipelineRolloutReconciler(
 	return r
 }
 
-// todo: argo-workflows calls `defer wfc.wfQueue.ShutDown()` - do the same?
-
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=pipelinerollouts/finalizers,verbs=update
@@ -102,7 +101,8 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	ctx = logger.WithLogger(ctx, numaLogger)
 
 	namespacedName := namespacedNameToKey(req.NamespacedName)
-	r.queue.AddRateLimited(namespacedName) // todo: verify this is what we want
+	r.queue.AddRateLimited(namespacedName)
+	numaLogger.Debugf("added PipelineRollout %v to queue", namespacedName)
 	return ctrl.Result{}, nil
 }
 
@@ -174,6 +174,9 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 }
 
 func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
+	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
 
 	for i := 0; i < numWorkers; i++ {
 		go r.runWorker(ctx)
@@ -181,6 +184,7 @@ func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
 
 	// once context is closed, stop the queue
 	<-ctx.Done()
+	numaLogger.Info("shutting down PipelineRollout queue")
 	r.queue.ShutDown()
 }
 
@@ -195,32 +199,47 @@ func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 			numaLogger.Info("PipelineRollout worker done")
 			return
 		}
-		defer r.queue.Done(key)
-
-		// get namespace/name from key
-		namespacedName := keyToNamespacedName(key.(string))
-
-		result, err := r.processPipelineRollout(ctx, namespacedName)
-
-		if err != nil {
-			r.queue.AddRateLimited(key)
-		} else {
-			if result.Requeue {
-				r.queue.AddRateLimited(key)
-			} else if result.RequeueAfter > 0 {
-				r.queue.AddAfter(key, result.RequeueAfter)
-			}
-		}
+		r.processQueueKey(ctx, key.(string))
+		r.queue.Done(key)
 	}
 
 }
 
-func keyToNamespacedName(key string) k8stypes.NamespacedName {
+func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key string) {
+	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
 
+	// get namespace/name from key
+	namespacedName, err := keyToNamespacedName(key)
+	if err != nil {
+		numaLogger.Fatal(err, "Queue key not derivable")
+	}
+
+	numaLogger.Debugf("processing PipelineRollout %v", namespacedName)
+	result, err := r.processPipelineRollout(ctx, namespacedName)
+
+	if err != nil {
+		r.queue.AddRateLimited(key)
+	} else {
+		if result.Requeue {
+			r.queue.AddRateLimited(key)
+		} else if result.RequeueAfter > 0 {
+			r.queue.AddAfter(key, result.RequeueAfter)
+		}
+	}
 }
 
-func namespacedNameToKey(k8stypes.NamespacedName) string {
+func keyToNamespacedName(key string) (k8stypes.NamespacedName, error) {
+	index := strings.Index(key, "/")
+	if index < 0 {
+		return k8stypes.NamespacedName{}, fmt.Errorf("Improperly formatted key: %q", key)
+	}
+	return k8stypes.NamespacedName{Namespace: key[0:index], Name: key[index+1:]}, nil
+}
 
+func namespacedNameToKey(namespacedName k8stypes.NamespacedName) string {
+	return fmt.Sprintf("%s/%s", namespacedName.Namespace, namespacedName.Name)
 }
 
 // reconcile does the real logic, it returns true if the event

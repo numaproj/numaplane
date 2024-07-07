@@ -1,8 +1,6 @@
 package util
 
 import (
-	"time"
-
 	"k8s.io/client-go/util/workqueue"
 )
 
@@ -16,7 +14,7 @@ type rateLimitingQueue struct {
 func NewWorkQueue(queueName string) workqueue.RateLimitingInterface {
 	//m.newWorker(queueName)
 	return rateLimitingQueue{
-		RateLimitingInterface: workqueue.NewNamedRateLimitingQueue(&fixedIntervalRateLimiter{}, queueName),
+		RateLimitingInterface: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
 		workerType:            queueName,
 		//metrics:               m,
 	}
@@ -55,12 +53,13 @@ func (w rateLimitingQueue) Done(item interface{}) {
 	//w.metrics.workerFree(w.workerType)
 }
 
+/*
 // fixedIntervalRateLimiter implements the RateLimiter interface in client-go
 type fixedIntervalRateLimiter struct{}
 
 // When decides the miminum amount of time between two entries
 func (r *fixedIntervalRateLimiter) When(interface{}) time.Duration {
-	return 10 * time.Second // can consider making this configurable
+	return 5 * time.Second // can consider making this configurable
 }
 
 // Forget indicates that an item is finished being retried.  Doesn't matter whether it's for failing
@@ -71,3 +70,4 @@ func (r *fixedIntervalRateLimiter) Forget(interface{}) {}
 func (r *fixedIntervalRateLimiter) NumRequeues(interface{}) int {
 	return 1
 }
+*/
