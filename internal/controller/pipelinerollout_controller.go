@@ -68,6 +68,10 @@ func NewPipelineRolloutReconciler(
 	restConfig *rest.Config,
 ) *PipelineRolloutReconciler {
 
+	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
+
 	pipelineRolloutQueue := util.NewWorkQueue("pipeline_rollout_queue")
 
 	r := &PipelineRolloutReconciler{
@@ -97,8 +101,6 @@ func NewPipelineRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
-	// update the context with this Logger so downstream users can incorporate these values in the logs
-	ctx = logger.WithLogger(ctx, numaLogger)
 
 	namespacedName := namespacedNameToKey(req.NamespacedName)
 	r.queue.AddRateLimited(namespacedName)
@@ -107,7 +109,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", namespacedName)
+	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 
@@ -174,9 +176,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 }
 
 func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName)
-	// update the context with this Logger so downstream users can incorporate these values in the logs
-	ctx = logger.WithLogger(ctx, numaLogger)
+	numaLogger := logger.FromContext(ctx)
 
 	for i := 0; i < numWorkers; i++ {
 		go r.runWorker(ctx)
@@ -189,9 +189,7 @@ func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
 }
 
 func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName)
-	// update the context with this Logger so downstream users can incorporate these values in the logs
-	ctx = logger.WithLogger(ctx, numaLogger)
+	numaLogger := logger.FromContext(ctx)
 
 	for {
 		key, quit := r.queue.Get()
@@ -206,7 +204,7 @@ func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 }
 
 func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key string) {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+	numaLogger := logger.FromContext(ctx).WithValues("key", key)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
 

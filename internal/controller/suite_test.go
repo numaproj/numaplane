@@ -134,11 +134,10 @@ var _ = BeforeSuite(func() {
 		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&ISBServiceRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-	}).SetupWithManager(k8sManager)
+	err = NewISBServiceRolloutReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg)
