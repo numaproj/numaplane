@@ -12,18 +12,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 
-	// clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var (
-	dynamicClient dynamic.Interface
+	dynamicClient dynamic.DynamicClient
 	testEnv       *envtest.Environment
 	ctx           context.Context
 	cancel        context.CancelFunc
-	// externalCRDsDir string
 )
 
 func TestE2E(t *testing.T) {
@@ -42,8 +40,6 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	scheme := runtime.NewScheme()
-	// err = clientgoscheme.AddToScheme(scheme)
-	// Expect(err).NotTo(HaveOccurred())
 	err = apiv1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = numaflowv1.AddToScheme(scheme)
@@ -58,10 +54,17 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	// k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
-	dynamicClient, err = dynamic.NewForConfig(cfg)
+	dynamicClient = *dynamic.NewForConfigOrDie(cfg)
 
 	Expect(err).NotTo(HaveOccurred())
 	Expect(dynamicClient).NotTo(BeNil())
+
+})
+
+var _ = AfterSuite(func() {
+	cancel()
+	By("tearing down the test environment")
+	err := testEnv.Stop()
+	Expect(err).NotTo(HaveOccurred())
 
 })
