@@ -59,7 +59,7 @@ var _ = Describe("PipelineRollout E2E", func() {
 		}, timeout, duration).Should(BeTrue())
 	})
 
-	It("should ", func() {
+	It("should correctly update the PipelineRollout", func() {
 		By("Creating a new PipelineRollout for the update test")
 		pipelineRollout := createPipelineRolloutSpec(pipelineRolloutName, namespace)
 		err := createPipelineRollout(ctx, pipelineRollout)
