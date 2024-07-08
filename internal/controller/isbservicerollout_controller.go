@@ -125,7 +125,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
+		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
 			return ctrl.Result{}, statusUpdateErr
 		}
@@ -306,7 +306,7 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.
 		Status:     rawStatus,
 	}
 
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "ISBServiceRollouts")
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "isbservicerollouts")
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {

@@ -38,7 +38,6 @@ import (
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -51,6 +50,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -130,6 +130,11 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
 	if err != nil {
+		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -138,6 +143,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
 		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout", "NumaflowControllerRollout", numaflowControllerRollout)
+
+			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
+			if statusUpdateErr != nil {
+				return ctrl.Result{}, statusUpdateErr
+			}
+
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -146,18 +157,9 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	// Update the Status subresource
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latestNumaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
-			if err := r.client.Get(ctx, req.NamespacedName, latestNumaflowControllerRollout); err != nil {
-				return err
-			}
-
-			latestNumaflowControllerRollout.Status = numaflowControllerRollout.Status
-			return r.client.Status().Update(ctx, latestNumaflowControllerRollout)
-		})
-		if err != nil {
-			numaLogger.Error(err, "Error Updating NumaflowControllerRollout Status", "NumaflowControllerRollout", numaflowControllerRollout)
-			return ctrl.Result{}, err
+		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -584,4 +586,40 @@ func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructur
 		uns = append(uns, target)
 	}
 	return uns, nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&controllerRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&controllerRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   controllerRollout.TypeMeta,
+		ObjectMeta: controllerRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "numaflowcontrollerrollouts")
+}
+
+func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
+	numaLogger := logger.FromContext(ctx)
+
+	controllerRollout.Status.MarkFailed(controllerRollout.Generation, err.Error())
+
+	statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, controllerRollout)
+	if statusUpdateErr != nil {
+		numaLogger.Error(statusUpdateErr, "Error updating NumaflowControllerRollout status", "namespace", controllerRollout.Namespace, "name", controllerRollout.Name)
+	}
+
+	return statusUpdateErr
 }
