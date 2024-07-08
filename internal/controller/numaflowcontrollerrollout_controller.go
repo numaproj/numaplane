@@ -457,7 +457,7 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "numaflow-controller",
+			Name:      NumaflowControllerDeploymentName,
 			Namespace: controllerRollout.Namespace,
 		},
 	}
