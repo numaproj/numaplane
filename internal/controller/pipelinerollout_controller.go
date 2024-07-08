@@ -89,7 +89,7 @@ func NewPipelineRolloutReconciler(
 		&sync.WaitGroup{},
 	}
 
-	go r.runWorkers(ctx)
+	r.runWorkers(ctx)
 
 	return r
 }
@@ -183,8 +183,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineRolloutReconciler) Shutdown() {
-	numaLogger := logger.GetBaseLogger().WithName(loggerName)
+func (r *PipelineRolloutReconciler) Shutdown(ctx context.Context) {
+	numaLogger := logger.FromContext(ctx)
 
 	numaLogger.Info("shutting down PipelineRollout queue")
 	r.queue.ShutDown()

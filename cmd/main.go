@@ -119,6 +119,7 @@ func main() {
 	}
 	numaLogger.SetLevel(config.LogLevel)
 	logger.SetBaseLogger(numaLogger)
+	ctx := logger.WithLogger(context.Background(), numaLogger)
 	clog.SetLogger(*numaLogger.LogrLogger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -149,7 +150,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := kubernetes.StartConfigMapWatcher(context.Background(), mgr.GetConfig()); err != nil {
+	if err := kubernetes.StartConfigMapWatcher(ctx, mgr.GetConfig()); err != nil {
 		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
@@ -164,7 +165,7 @@ func main() {
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
 	}
-	defer pipelineRolloutReconciler.Shutdown()
+	defer pipelineRolloutReconciler.Shutdown(ctx)
 
 	kubectl := kubernetes.NewKubectl()
 	numaflowControllerRolloutReconciler, err := controller.NewNumaflowControllerRolloutReconciler(
