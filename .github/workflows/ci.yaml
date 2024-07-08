@@ -142,13 +142,6 @@ jobs:
       - name: Get dependencies
         run: go mod download
 
-      - name: Install kubectl
-        run: |
-          curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x ./kubectl
-          sudo mv ./kubectl /usr/local/bin/kubectl
-          kubectl version --client
-
       - name: Test
         run: make unit-test
 
