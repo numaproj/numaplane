@@ -35,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -45,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -223,13 +225,75 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
 	manifestsWithOwnership := make([]string, 0, len(manifests))
 	for _, v := range manifests {
-		reference, err := kubernetes.ApplyOwnership(v, controllerRollout)
+		reference, err := applyOwnership(v, controllerRollout)
 		if err != nil {
 			return nil, err
 		}
 		manifestsWithOwnership = append(manifestsWithOwnership, string(reference))
 	}
 	return manifestsWithOwnership, nil
+}
+
+func applyOwnership(manifest string, controllerRollout *apiv1.NumaflowControllerRollout) ([]byte, error) {
+	// Decode YAML into an Unstructured object
+	decUnstructured := yamlserializer.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	obj := &unstructured.Unstructured{}
+	_, _, err := decUnstructured.Decode([]byte(manifest), nil, obj)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the new owner reference
+	ownerRef := map[string]interface{}{
+		"apiVersion":         controllerRollout.APIVersion,
+		"kind":               controllerRollout.Kind,
+		"name":               controllerRollout.Name,
+		"uid":                string(controllerRollout.UID),
+		"controller":         true,
+		"blockOwnerDeletion": true,
+	}
+
+	// Get existing owner references and check if our reference is already there
+	existingRefs, found, err := unstructured.NestedSlice(obj.Object, "metadata", "ownerReferences")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		existingRefs = []interface{}{}
+	}
+
+	// Check if the owner reference already exists to avoid duplication
+	alreadyExists := ownerExists(existingRefs, ownerRef)
+
+	// Add the new owner reference if it does not exist
+	if !alreadyExists {
+		existingRefs = append(existingRefs, ownerRef)
+		err = unstructured.SetNestedSlice(obj.Object, existingRefs, "metadata", "ownerReferences")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Marshal the updated object into YAML
+	modifiedManifest, err := sigsyaml.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return modifiedManifest, nil
+}
+
+// ownerExists checks if an owner reference already exists in the list of owner references.
+func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bool {
+	var alreadyExists bool
+	for _, ref := range existingRefs {
+		if refMap, ok := ref.(map[string]interface{}); ok {
+			if refMap["uid"] == ownerRef["uid"] {
+				alreadyExists = true
+				break
+			}
+		}
+	}
+	return alreadyExists
 }
 
 func (r *NumaflowControllerRolloutReconciler) sync(
@@ -513,7 +577,7 @@ func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructur
 			return nil, err
 		}
 		target := &unstructured.Unstructured{Object: obj}
-		err = kubernetes.SetNumaplaneInstanceLabel(target, common.LabelKeyNumaplaneInstance, name)
+		err = kubernetes.SetLabel(target, common.LabelKeyNumaplaneInstance, name)
 		if err != nil {
 			return nil, err
 		}
