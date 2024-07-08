@@ -193,6 +193,7 @@ func (r *PipelineRolloutReconciler) Shutdown() {
 	r.shutdownWorkerWaitGroup.Wait()
 }
 
+// runWorkers starts up the workers processing the queue of PipelineRollouts
 func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
 
 	for i := 0; i < numWorkers; i++ {
@@ -201,6 +202,7 @@ func (r *PipelineRolloutReconciler) runWorkers(ctx context.Context) {
 	}
 }
 
+// runWorker starts up one of the workers processing the queue of PipelineRollouts
 func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 	numaLogger := logger.FromContext(ctx)
 
