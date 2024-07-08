@@ -84,16 +84,14 @@ jobs:
 
       - name: Install CRDS
         env:
-          KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
         run: |
-          VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
 
       - name: Run tests
         env:
-          KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
-        run: VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
 
   lint:
     name: Lint
