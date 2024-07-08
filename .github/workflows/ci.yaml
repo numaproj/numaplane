@@ -87,13 +87,13 @@ jobs:
           KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
         run: |
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+          VERSION=${{ github.sha }} DOCKER_PUSH=true make start
 
       - name: Run tests
         env:
           KUBECONFIG: $HOME/.kube/config
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
+        run: VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
 
   lint:
     name: Lint
