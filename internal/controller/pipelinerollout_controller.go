@@ -59,7 +59,11 @@ type PipelineRolloutReconciler struct {
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	queue                   workqueue.RateLimitingInterface
+	// queue contains the list of PipelineRollouts that currently need to be reconciled
+	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this queue to be processed as needed
+	// a set of Workers is used to process this queue
+	queue workqueue.RateLimitingInterface
+	// shutdownWorkerWaitGroup is used when shutting down the workers processing the queue for them to indicate that they're done
 	shutdownWorkerWaitGroup *sync.WaitGroup
 }
 
@@ -73,6 +77,8 @@ func NewPipelineRolloutReconciler(
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
+	// create a queue to process PipelineRollout reconciliations
+	// the benefit of the queue is that other reconciliation code can also add PipelineRollouts to it so they'll be processed
 	pipelineRolloutQueue := util.NewWorkQueue("pipeline_rollout_queue")
 
 	r := &PipelineRolloutReconciler{
@@ -225,6 +231,7 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 	numaLogger.Debugf("processing PipelineRollout %v", namespacedName)
 	result, err := r.processPipelineRollout(ctx, namespacedName)
 
+	// based on result, may need to add this back to the queue
 	if err != nil {
 		r.queue.AddRateLimited(key)
 	} else {
