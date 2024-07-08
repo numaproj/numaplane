@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -140,6 +139,16 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
+		// TTODO: MarkFailed should mark also condition unhelathy (confirm and, if yes, modify also the MarkHealthy and other functions)
+		// TTODO: define constants/enum to use for MarkFailed (ex: ReconciliationError, SomethingElseError, etc.)
+		pipelineRollout.Status.MarkFailed("", err.Error())
+
+		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		if statusUpdateErr != nil {
+			numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
+			return ctrl.Result{}, statusUpdateErr
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -156,22 +165,12 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		// TODO: retry in case of error updating the state
-		// TODO: write a reusable function for this
-		// TODO: use the reusable func to update state when there are errors elsewhere during reconciliation
-		// TODO: do this for all 3 controllers
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latestPipelineRollout := &apiv1.PipelineRollout{}
-			if err := r.client.Get(ctx, namespacedName, latestPipelineRollout); err != nil {
-				return err
-			}
-
-			latestPipelineRollout.Status = pipelineRollout.Status
-			return r.client.Status().Update(ctx, latestPipelineRollout)
-		})
-		if err != nil {
-			numaLogger.Error(err, "Error Updating PipelineRollout Status", "PipelineRollout", pipelineRollout)
-			return ctrl.Result{}, err
+		// TTODO: use the reusable func to update state when there are errors elsewhere during reconciliation
+		// TTODO: do this for all 3 controllers
+		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		if statusUpdateErr != nil {
+			numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -507,4 +506,27 @@ func applyPipelineSpec(
 	}
 
 	return nil
+}
+
+func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert PipelineRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   pipelineRollout.TypeMeta,
+		ObjectMeta: pipelineRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "pipelinerollouts")
 }
