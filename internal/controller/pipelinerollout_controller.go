@@ -139,13 +139,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	requeue, err := r.reconcile(ctx, pipelineRollout)
 	if err != nil {
-		// TTODO: MarkFailed should mark also condition unhelathy (confirm and, if yes, modify also the MarkHealthy and other functions)
-		// TTODO: define constants/enum to use for MarkFailed (ex: ReconciliationError, SomethingElseError, etc.)
-		pipelineRollout.Status.MarkFailed("", err.Error())
-
-		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -157,6 +152,12 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		pipelineRolloutStatus := pipelineRollout.Status
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
 			numaLogger.Error(err, "Error Updating PipelineRollout", "PipelineRollout", pipelineRollout)
+
+			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
+			if statusUpdateErr != nil {
+				return ctrl.Result{}, statusUpdateErr
+			}
+
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -165,11 +166,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		// TTODO: use the reusable func to update state when there are errors elsewhere during reconciliation
-		// TTODO: do this for all 3 controllers
-		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -501,7 +499,6 @@ func applyPipelineSpec(
 	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
-		pipelineRollout.Status.MarkFailed("ApplyPipelineFailure", err.Error())
 		return err
 	}
 
@@ -529,4 +526,17 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 	}
 
 	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "pipelinerollouts")
+}
+
+func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
+	numaLogger := logger.FromContext(ctx)
+
+	pipelineRollout.Status.MarkFailed(pipelineRollout.Generation, err.Error())
+
+	statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+	if statusUpdateErr != nil {
+		numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
+	}
+
+	return statusUpdateErr
 }
