@@ -45,12 +45,12 @@ var _ = Describe("NumaflowControllerRollout E2E", func() {
 		}, timeout, duration).Should(Succeed())
 
 		By("Updating the existing NumaflowControllerRollout")
-		updateLabelValue := "update-1"
+		newnumaflowControllerRolloutName := "new-numaflow-controller"
 
 		gotNumaflowControllerRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = unstructured.SetNestedField(gotNumaflowControllerRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		err = unstructured.SetNestedField(gotNumaflowControllerRollout.Object, newnumaflowControllerRolloutName, "metadata", "labels", "customLabelKey")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, gotNumaflowControllerRollout, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -58,7 +58,7 @@ var _ = Describe("NumaflowControllerRollout E2E", func() {
 		updatedNumaflowControllerRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		val, _, _ := unstructured.NestedString(updatedNumaflowControllerRollout.Object, "metadata", "labels", "customLabelKey")
-		Expect(val).To(Equal(updateLabelValue))
+		Expect(val).To(Equal(newnumaflowControllerRolloutName))
 
 		By("Deleting the NumaflowControllerRollout")
 
