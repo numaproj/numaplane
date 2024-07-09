@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -40,11 +41,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -280,14 +282,24 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
+	var pipelineSpec struct {
+		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
+	}
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &pipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
+	}
+	labelKey := "isbsvc-name"
 	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name,
-			Namespace:       pipelineRollout.Namespace,
+			Name:      pipelineRollout.Name,
+			Namespace: pipelineRollout.Namespace,
+			Labels: map[string]string{
+				labelKey: pipelineSpec.InterStepBufferServiceName,
+			},
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline,
