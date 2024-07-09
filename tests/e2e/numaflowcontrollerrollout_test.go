@@ -50,7 +50,8 @@ var _ = Describe("NumaflowControllerRollout E2E", func() {
 		gotNumaflowControllerRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
-		unstructured.SetNestedField(gotNumaflowControllerRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		err = unstructured.SetNestedField(gotNumaflowControllerRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		Expect(err).NotTo(HaveOccurred())
 		_, err = dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, gotNumaflowControllerRollout, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
