@@ -1,4 +1,3 @@
-
 const path = require("path");
 const webpack = require("webpack");
 const TerserWebpackPlugin = require("terser-webpack-plugin");
@@ -18,6 +17,10 @@ const config = {
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js", ".json", ".ttf"],
+    fallback: {
+      url: require.resolve("url/"),
+      // You can add other polyfills if needed
+    },
   },
   externals: {
     react: "React",
@@ -26,32 +29,38 @@ const config = {
   },
   optimization: {
     minimize: true,
-    minimizer: [
-      new TerserWebpackPlugin({
-        terserOptions: {
-          format: {
-            comments: false,
-          },
-        },
-        extractComments: false,
-      }),
-    ],
   },
-  plugins: [
-    new webpack.LoaderOptionsPlugin({
-      minimize: true,
-      debug: false,
-    }),
-  ],
   module: {
     rules: [
       {
         test: /\.(ts|js)x?$/,
-        loader: "esbuild-loader",
-        options: {
-          loader: "tsx",
-          target: "es2015",
-        },
+        exclude: /node_modules/,
+        use: [
+          {
+            loader: "ts-loader",
+            options: {
+              // specify TypeScript compiler options
+              compilerOptions: {
+                target: "es5",
+              },
+              appendTsSuffixTo: [/\.vue$/],
+              appendTsxSuffixTo: [/\.vue$/],
+              transpileOnly: true,
+            },
+          },
+        ],
+      },
+      {
+        test: /\.tsx?$/,
+        include: [/argo-rollouts\/ui/, /argo-ui/], // Add argo-ui package here
+        use: [
+          {
+            loader: "ts-loader",
+            options: {
+              transpileOnly: true,
+            },
+          },
+        ],
       },
       {
         test: /\.scss$/,
@@ -66,4 +75,3 @@ const config = {
 };
 
 module.exports = config;
-
