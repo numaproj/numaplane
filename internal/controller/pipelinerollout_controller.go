@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -306,65 +307,50 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
+	// Object already exists
+
 	// propagate the pipeline's status into PipelineRollout's status
 	var pipelineStatus kubernetes.GenericStatus
 	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
 	pipelineReconciled := pipelineObservedGenerationCurrent(existingPipelineDef.Generation, pipelineStatus.ObservedGeneration)
 
-	// If the pipeline already exists, first check if the pipeline status
-	// is pausing. If so, re-enqueue immediately.
-	pausing := isPipelinePausing(ctx, existingPipelineDef)
-	if pausing {
-		// re-enqueue
-		return true, nil
-	}
+	// Get the fields we need from both the Pipeline spec we have and the one we want
+	// todo: consider having a Pipeline struct which includes everything
+	var existingPipelineSpec pipelineSpec
+	err = util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec)
+	var newPipelineSpec pipelineSpec
+	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
 
-	// Check if the pipeline status is paused. If so, apply the change and
-	// resume.
-	paused := isPipelinePaused(ctx, existingPipelineDef)
-	if paused {
-		// Apply the new spec and resume the pipeline
-		// TODO: in the future, need to take into account whether Numaflow Controller
-		//       or ISBService is being installed to determine whether it's safe to unpause
-		newObj, err := setPipelineDesiredStatus(&newPipelineDef, "Running")
+	pipelineNeedsToUpdate := !pipelineSpecEqual(existingPipelineDef.Spec, newPipelineDef.Spec) || !pipelineReconciled
+	var pipelineUpdateRequiresPause bool
+	if pipelineNeedsToUpdate {
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef.Spec, &newPipelineDef.Spec)
 		if err != nil {
 			return false, err
 		}
-		newPipelineDef = *newObj
+	}
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	controllerRequestsPause := controller.GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	isbSvcRequestsPause := controller.GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
 
-		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
-		if err != nil {
-			return false, err
-		}
+	// make sure our Lifecycle is what we need it to be
+	shouldBePaused := pipelineUpdateRequiresPause || controllerRequestsPause || isbSvcRequestsPause
+	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
-		return false, nil
+	if shouldBePaused && !lifeCycleIsPaused {
+		controller.GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
+	} else if !shouldBePaused && lifeCycleIsPaused {
+		controller.GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
 	}
 
-	// If pipeline status is not above, detect if pausing is required.
-	shouldPause, err := needsPausing(existingPipelineDef, &newPipelineDef)
-	if err != nil {
-		return false, err
-	}
-	if shouldPause {
-		// Use the existing spec, then pause and re-enqueue
-		newPipelineDef.Spec = existingPipelineDef.Spec
-		newObj, err := setPipelineDesiredStatus(&newPipelineDef, "Paused")
-		if err != nil {
-			return false, err
+	// if it's safe to Update and we need to, do it now
+	if pipelineNeedsToUpdate {
+		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
+			err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
+			if err != nil {
+				return false, err
+			}
 		}
-		newPipelineDef = *newObj
-
-		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
-		if err != nil {
-			return false, err
-		}
-		return true, err
-	}
-
-	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
-	if err != nil {
-		return false, err
 	}
 
 	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -547,4 +533,24 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	}
 
 	return statusUpdateErr
+}
+
+func getISBSvcName(pipeline pipelineSpec) string {
+	if pipelineSpec.InterStepBufferServiceName == "" {
+		return "default"
+	}
+	return pipelineSpec.InterStepBufferServiceName
+}
+
+// keep track of the minimum number of fields we need to know about
+type pipelineSpec struct {
+	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
+	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
+}
+
+type lifecycle struct {
+	// DesiredPhase used to bring the pipeline from current phase to desired phase
+	// +kubebuilder:default=Running
+	// +optional
+	DesiredPhase string `json:"desiredPhase,omitempty"`
 }
