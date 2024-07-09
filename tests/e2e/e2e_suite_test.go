@@ -22,6 +22,8 @@ var (
 	testEnv       *envtest.Environment
 	ctx           context.Context
 	cancel        context.CancelFunc
+	timeout       = 30 * time.Second
+	duration      = time.Second
 )
 
 func TestE2E(t *testing.T) {

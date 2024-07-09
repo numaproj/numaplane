@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"context"
-	"time"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -18,8 +17,6 @@ var _ = Describe("NumaflowControllerRollout E2E", func() {
 	const (
 		namespace                     = "numaplane-system"
 		numaflowControllerRolloutName = "numaflow-controller"
-		timeout                       = 30 * time.Second
-		duration                      = time.Second
 	)
 	gvr := getGVRForNumaflowControllerRollout()
 

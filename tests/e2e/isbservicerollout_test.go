@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -21,11 +20,8 @@ var _ = Describe("ISBService E2E", func() {
 	const (
 		namespace             = "numaplane-system"
 		isbServiceRolloutName = "test-isb-service-rollout"
-		timeout               = 30 * time.Second
-		duration              = time.Second
-		interval              = 250 * time.Millisecond
 	)
-	gvr := getGVRForISBServiceRollout()
+	gvr := getGVRForISBService()
 
 	BeforeEach(func() {
 		err := dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, isbServiceRolloutName, metav1.DeleteOptions{})
@@ -34,11 +30,10 @@ var _ = Describe("ISBService E2E", func() {
 		}
 	})
 
-	It("Should create, update, and delete a ISBService", func() {
+	It("Should create, update, and delete an ISBService", func() {
 		// Creating ISB Service Rollout
 		By("Creating a new ISBServiceRollout")
 		isbServiceRollout := createISBServiceRolloutSpec(isbServiceRolloutName, namespace)
-		// fmt.Printf(isbServiceRollout)
 		err := createISBServiceRollout(ctx, isbServiceRollout)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -115,17 +110,17 @@ func createISBServiceRolloutSpec(name, namespace string) *unstructured.Unstructu
 }
 
 func createISBServiceRollout(ctx context.Context, isbServiceRollout *unstructured.Unstructured) error {
-	gvr := getGVRForISBServiceRollout()
+	gvr := getGVRForISBService()
 	_, err := dynamicClient.Resource(gvr).Namespace(isbServiceRollout.GetNamespace()).Create(ctx, isbServiceRollout, metav1.CreateOptions{})
 	return err
 }
 
 func deleteISBServiceRollout(ctx context.Context, namespace, name string) error {
-	gvr := getGVRForISBServiceRollout()
+	gvr := getGVRForISBService()
 	return dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func getGVRForISBServiceRollout() schema.GroupVersionResource {
+func getGVRForISBService() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaplane.numaproj.io",
 		Version:  "v1alpha1",

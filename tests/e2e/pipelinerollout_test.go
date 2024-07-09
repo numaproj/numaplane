@@ -21,8 +21,6 @@ var _ = Describe("PipelineRollout E2E", func() {
 	const (
 		namespace           = "numaplane-system"
 		pipelineRolloutName = "test-pipeline-rollout"
-		timeout             = 30 * time.Second
-		duration            = time.Second
 	)
 	gvr := getGVR()
 

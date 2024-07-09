@@ -82,7 +82,7 @@ jobs:
           echo 'Waiting for the cluster to be ready...'
           until kubectl cluster-info; do sleep 1; done
 
-      - name: Install CRDS
+      - name: Install Numaplane
         env:
           GOPATH: /home/runner/go
         run: |
