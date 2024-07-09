@@ -55,7 +55,8 @@ var _ = Describe("ISBService E2E", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the ISBServiceRollout.
-		unstructured.SetNestedField(gotISBServiceRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		err = unstructured.SetNestedField(gotISBServiceRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		Expect(err).NotTo(HaveOccurred())
 		_, err = dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, gotISBServiceRollout, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
