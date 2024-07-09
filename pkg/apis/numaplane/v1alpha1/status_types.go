@@ -78,29 +78,30 @@ func (s *Status) InitializeConditions(conditionTypes ...ConditionType) {
 	}
 }
 
-func (status *Status) SetPhase(phase Phase, msg string) {
+func (status *Status) SetPhase(phase Phase, msg string, generation int64) {
 	status.Phase = phase
 	status.Message = msg
+	status.ObservedGeneration = generation
 }
 
 // MarkTrue sets the status of t to true
-func (s *Status) MarkTrue(t ConditionType, observedGeneration int64) {
-	s.markTypeStatus(t, metav1.ConditionTrue, "Successful", "Successful", observedGeneration)
+func (s *Status) MarkTrue(t ConditionType, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionTrue, "Successful", "Successful", generation)
 }
 
 // MarkTrueWithReason sets the status of t to true with reason
-func (s *Status) MarkTrueWithReason(t ConditionType, reason, message string, observedGeneration int64) {
-	s.markTypeStatus(t, metav1.ConditionTrue, reason, message, observedGeneration)
+func (s *Status) MarkTrueWithReason(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionTrue, reason, message, generation)
 }
 
 // MarkFalse sets the status of t to fasle
-func (s *Status) MarkFalse(t ConditionType, reason, message string, observedGeneration int64) {
-	s.markTypeStatus(t, metav1.ConditionFalse, reason, message, observedGeneration)
+func (s *Status) MarkFalse(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionFalse, reason, message, generation)
 }
 
 // MarkUnknown sets the status of t to unknown
-func (s *Status) MarkUnknown(t ConditionType, reason, message string, observedGeneration int64) {
-	s.markTypeStatus(t, metav1.ConditionUnknown, reason, message, observedGeneration)
+func (s *Status) MarkUnknown(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionUnknown, reason, message, generation)
 }
 
 // GetCondition returns the condition of a condition type
@@ -115,44 +116,36 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 
 // Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
 func (status *Status) Init(generation int64) {
+	status.MarkPending(generation)
 	status.InitializeConditions(ConditionChildResourceDeployed, ConditionChildResourceHealthy)
-
-	if generation != status.ObservedGeneration {
-		status.SetObservedGeneration(generation)
-		status.MarkPending()
-	}
-}
-
-func (status *Status) SetObservedGeneration(generation int64) {
-	status.ObservedGeneration = generation
 }
 
 // MarkPending sets Phase to Pending
-func (status *Status) MarkPending() {
-	status.SetPhase(PhasePending, "")
+func (status *Status) MarkPending(generation int64) {
+	status.SetPhase(PhasePending, "Progressing", generation)
 }
 
 // MarkDeployed sets Phase to Deployed
-func (status *Status) MarkDeployed(observedGeneration int64) {
-	status.SetPhase(PhaseDeployed, "")
-	status.MarkTrue(ConditionChildResourceDeployed, observedGeneration)
+func (status *Status) MarkDeployed(generation int64) {
+	status.SetPhase(PhaseDeployed, "Deployed", generation)
+	status.MarkTrue(ConditionChildResourceDeployed, generation)
 }
 
 // MarkFailed sets Phase to Failed
-func (status *Status) MarkFailed(reason, message string) {
-	status.SetPhase(PhaseFailed, message)
+func (status *Status) MarkFailed(generation int64, message string) {
+	status.SetPhase(PhaseFailed, message, generation)
 }
 
-func (status *Status) MarkChildResourcesHealthy(observedGeneration int64) {
-	status.MarkTrue(ConditionChildResourceHealthy, observedGeneration)
+func (status *Status) MarkChildResourcesHealthy(generation int64) {
+	status.MarkTrue(ConditionChildResourceHealthy, generation)
 }
 
-func (status *Status) MarkChildResourcesUnhealthy(reason, message string, observedGeneration int64) {
-	status.MarkFalse(ConditionChildResourceHealthy, reason, message, observedGeneration)
+func (status *Status) MarkChildResourcesUnhealthy(reason, message string, generation int64) {
+	status.MarkFalse(ConditionChildResourceHealthy, reason, message, generation)
 }
 
-func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, observedGeneration int64) {
-	status.MarkUnknown(ConditionChildResourceHealthy, reason, message, observedGeneration)
+func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, generation int64) {
+	status.MarkUnknown(ConditionChildResourceHealthy, reason, message, generation)
 }
 
 // setCondition sets a condition
@@ -175,12 +168,12 @@ func (s *Status) setCondition(condition metav1.Condition) {
 	s.Conditions = conditions
 }
 
-func (s *Status) markTypeStatus(t ConditionType, status metav1.ConditionStatus, reason, message string, observedGeneration int64) {
+func (s *Status) markTypeStatus(t ConditionType, status metav1.ConditionStatus, reason, message string, generation int64) {
 	s.setCondition(metav1.Condition{
 		Type:               string(t),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
-		ObservedGeneration: observedGeneration,
+		ObservedGeneration: generation,
 	})
 }
