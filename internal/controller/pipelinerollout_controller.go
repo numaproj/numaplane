@@ -330,7 +330,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		newPipelineDef = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
+		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
 		if err != nil {
 			return false, err
 		}
@@ -352,7 +352,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		newPipelineDef = *newObj
 
-		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
+		err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
 		if err != nil {
 			return false, err
 		}
@@ -360,7 +360,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef, pipelineRollout)
+	err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -491,7 +491,6 @@ func applyPipelineSpec(
 	ctx context.Context,
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
-	pipelineRollout *apiv1.PipelineRollout,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
