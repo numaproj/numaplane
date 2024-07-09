@@ -310,7 +310,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// propagate the pipeline's status into PipelineRollout's status
-	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout)
+	var pipelineStatus kubernetes.GenericStatus
+	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
+	pipelineReconciled := pipelineObservedGenerationCurrent(existingPipelineDef.Generation, pipelineStatus.ObservedGeneration)
 
 	// If the pipeline already exists, first check if the pipeline status
 	// is pausing. If so, re-enqueue immediately.
@@ -374,24 +376,30 @@ func (r *PipelineRolloutReconciler) reconcile(
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
-	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
-	// issues for Numaflow versions that do not have ObservedGeneration
-	if pipelineObservedGeneration == 0 || pipeline.Generation <= pipelineObservedGeneration {
+	if pipelineObservedGenerationCurrent(pipeline.Generation, pipelineObservedGeneration) {
 		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 	} else {
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
 	}
 }
 
+func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
+	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
+	// issues for Numaflow versions that do not have ObservedGeneration
+	return observedGeneration == 0 || generation <= observedGeneration
+}
+
 // Set the Condition in the Status for child resource health
-func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) {
+// pipeline and pipelineRollout are passed in; pipelineStatus is passed back
+func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 	numaLogger := logger.FromContext(ctx)
-	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
+	status, err := kubernetes.ParseStatus(pipeline)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
 		return
 	}
+	pipelineStatus = &status
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
@@ -415,6 +423,7 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 	default:
 		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
 	}
+
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
