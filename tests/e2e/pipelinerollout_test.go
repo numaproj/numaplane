@@ -46,7 +46,7 @@ var _ = Describe("PipelineRollout E2E", func() {
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err
-		}, time.Second*30, time.Second).Should(Succeed())
+		}, timeout, duration).Should(Succeed())
 
 		By("Deleting the PipelineRollout")
 		err = deletePipelineRollout(ctx, namespace, pipelineRolloutName)
@@ -70,7 +70,7 @@ var _ = Describe("PipelineRollout E2E", func() {
 			pipelineRollout, err = dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			Expect(err).Should(Succeed())
 			return err
-		}, time.Second*30, time.Second).Should(Succeed())
+		}, timeout, duration).Should(Succeed())
 
 		// Now pipelineRollout has the `resourceVersion` field, and after making modifications you can update it
 		pipelineRolloutUpdate := pipelineRollout.DeepCopy()

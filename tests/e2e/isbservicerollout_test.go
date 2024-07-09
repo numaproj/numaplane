@@ -45,17 +45,17 @@ var _ = Describe("ISBService E2E", func() {
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
-		}, time.Second*30, time.Second).Should(Succeed())
+		}, timeout, duration).Should(Succeed())
 
 		By("Updating the existing ISBServiceRollout")
-		updateLabelValue := "update-1"
+		newisbServiceRolloutName := "new-test-isb-service-rollout"
 
 		// Get the latest ISBServiceRollout again before updating
 		gotISBServiceRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the ISBServiceRollout.
-		err = unstructured.SetNestedField(gotISBServiceRollout.Object, updateLabelValue, "metadata", "labels", "customLabelKey")
+		err = unstructured.SetNestedField(gotISBServiceRollout.Object, newisbServiceRolloutName, "metadata", "labels", "customLabelKey")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, gotISBServiceRollout, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -64,7 +64,7 @@ var _ = Describe("ISBService E2E", func() {
 		updatedISBServiceRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		val, _, _ := unstructured.NestedString(updatedISBServiceRollout.Object, "metadata", "labels", "customLabelKey")
-		Expect(val).To(Equal(updateLabelValue))
+		Expect(val).To(Equal(newisbServiceRolloutName))
 
 		By("Deleting the ISBServiceRollout")
 		err = deleteISBServiceRollout(ctx, namespace, isbServiceRolloutName)
