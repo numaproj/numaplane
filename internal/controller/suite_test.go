@@ -127,18 +127,16 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	err = (&PipelineRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-	}).SetupWithManager(k8sManager)
+	err = NewPipelineRolloutReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&ISBServiceRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-	}).SetupWithManager(k8sManager)
+	err = NewISBServiceRolloutReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg)
