@@ -103,6 +103,22 @@ var _ = Describe("PipelineRollout E2E", func() {
 			}
 			return nil
 		}, timeout, duration).Should(Succeed())
+
+		// check the pipeline spec status
+		By("Verifying the PipelineRollout Status Phase is Running")
+		Consistently(func() (string, error) {
+			createdResource, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return "", err
+			}
+
+			status, ok := createdResource.Object["status"].(map[string]interface{})
+			if ok {
+				return status["phase"].(string), nil
+			} else {
+				return "", fmt.Errorf("PipelineRollout status is nil")
+			}
+		}, duration, timeout).Should(Equal(string(apiv1.PhaseRunning)))
 	})
 
 })
