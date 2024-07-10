@@ -96,15 +96,8 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			Expect(createdISBResource.Spec).Should(Equal(isbsSpec))
 		})
 
-		It("Should have the ISBServiceRollout Status Phase as Deployed", func() {
-			Consistently(func() (apiv1.Phase, error) {
-				createdISBResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdISBResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return createdISBResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
+		It("Should have the ISBServiceRollout Status Phase as Deployed and ObservedGeneration matching Generation", func() {
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should have created an PodDisruptionBudget for ISB ", func() {
@@ -209,15 +202,8 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				return false, nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying that the ISBServiceRollout Status Phase is Deployed")
-			Consistently(func() (apiv1.Phase, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return updatedResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
+			By("Verifying that the ISBServiceRollout Status Phase is Deployed and ObservedGeneration matches Generation")
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
 
 			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())

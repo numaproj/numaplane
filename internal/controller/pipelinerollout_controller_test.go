@@ -132,15 +132,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
 		})
 
-		It("Should have the PipelineRollout Status Phase has Deployed", func() {
-			Consistently(func() (apiv1.Phase, error) {
-				createdResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return createdResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
+		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should have the metrics updated", func() {
@@ -223,15 +216,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return false, nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying that the PipelineRollout Status Phase is Deployed")
-			Consistently(func() (apiv1.Phase, error) {
-				updatedResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return updatedResource.Status.Phase, nil
-			}, duration, interval).Should(Equal(apiv1.PhaseDeployed))
+			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
 
 			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())

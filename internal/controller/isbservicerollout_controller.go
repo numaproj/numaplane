@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -36,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -102,6 +102,11 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
+		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -110,6 +115,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		isbServiceRolloutStatus := isbServiceRollout.Status
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
+
+			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
+			if statusUpdateErr != nil {
+				return ctrl.Result{}, statusUpdateErr
+			}
+
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -118,18 +129,9 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latestISBServiceRollout := &apiv1.ISBServiceRollout{}
-			if err := r.client.Get(ctx, req.NamespacedName, latestISBServiceRollout); err != nil {
-				return err
-			}
-
-			latestISBServiceRollout.Status = isbServiceRollout.Status
-			return r.client.Status().Update(ctx, latestISBServiceRollout)
-		})
-		if err != nil {
-			numaLogger.Error(err, "Error Updating isbServiceRollout Status", "isbServiceRollout", isbServiceRollout)
-			return ctrl.Result{}, err
+		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -178,7 +180,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
 
@@ -190,7 +191,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
 
@@ -293,4 +293,40 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&isbServiceRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert ISBServiceRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&isbServiceRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert ISBServiceRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   isbServiceRollout.TypeMeta,
+		ObjectMeta: isbServiceRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "isbservicerollouts")
+}
+
+func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {
+	numaLogger := logger.FromContext(ctx)
+
+	isbServiceRollout.Status.MarkFailed(isbServiceRollout.Generation, err.Error())
+
+	statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
+	if statusUpdateErr != nil {
+		numaLogger.Error(statusUpdateErr, "Error updating ISBServiceRollout status", "namespace", isbServiceRollout.Namespace, "name", isbServiceRollout.Name)
+	}
+
+	return statusUpdateErr
 }

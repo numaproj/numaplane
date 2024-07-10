@@ -258,3 +258,42 @@ func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespa
 	e.Should(Equal(originalValue))
 	e.ShouldNot(Equal(newValue))
 }
+
+func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, desiredPhase apiv1.Phase) {
+	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+	currentResource := unstructured.Unstructured{}
+	currentResource.SetGroupVersionKind(gvk)
+	Consistently(func() (bool, error) {
+		err := k8sClient.Get(ctx, lookupKey, &currentResource)
+		if err != nil {
+			return false, err
+		}
+
+		phase, found, err := unstructured.NestedString(currentResource.Object, "status", "phase")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		observedGeneration, found, err := unstructured.NestedInt64(currentResource.Object, "status", "observedGeneration")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		generation, found, err := unstructured.NestedInt64(currentResource.Object, "metadata", "generation")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		return apiv1.Phase(phase) == desiredPhase && observedGeneration == generation, nil
+	}, duration, interval).Should(BeTrue())
+}
