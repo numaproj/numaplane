@@ -41,6 +41,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -154,12 +155,16 @@ func main() {
 		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
+	// initialize the custom metrics with the global prometheus registry
+	customMetrics := metrics.RegisterCustomMetrics()
+
 	//+kubebuilder:scaffold:builder
 
 	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		mgr.GetConfig(),
+		customMetrics,
 	)
 
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
@@ -173,6 +178,7 @@ func main() {
 		mgr.GetScheme(),
 		mgr.GetConfig(),
 		kubectl,
+		customMetrics,
 	)
 	if err != nil {
 		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
@@ -186,6 +192,7 @@ func main() {
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		mgr.GetConfig(),
+		customMetrics,
 	)
 
 	if err = isbServiceRolloutReconciler.SetupWithManager(mgr); err != nil {

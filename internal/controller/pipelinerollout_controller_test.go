@@ -138,6 +138,11 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
 		})
 
+		It("Should have the metrics updated", func() {
+			By("Verifying the PipelineRollout metric")
+			Expect(len(customMetrics.GetPipelineCounterMap())).Should(Equal(1))
+		})
+
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
 			By("updating the PipelineRollout")
 
