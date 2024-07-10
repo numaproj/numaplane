@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -17,6 +16,36 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+var rpuVal = int64(5)
+var pipelineSpec = numaflowv1.PipelineSpec{
+	InterStepBufferServiceName: "test-isbsvc",
+	Vertices: []numaflowv1.AbstractVertex{
+		{
+			Name: "in",
+			Source: &numaflowv1.Source{
+				Generator: &numaflowv1.GeneratorSource{
+					RPU:      &rpuVal,
+					Duration: &metav1.Duration{Duration: time.Second},
+				},
+			},
+		},
+		{
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					Log: &numaflowv1.Log{},
+				},
+			},
+		},
+	},
+	Edges: []numaflowv1.Edge{
+		{
+			From: "in",
+			To:   "out",
+		},
+	},
+}
+
 var _ = Describe("PipelineRollout E2E", func() {
 	const (
 		namespace           = "numaplane-system"
@@ -24,117 +53,147 @@ var _ = Describe("PipelineRollout E2E", func() {
 	)
 	gvr := getGVR()
 
-	BeforeEach(func() {
-		err := dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, pipelineRolloutName, metav1.DeleteOptions{})
-		// If the error is not that it's 'not found', let's fail the test.
-		if err != nil && !errors.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred())
-		}
+	It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
+		// create PipelineRolloutSpec
+		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, namespace)
+
+		// create the PipelineRollout
+		err := createPipelineRollout(ctx, pipelineRolloutSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		createdResource := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdResource = unstruct
+			return true
+		}, timeout, duration).Should(BeTrue())
+
+		// unmarshal the Pipeline from the PipelineRollout
+		createdPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
+		rawPipelineSpec := createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})
+		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineRolloutPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("Verifying the content of the pipeline spec field")
+		Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
 	})
 
-	It("Should create, update, and delete a PipelineRollout", func() {
-		By("Creating a new PipelineRollout")
-		pipelineRollout := createPipelineRolloutSpec(pipelineRolloutName, namespace)
+	It("Should create a Numaflow Pipeline", func() {
+		// Correct GVR for Numaflow Pipeline
+		pipelineGVR := schema.GroupVersionResource{
+			Group:    "numaflow.numaproj.io",
+			Version:  "v1alpha1",
+			Resource: "pipelines",
+		}
 
-		err := createPipelineRollout(ctx, pipelineRollout)
-		Expect(err).NotTo(HaveOccurred())
+		createdPipeline := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(pipelineGVR).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdPipeline = unstruct
+			return true
+		}, timeout, duration).Should(BeTrue())
 
-		By("Checking if the PipelineRollout was successfully created")
+		// unmarshal the spec from the created Pipeline
+		createdPipelineSpec := numaflowv1.PipelineSpec{}
+		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
+		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
 
-		Eventually(func() error {
-			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return err
-		}, timeout, duration).Should(Succeed())
+		By("Verifying the content of the pipeline spec")
+		Expect(createdPipelineSpec).Should(Equal(pipelineSpec))
+	})
 
-		By("Deleting the PipelineRollout")
-		err = deletePipelineRollout(ctx, namespace, pipelineRolloutName)
-		Expect(err).NotTo(HaveOccurred())
+	It("Should update the entire PipelineRollout and Numaflow Pipeline", func() {
+		// Fetch existing PipelineRollout
+		unstruct, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 
-		By("Checking if the PipelineRollout was successfully deleted")
+		// Marshal spec map to RawExtension bytes, unmarshal to update with PipelineRollout
+		rawPipelineSpec := unstruct.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})
+		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		currentPipelineSpec := numaflowv1.PipelineSpec{}
+		err = json.Unmarshal(rawPipelineSpecBytes, &currentPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Update fields in the fetched PipelineRollout's PipelineSpec
+		currentPipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
+
+		// Convert the updated PipelineSpec back to RawExtension bytes
+		updatedPipelineSpecBytes, err := json.Marshal(currentPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Convert the updated PipelineSpec back to map[string]interface{} so you can put it directly back into the unstructured object.
+		updatedPipelineSpecAsMap := make(map[string]interface{})
+		err = json.Unmarshal(updatedPipelineSpecBytes, &updatedPipelineSpecAsMap)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Save updated spec back into PipelineRollout
+		unstruct.Object["spec"].(map[string]interface{})["pipeline"] = updatedPipelineSpecAsMap
+
+		// Update PipelineRollout in the cluster
+		err = updatePipelineRollout(ctx, unstruct)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Fetch the updated PipelineRollout
+		updatedResource := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			updatedResource = unstruct
+			return true
+		}, timeout, duration).Should(BeTrue())
+
+		// Unmarshal the updated PipelineRollout spec into a numaflowv1.PipelineSpec
+		updatedRawPipelineSpec := updatedResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})
+		updatedRawPipelineSpecBytes, err := json.Marshal(updatedRawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updatedPipelineSpec := numaflowv1.PipelineSpec{}
+		err = json.Unmarshal(updatedRawPipelineSpecBytes, &updatedPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Validate that the updated PipelineRollout has the expected content
+		Expect(updatedPipelineSpec).To(Equal(currentPipelineSpec))
+	})
+
+	It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
+		// Delete PipelineRollout
+		err := deletePipelineRollout(ctx, namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Refetch the PipelineRollout to ensure it was deleted
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return errors.IsNotFound(err)
-		}, timeout, duration).Should(BeTrue())
-	})
-
-	It("should correctly update the PipelineRollout", func() {
-		By("Creating a new PipelineRollout for the update test")
-		pipelineRollout := createPipelineRolloutSpec(pipelineRolloutName, namespace)
-		err := createPipelineRollout(ctx, pipelineRollout)
-		Expect(err).NotTo(HaveOccurred())
-
-		// After creating the pipelineRollout...
-		Eventually(func() error {
-			pipelineRollout, err = dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			Expect(err).Should(Succeed())
-			return err
-		}, timeout, duration).Should(Succeed())
-
-		// Now pipelineRollout has the `resourceVersion` field, and after making modifications you can update it
-		pipelineRolloutUpdate := pipelineRollout.DeepCopy()
-
-		By("Updating the PipelineRollout")
-
-		updatedPipeline := map[string]any{
-			"InterStepBufferServiceName": "new-test-isbsvc",
-		}
-		Eventually(func() error {
-			err = updateFields(pipelineRolloutUpdate)
-			Expect(err).Should(Succeed())
-			return err
-		}, timeout, duration).Should(Succeed())
-
-		pipelineRolloutUpdate.Object["spec"].(map[string]any)["pipeline"] = updatedPipeline
-
-		err = updatePipelineRollout(ctx, pipelineRolloutUpdate)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Checking if the PipelineRollout was successfully updated")
-		Eventually(func() error {
-			updatedRollout, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			// If an error occurred that wasn't a not found error, fail the test
 			if err != nil {
-				return err
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the PipelineRollout: " + err.Error())
+				}
+				// Resource not found, hence it has been deleted
+				return false
 			}
-			updatedFieldFromServer := updatedRollout.Object["spec"].(map[string]any)["pipeline"].(map[string]any)["InterStepBufferServiceName"].(string)
-			if updatedFieldFromServer != updatedPipeline["InterStepBufferServiceName"] {
-				return fmt.Errorf("field of updated rollout does not match expected value")
-			}
-			return nil
-		}, timeout, duration).Should(Succeed())
+			// Resource is found, which means it's not yet deleted.
+			return true
+		}, timeout, duration).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 	})
 
 })
 
 func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructured {
-	rpuVal := int64(5)
-	pipelineSpec := numaflowv1.PipelineSpec{
-		InterStepBufferServiceName: "test-isbsvc",
-		Vertices: []numaflowv1.AbstractVertex{
-			{
-				Name: "in",
-				Source: &numaflowv1.Source{
-					Generator: &numaflowv1.GeneratorSource{
-						RPU:      &rpuVal,
-						Duration: &metav1.Duration{Duration: time.Second},
-					},
-				},
-			},
-			{
-				Name: "out",
-				Sink: &numaflowv1.Sink{
-					AbstractSink: numaflowv1.AbstractSink{
-						Log: &numaflowv1.Log{},
-					},
-				},
-			},
-		},
-		Edges: []numaflowv1.Edge{
-			{
-				From: "in",
-				To:   "out",
-			},
-		},
-	}
 
 	pipelineSpecRaw, _ := json.Marshal(pipelineSpec)
 
@@ -181,21 +240,4 @@ func getGVR() schema.GroupVersionResource {
 		Version:  "v1alpha1",
 		Resource: "pipelinerollouts",
 	}
-}
-
-func updateFields(pipelineRolloutUpdate *unstructured.Unstructured) error {
-
-	if spec, exists := pipelineRolloutUpdate.Object["spec"].(map[string]interface{}); exists {
-		if pipe, hasPipe := spec["pipeline"].(map[string]interface{}); hasPipe {
-			updatedPipeline := map[string]interface{}{
-				"InterStepBufferServiceName": "new-test-isbsvc",
-			}
-			pipe["spec"] = updatedPipeline
-		} else {
-			return fmt.Errorf("field 'pipeline' not found in the object spec")
-		}
-	} else {
-		return fmt.Errorf("field 'spec' not found in the object")
-	}
-	return nil
 }

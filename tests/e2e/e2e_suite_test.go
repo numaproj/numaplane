@@ -38,7 +38,7 @@ var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5) //WithCancel(context.TODO())
+	ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5)
 
 	var err error
 	scheme := runtime.NewScheme()
