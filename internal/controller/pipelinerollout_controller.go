@@ -282,24 +282,19 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	var pipelineSpec struct {
-		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
+	labels, err := pipeLinLabels(pipelineRollout)
+	if err != nil {
+		return false, err
 	}
-	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &pipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
-	}
-	labelKey := "isbsvc-name"
 	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pipelineRollout.Name,
-			Namespace: pipelineRollout.Namespace,
-			Labels: map[string]string{
-				labelKey: pipelineSpec.InterStepBufferServiceName,
-			},
+			Name:            pipelineRollout.Name,
+			Namespace:       pipelineRollout.Namespace,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline,
@@ -525,4 +520,22 @@ func applyPipelineSpec(
 	}
 
 	return nil
+}
+
+func pipeLinLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+	var pipelineSpec struct {
+		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
+	}
+	labelMapping := map[string]string{
+		"isbsvc-name": "default",
+	}
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &pipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
+	}
+	if pipelineSpec.InterStepBufferServiceName != "" {
+		labelMapping["isbsvc-name"] = pipelineSpec.InterStepBufferServiceName
+
+	}
+
+	return labelMapping, nil
 }

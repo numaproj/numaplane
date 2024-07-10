@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -302,3 +304,49 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 	})
 })
+
+func TestPipeLinLabels(t *testing.T) {
+	tests := []struct {
+		name          string
+		jsonInput     string
+		expectedLabel string
+		expectError   bool
+	}{
+		{
+			name:          "Valid Input",
+			jsonInput:     `{"interStepBufferServiceName": "buffer-service"}`,
+			expectedLabel: "buffer-service",
+			expectError:   false,
+		},
+		{
+			name:          "Missing InterStepBufferServiceName",
+			jsonInput:     `{}`,
+			expectedLabel: "default",
+			expectError:   false,
+		},
+		{
+			name:          "Invalid JSON",
+			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
+			expectedLabel: "",
+			expectError:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipelineRollout := &apiv1.PipelineRollout{
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+				},
+			}
+			labels, err := pipeLinLabels(pipelineRollout)
+			if (err != nil) != tt.expectError {
+				t.Errorf("pipeLinLabels() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+			if err == nil && labels["isbsvc-name"] != tt.expectedLabel {
+				t.Errorf("pipeLinLabels() = %v, expected %v", labels["isbsvc-name"], tt.expectedLabel)
+			}
+		})
+	}
+}
