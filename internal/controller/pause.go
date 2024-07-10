@@ -33,3 +33,25 @@ type PipelinePauseRequest struct {
 	pause *bool
 	mutex sync.RWMutex
 }
+
+func (pm *PauseModule) NewControllerPauseRequest(namespace string) {
+	pm.controllerRequestedPauseLock.Lock()
+	defer pm.controllerRequestedPauseLock.Unlock()
+	_, alreadyThere := pm.controllerRequestedPause[namespace]
+	if !alreadyThere {
+		pm.controllerRequestedPause[namespace] = &PipelinePauseRequest{}
+	}
+}
+
+func (pm *PauseModule) DeleteControllerPauseRequest(namespace string) {
+	pm.controllerRequestedPauseLock.Lock()
+	defer pm.controllerRequestedPauseLock.Unlock()
+	delete(pm.controllerRequestedPause, namespace)
+}
+
+func (pm *PauseModule) GetControllerPauseRequest(namespace string) (*bool, bool) {
+	pm.controllerRequestedPauseLock.RLock()
+	defer pm.controllerRequestedPauseLock.RUnlock()
+	entry, exists := pm.controllerRequestedPause[namespace]
+	return entry.pause, exists
+}

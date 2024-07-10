@@ -321,20 +321,29 @@ func (r *PipelineRolloutReconciler) reconcile(
 	var newPipelineSpec pipelineSpec
 	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
 
-	pipelineNeedsToUpdate := !pipelineSpecEqual(existingPipelineDef, newPipelineDef) || !pipelineReconciled
+	pipelineSpecsEqual, err := pipelineSpecEqual(existingPipelineDef, &newPipelineDef)
+	pipelineNeedsToUpdate := !pipelineSpecsEqual || !pipelineReconciled
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToUpdate {
-		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, &newPipelineDef)
 		if err != nil {
 			return false, err
 		}
 	}
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerRequestsPause := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
-	isbSvcRequestsPause := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
+	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	if !found {
+		//TODO
+	}
+	controllerRequestsPause := (controllerPauseRequest != nil && *controllerPauseRequest)
+	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
+	if !found {
+		//TODO
+	}
+	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
 	// make sure our Lifecycle is what we need it to be
-	shouldBePaused := pipelineUpdateRequiresPause || controllerRequestsPause || isbSvcRequestsPause
+	shouldBePaused := pipelineUpdateRequiresPause || controllerRequestsPause || isbsvcRequestsPause
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
 	if shouldBePaused && !lifeCycleIsPaused {
@@ -509,7 +518,7 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 }
 
 // TODO: detect engine determines when Pipeline spec change requires pausing
-func needsPausing(_ runtime.RawExtension, _ runtime.RawExtension) (bool, error) {
+func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
 	return false, nil
 }
 
@@ -580,10 +589,10 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 func getISBSvcName(pipeline pipelineSpec) string {
-	if pipelineSpec.InterStepBufferServiceName == "" {
+	if pipeline.InterStepBufferServiceName == "" {
 		return "default"
 	}
-	return pipelineSpec.InterStepBufferServiceName
+	return pipeline.InterStepBufferServiceName
 }
 
 // keep track of the minimum number of fields we need to know about
