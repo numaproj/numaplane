@@ -20,11 +20,12 @@ import (
 	"context"
 	"fmt"
 
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,7 +39,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -78,8 +78,6 @@ func NewISBServiceRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// update the Base Logger's level according to the Numaplane Config
-	logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
@@ -96,10 +94,15 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRolloutOrig := isbServiceRollout
 	isbServiceRollout = isbServiceRolloutOrig.DeepCopy()
 
-	isbServiceRollout.Status.InitConditions()
+	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
+		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -108,6 +111,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		isbServiceRolloutStatus := isbServiceRollout.Status
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
+
+			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
+			if statusUpdateErr != nil {
+				return ctrl.Result{}, statusUpdateErr
+			}
+
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -116,18 +125,9 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latestISBServiceRollout := &apiv1.ISBServiceRollout{}
-			if err := r.client.Get(ctx, req.NamespacedName, latestISBServiceRollout); err != nil {
-				return err
-			}
-
-			latestISBServiceRollout.Status = isbServiceRollout.Status
-			return r.client.Status().Update(ctx, latestISBServiceRollout)
-		})
-		if err != nil {
-			numaLogger.Error(err, "Error Updating isbServiceRollout Status", "isbServiceRollout", isbServiceRollout)
-			return ctrl.Result{}, err
+		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -168,38 +168,11 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	previousRolloutSpecHash := isbServiceRollout.Annotations[apiv1.KeyHash]
-	currentRolloutSpecHash, err := util.CalculateSpecHash(isbServiceRollout.Spec.InterStepBufferService)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to calculate spec hash from rollout CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-		return err
-	}
-
-	// Calculate child resource spec hash only if no changes are necessary by the rollout spec comparison
-	isbsvcSpecHash := ""
-	if currentRolloutSpecHash == previousRolloutSpecHash {
-		isbsvcSpecHash, err = r.calculateChildSpecHash(ctx, &obj)
-		if err != nil {
-			numaLogger.Errorf(err, "failed to calculate spec hash from ISBService CR: %v", err)
-			isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
-			return err
-		}
-	}
-
-	shouldUpdateCR := true
-	if currentRolloutSpecHash == previousRolloutSpecHash && currentRolloutSpecHash == isbsvcSpecHash {
-		shouldUpdateCR = false
-	}
-
-	err = kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices", shouldUpdateCR)
+	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		isbServiceRollout.Status.MarkFailed("ApplyISBServiceFailure", err.Error())
 		return err
 	}
-
-	kubernetes.SetAnnotation(isbServiceRollout, apiv1.KeyHash, currentRolloutSpecHash)
 
 	// after the Apply, Get the ISBService so that we can propagate its health into our Status
 	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
@@ -208,20 +181,44 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return err
 	}
 
+	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
+		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
+	}
+
 	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
-	isbServiceRollout.Status.MarkRunning()
+	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) calculateChildSpecHash(ctx context.Context, obj *kubernetes.GenericObject) (string, error) {
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, obj, "interstepbufferservices")
-	if err != nil {
-		return "", fmt.Errorf("error retrieving InterStepBufferService CR: %v", err)
+// Apply pod disruption budget for the ISBService
+func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	pdb := kubernetes.NewPodDisruptionBudget(isbServiceRollout.Name, isbServiceRollout.Namespace, 1,
+		[]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
+	)
+
+	// Create the pdb only if it doesn't exist
+	existingPDB := &policyv1.PodDisruptionBudget{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: pdb.Name, Namespace: pdb.Namespace}, existingPDB); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err = r.client.Create(ctx, pdb); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	} else {
+		// Update the pdb if needed
+		if existingPDB.Spec.MaxUnavailable != pdb.Spec.MaxUnavailable {
+			existingPDB.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
+			if err := r.client.Update(ctx, existingPDB); err != nil {
+				return err
+			}
+		}
 	}
 
-	return util.CalculateSpecHash(isbsvc.Spec)
+	return nil
 }
 
 func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
@@ -237,11 +234,20 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
 	switch isbSvcPhase {
 	case numaflowv1.ISBSvcPhaseFailed:
-		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed")
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed", rollout.Generation)
+	case numaflowv1.ISBSvcPhasePending:
+		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending", rollout.Generation)
 	case numaflowv1.ISBSvcPhaseUnknown:
-		// this will have been set to Unknown in the call to InitConditions()
+		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
-		rollout.Status.MarkChildResourcesHealthy()
+		// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+		// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
+		// issues for Numaflow versions that do not have ObservedGeneration
+		if isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration {
+			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
+		} else {
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between ISBService Generation and ObservedGeneration", rollout.Generation)
+		}
 	}
 }
 
@@ -251,10 +257,7 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 	}
 
 	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
-	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	// Checking only the Finalizers and Annotations allows to have more control on updating only when certain changes have been made.
-	// However, do we want to be also more specific? For instance, check specific finalizers and annotations (ex: .DeepEqual(old.Annotations["somekey"], new.Annotations["somekey"]))
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) || !equality.Semantic.DeepEqual(old.Annotations, new.Annotations) {
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
 		return true
 	}
 	return false
@@ -281,4 +284,40 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&isbServiceRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert ISBServiceRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&isbServiceRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert ISBServiceRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   isbServiceRollout.TypeMeta,
+		ObjectMeta: isbServiceRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "isbservicerollouts")
+}
+
+func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {
+	numaLogger := logger.FromContext(ctx)
+
+	isbServiceRollout.Status.MarkFailed(isbServiceRollout.Generation, err.Error())
+
+	statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
+	if statusUpdateErr != nil {
+		numaLogger.Error(statusUpdateErr, "Error updating ISBServiceRollout status", "namespace", isbServiceRollout.Namespace, "name", isbServiceRollout.Name)
+	}
+
+	return statusUpdateErr
 }

@@ -23,12 +23,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -83,19 +83,6 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 			By("Verifying the content of the ISBServiceRollout spec field")
 			Expect(createdInterStepBufferServiceSpec).Should(Equal(isbsSpec))
-
-			By("Verifying the spec hash stored in the ISBServiceRollout annotations after creation")
-			var isbServiceSpecAsMap map[string]any
-			Expect(json.Unmarshal(isbsSpecRaw, &isbServiceSpecAsMap)).ToNot(HaveOccurred())
-			isbServiceSpecHash := util.MustHash(isbServiceSpecAsMap)
-			Eventually(func() (string, error) {
-				createdResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
-				if err != nil {
-					return "", err
-				}
-				return createdResource.Annotations[apiv1.KeyHash], nil
-			}, timeout, interval).Should(Equal(isbServiceSpecHash))
 		})
 
 		It("Should have created an InterStepBufferService ", func() {
@@ -109,15 +96,19 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			Expect(createdISBResource.Spec).Should(Equal(isbsSpec))
 		})
 
-		It("Should have the ISBServiceRollout Status Phase as Running", func() {
-			Consistently(func() (apiv1.Phase, error) {
-				createdISBResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, createdISBResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return createdISBResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+		It("Should have the ISBServiceRollout Status Phase as Deployed and ObservedGeneration matching Generation", func() {
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
+		})
+
+		It("Should have created an PodDisruptionBudget for ISB ", func() {
+			isbPDB := &policyv1.PodDisruptionBudget{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, resourceLookupKey, isbPDB)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the content of the InterStepBufferService spec")
+			Expect(isbPDB.Spec.MaxUnavailable.IntVal).Should(Equal(int32(1)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
@@ -135,7 +126,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range currentISBServiceRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return lastTransitionTime, nil
 					}
@@ -187,20 +178,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(newIsbsSpec))
 
-			By("Verifying the spec hash stored in the ISBServiceRollout annotations after update")
-			var isbServiceSpecAsMap map[string]any
-			Expect(json.Unmarshal(newIsbsSpecRaw, &isbServiceSpecAsMap)).ToNot(HaveOccurred())
-			isbServiceSpecHash := util.MustHash(isbServiceSpecAsMap)
-			Eventually(func() (string, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return "", err
-				}
-				return updatedResource.Annotations[apiv1.KeyHash], nil
-			}, timeout, interval).Should(Equal(isbServiceSpecHash))
-
-			By("Verifying the LastTransitionTime of the Configured condition of the ISBServiceRollout is after the time of the initial configuration")
+			By("Verifying the LastTransitionTime of the Deployed condition of the ISBServiceRollout is after the time of the initial configuration")
 			Eventually(func() (bool, error) {
 				updatedResource := &apiv1.ISBServiceRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
@@ -209,7 +187,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
 						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
 						lastTransitionTime = cond.LastTransitionTime.Time
 						return isAfter, nil
@@ -217,19 +195,12 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				return false, nil
-			}, time.Second, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying that the ISBServiceRollout Status Phase is Running")
-			Consistently(func() (apiv1.Phase, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return apiv1.Phase(""), err
-				}
-				return updatedResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseRunning))
+			By("Verifying that the ISBServiceRollout Status Phase is Deployed and ObservedGeneration matches Generation")
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
 
-			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change) and the hash spec annotation should not change")
+			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change)")
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())
 			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
 			Eventually(func() (bool, error) {
@@ -239,12 +210,9 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 					return false, err
 				}
 
-				equalHash := updatedResource.Annotations[apiv1.KeyHash] == isbServiceSpecHash
-
 				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionConfigured) {
-						equalTime := cond.LastTransitionTime.Time.Equal(lastTransitionTime)
-						return equalTime && equalHash, nil
+					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
+						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
 					}
 				}
 

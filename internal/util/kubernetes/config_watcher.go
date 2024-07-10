@@ -68,9 +68,9 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 			}
 			// controller config definition is immutable, so no need to update the existing config
 			if event.Type == watch.Added {
-				config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(controllerConfig)
+				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(controllerConfig)
 			} else if event.Type == watch.Deleted {
-				config.GetConfigManagerInstance().RemoveControllerDefinitionConfig(controllerConfig)
+				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveControllerDefinitionConfig(controllerConfig)
 			}
 		}
 	}

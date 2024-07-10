@@ -21,8 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	// ConditionPipelinePausingOrPaused indicates that the Pipeline is either pausing or paused.
+	ConditionPipelinePausingOrPaused ConditionType = "PipelinePausingOrPaused"
+)
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
@@ -59,4 +61,12 @@ type PipelineRolloutList struct {
 
 func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
+}
+
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(observedGeneration int64) {
+	status.MarkTrue(ConditionPipelinePausingOrPaused, observedGeneration)
+}
+
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPausedWithReason(reason string, observedGeneration int64) {
+	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, "", observedGeneration)
 }

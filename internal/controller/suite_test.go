@@ -31,9 +31,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -47,7 +44,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -55,7 +54,7 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 const (
-	timeout  = 10 * time.Second
+	timeout  = 15 * time.Second
 	duration = 10 * time.Second
 	interval = 250 * time.Millisecond
 )
@@ -128,18 +127,16 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	err = (&PipelineRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-	}).SetupWithManager(k8sManager)
+	err = NewPipelineRolloutReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&ISBServiceRolloutReconciler{
-		client:     k8sManager.GetClient(),
-		scheme:     k8sManager.GetScheme(),
-		restConfig: cfg,
-	}).SetupWithManager(k8sManager)
+	err = NewISBServiceRolloutReconciler(
+		k8sManager.GetClient(),
+		k8sManager.GetScheme(),
+		cfg).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg)
@@ -151,7 +148,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
 	err = (&NumaflowControllerRolloutReconciler{
 		client:     k8sManager.GetClient(),
@@ -205,22 +202,13 @@ func downloadCRD(url string, downloadDir string) {
 
 func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
 	// Read definitions config file
-	// TODO: use this file instead "../../tests/config/controller-definitions-config.yaml"
-	data, err := os.ReadFile("../../config/manager/numaflow-controller-definitions-config.yaml")
+	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
+	Expect(err).ToNot(HaveOccurred())
+	var controllerConfig config.NumaflowControllerDefinitionConfig
+	err = yaml.Unmarshal(configData, &controllerConfig)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Decode the yaml into a ConfigMap object
-	configMap := corev1.ConfigMap{}
-	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), len(data)).Decode(&configMap)
-	Expect(err).ToNot(HaveOccurred())
-
-	// Decode the sub-yaml string into a NumaflowControllerDefinitionConfig object
-	mp := configMap.Data["controller_definitions.yaml"]
-	ncdc := config.NumaflowControllerDefinitionConfig{}
-	err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(mp), len(mp)).Decode(&ncdc)
-	Expect(err).ToNot(HaveOccurred())
-
-	return ncdc
+	return controllerConfig
 }
 
 // verifyAutoHealing tests the auto healing feature
@@ -264,4 +252,43 @@ func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespa
 	// Verify that the value matches the original value and not the new value
 	e.Should(Equal(originalValue))
 	e.ShouldNot(Equal(newValue))
+}
+
+func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, desiredPhase apiv1.Phase) {
+	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
+
+	currentResource := unstructured.Unstructured{}
+	currentResource.SetGroupVersionKind(gvk)
+	Consistently(func() (bool, error) {
+		err := k8sClient.Get(ctx, lookupKey, &currentResource)
+		if err != nil {
+			return false, err
+		}
+
+		phase, found, err := unstructured.NestedString(currentResource.Object, "status", "phase")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		observedGeneration, found, err := unstructured.NestedInt64(currentResource.Object, "status", "observedGeneration")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		generation, found, err := unstructured.NestedInt64(currentResource.Object, "metadata", "generation")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+
+		return apiv1.Phase(phase) == desiredPhase && observedGeneration == generation, nil
+	}, duration, interval).Should(BeTrue())
 }

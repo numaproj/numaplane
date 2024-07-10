@@ -27,19 +27,25 @@ import (
 // ConditionType is a valid value of Condition.Type
 type ConditionType string
 
-// +kubebuilder:validation:Enum="";Pending;Running;Failed;NotApplicable
+// +kubebuilder:validation:Enum="";Pending;Deployed;Failed
 type Phase string
 
 const (
+	// PhasePending indicates that a reconciliation operation on the rollout spec has started.
+	// In this phase, the reconciliation process could take some time and/or happen with multiple reconciliation calls.
 	PhasePending Phase = "Pending"
-	PhaseRunning Phase = "Running"
-	PhaseFailed  Phase = "Failed"
-	PhaseNA      Phase = "NotApplicable"
 
-	// ConditionConfigured indicates valid configuration.
-	ConditionConfigured ConditionType = "Configured"
+	// PhaseDeployed indicates that the child resource has been applied to the cluster.
+	PhaseDeployed Phase = "Deployed"
 
-	ConditionChildResourcesHealthy ConditionType = "ChildResourcesHealthy"
+	// PhaseFailed indicates that one or more errors have occurred during reconciliation.
+	PhaseFailed Phase = "Failed"
+
+	// ConditionChildResourceHealthy indicates if the child resource is in a healthy state.
+	ConditionChildResourceHealthy ConditionType = "ChildResourcesHealthy"
+
+	// ConditionChildResourceDeployed indicates that the child resource was deployed.
+	ConditionChildResourceDeployed ConditionType = "ChildResourceDeployed"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -50,11 +56,14 @@ type Status struct {
 	// +patchStrategy=merge
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 
+	// Message is added if Phase is PhaseFailed.
+	Message string `json:"message,omitempty"`
+
 	// Phase indicates the current phase of the resource.
 	Phase Phase `json:"phase,omitempty"`
 
-	// Message is added if Phase is PhaseFailed.
-	Message string `json:"message,omitempty"`
+	// ObservedGeneration stores the generation value observed when setting the current Phase
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // InitializeConditions initializes the conditions to Unknown
@@ -67,6 +76,76 @@ func (s *Status) InitializeConditions(conditionTypes ...ConditionType) {
 		}
 		s.setCondition(c)
 	}
+}
+
+func (status *Status) SetPhase(phase Phase, msg string, generation int64) {
+	status.Phase = phase
+	status.Message = msg
+	status.ObservedGeneration = generation
+}
+
+// MarkTrue sets the status of t to true
+func (s *Status) MarkTrue(t ConditionType, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionTrue, "Successful", "Successful", generation)
+}
+
+// MarkTrueWithReason sets the status of t to true with reason
+func (s *Status) MarkTrueWithReason(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionTrue, reason, message, generation)
+}
+
+// MarkFalse sets the status of t to fasle
+func (s *Status) MarkFalse(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionFalse, reason, message, generation)
+}
+
+// MarkUnknown sets the status of t to unknown
+func (s *Status) MarkUnknown(t ConditionType, reason, message string, generation int64) {
+	s.markTypeStatus(t, metav1.ConditionUnknown, reason, message, generation)
+}
+
+// GetCondition returns the condition of a condition type
+func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
+	for _, c := range s.Conditions {
+		if c.Type == string(t) {
+			return &c
+		}
+	}
+	return nil
+}
+
+// Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
+func (status *Status) Init(generation int64) {
+	status.MarkPending(generation)
+	status.InitializeConditions(ConditionChildResourceDeployed, ConditionChildResourceHealthy)
+}
+
+// MarkPending sets Phase to Pending
+func (status *Status) MarkPending(generation int64) {
+	status.SetPhase(PhasePending, "Progressing", generation)
+}
+
+// MarkDeployed sets Phase to Deployed
+func (status *Status) MarkDeployed(generation int64) {
+	status.SetPhase(PhaseDeployed, "Deployed", generation)
+	status.MarkTrue(ConditionChildResourceDeployed, generation)
+}
+
+// MarkFailed sets Phase to Failed
+func (status *Status) MarkFailed(generation int64, message string) {
+	status.SetPhase(PhaseFailed, message, generation)
+}
+
+func (status *Status) MarkChildResourcesHealthy(generation int64) {
+	status.MarkTrue(ConditionChildResourceHealthy, generation)
+}
+
+func (status *Status) MarkChildResourcesUnhealthy(reason, message string, generation int64) {
+	status.MarkFalse(ConditionChildResourceHealthy, reason, message, generation)
+}
+
+func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, generation int64) {
+	status.MarkUnknown(ConditionChildResourceHealthy, reason, message, generation)
 }
 
 // setCondition sets a condition
@@ -89,85 +168,12 @@ func (s *Status) setCondition(condition metav1.Condition) {
 	s.Conditions = conditions
 }
 
-func (s *Status) markTypeStatus(t ConditionType, status metav1.ConditionStatus, reason, message string) {
+func (s *Status) markTypeStatus(t ConditionType, status metav1.ConditionStatus, reason, message string, generation int64) {
 	s.setCondition(metav1.Condition{
-		Type:    string(t),
-		Status:  status,
-		Reason:  reason,
-		Message: message,
+		Type:               string(t),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: generation,
 	})
-}
-
-// MarkTrue sets the status of t to true
-func (s *Status) MarkTrue(t ConditionType) {
-	s.markTypeStatus(t, metav1.ConditionTrue, "Successful", "Successful")
-}
-
-// MarkTrueWithReason sets the status of t to true with reason
-func (s *Status) MarkTrueWithReason(t ConditionType, reason, message string) {
-	s.markTypeStatus(t, metav1.ConditionTrue, reason, message)
-}
-
-// MarkFalse sets the status of t to fasle
-func (s *Status) MarkFalse(t ConditionType, reason, message string) {
-	s.markTypeStatus(t, metav1.ConditionFalse, reason, message)
-}
-
-// MarkUnknown sets the status of t to unknown
-func (s *Status) MarkUnknown(t ConditionType, reason, message string) {
-	s.markTypeStatus(t, metav1.ConditionUnknown, reason, message)
-}
-
-// GetCondition returns the condition of a condition type
-func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
-	for _, c := range s.Conditions {
-		if c.Type == string(t) {
-			return &c
-		}
-	}
-	return nil
-}
-
-// IsReady returns true when all the conditions are true
-func (s *Status) IsReady() bool {
-	if len(s.Conditions) == 0 {
-		return false
-	}
-	for _, c := range s.Conditions {
-		if c.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	return true
-}
-
-func (status *Status) SetPhase(phase Phase, msg string) {
-	status.Phase = phase
-	status.Message = msg
-}
-
-// InitConditions sets conditions to Unknown state and Phase to Pending.
-func (status *Status) InitConditions() {
-	status.InitializeConditions(ConditionConfigured, ConditionChildResourcesHealthy)
-	status.SetPhase(PhasePending, "")
-}
-
-// MarkRunning sets conditions to True state and Phase to Running.
-func (status *Status) MarkRunning() {
-	status.MarkTrue(ConditionConfigured)
-	status.SetPhase(PhaseRunning, "")
-}
-
-// MarkFailed sets conditions to False state and Phase to Failed.
-func (status *Status) MarkFailed(reason, message string) {
-	status.MarkFalse(ConditionConfigured, reason, message)
-	status.SetPhase(PhaseFailed, message)
-}
-
-func (status *Status) MarkChildResourcesHealthy() {
-	status.MarkTrue(ConditionChildResourcesHealthy)
-}
-
-func (status *Status) MarkChildResourcesUnhealthy(reason, message string) {
-	status.MarkFalse(ConditionChildResourcesHealthy, reason, message)
 }

@@ -1,0 +1,62 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+      - dev-*
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-push-linux-multi:
+    name: Build & push linux/amd64 and linux/arm64
+    runs-on: ubuntu-latest
+    if: github.repository == 'numaproj/numaplane'
+    strategy:
+      matrix:
+        target: [ numaplane ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Registry Login
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAYIO_USERNAME }}
+          password: ${{ secrets.QUAYIO_PASSWORD }}
+
+      - name: set Version
+        id: version
+        run: |
+          tag=$(basename $GITHUB_REF)
+          if [ $tag = "main" ]; then
+            tag="latest"
+          fi
+          echo "VERSION=$tag" >> $GITHUB_OUTPUT
+      - name: Container build and push with arm64/amd64
+        run: make image docker-push IMAGE_FULL_PATH=${{ secrets.QUAYIO_ORG }}/numaplane-controller:${{ steps.version.outputs.VERSION }} CONTAINER_TOOL=docker
+
+  Release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'numaproj/numaplane'
+    needs: [ build-push-linux-multi ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Registry Login
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAYIO_USERNAME }}
+          password: ${{ secrets.QUAYIO_PASSWORD }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

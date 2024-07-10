@@ -19,6 +19,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -31,11 +32,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -43,10 +45,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -78,7 +82,6 @@ func NewNumaflowControllerRolloutReconciler(
 	kubectl kubeUtil.Kubectl,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig)
-	logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
 	err := stateCache.Init(numaLogger)
 	if err != nil {
@@ -106,8 +109,6 @@ func NewNumaflowControllerRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// update the Base Logger's level according to the Numaplane Config
-	logger.RefreshBaseLoggerLevel()
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 
 	// TODO: only allow one controllerRollout per namespace.
@@ -125,8 +126,15 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	numaflowControllerRolloutOrig := numaflowControllerRollout
 	numaflowControllerRollout = numaflowControllerRolloutOrig.DeepCopy()
 
+	numaflowControllerRollout.Status.Init(numaflowControllerRollout.Generation)
+
 	err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
 	if err != nil {
+		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -135,6 +143,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
 		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout", "NumaflowControllerRollout", numaflowControllerRollout)
+
+			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
+			if statusUpdateErr != nil {
+				return ctrl.Result{}, statusUpdateErr
+			}
+
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -143,18 +157,9 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	// Update the Status subresource
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latestNumaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
-			if err := r.client.Get(ctx, req.NamespacedName, latestNumaflowControllerRollout); err != nil {
-				return err
-			}
-
-			latestNumaflowControllerRollout.Status = numaflowControllerRollout.Status
-			return r.client.Status().Update(ctx, latestNumaflowControllerRollout)
-		})
-		if err != nil {
-			numaLogger.Error(err, "Error Updating NumaflowControllerRollout Status", "NumaflowControllerRollout", numaflowControllerRollout)
-			return ctrl.Result{}, err
+		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
+		if statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -207,7 +212,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return fmt.Errorf("sync operation is not successful")
 	}
 
-	controllerRollout.Status.MarkRunning()
+	err = r.processNumaflowControllerStatus(ctx, controllerRollout)
+	if err != nil {
+		return err
+	}
+
+	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+
 	return nil
 }
 
@@ -216,13 +227,75 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 func applyOwnershipToManifests(manifests []string, controllerRollout *apiv1.NumaflowControllerRollout) ([]string, error) {
 	manifestsWithOwnership := make([]string, 0, len(manifests))
 	for _, v := range manifests {
-		reference, err := kubernetes.ApplyOwnership(v, controllerRollout)
+		reference, err := applyOwnership(v, controllerRollout)
 		if err != nil {
 			return nil, err
 		}
 		manifestsWithOwnership = append(manifestsWithOwnership, string(reference))
 	}
 	return manifestsWithOwnership, nil
+}
+
+func applyOwnership(manifest string, controllerRollout *apiv1.NumaflowControllerRollout) ([]byte, error) {
+	// Decode YAML into an Unstructured object
+	decUnstructured := yamlserializer.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	obj := &unstructured.Unstructured{}
+	_, _, err := decUnstructured.Decode([]byte(manifest), nil, obj)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the new owner reference
+	ownerRef := map[string]interface{}{
+		"apiVersion":         controllerRollout.APIVersion,
+		"kind":               controllerRollout.Kind,
+		"name":               controllerRollout.Name,
+		"uid":                string(controllerRollout.UID),
+		"controller":         true,
+		"blockOwnerDeletion": true,
+	}
+
+	// Get existing owner references and check if our reference is already there
+	existingRefs, found, err := unstructured.NestedSlice(obj.Object, "metadata", "ownerReferences")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		existingRefs = []interface{}{}
+	}
+
+	// Check if the owner reference already exists to avoid duplication
+	alreadyExists := ownerExists(existingRefs, ownerRef)
+
+	// Add the new owner reference if it does not exist
+	if !alreadyExists {
+		existingRefs = append(existingRefs, ownerRef)
+		err = unstructured.SetNestedSlice(obj.Object, existingRefs, "metadata", "ownerReferences")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Marshal the updated object into YAML
+	modifiedManifest, err := sigsyaml.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return modifiedManifest, nil
+}
+
+// ownerExists checks if an owner reference already exists in the list of owner references.
+func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bool {
+	var alreadyExists bool
+	for _, ref := range existingRefs {
+		if refMap, ok := ref.(map[string]interface{}); ok {
+			if refMap["uid"] == ownerRef["uid"] {
+				alreadyExists = true
+				break
+			}
+		}
+	}
+	return alreadyExists
 }
 
 func (r *NumaflowControllerRolloutReconciler) sync(
@@ -233,7 +306,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 
 	// Get the target manifests based on the version of the controller and throw an error if the definition not for a version.
 	version := rollout.Spec.Controller.Version
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsConfig()
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetControllerDefinitionsConfig()
 	manifest := definition[version]
 	if len(manifest) == 0 {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)
@@ -367,6 +440,90 @@ func (r *NumaflowControllerRolloutReconciler) getResourceOperations() (kubeUtil.
 	return ops, cleanup, nil
 }
 
+func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
+	for _, cond := range status.Conditions {
+		if cond.Type == condType {
+			return &cond
+		}
+	}
+	return nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// Try to get the Numaflow Controller Deployment
+	deplObj := kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      NumaflowControllerDeploymentName,
+			Namespace: controllerRollout.Namespace,
+		},
+	}
+	deployment, err := kubernetes.GetCR(ctx, r.restConfig, &deplObj, "deployments")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// This could just mean that the deployment has not yet been created.
+			// Log and return to wait for next reconcile call once the deployment is created triggering the reconciliation.
+			numaLogger.Warnf("Numaflow Controller Deployment not found. It may still have to be created.")
+			return nil
+		}
+
+		return fmt.Errorf("error getting the Numaflow Controller Deployment for NumaflowControllerRollout %s/%s: %v", controllerRollout.Namespace, controllerRollout.Name, err)
+	}
+
+	// Parse the Deployment spec of the existing Numaflow Controller Deployment
+	var deploymentSpec appsv1.DeploymentSpec
+	if len(deployment.Spec.Raw) > 0 {
+		err = json.Unmarshal(deployment.Spec.Raw, &deploymentSpec)
+		if err != nil {
+			return fmt.Errorf("unable to parse spec for existing Numaflow Controller Deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
+		}
+	}
+
+	// Parse the Deployment status of the existing Numaflow Controller Deployment
+	var deploymentStatus appsv1.DeploymentStatus
+	if len(deployment.Status.Raw) > 0 {
+		err = json.Unmarshal(deployment.Status.Raw, &deploymentStatus)
+		if err != nil {
+			return fmt.Errorf("unable to parse status for existing Numaflow Controller Deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
+		}
+	}
+
+	// Health Check borrowed from argoproj/gitops-engine/pkg/health/health_deployment.go https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health_deployment.go#L27
+	if deployment.Generation <= deploymentStatus.ObservedGeneration {
+		cond := getDeploymentCondition(deploymentStatus, appsv1.DeploymentProgressing)
+		if cond != nil && cond.Reason == "ProgressDeadlineExceeded" {
+			msg := fmt.Sprintf("Deployment %q exceeded its progress deadline", deployment.Name)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Degraded", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
+			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
+			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+			return nil
+		}
+	} else {
+		msg := "Waiting for Deployment rollout to finish: observed deployment generation less than desired generation"
+		controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
+		return nil
+	}
+
+	controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
+
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
@@ -383,7 +540,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 	for _, kind := range []client.Object{&appsv1.Deployment{}, &corev1.ConfigMap{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
 		if err := controller.Watch(source.Kind(mgr.GetCache(), kind),
 			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
-			predicate.GenerationChangedPredicate{}); err != nil {
+			predicate.ResourceVersionChangedPredicate{}); err != nil {
 			return err
 		}
 	}
@@ -422,11 +579,47 @@ func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructur
 			return nil, err
 		}
 		target := &unstructured.Unstructured{Object: obj}
-		err = kubernetes.SetNumaplaneInstanceLabel(target, common.LabelKeyNumaplaneInstance, name)
+		err = kubernetes.SetLabel(target, common.LabelKeyNumaplaneInstance, name)
 		if err != nil {
 			return nil, err
 		}
 		uns = append(uns, target)
 	}
 	return uns, nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&controllerRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&controllerRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   controllerRollout.TypeMeta,
+		ObjectMeta: controllerRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "numaflowcontrollerrollouts")
+}
+
+func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
+	numaLogger := logger.FromContext(ctx)
+
+	controllerRollout.Status.MarkFailed(controllerRollout.Generation, err.Error())
+
+	statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, controllerRollout)
+	if statusUpdateErr != nil {
+		numaLogger.Error(statusUpdateErr, "Error updating NumaflowControllerRollout status", "namespace", controllerRollout.Namespace, "name", controllerRollout.Name)
+	}
+
+	return statusUpdateErr
 }
