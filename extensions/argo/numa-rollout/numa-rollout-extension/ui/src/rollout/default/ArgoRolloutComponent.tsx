@@ -16,9 +16,6 @@ export type State = TypeMeta & { metadata: ObjectMeta } & {
 const parseInfoFromResourceNode = (app: any, tree: any, resource: State) => {
   const ro: RolloutRolloutInfo = {};
   const { spec, status, metadata } = app;
-  console.log("spec", spec, "spec");
-  console.log("status", status, "status");
-  console.log("metadata", metadata, "metadata");
   ro.objectMeta = metadata as any;
 
   ro.analysisRuns = parseAnalysisRuns(app, tree, resource);
@@ -54,8 +51,7 @@ const parseInfoFromResourceNode = (app: any, tree: any, resource: State) => {
     }
   } else {
     ro.strategy = "Canary";
-    ro.step = "1/1";
-    ro.setWeight = "100";
+    ro.setWeight = "0";
     ro.actualWeight = "100";
   }
 

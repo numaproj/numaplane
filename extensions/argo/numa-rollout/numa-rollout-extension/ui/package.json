@@ -21,16 +21,11 @@
     "argo-rollouts": "git+https://github.com/argoproj/argo-rollouts.git#4729910fdca9d81fb222a613b9fd13b768171190",
     "argo-ui": "git+https://github.com/argoproj/argo-ui.git#5ff344ac9692c14dd108468bd3c020c3c75181cb",
     "axios": "^1.7.2",
-    "classnames": "2.2.6",
-    "json-loader": "^0.5.7",
-    "null-loader": "^4.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
-    "recharts": "^2.12.7",
     "typescript": "^4.9.5",
     "url": "^0.11.3",
-    "web-vitals": "^2.1.4",
     "yarn": "^1.22.22"
   },
   "peerDependencies": {

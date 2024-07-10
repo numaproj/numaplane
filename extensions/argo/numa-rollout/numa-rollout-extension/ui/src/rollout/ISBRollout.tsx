@@ -1,9 +1,9 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Node } from "../ArgoPropType";
 import { RolloutComponentContext } from "./RolloutComponentWrapper";
-import { Box, Chip, Tooltip } from "@mui/material";
-import CheckBoxIcon from "@mui/icons-material/CheckBox";
-import CancelIcon from "@mui/icons-material/Cancel";
+import { Box } from "@mui/material";
+import { SquareCheckIcon } from "../utils/SquareCheckIcon";
+import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const ISBRollout = () => {
   const { props } = useContext(RolloutComponentContext);
@@ -53,18 +53,28 @@ export const ISBRollout = () => {
       <Box>ISB Name : {isbName} </Box>
       <Box>
         ISB Pod Status:{" "}
-        <Box sx={{ display: "flex", flexDirection: "row" }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "row",
+            width: "100%",
+            backgroundColor: "#dee6eb",
+            borderRadius: "3px",
+            padding: "6px",
+            flexWrap: "wrap",
+            marginRight: "-3px",
+            marginBottom: "-3px",
+          }}
+        >
           {isbPods.map((node) => {
             return (
               <Box key={node.name}>
                 <Box>
-                  <Tooltip title={node.name}>
-                    {node.health?.status === "Healthy" ? (
-                      <CheckBoxIcon sx={{ color: "green" }} />
-                    ) : (
-                      <CancelIcon sx={{ color: "red" }} />
-                    )}
-                  </Tooltip>
+                  {node.health?.status === "Healthy" ? (
+                    <SquareCheckIcon tooltipTitle={node.name} />
+                  ) : (
+                    <SquareCancelIcon tooltipTitle={node.name} />
+                  )}
                 </Box>
               </Box>
             );

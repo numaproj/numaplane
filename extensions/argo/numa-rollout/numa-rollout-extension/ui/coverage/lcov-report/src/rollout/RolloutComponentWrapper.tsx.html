@@ -365,8 +365,7 @@ import { Box, Chip, Paper } from "@mui/material";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CancelIcon from "@mui/icons-material/Cancel";
 &nbsp;
-export const RolloutComponentWrapper = (props: ArgoPropType) =&gt; {
-  console.log("props", JSON.stringify(props, null, 2));
+export const RolloutComponentWrapper = (props: ArgoPropType) {
   const currentNodeKind = props?.resource?.kind;
   const currentStatusResource = props?.application?.status?.resources?.filter(
     (resource) =&gt; {

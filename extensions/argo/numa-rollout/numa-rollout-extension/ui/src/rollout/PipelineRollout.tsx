@@ -1,9 +1,9 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Node } from "../ArgoPropType";
 import { RolloutComponentContext } from "./RolloutComponentWrapper";
-import { Box, Chip, Tooltip } from "@mui/material";
-import CheckBoxIcon from "@mui/icons-material/CheckBox";
-import CancelIcon from "@mui/icons-material/Cancel";
+import { Box } from "@mui/material";
+import { SquareCheckIcon } from "../utils/SquareCheckIcon";
+import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const PipelineRollout = () => {
   const { props } = useContext(RolloutComponentContext);
@@ -26,7 +26,6 @@ export const PipelineRollout = () => {
       }
     }
     setKindToNodeMap(tempMap);
-    console.log("PipelineRollout: ", tempMap);
   }, [props.tree]);
   return (
     <Box>
@@ -35,16 +34,26 @@ export const PipelineRollout = () => {
           return (
             <Box key={node.name}>
               <Box>Pipeline Name: {node.name}</Box>
-              <Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "row",
+                  width: "100%",
+                  backgroundColor: "#dee6eb",
+                  borderRadius: "3px",
+                  padding: "6px",
+                  flexWrap: "wrap",
+                  marginRight: "-3px",
+                  marginBottom: "-3px",
+                }}
+              >
                 Pipeline Status:{" "}
-                <Tooltip title={node.name}>
-                  {props.resource.status.conditions[0].type ===
-                  "ChildResourcesHealthy" ? (
-                    <CheckBoxIcon sx={{ color: "green" }} />
-                  ) : (
-                    <CancelIcon sx={{ color: "red" }} />
-                  )}
-                </Tooltip>
+                {props.resource.status.conditions[0].type ===
+                "ChildResourcesHealthy" ? (
+                  <SquareCheckIcon tooltipTitle={node.name} />
+                ) : (
+                  <SquareCancelIcon tooltipTitle={node.name} />
+                )}
               </Box>
             </Box>
           );

@@ -1,9 +1,9 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Node } from "../ArgoPropType";
-import { Box, Tooltip } from "@mui/material";
+import { Box } from "@mui/material";
 import { RolloutComponentContext } from "./RolloutComponentWrapper";
-import CheckBoxIcon from "@mui/icons-material/CheckBox";
-import CancelIcon from "@mui/icons-material/Cancel";
+import { SquareCheckIcon } from "../utils/SquareCheckIcon";
+import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const ControllerRollout = () => {
   const { props } = useContext(RolloutComponentContext);
@@ -65,18 +65,28 @@ export const ControllerRollout = () => {
       <Box>Controller Name : {controllerName} </Box>
       <Box>
         Controller Pod Status:{" "}
-        <Box sx={{ display: "flex", flexDirection: "row" }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "row",
+            width: "100%",
+            backgroundColor: "#dee6eb",
+            borderRadius: "3px",
+            padding: "6px",
+            flexWrap: "wrap",
+            marginRight: "-3px",
+            marginBottom: "-3px",
+          }}
+        >
           {controllerPods.map((node) => {
             return (
               <Box key={node.name}>
                 <Box>
-                  <Tooltip title={node.name}>
-                    {node.health?.status === "Healthy" ? (
-                      <CheckBoxIcon sx={{ color: "green" }} />
-                    ) : (
-                      <CancelIcon sx={{ color: "red" }} />
-                    )}
-                  </Tooltip>
+                  {node.health?.status === "Healthy" ? (
+                    <SquareCheckIcon tooltipTitle={node.name} />
+                  ) : (
+                    <SquareCancelIcon tooltipTitle={node.name} />
+                  )}
                 </Box>
               </Box>
             );
