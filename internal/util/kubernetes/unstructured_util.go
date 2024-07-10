@@ -10,7 +10,7 @@ import (
 
 // GetLabel returns the label identified by "key"
 func GetLabel(un *unstructured.Unstructured, key string) (string, error) {
-	labels, err := nestedNullableStringMap(un.Object, "metadata", "labels")
+	labels, err := NestedNullableStringMap(un.Object, "metadata", "labels")
 	if err != nil {
 		return "", fmt.Errorf("failed to get labels from target object %s %s/%s: %w", un.GroupVersionKind().String(), un.GetNamespace(), un.GetName(), err)
 	}
@@ -23,7 +23,7 @@ func GetLabel(un *unstructured.Unstructured, key string) (string, error) {
 // SetLabel sets the label identified by "key" on an unstructured object
 func SetLabel(target *unstructured.Unstructured, key, val string) error {
 
-	labels, err := nestedNullableStringMap(target.Object, "metadata", "labels")
+	labels, err := NestedNullableStringMap(target.Object, "metadata", "labels")
 	if err != nil {
 		return fmt.Errorf("failed to get labels from target object %s %s/%s: %w", target.GroupVersionKind().String(), target.GetNamespace(), target.GetName(), err)
 	}
@@ -36,9 +36,9 @@ func SetLabel(target *unstructured.Unstructured, key, val string) error {
 	return nil
 }
 
-// nestedNullableStringMap returns a copy of map[string]string value of a nested field.
+// NestedNullableStringMap returns a copy of map[string]string value of a nested field.
 // Returns an error if not one of map[string]interface{} or nil, or contains non-string values in the map.
-func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[string]string, error) {
+func NestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[string]string, error) {
 	var m map[string]string
 	val, found, err := unstructured.NestedFieldNoCopy(obj, fields...)
 	if err != nil {
@@ -50,3 +50,15 @@ func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	}
 	return m, err
 }
+
+/*
+// look for the nested field indicated by "fields" and if it exists, remove it and if it was found, return it
+func ClearNestedNullableStringMap(obj *map[string]interface{}, fields ...string) (map[string]string, error) {
+	foundEntry, err := NestedNullableStringMap(*obj, fields...)
+	if err != nil {
+		return nil, err
+	}
+	if foundEntry != nil {
+
+	}
+}*/

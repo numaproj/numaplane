@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -39,7 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -321,26 +321,26 @@ func (r *PipelineRolloutReconciler) reconcile(
 	var newPipelineSpec pipelineSpec
 	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
 
-	pipelineNeedsToUpdate := !pipelineSpecEqual(existingPipelineDef.Spec, newPipelineDef.Spec) || !pipelineReconciled
+	pipelineNeedsToUpdate := !pipelineSpecEqual(existingPipelineDef, newPipelineDef) || !pipelineReconciled
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToUpdate {
-		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef.Spec, &newPipelineDef.Spec)
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
 		}
 	}
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerRequestsPause := controller.GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
-	isbSvcRequestsPause := controller.GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
+	controllerRequestsPause := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	isbSvcRequestsPause := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
 
 	// make sure our Lifecycle is what we need it to be
 	shouldBePaused := pipelineUpdateRequiresPause || controllerRequestsPause || isbSvcRequestsPause
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
 	if shouldBePaused && !lifeCycleIsPaused {
-		controller.GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
+		GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
 	} else if !shouldBePaused && lifeCycleIsPaused {
-		controller.GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
+		GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
 	}
 
 	// if it's safe to Update and we need to, do it now
@@ -464,8 +464,52 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 }
 
-// TODO: detect engine, now always not pause, enable to pause when we can detect spec change
-func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
+func pipelineSpecEqual(a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
+	if err != nil {
+		return false, err
+	}
+	pipelineWithoutLifecycleB, err := pipelineWithoutLifecycle(b)
+	if err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+}
+
+func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+	unstruc, err := kubernetes.ObjectToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	desiredPhase, _ := kubernetes.NestedNullableStringMap(unstruc.Object, "spec", "lifecycle", "desiredPhase")
+	if desiredPhase != nil {
+		unstrucNew := unstruc.DeepCopy()
+		specMapAsInterface, found := unstrucNew.Object["spec"]
+		if found {
+			specMap, ok := specMapAsInterface.(map[string]interface{})
+			if ok {
+				lifecycleMapAsInterface, found := specMap["lifecycle"]
+				if found {
+					if ok {
+						lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
+						if ok {
+							delete(lifecycleMap, "desiredPhase")
+							specMap["lifecycle"] = lifecycleMap
+							unstrucNew.Object["spec"] = specMap
+							return kubernetes.UnstructuredToObject(unstrucNew)
+						}
+					}
+				}
+			}
+
+		}
+		return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
+	}
+	return obj, nil
+}
+
+// TODO: detect engine determines when Pipeline spec change requires pausing
+func needsPausing(_ runtime.RawExtension, _ runtime.RawExtension) (bool, error) {
 	return false, nil
 }
 
