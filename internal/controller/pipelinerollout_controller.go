@@ -53,6 +53,8 @@ const (
 	numWorkers                = 16 // can consider making configurable
 )
 
+var pipelineROReconciler *PipelineRolloutReconciler
+
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
 	client     client.Client
@@ -88,6 +90,7 @@ func NewPipelineRolloutReconciler(
 		pipelineRolloutQueue,
 		&sync.WaitGroup{},
 	}
+	pipelineROReconciler = r
 
 	r.runWorkers(ctx)
 
@@ -110,10 +113,14 @@ func NewPipelineRolloutReconciler(
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 
-	namespacedName := namespacedNameToKey(req.NamespacedName)
-	r.queue.AddRateLimited(namespacedName)
-	numaLogger.Debugf("added PipelineRollout %v to queue", namespacedName)
+	r.enqueuePipeline(req.NamespacedName)
+	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
 	return ctrl.Result{}, nil
+}
+
+func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
+	key := namespacedNameToKey(namespacedName)
+	r.queue.AddRateLimited(key)
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
@@ -333,12 +340,16 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
 	if !found {
-		//TODO
+		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
+		// todo: if the Numaflow Controller doesn't exist yet, that's fine
+
+		// otherwise we need to wait
 	}
 	controllerRequestsPause := (controllerPauseRequest != nil && *controllerPauseRequest)
 	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
 	if !found {
-		//TODO
+		// it's possible the ISBService doesn't exist yet
+		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", getISBSvcName(newPipelineSpec), pipelineRollout.Namespace)
 	}
 	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 

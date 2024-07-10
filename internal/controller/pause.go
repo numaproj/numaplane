@@ -39,7 +39,10 @@ func (pm *PauseModule) NewControllerPauseRequest(namespace string) {
 	defer pm.controllerRequestedPauseLock.Unlock()
 	_, alreadyThere := pm.controllerRequestedPause[namespace]
 	if !alreadyThere {
-		pm.controllerRequestedPause[namespace] = &PipelinePauseRequest{}
+		pause := false
+		pm.controllerRequestedPause[namespace] = &PipelinePauseRequest{
+			pause: &pause,
+		}
 	}
 }
 

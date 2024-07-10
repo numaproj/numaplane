@@ -32,7 +32,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -192,6 +191,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
+			GetPauseModule().DeleteControllerPauseRequest(namespace)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		return nil
@@ -202,6 +202,53 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
 
+	_, pauseRequestExists := GetPauseModule().GetControllerPauseRequest(namespace)
+	if !pauseRequestExists {
+		GetPauseModule().NewControllerPauseRequest(namespace)
+	}
+
+	deployment, deploymentExists, err := getNumaflowControllerDeployment(ctx, controllerRollout)
+	if err != nil {
+		return err
+	}
+	if deploymentExists {
+
+		err = r.processNumaflowControllerStatus(ctx, controllerRollout, deployment)
+		if err != nil {
+			return err
+		}
+		controllerDeploymentReconciled := (deployment.Generation <= deployment.Status.ObservedGeneration)
+
+		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
+
+		// if the ControllerRollout version number is different from the last one deployed, then I need to update safely
+		currentVersion, err := getControllerDeploymentTag(deployment)
+		if err != nil {
+			return err
+		}
+		controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion)
+
+		if controllerVersionNeedsToUpdate || !controllerDeploymentReconciled {
+			changed := GetPauseModule().UpdateControllerPauseRequest(namespace, true)
+			if changed {
+				// get all of the Pipelines in this namespace and queue them to be processed
+				pipelines := getPipelines(namespace)
+				for _, namespacedName := range pipelines {
+					pipelineROReconciler.enqueuePipeline(namespacedName)
+				}
+				return Reenqueue()
+			}
+
+		}
+
+		if !controllerVersionNeedsToUpdate {
+			// we still need to sync in case the manifest changed
+		}
+
+	} else {
+
+	}
+
 	// apply controller
 	phase, err := r.sync(controllerRollout, namespace, numaLogger)
 	if err != nil {
@@ -210,11 +257,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return fmt.Errorf("sync operation is not successful")
-	}
-
-	err = r.processNumaflowControllerStatus(ctx, controllerRollout)
-	if err != nil {
-		return err
 	}
 
 	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
@@ -449,10 +491,18 @@ func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 	return nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
+func getNumaflowControllerDeployment(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) (*appsv1.Deployment, error) {
+	// TODO
+}
+
+func getControllerDeploymentTag(*appsv1.Deployment) (string, error) {
+	// TODO
+}
+
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// Try to get the Numaflow Controller Deployment
+	/*// Try to get the Numaflow Controller Deployment
 	deplObj := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -473,7 +523,7 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 		}
 
 		return fmt.Errorf("error getting the Numaflow Controller Deployment for NumaflowControllerRollout %s/%s: %v", controllerRollout.Namespace, controllerRollout.Name, err)
-	}
+	}*/
 
 	// Parse the Deployment spec of the existing Numaflow Controller Deployment
 	var deploymentSpec appsv1.DeploymentSpec
