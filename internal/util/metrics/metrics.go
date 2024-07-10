@@ -59,7 +59,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 	}
 }
 
-// IncPipelineMetrics increments the pipeline counter
+// IncPipelineMetrics increments the pipeline counter if it doesn't already know about the pipeline
 func (m *CustomMetrics) IncPipelineMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
@@ -67,7 +67,7 @@ func (m *CustomMetrics) IncPipelineMetrics(name, namespace string) {
 	m.pipelinesGauge.WithLabelValues().Set(float64(len(m.pipelineCounterMap)))
 }
 
-// DecPipelineMetrics decrement the pipeline counter
+// DecPipelineMetrics decrements the pipeline counter
 func (m *CustomMetrics) DecPipelineMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
@@ -82,7 +82,7 @@ func (m *CustomMetrics) GetPipelineCounterMap() map[string]struct{} {
 	return m.pipelineCounterMap
 }
 
-// IncISBServiceMetrics increments the ISB service counter
+// IncISBServiceMetrics increments the ISBService counter if it doesn't already know about the ISBService
 func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
 	isbsvcLock.Lock()
 	defer isbsvcLock.Unlock()
@@ -90,7 +90,7 @@ func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
 	m.isbsvcGauge.WithLabelValues().Set(float64(len(m.isbsvcCounterMap)))
 }
 
-// DecISBServiceMetrics decrement the ISB service counter
+// DecISBServiceMetrics decrements the ISBService counter
 func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
 	isbsvcLock.Lock()
 	defer isbsvcLock.Unlock()
@@ -98,7 +98,7 @@ func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
 	m.isbsvcGauge.WithLabelValues().Set(float64(len(m.isbsvcCounterMap)))
 }
 
-// GetISBServiceCounterMap returns the ISB service counter
+// GetISBServiceCounterMap returns the ISBService counter
 func (m *CustomMetrics) GetISBServiceCounterMap() map[string]struct{} {
 	isbsvcLock.Lock()
 	defer isbsvcLock.Unlock()
@@ -106,11 +106,12 @@ func (m *CustomMetrics) GetISBServiceCounterMap() map[string]struct{} {
 }
 
 // IncNumaflowControllerMetrics increments the Numaflow Controller counter
+// if it doesn't already know about the Numaflow Controller
 func (m *CustomMetrics) IncNumaflowControllerMetrics(name, namespace, version string) {
 	m.numaflowControllerGauge.WithLabelValues(name, namespace, version).Set(1)
 }
 
-// DecNumaflowControllerMetrics decrement the Numaflow Controller counter
+// DecNumaflowControllerMetrics decrements the Numaflow Controller counter
 func (m *CustomMetrics) DecNumaflowControllerMetrics(name, namespace, version string) {
 	m.numaflowControllerGauge.WithLabelValues(name, namespace, version).Set(0)
 }

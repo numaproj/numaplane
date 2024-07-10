@@ -180,12 +180,12 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		}
 	}
 
+	// generate the metrics for the Pipeline.
+	r.customMetrics.IncPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
-
-	// generate the metrics for the Pipeline.
-	r.customMetrics.IncPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	numaLogger.Debug("reconciliation successful")
 
