@@ -511,7 +511,7 @@ func applyPipelineSpec(
 	return nil
 }
 
-func pipeLinLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
 	var pipelineSpec struct {
 		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
 	}
