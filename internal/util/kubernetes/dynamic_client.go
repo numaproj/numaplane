@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 // this file contains generic utility functions for using the dynamic client for Kubernetes
@@ -58,15 +60,9 @@ func GetResource(
 		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	group, version, err := parseApiVersion(object.APIVersion)
+	gvr, err := getGroupVersionResource(object, pluralName)
 	if err != nil {
 		return nil, err
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    group,
-		Version:  version,
-		Resource: pluralName,
 	}
 
 	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
@@ -83,15 +79,9 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	group, version, err := parseApiVersion(object.APIVersion)
+	gvr, err := getGroupVersionResource(object, pluralName)
 	if err != nil {
 		return err
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    group,
-		Version:  version,
-		Resource: pluralName,
 	}
 
 	// Get the object to see if it exists
@@ -165,15 +155,9 @@ func CreateCR(
 		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	group, version, err := parseApiVersion(object.APIVersion)
+	gvr, err := getGroupVersionResource(object, pluralName)
 	if err != nil {
 		return err
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    group,
-		Version:  version,
-		Resource: pluralName,
 	}
 
 	numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
@@ -204,12 +188,8 @@ func parseApiVersion(apiVersion string) (string, string, error) {
 }
 
 func ObjectToUnstructured(object *GenericObject) (*unstructured.Unstructured, error) {
-	asJsonBytes, err := json.Marshal(object)
-	if err != nil {
-		return nil, err
-	}
-	var asMap map[string]interface{}
-	err = json.Unmarshal(asJsonBytes, &asMap)
+	var asMap map[string]any
+	err := util.StructToStruct(object, &asMap)
 	if err != nil {
 		return nil, err
 	}
@@ -218,12 +198,59 @@ func ObjectToUnstructured(object *GenericObject) (*unstructured.Unstructured, er
 }
 
 func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) {
-	asJsonBytes, err := json.Marshal(u.Object)
+	var genericObject GenericObject
+	err := util.StructToStruct(u, &genericObject)
 	if err != nil {
 		return nil, err
 	}
-	var genericObject GenericObject
-	err = json.Unmarshal(asJsonBytes, &genericObject)
 
 	return &genericObject, err
+}
+
+func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+		if err != nil {
+			// NOTE: report the error as-is and do not check for resource existance fo retry purposes
+			return err
+		}
+
+		resource.Object["status"] = object.Status
+
+		_, err = client.Resource(gvr).Namespace(object.Namespace).UpdateStatus(ctx, resource, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// TODO: we may want to also implement retry.OnError() to retry in case of errors while updating the status.
+	// We should consider to add extra failover logic to avoid this function to not be able to update
+	// the status of the resource and return error.
+
+	return err
+}
+
+func getGroupVersionResource(object *GenericObject, pluralName string) (schema.GroupVersionResource, error) {
+	group, version, err := parseApiVersion(object.APIVersion)
+	if err != nil {
+		return schema.GroupVersionResource{}, err
+	}
+
+	return schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: pluralName,
+	}, nil
 }
