@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -287,6 +289,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
+	labels, err := pipelineLabels(pipelineRollout)
+	if err != nil {
+		return false, err
+	}
 	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
@@ -295,6 +301,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineRollout.Name,
 			Namespace:       pipelineRollout.Namespace,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline,
@@ -514,6 +521,23 @@ func applyPipelineSpec(
 	return nil
 }
 
+func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+	var pipelineSpec struct {
+		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
+	}
+	labelMapping := map[string]string{
+		"isbsvc-name": "default",
+	}
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &pipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
+	}
+	if pipelineSpec.InterStepBufferServiceName != "" {
+		labelMapping["isbsvc-name"] = pipelineSpec.InterStepBufferServiceName
+
+	}
+
+	return labelMapping, nil
+}
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	rawSpec := runtime.RawExtension{}
 	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
@@ -548,4 +572,5 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	}
 
 	return statusUpdateErr
+
 }
