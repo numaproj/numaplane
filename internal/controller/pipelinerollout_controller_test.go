@@ -330,7 +330,7 @@ func TestPipeLinLabels(t *testing.T) {
 					Pipeline: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
 				},
 			}
-			labels, err := pipeLinLabels(pipelineRollout)
+			labels, err := pipelineLabels(pipelineRollout)
 			if (err != nil) != tt.expectError {
 				t.Errorf("pipeLinLabels() error = %v, expectError %v", err, tt.expectError)
 				return
