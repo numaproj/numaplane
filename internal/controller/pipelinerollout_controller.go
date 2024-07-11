@@ -328,8 +328,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 	var newPipelineSpec pipelineSpec
 	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
 
+	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(existingPipelineDef, &newPipelineDef)
 	pipelineNeedsToUpdate := !pipelineSpecsEqual || !pipelineReconciled
+	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToUpdate {
 		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, &newPipelineDef)
@@ -338,30 +340,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
-	if !found {
-		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
-		// todo: if the Numaflow Controller doesn't exist yet, that's fine
-
-		// otherwise we need to wait
-	}
-	controllerRequestsPause := (controllerPauseRequest != nil && *controllerPauseRequest)
-	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, getISBSvcName(newPipelineSpec))
-	if !found {
-		// it's possible the ISBService doesn't exist yet
-		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", getISBSvcName(newPipelineSpec), pipelineRollout.Namespace)
-	}
-	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
+	externalPauseRequest := checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 
 	// make sure our Lifecycle is what we need it to be
-	shouldBePaused := pipelineUpdateRequiresPause || controllerRequestsPause || isbsvcRequestsPause
-	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
-
-	if shouldBePaused && !lifeCycleIsPaused {
-		GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
-	} else if !shouldBePaused && lifeCycleIsPaused {
-		GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
-	}
+	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
+	setPipelineLifecycle(pipelineRollout, shouldBePaused, existingPipelineSpec)
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
@@ -376,6 +359,38 @@ func (r *PipelineRolloutReconciler) reconcile(
 	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 	return false, nil
+}
+
+// make sure our Lifecycle is what we need it to be
+func setPipelineLifecycle(pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineSpec pipelineSpec) {
+	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
+
+	if paused && !lifeCycleIsPaused {
+		GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
+	} else if !paused && lifeCycleIsPaused {
+		GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
+	}
+}
+
+func checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbSvcName string) bool {
+	numaLogger := logger.FromContext(ctx)
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	if !found {
+		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
+		// todo: if the Numaflow Controller doesn't exist yet, that's fine
+
+		// otherwise we need to wait
+	}
+	controllerRequestsPause := (controllerPauseRequest != nil && *controllerPauseRequest)
+	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, isbSvcName)
+	if !found {
+		// it's possible the ISBService doesn't exist yet
+		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbSvcName, pipelineRollout.Namespace)
+	}
+	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
+
+	return controllerRequestsPause || isbsvcRequestsPause
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
