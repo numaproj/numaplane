@@ -53,6 +53,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -67,12 +68,13 @@ const (
 
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	restConfig *rest.Config
-	rawConfig  *rest.Config
-	kubectl    kubeUtil.Kubectl
-	stateCache sync.LiveStateCache
+	client        client.Client
+	scheme        *runtime.Scheme
+	restConfig    *rest.Config
+	rawConfig     *rest.Config
+	kubectl       kubeUtil.Kubectl
+	stateCache    sync.LiveStateCache
+	customMetrics *metrics.CustomMetrics
 }
 
 func NewNumaflowControllerRolloutReconciler(
@@ -80,6 +82,7 @@ func NewNumaflowControllerRolloutReconciler(
 	s *runtime.Scheme,
 	rawConfig *rest.Config,
 	kubectl kubeUtil.Kubectl,
+	customMetrics *metrics.CustomMetrics,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig)
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
@@ -96,6 +99,7 @@ func NewNumaflowControllerRolloutReconciler(
 		rawConfig,
 		kubectl,
 		stateCache,
+		customMetrics,
 	}, nil
 }
 
@@ -111,7 +115,6 @@ func NewNumaflowControllerRolloutReconciler(
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 
-	// TODO: only allow one controllerRollout per namespace.
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -163,6 +166,9 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		}
 	}
 
+	// generate the metrics for the numaflow controller based on a numaflow version.
+	r.customMetrics.IncNumaflowControllerMetrics(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version)
+
 	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
@@ -194,6 +200,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
+		// generate the metrics for the numaflow controller deletion based on a numaflow version.
+		r.customMetrics.DecNumaflowControllerMetrics(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
 		return nil
 	}
 
