@@ -10,59 +10,54 @@ export const ControllerRollout = () => {
   const [kindToNodeMap, setKindToNodeMap] = useState<Map<string, Node[]>>(
     new Map()
   );
+
   useEffect(() => {
     const tempMap = new Map<string, Node[]>();
 
-    const tree = props.tree;
-    const nodes = tree.nodes;
-    for (const node of nodes) {
-      const kind = node.kind;
-      if (tempMap.has(kind)) {
-        const tempNodes = tempMap.get(kind);
-        tempNodes?.push(node);
-        tempMap.set(kind, tempNodes || []);
-      } else {
-        tempMap.set(kind, [node]);
+    const tree = props?.tree;
+    const nodes = tree?.nodes;
+    for (const node of nodes ?? []) {
+      const kind = node?.kind;
+      if (kind) {
+        const tempNodes = tempMap.get(kind) ?? [];
+        tempNodes.push(node);
+        tempMap.set(kind, tempNodes);
       }
     }
     setKindToNodeMap(tempMap);
-  }, [props.tree]);
+  }, [props?.tree]);
+
   const controllerPods = useMemo(() => {
-    if (!kindToNodeMap || !kindToNodeMap.get("Pod")) {
-      return [];
-    }
-    const pods = kindToNodeMap.get("Pod");
-    if (!pods) {
-      return [];
-    }
-    return pods.filter((node) => node.name.indexOf("numaflow-controller") >= 0);
-  }, [kindToNodeMap]);
+    const pods = kindToNodeMap?.get("Pod") ?? [];
+    return pods.filter(
+      (node) => node?.name?.indexOf("numaflow-controller") >= 0
+    );
+  }, [kindToNodeMap?.get("Pod")]);
 
   const controllerName = useMemo(() => {
-    if (!kindToNodeMap || !kindToNodeMap.get("NumaflowControllerRollout")) {
-      return "";
-    }
-    const numaflowController = kindToNodeMap.get("NumaflowControllerRollout");
-    if (!numaflowController) {
-      return "";
-    }
-    const numaControllerName = numaflowController[0].name;
+    const numaflowController = kindToNodeMap?.get(
+      "NumaflowControllerRollout"
+    )?.[0];
+    if (numaflowController) {
+      const numaControllerName = numaflowController.name;
 
-    //Find the deployment object with the numaControllerName
-    const deployment = kindToNodeMap.get("Deployment");
-    if (!deployment) {
-      return "";
-    }
-    const controllerDeployment = deployment.find(
-      (node) =>
-        node.parentRefs && node.parentRefs[0]?.name === numaControllerName
-    );
+      // Find the deployment object with the numaControllerName
+      const deployment = kindToNodeMap.get("Deployment") ?? [];
+      const controllerDeployment = deployment.find(
+        (node) => node?.parentRefs?.[0]?.name === numaControllerName
+      );
 
-    return controllerDeployment?.name;
-  }, [kindToNodeMap]);
+      return controllerDeployment?.name ?? "";
+    }
+    return "";
+  }, [
+    kindToNodeMap.get("NumaflowControllerRollout"),
+    kindToNodeMap.get("Deployment"),
+  ]);
+
   return (
     <Box>
-      <Box>Controller Name : {controllerName} </Box>
+      <Box>Controller Name : {controllerName}</Box>
       <Box>
         Controller Pod Status:{" "}
         <Box
@@ -82,7 +77,7 @@ export const ControllerRollout = () => {
             return (
               <Box key={node.name}>
                 <Box>
-                  {node.health?.status === "Healthy" ? (
+                  {node?.health?.status === "Healthy" ? (
                     <SquareCheckIcon tooltipTitle={node.name} />
                   ) : (
                     <SquareCancelIcon tooltipTitle={node.name} />

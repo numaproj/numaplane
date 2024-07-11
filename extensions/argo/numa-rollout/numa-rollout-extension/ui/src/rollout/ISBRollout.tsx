@@ -10,23 +10,23 @@ export const ISBRollout = () => {
   const [kindToNodeMap, setKindToNodeMap] = useState<Map<string, Node[]>>(
     new Map()
   );
+
   useEffect(() => {
     const tempMap = new Map<string, Node[]>();
 
-    const tree = props.tree;
-    const nodes = tree.nodes;
+    const tree = props?.tree;
+    const nodes = tree?.nodes ?? [];
     for (const node of nodes) {
-      const kind = node.kind;
-      if (tempMap.has(kind)) {
-        const tempNodes = tempMap.get(kind);
-        tempNodes?.push(node);
-        tempMap.set(kind, tempNodes || []);
-      } else {
-        tempMap.set(kind, [node]);
+      const kind = node?.kind;
+      if (kind) {
+        const tempNodes = tempMap.get(kind) ?? [];
+        tempNodes.push(node);
+        tempMap.set(kind, tempNodes);
       }
     }
     setKindToNodeMap(tempMap);
-  }, [props.tree]);
+  }, [props?.tree]);
+
   const isbPods = useMemo(() => {
     if (!kindToNodeMap || !kindToNodeMap.get("Pod")) {
       return [];
@@ -43,11 +43,12 @@ export const ISBRollout = () => {
       return "";
     }
     const isbService = kindToNodeMap.get("InterStepBufferService");
-    if (!isbService) {
+    if (!isbService || !isbService[0]) {
       return "";
     }
     return isbService[0].name;
   }, [kindToNodeMap]);
+
   return (
     <Box>
       <Box>ISB Name : {isbName} </Box>
@@ -68,12 +69,12 @@ export const ISBRollout = () => {
         >
           {isbPods.map((node) => {
             return (
-              <Box key={node.name}>
+              <Box key={node?.name}>
                 <Box>
-                  {node.health?.status === "Healthy" ? (
-                    <SquareCheckIcon tooltipTitle={node.name} />
+                  {node?.health?.status === "Healthy" ? (
+                    <SquareCheckIcon tooltipTitle={node?.name} />
                   ) : (
-                    <SquareCancelIcon tooltipTitle={node.name} />
+                    <SquareCancelIcon tooltipTitle={node?.name} />
                   )}
                 </Box>
               </Box>

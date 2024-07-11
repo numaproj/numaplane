@@ -13,27 +13,26 @@ export const PipelineRollout = () => {
   useEffect(() => {
     const tempMap = new Map<string, Node[]>();
 
-    const tree = props.tree;
-    const nodes = tree.nodes;
+    const tree = props?.tree;
+    const nodes = tree?.nodes ?? [];
     for (const node of nodes) {
-      const kind = node.kind;
-      if (tempMap.has(kind)) {
-        const tempNodes = tempMap.get(kind);
-        tempNodes?.push(node);
-        tempMap.set(kind, tempNodes || []);
-      } else {
-        tempMap.set(kind, [node]);
+      const kind = node?.kind;
+      if (kind) {
+        const tempNodes = tempMap.get(kind) ?? [];
+        tempNodes.push(node);
+        tempMap.set(kind, tempNodes);
       }
     }
     setKindToNodeMap(tempMap);
-  }, [props.tree]);
+  }, [props?.tree]);
+
   return (
     <Box>
       <Box>
         {kindToNodeMap.get("Pipeline")?.map((node) => {
           return (
-            <Box key={node.name}>
-              <Box>Pipeline Name: {node.name}</Box>
+            <Box key={node?.name}>
+              <Box>Pipeline Name: {node?.name}</Box>
               <Box
                 sx={{
                   display: "flex",
@@ -48,11 +47,11 @@ export const PipelineRollout = () => {
                 }}
               >
                 Pipeline Status:{" "}
-                {props.resource.status.conditions[0].type ===
+                {props?.resource?.status?.conditions?.[0].type ===
                 "ChildResourcesHealthy" ? (
-                  <SquareCheckIcon tooltipTitle={node.name} />
+                  <SquareCheckIcon tooltipTitle={node?.name} />
                 ) : (
-                  <SquareCancelIcon tooltipTitle={node.name} />
+                  <SquareCancelIcon tooltipTitle={node?.name} />
                 )}
               </Box>
             </Box>

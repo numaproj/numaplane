@@ -7,6 +7,21 @@ import {
 } from "argo-rollouts/ui/src/models/rollout/generated";
 import { ObjectMeta, TypeMeta } from "argo-ui/src/models/kubernetes";
 import { default as axios } from "axios";
+import {
+  ANALYSIS_RUN,
+  CANARY,
+  DEGRADED,
+  ERROR,
+  FAILURE,
+  HEALTHY,
+  PROGRESSING,
+  REPLICA_SET,
+  REVISION,
+  ROLLOUT,
+  RUNNING,
+  STATUS_REASON,
+  SUCCESSFUL,
+} from "../../utils/Constants";
 
 export type State = TypeMeta & { metadata: ObjectMeta } & {
   status: any;
@@ -19,15 +34,15 @@ const parseInfoFromResourceNode = (app: any, tree: any, resource: State) => {
   ro.objectMeta = metadata as any;
 
   ro.analysisRuns = parseAnalysisRuns(app, tree, resource);
-
   ro.replicaSets = parseReplicaSets(tree, resource);
 
-  if (spec.strategy && spec.strategy.canary) {
+  // Additional checks with ? operator have been added whenever accessing nested properties
+  if (spec?.strategy?.canary) {
     ro.strategy = "BlueGreen";
-    const steps = spec.strategy?.canary?.steps || [];
+    const steps = spec?.strategy?.canary?.steps || [];
     ro.steps = steps;
 
-    if (steps && status.currentStepIndex !== null && steps.length > 0) {
+    if (steps && status?.currentStepIndex !== null && steps.length > 0) {
       ro.step = `${status.currentStepIndex}/${steps.length}`;
     }
 
@@ -38,10 +53,10 @@ const parseInfoFromResourceNode = (app: any, tree: any, resource: State) => {
 
     if (!currentStep) {
       ro.actualWeight = "100";
-    } else if (status.availableReplicas > 0) {
-      if (!spec.strategy.canary.trafficRouting) {
+    } else if (status?.availableReplicas > 0) {
+      if (!spec?.strategy?.canary?.trafficRouting) {
         for (const rs of ro.replicaSets) {
-          if (rs.canary && rs.available) {
+          if (rs?.canary && rs?.available) {
             ro.actualWeight = `${rs.available / status.availableReplicas}`;
           }
         }
@@ -50,20 +65,20 @@ const parseInfoFromResourceNode = (app: any, tree: any, resource: State) => {
       }
     }
   } else {
-    ro.strategy = "Canary";
+    ro.strategy = CANARY;
     ro.setWeight = "0";
     ro.actualWeight = "100";
   }
 
   ro.containers = [];
   if (status?.summary?.images) {
-    for (const c of status?.summary?.images) {
+    for (const c of status.summary.images) {
       ro.containers.push({ image: c });
     }
   }
 
-  ro.current = status.replicas;
-  ro.available = status.availableReplicas;
+  ro.current = status?.replicas;
+  ro.available = status?.availableReplicas;
   return ro;
 };
 
@@ -106,7 +121,7 @@ const parseCurrentSetWeight = (
 
 const parseRevision = (node: any) => {
   for (const item of node.info || []) {
-    if (item.name === "Revision") {
+    if (item.name === REVISION) {
       const parts = item.value.split(":") || [];
       return parts.length === 2 ? parts[1] : "0";
     }
@@ -115,7 +130,7 @@ const parseRevision = (node: any) => {
 
 const parsePodStatus = (pod: any) => {
   for (const item of pod.info || []) {
-    if (item.name === "Status Reason") {
+    if (item.name === STATUS_REASON) {
       return item.value;
     }
   }
@@ -138,7 +153,7 @@ const parseAnalysisRuns = (
   React.useMemo(() => {
     const filteredNodes = tree.nodes.filter(
       (node: any) =>
-        node.kind === "AnalysisRun" &&
+        node.kind === ANALYSIS_RUN &&
         node.parentRefs.some((ref: any) => ref.name === rollout.metadata.name)
     );
     const nodeIds = filteredNodes.map((node: any) => node.uid);
@@ -199,14 +214,14 @@ const parseAnalysisRuns = (
 
 const parseAnalysisRunStatus = (status: string): string => {
   switch (status) {
-    case "Healthy":
-      return "Successful";
-    case "Progressing":
-      return "Running";
-    case "Degraded":
-      return "Error";
+    case HEALTHY:
+      return SUCCESSFUL;
+    case PROGRESSING:
+      return RUNNING;
+    case DEGRADED:
+      return ERROR;
     default:
-      return "Failure";
+      return FAILURE;
   }
 };
 
@@ -214,7 +229,7 @@ const parseReplicaSets = (tree: any, rollout: any): RolloutReplicaSetInfo[] => {
   const allReplicaSets = [];
   const allPods = [];
   for (const node of tree.nodes) {
-    if (node.kind === "ReplicaSet") {
+    if (node.kind === REPLICA_SET) {
       allReplicaSets.push(node);
     } else if (node.kind === "Pod") {
       allPods.push(node);
@@ -226,7 +241,7 @@ const parseReplicaSets = (tree: any, rollout: any): RolloutReplicaSetInfo[] => {
   for (const rs of allReplicaSets) {
     for (const parentRef of rs.parentRefs) {
       if (
-        parentRef?.kind === "Rollout" &&
+        parentRef?.kind === ROLLOUT &&
         parentRef?.name === rollout?.metadata?.name
       ) {
         const pods = [];
@@ -234,7 +249,7 @@ const parseReplicaSets = (tree: any, rollout: any): RolloutReplicaSetInfo[] => {
           const [parentRef] = pod.parentRefs;
           if (
             parentRef &&
-            parentRef.kind === "ReplicaSet" &&
+            parentRef.kind === REPLICA_SET &&
             parentRef.name === rs.name
           ) {
             const ownedPod = {

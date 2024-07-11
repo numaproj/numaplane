@@ -5,6 +5,12 @@ import { ISBRollout } from "./ISBRollout";
 import { ControllerRollout } from "./ControllerRollout";
 import { PipelineRollout } from "./PipelineRollout";
 import { ArgoRolloutComponent } from "./default/ArgoRolloutComponent";
+import {
+  INTUIT_DOMAIN,
+  ISB_SERVICE_ROLLOUT,
+  NUMAFLOW_CONTROLLER_ROLLOUT,
+  PIPELINE_ROLLOUT,
+} from "../utils/Constants";
 
 export interface RolloutContextData {
   props: ArgoPropType;
@@ -15,13 +21,9 @@ export const RolloutComponentContext = createContext<RolloutContextData>({
 
 export const RolloutComponentWrapper = (props: ArgoPropType) => {
   const currentNodeKind = props?.resource?.kind;
-  const currentStatusResource = props?.application?.status?.resources?.filter(
-    (resource) => {
-      return resource.kind === currentNodeKind;
-    }
-  );
+
   // Check if the current rollout is hosted inside Intuit
-  const isIntuitRollout = window.location.href.indexOf("intuit.com") >= 0;
+  const isIntuitRollout = window.location.href.indexOf(INTUIT_DOMAIN) >= 0;
   const getRevisionURL = useCallback((revision: History) => {
     return `${props?.application?.spec?.source?.repoURL}/commit/${revision?.revision}`.replace(
       ".git",
@@ -97,18 +99,18 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
                   >{`Revision ${index + 1}`}</a>
                   <Box>Deployed At : {`${revision.deployedAt}`}</Box>
                   <Box>
-                    {index === 0 && currentNodeKind === "ISBServiceRollout" && (
+                    {index === 0 && currentNodeKind === ISB_SERVICE_ROLLOUT && (
                       <Box sx={{ marginTop: "1rem" }}>
                         <ISBRollout />
                       </Box>
                     )}
                     {index === 0 &&
-                      currentNodeKind === "NumaflowControllerRollout" && (
+                      currentNodeKind === NUMAFLOW_CONTROLLER_ROLLOUT && (
                         <Box sx={{ marginTop: "1rem" }}>
                           <ControllerRollout />
                         </Box>
                       )}
-                    {index === 0 && currentNodeKind === "PipelineRollout" && (
+                    {index === 0 && currentNodeKind === PIPELINE_ROLLOUT && (
                       <Box sx={{ marginTop: "1rem" }}>
                         <PipelineRollout />
                       </Box>
