@@ -68,6 +68,27 @@ func GetResource(
 	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
 }
 
+func ListResource(
+	ctx context.Context,
+	restConfig *rest.Config,
+	apiGroup string,
+	version string,
+	pluralName string,
+	namespace string,
+) (*unstructured.UnstructuredList, error) {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    apiGroup,
+		Version:  version,
+		Resource: pluralName,
+	}
+	return client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+}
+
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
 // first checking to see if there's a difference in Spec before applying
 // TODO: use CreateCR and UpdateCR instead
@@ -140,6 +161,22 @@ func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, 
 	} else {
 		return nil, err
 	}
+}
+
+func ListCR(ctx context.Context, restConfig *rest.Config, apiGroup string, version string, pluralName string, namespace string) ([]*GenericObject, error) {
+	unstrucList, err := ListResource(ctx, restConfig, apiGroup, version, pluralName, namespace)
+	if unstrucList != nil {
+		objects := make([]*GenericObject, len(unstrucList.Items))
+		for i, unstruc := range unstrucList.Items {
+			obj, err := UnstructuredToObject(&unstruc)
+			if err != nil {
+				return nil, err
+			}
+			objects[i] = obj
+		}
+	}
+
+	return nil, err
 }
 
 func CreateCR(

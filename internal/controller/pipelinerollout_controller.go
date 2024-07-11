@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -288,7 +289,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			APIVersion: common.NumaflowGroupVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineRollout.Name,
@@ -323,9 +324,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// todo: consider having a Pipeline struct which includes everything
-	var existingPipelineSpec pipelineSpec
+	var existingPipelineSpec PipelineSpec
 	err = util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec)
-	var newPipelineSpec pipelineSpec
+	var newPipelineSpec PipelineSpec
 	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
 
 	// Does pipeline spec need to be updated?
@@ -362,7 +363,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 }
 
 // make sure our Lifecycle is what we need it to be
-func setPipelineLifecycle(pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineSpec pipelineSpec) {
+func setPipelineLifecycle(pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineSpec PipelineSpec) {
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
 	if paused && !lifeCycleIsPaused {
@@ -372,26 +373,45 @@ func setPipelineLifecycle(pipelineRollout *apiv1.PipelineRollout, paused bool, e
 	}
 }
 
-func checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbSvcName string) bool {
+func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbSvcName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	controllerRolloutExists := true
 	if !found {
+		// this can happen for 2 reasons: either the ControllerRollout exists but hasn't been reconciled yet (Numaplane startup)
+		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
 		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
-		// todo: if the Numaflow Controller doesn't exist yet, that's fine
+		// see if NumaflowControllerRollout exists
+		numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
+		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: NumaflowControllerDeploymentName}, numaflowControllerRollout); err != nil {
+			if apierrors.IsNotFound(err) {
+				controllerRolloutExists = false
+			} else {
+				return false, err
+			}
+		}
 
-		// otherwise we need to wait
 	}
-	controllerRequestsPause := (controllerPauseRequest != nil && *controllerPauseRequest)
+	controllerRequestsPause := (controllerRolloutExists && controllerPauseRequest != nil && *controllerPauseRequest)
+
 	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, isbSvcName)
+	isbsvcRolloutExists := true
 	if !found {
-		// it's possible the ISBService doesn't exist yet
+		// this can happen for 2 reasons: either the ISBServiceRollout exists but hasn't been reconciled yet (Numaplane startup)
+		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbSvcName, pipelineRollout.Namespace)
-		// todo: if the ISBService doesn't exist yet, that's fine
-
-		// otherwise we need to wait
+		// see if ISBServiceRollout exists
+		isbsvcRollout := &apiv1.ISBServiceRollout{}
+		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: isbSvcName}, isbsvcRollout); err != nil {
+			if apierrors.IsNotFound(err) {
+				isbsvcRolloutExists = false
+			} else {
+				return false, err
+			}
+		}
 	}
-	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
+	isbsvcRequestsPause := (isbsvcRolloutExists && isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
 	return controllerRequestsPause || isbsvcRequestsPause
 }
@@ -617,7 +637,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return statusUpdateErr
 }
 
-func getISBSvcName(pipeline pipelineSpec) string {
+func getISBSvcName(pipeline PipelineSpec) string {
 	if pipeline.InterStepBufferServiceName == "" {
 		return "default"
 	}
@@ -625,7 +645,7 @@ func getISBSvcName(pipeline pipelineSpec) string {
 }
 
 // keep track of the minimum number of fields we need to know about
-type pipelineSpec struct {
+type PipelineSpec struct {
 	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
 	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
 }
