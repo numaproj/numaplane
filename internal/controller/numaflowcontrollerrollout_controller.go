@@ -208,6 +208,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	}
 	defer controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
+	// make sure the memory has been created for ControllerPause request for when we need to use later
 	_, pauseRequestExists := GetPauseModule().GetControllerPauseRequest(namespace)
 	if !pauseRequestExists {
 		GetPauseModule().NewControllerPauseRequest(namespace)
@@ -220,6 +221,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	if deploymentExists {
 
+		// update our Status with the Deployment's Status
 		err = r.processNumaflowControllerStatus(ctx, controllerRollout, deployment)
 		if err != nil {
 			return err
@@ -242,13 +244,17 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 					if err != nil {
 						return ctrl.Result{}, err
 					}
-					if phase != gitopsSyncCommon.OperationSucceeded {
+					if phase != gitopsSyncCommon.OperationSucceeded { //todo: examine this case
 						return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 					}
 				}
 			}
 			return delayedRequeue, nil
+		} else {
+			// remove any pause requirement if necessary
+			requestPipelinesPause(namespace, false)
 		}
+
 	}
 
 	// apply controller - this handles syncing in the cases in which our Controller Rollout isn't updating:

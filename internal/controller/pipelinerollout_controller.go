@@ -330,10 +330,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(existingPipelineDef, &newPipelineDef)
-	pipelineNeedsToUpdate := !pipelineSpecsEqual || !pipelineReconciled
+	pipelineNeedsToOrIsUpdating := !pipelineSpecsEqual || !pipelineReconciled
 	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
-	if pipelineNeedsToUpdate {
+	if pipelineNeedsToOrIsUpdating {
 		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, &newPipelineDef)
 		if err != nil {
 			return false, err
@@ -347,7 +347,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	setPipelineLifecycle(pipelineRollout, shouldBePaused, existingPipelineSpec)
 
 	// if it's safe to Update and we need to, do it now
-	if pipelineNeedsToUpdate {
+	if !pipelineSpecsEqual {
 		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
 			err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
 			if err != nil {
@@ -387,6 +387,9 @@ func checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRo
 	if !found {
 		// it's possible the ISBService doesn't exist yet
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbSvcName, pipelineRollout.Namespace)
+		// todo: if the ISBService doesn't exist yet, that's fine
+
+		// otherwise we need to wait
 	}
 	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
