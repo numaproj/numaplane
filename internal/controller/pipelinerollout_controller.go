@@ -319,7 +319,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// propagate the pipeline's status into PipelineRollout's status
 	var pipelineStatus kubernetes.GenericStatus
 	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
-	pipelineReconciled := pipelineObservedGenerationCurrent(existingPipelineDef.Generation, pipelineStatus.ObservedGeneration)
+	pipelineReconciled := pipelineRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// todo: consider having a Pipeline struct which includes everything
