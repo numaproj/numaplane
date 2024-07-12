@@ -589,16 +589,19 @@ func getControllerDeploymentTag(deployment *appsv1.Deployment) (string, error) {
 		tag := ""
 		colon := strings.Index(c.Image, ":")
 		if colon != -1 {
-			imageName = imageName[0:colon]
-			tag = imageName[colon+1:]
+			imageName = c.Image[0:colon]
+			tag = c.Image[colon+1:]
 		}
 		finalSlash := strings.LastIndex(imageName, "/")
 		if finalSlash != -1 {
 			imageName = imageName[finalSlash+1:]
+			fmt.Printf("deletethis: imageName=%q\n", imageName)
 		}
 		if imageName == NumaflowImageName {
 			if tag == "" {
 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
+			} else {
+				return tag, nil
 			}
 		}
 	}
