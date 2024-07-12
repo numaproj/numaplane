@@ -2,11 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
@@ -88,7 +88,7 @@ func (pm *PauseModule) getISBSvcPauseRequest(namespace string, isbsvcName string
 
 func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {
 	var existingPipelineSpec PipelineSpec
-	if err := util.StructToStruct(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 	// verify that all requests are still to pause, if not we can't run right now
 	controllerPauseRequest := pm.controllerRequestedPause[pipeline.Namespace]
 	var existingPipelineSpec PipelineSpec
-	if err := util.StructToStruct(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}
 	isbsvcPauseRequest := pm.isbSvcRequestedPause[getISBSvcName(existingPipelineSpec)]

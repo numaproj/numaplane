@@ -596,7 +596,7 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 
 // TODO: detect engine determines when Pipeline spec change requires pausing
 func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
-	return false, nil
+	return true, nil
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
