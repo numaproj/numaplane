@@ -596,7 +596,7 @@ func getControllerDeploymentTag(deployment *appsv1.Deployment) (string, error) {
 		}
 		if imageName == NumaflowImageName {
 			if tag == "" {
-				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", deployment)
+				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
 			}
 		}
 	}

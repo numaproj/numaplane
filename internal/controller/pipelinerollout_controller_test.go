@@ -19,7 +19,13 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
+
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -288,3 +295,226 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 	})
 })
+
+var yamlHasDesiredPhase = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlDesiredPhaseWrongType = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": 3
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlNoDesiredPhase = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlNoLifecycle = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+func Test_pipelineWithoutLifecycle(t *testing.T) {
+	testCases := []struct {
+		name          string
+		specYaml      string
+		expectedError bool
+	}{
+		{
+			name:          "desiredPhase set to Paused",
+			specYaml:      yamlHasDesiredPhase,
+			expectedError: false,
+		},
+		{
+			name:          "desiredPhase set to wrong type",
+			specYaml:      yamlDesiredPhaseWrongType,
+			expectedError: true,
+		},
+		{
+			name:          "desiredPhase not present",
+			specYaml:      yamlNoDesiredPhase,
+			expectedError: false,
+		},
+		{
+			name:          "lifecycle not present",
+			specYaml:      yamlNoLifecycle,
+			expectedError: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj := &kubernetes.GenericObject{}
+			obj.Spec.Raw = []byte(tc.specYaml)
+			withoutLifecycle, err := pipelineWithoutLifecycle(obj)
+			if tc.expectedError {
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, withoutLifecycle.Spec.Raw)
+				assert.False(t, strings.Contains(string(withoutLifecycle.Spec.Raw), "desiredPhase"))
+			}
+		})
+	}
+
+}

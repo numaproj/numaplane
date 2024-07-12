@@ -45,6 +45,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -535,8 +536,11 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 	if err != nil {
 		return nil, err
 	}
-	desiredPhase, _ := kubernetes.NestedNullableStringMap(unstruc.Object, "spec", "lifecycle", "desiredPhase")
-	if desiredPhase != nil {
+	_, found, err := unstructured.NestedString(unstruc.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return nil, err
+	}
+	if found {
 		unstrucNew := unstruc.DeepCopy()
 		specMapAsInterface, found := unstrucNew.Object["spec"]
 		if found {
@@ -556,8 +560,8 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 				}
 			}
 
+			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
 		}
-		return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
 	}
 	return obj, nil
 }

@@ -50,15 +50,3 @@ func NestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	}
 	return m, err
 }
-
-/*
-// look for the nested field indicated by "fields" and if it exists, remove it and if it was found, return it
-func ClearNestedNullableStringMap(obj *map[string]interface{}, fields ...string) (map[string]string, error) {
-	foundEntry, err := NestedNullableStringMap(*obj, fields...)
-	if err != nil {
-		return nil, err
-	}
-	if foundEntry != nil {
-
-	}
-}*/
