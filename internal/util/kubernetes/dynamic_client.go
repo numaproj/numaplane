@@ -197,7 +197,7 @@ func CreateCR(
 		return err
 	}
 
-	numaLogger.Debugf("didn't find resource %s/%s, will create", object.Namespace, object.Name)
+	numaLogger.Debugf("will create resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
 
 	unstruct, err := ObjectToUnstructured(object)
 	if err != nil {
@@ -209,6 +209,52 @@ func CreateCR(
 		return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
 	}
 	numaLogger.Infof("successfully created resource %s/%s", object.Namespace, object.Name)
+	return nil
+}
+
+func UpdateCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) error {
+
+	unstruc, err := ObjectToUnstructured(object)
+	if err != nil {
+		return err
+	}
+
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	return UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name)
+}
+
+// todo: if I like this, repeat for other methods
+func UpdateUnstructuredCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	unstruc *unstructured.Unstructured,
+	gvr schema.GroupVersionResource,
+	namespace string,
+	name string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will update resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	_, err = client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update Resource %s/%s, err=%v", namespace, name, err)
+	}
+
+	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
 	return nil
 }
 

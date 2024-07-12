@@ -198,7 +198,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-			GetPauseModule().DeleteControllerPauseRequest(namespace)
+			GetPauseModule().deleteControllerPauseRequest(namespace)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		return ctrl.Result{}, nil
@@ -211,9 +211,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	defer controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
 	// make sure the memory has been created for ControllerPause request for when we need to use later
-	_, pauseRequestExists := GetPauseModule().GetControllerPauseRequest(namespace)
+	_, pauseRequestExists := GetPauseModule().getControllerPauseRequest(namespace)
 	if !pauseRequestExists {
-		GetPauseModule().NewControllerPauseRequest(namespace)
+		GetPauseModule().newControllerPauseRequest(namespace)
 	}
 
 	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controllerRollout)
@@ -310,7 +310,7 @@ func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Con
 }
 
 func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, namespace string, pause bool) (bool, error) {
-	updated := GetPauseModule().UpdateControllerPauseRequest(namespace, pause)
+	updated := GetPauseModule().updateControllerPauseRequest(namespace, pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		pipelines, err := r.getPipelines(ctx, namespace)
 		if err != nil {
@@ -320,7 +320,7 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
 		}
 	}
-	return updated
+	return updated, nil
 }
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)

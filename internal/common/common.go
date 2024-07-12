@@ -2,6 +2,8 @@ package common
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -25,4 +27,10 @@ const (
 
 var (
 	NumaflowGroupVersion = fmt.Sprintf("%s/%s", NumaflowAPIGroup, NumaflowAPIVersion)
+
+	PipelineGVR = schema.GroupVersionResource{
+		Group:    NumaflowAPIGroup,
+		Version:  NumaflowAPIVersion,
+		Resource: "pipelines",
+	}
 )

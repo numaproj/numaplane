@@ -26,7 +26,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -341,11 +340,17 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest := checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	externalPauseRequest, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	if err != nil {
+		return false, err
+	}
 
 	// make sure our Lifecycle is what we need it to be
 	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
-	setPipelineLifecycle(pipelineRollout, shouldBePaused, existingPipelineSpec)
+	err = r.setPipelineLifecycle(ctx, pipelineRollout, shouldBePaused, existingPipelineDef)
+	if err != nil {
+		return false, err
+	}
 
 	// if it's safe to Update and we need to, do it now
 	if !pipelineSpecsEqual {
@@ -363,20 +368,29 @@ func (r *PipelineRolloutReconciler) reconcile(
 }
 
 // make sure our Lifecycle is what we need it to be
-func setPipelineLifecycle(pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineSpec PipelineSpec) {
+func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
+	var existingPipelineSpec PipelineSpec //todo: consider that I'm doing this here and in the methods being called both
+	if err := util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return err
+	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
 	if paused && !lifeCycleIsPaused {
-		GetPauseModule().pausePipeline(pipelineRollout.Namespace, pipelineRollout.Name)
+		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
+			return err
+		}
 	} else if !paused && lifeCycleIsPaused {
-		GetPauseModule().runPipelineIfSafe(pipelineRollout.Namespace, pipelineRollout.Name)
+		if err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbSvcName string) (bool, error) {
+func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerPauseRequest, found := GetPauseModule().GetControllerPauseRequest(pipelineRollout.Namespace)
+	controllerPauseRequest, found := GetPauseModule().getControllerPauseRequest(pipelineRollout.Namespace)
 	controllerRolloutExists := true
 	if !found {
 		// this can happen for 2 reasons: either the ControllerRollout exists but hasn't been reconciled yet (Numaplane startup)
@@ -395,15 +409,15 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	}
 	controllerRequestsPause := (controllerRolloutExists && controllerPauseRequest != nil && *controllerPauseRequest)
 
-	isbsvcPauseRequest, found := GetPauseModule().GetISBSvcPauseRequest(pipelineRollout.Namespace, isbSvcName)
+	isbsvcPauseRequest, found := GetPauseModule().getISBSvcPauseRequest(pipelineRollout.Namespace, isbsvcName)
 	isbsvcRolloutExists := true
 	if !found {
 		// this can happen for 2 reasons: either the ISBServiceRollout exists but hasn't been reconciled yet (Numaplane startup)
 		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
-		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbSvcName, pipelineRollout.Namespace)
+		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
 		// see if ISBServiceRollout exists
 		isbsvcRollout := &apiv1.ISBServiceRollout{}
-		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: isbSvcName}, isbsvcRollout); err != nil {
+		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: isbsvcName}, isbsvcRollout); err != nil {
 			if apierrors.IsNotFound(err) {
 				isbsvcRolloutExists = false
 			} else {
@@ -413,7 +427,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	}
 	isbsvcRequestsPause := (isbsvcRolloutExists && isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
-	return controllerRequestsPause || isbsvcRequestsPause
+	return controllerRequestsPause || isbsvcRequestsPause, nil
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
@@ -494,24 +508,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return nil
-}
-
-func setPipelineDesiredStatus(obj *kubernetes.GenericObject, status string) (*kubernetes.GenericObject, error) {
-	unstruc, err := kubernetes.ObjectToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	err = unstructured.SetNestedField(unstruc.Object, status, "spec", "lifecycle", "desiredPhase")
-	if err != nil {
-		return nil, err
-	}
-
-	newObj, err := kubernetes.UnstructuredToObject(unstruc)
-	if err != nil {
-		return nil, err
-	}
-	return newObj, nil
 }
 
 func isPipelinePausing(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
