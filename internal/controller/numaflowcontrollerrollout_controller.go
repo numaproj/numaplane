@@ -136,6 +136,8 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
 	if err != nil {
+
+		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
 			return ctrl.Result{}, statusUpdateErr

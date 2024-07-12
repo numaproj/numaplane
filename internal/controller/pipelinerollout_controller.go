@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -241,12 +242,17 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 
 	// based on result, may need to add this back to the queue
 	if err != nil {
+		numaLogger.Errorf(err, "PipelineRollout %v reconcile returned error: %v", namespacedName, err)
 		r.queue.AddRateLimited(key)
 	} else {
 		if result.Requeue {
+			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue", namespacedName)
 			r.queue.AddRateLimited(key)
 		} else if result.RequeueAfter > 0 {
+			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %d seconds", namespacedName, result.RequeueAfter)
 			r.queue.AddAfter(key, result.RequeueAfter)
+		} else {
+			numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
 		}
 	}
 }
@@ -326,16 +332,16 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// todo: consider having a Pipeline struct which includes everything
 	var existingPipelineSpec PipelineSpec
-	if err = util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
-		return false, err
+	if err = json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 	var newPipelineSpec PipelineSpec
-	if err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, err
+	if err = json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert PipelineRollout Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
 	// Does pipeline spec need to be updated?
-	pipelineSpecsEqual, err := pipelineSpecEqual(existingPipelineDef, &newPipelineDef)
+	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, &newPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -385,7 +391,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
 	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec PipelineSpec //todo: consider that I'm doing this here and in the methods being called both
-	if err := util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
@@ -539,7 +545,8 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 }
 
-func pipelineSpecEqual(a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
 	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
 	if err != nil {
 		return false, err
@@ -548,7 +555,8 @@ func pipelineSpecEqual(a *kubernetes.GenericObject, b *kubernetes.GenericObject)
 	if err != nil {
 		return false, err
 	}
-	return reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%q, pipelineWithoutLifecycleB=%q\n", string(pipelineWithoutLifecycleA.Spec.Raw), string(pipelineWithoutLifecycleB.Spec.Raw))
+	return reflect.DeepEqual(pipelineWithoutLifecycleA.Spec.Raw, pipelineWithoutLifecycleB.Spec.Raw), nil
 }
 
 func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {

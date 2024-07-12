@@ -98,6 +98,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
+		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
 			return ctrl.Result{}, statusUpdateErr
