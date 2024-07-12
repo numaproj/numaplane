@@ -304,6 +304,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateCR(ctx, r.restConfig, &newPipelineDef, "pipelines")
 			if err != nil {
 				return false, err
@@ -325,13 +326,23 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// todo: consider having a Pipeline struct which includes everything
 	var existingPipelineSpec PipelineSpec
-	err = util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec)
+	if err = util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return false, err
+	}
 	var newPipelineSpec PipelineSpec
-	err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec)
+	if err = util.StructToStruct(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, err
+	}
 
 	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(existingPipelineDef, &newPipelineDef)
+	if err != nil {
+		return false, err
+	}
 	pipelineNeedsToOrIsUpdating := !pipelineSpecsEqual || !pipelineReconciled
+
+	numaLogger.Debugf("pipelineNeedsToOrIsUpdating=%t, pipelineSpecsEqual=%t, pipelineReconciled=%t", pipelineNeedsToOrIsUpdating, pipelineSpecsEqual, pipelineReconciled)
+
 	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToOrIsUpdating {
@@ -348,6 +359,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// make sure our Lifecycle is what we need it to be
 	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t", shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest)
 	err = r.setPipelineLifecycle(ctx, pipelineRollout, shouldBePaused, existingPipelineDef)
 	if err != nil {
 		return false, err
@@ -356,6 +368,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// if it's safe to Update and we need to, do it now
 	if !pipelineSpecsEqual {
 		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
+			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
 			if err != nil {
 				return false, err
@@ -370,6 +383,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 // make sure our Lifecycle is what we need it to be
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
+	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec PipelineSpec //todo: consider that I'm doing this here and in the methods being called both
 	if err := util.StructToStruct(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
@@ -377,12 +391,18 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pi
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
 
 	if paused && !lifeCycleIsPaused {
+		numaLogger.Info("pausing pipeline")
 		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
 			return err
 		}
 	} else if !paused && lifeCycleIsPaused {
-		if err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef); err != nil {
+		numaLogger.Info("resuming pipeline")
+		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
+		if err != nil {
 			return err
+		}
+		if !run {
+			numaLogger.Infof("new pause request, can't resume pipeline at this time, will try again later")
 		}
 	}
 	return nil

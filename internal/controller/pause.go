@@ -92,18 +92,35 @@ func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Confi
 		return err
 	}
 
-	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Running")
+	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Paused")
 }
 
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {
+// for performance reasons, caller should check that it's safe to run first, since this operation locks the map
+func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) (bool, error) {
 	pm.controllerRequestedPauseLock.RLock()
 	defer pm.controllerRequestedPauseLock.RUnlock()
 	pm.isbSvcRequestedPauseLock.RLock()
 	defer pm.isbSvcRequestedPauseLock.RUnlock()
 
-	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Paused")
+	// verify that all requests are still to pause, if not we can't run right now
+	controllerPauseRequest := pm.controllerRequestedPause[pipeline.Namespace]
+	var existingPipelineSpec PipelineSpec
+	if err := util.StructToStruct(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
+		return false, err
+	}
+	isbsvcPauseRequest := pm.isbSvcRequestedPause[getISBSvcName(existingPipelineSpec)]
+	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
+		// somebody is requesting to pause
+		return false, nil
+	}
+
+	err := pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Running")
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, status string) error {
