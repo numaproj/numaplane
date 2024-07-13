@@ -554,7 +554,7 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 }
 
 func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
-	//numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx)
 	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
 	if err != nil {
 		return false, err
@@ -563,18 +563,21 @@ func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kube
 	if err != nil {
 		return false, err
 	}
+	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
 
-	var aAsMap map[string]interface{}
+	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+
+	/*var aAsMap map[string]interface{}
 	var bAsMap map[string]interface{}
 	json.Unmarshal(pipelineWithoutLifecycleA.Spec.Raw, &aAsMap)
-	json.Unmarshal(pipelineWithoutLifecycleB.Spec.Raw, &bAsMap)
+	json.Unmarshal(pipelineWithoutLifecycleB.Spec.Raw, &bAsMap)*/
 
 	//numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
 
-	return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
+	//return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
 }
 
-func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
 	unstruc, err := kubernetes.ObjectToUnstructured(obj)
 	if err != nil {
 		return nil, err
@@ -596,8 +599,8 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 						if ok {
 							delete(lifecycleMap, "desiredPhase")
 							specMap["lifecycle"] = lifecycleMap
-							unstrucNew.Object["spec"] = specMap
-							return kubernetes.UnstructuredToObject(unstrucNew)
+							//unstrucNew.Object["spec"] = specMap
+							return specMap, nil
 						}
 					}
 				}
@@ -606,7 +609,7 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.Generi
 			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
 		}
 	}
-	return obj, nil
+	return unstruc.Object["spec"].(map[string]interface{}), nil
 }
 
 // TODO: detect engine determines when Pipeline spec change requires pausing
