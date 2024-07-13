@@ -224,6 +224,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	}
 
 	if deploymentExists {
+		numaLogger.Debugf("found existing numaflow-controller Deployment")
 
 		// update our Status with the Deployment's Status
 		err = r.processNumaflowControllerStatus(ctx, controllerRollout, deployment)
@@ -232,12 +233,15 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 
 		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
-		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := isControllerDeploymentUpdating(controllerRollout, deployment)
+		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
+		numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
+
 		if controllerDeploymentNeedsUpdating || controllerDeploymentIsUpdating {
+			numaLogger.Info("Numaflow Controller either needs to or is in the process of updating")
 			// request pause if we haven't already
 			updated, err := r.requestPipelinesPause(ctx, namespace, true)
 			if err != nil {
@@ -251,6 +255,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 						return ctrl.Result{}, err
 					}
 					if allPaused {
+						numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
 						// apply controller
 						phase, err := r.sync(controllerRollout, namespace, numaLogger)
 						if err != nil {
@@ -259,6 +264,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 						if phase != gitopsSyncCommon.OperationSucceeded {
 							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 						}
+					} else {
+						numaLogger.Debugf("not all Pipelines have paused")
 					}
 				}
 			}
@@ -312,8 +319,11 @@ func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Con
 }
 
 func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, namespace string, pause bool) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	updated := GetPauseModule().updateControllerPauseRequest(namespace, pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
+		numaLogger.Infof("updated pause request = %t", pause)
 		pipelines, err := r.getPipelines(ctx, namespace)
 		if err != nil {
 			return false, err
@@ -327,13 +337,17 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)
 // return if it needs to update and if it is already in the middle of an update
-func isControllerDeploymentUpdating(controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
+func isControllerDeploymentUpdating(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
 	controllerDeploymentReconciled := controllerRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
-	currentVersion, err := getControllerDeploymentTag(existingDeployment)
+	currentVersion, err := getControllerDeploymentVersion(existingDeployment)
 	if err != nil {
 		return false, false, err
 	}
 	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion)
+	if controllerVersionNeedsToUpdate {
+		numaLogger.Debugf("current Deployment image tag=%q differs from desired %q", currentVersion, controllerRollout.Spec.Controller.Version)
+	}
 
 	return controllerVersionNeedsToUpdate, !controllerDeploymentReconciled, nil
 }
@@ -581,7 +595,7 @@ func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ct
 	return deployment, true, nil
 }
 
-func getControllerDeploymentTag(deployment *appsv1.Deployment) (string, error) {
+func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
 	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
 	containers := deployment.Spec.Template.Spec.Containers
 	for _, c := range containers {
@@ -595,13 +609,17 @@ func getControllerDeploymentTag(deployment *appsv1.Deployment) (string, error) {
 		finalSlash := strings.LastIndex(imageName, "/")
 		if finalSlash != -1 {
 			imageName = imageName[finalSlash+1:]
-			fmt.Printf("deletethis: imageName=%q\n", imageName)
+
 		}
 		if imageName == NumaflowImageName {
 			if tag == "" {
 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
 			} else {
-				return tag, nil
+				// expect first letter to be a "v"
+				if tag[0] != 'v' {
+					return "", fmt.Errorf("expected numaflow-controller tag to start with 'v': %q", tag)
+				}
+				return tag[1:], nil
 			}
 		}
 	}

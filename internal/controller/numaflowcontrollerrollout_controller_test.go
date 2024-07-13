@@ -296,7 +296,7 @@ func Test_getControllerDeploymentTag(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			deployment := appsv1.Deployment{}
 			deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, tc.containers...)
-			tag, err := getControllerDeploymentTag(&deployment)
+			tag, err := getControllerDeploymentVersion(&deployment)
 			assert.Nil(t, err)
 			assert.Equal(t, tc.expectedTag, tag)
 		})

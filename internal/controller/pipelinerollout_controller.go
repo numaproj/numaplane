@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -292,6 +291,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
+	defer pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+
 	newPipelineDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
@@ -358,9 +359,13 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
 		return false, err
+	}
+	if !pauseRequestsKnown {
+		numaLogger.Debugf("incomplete pause request information")
+		return false, nil
 	}
 
 	// make sure our Lifecycle is what we need it to be
@@ -381,8 +386,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 		}
 	}
-
-	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 	return false, nil
 }
@@ -414,47 +417,52 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pi
 	return nil
 }
 
-func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, error) {
+func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	controllerPauseRequest, found := GetPauseModule().getControllerPauseRequest(pipelineRollout.Namespace)
-	controllerRolloutExists := true
+	//controllerRolloutExists := true
 	if !found {
 		// this can happen for 2 reasons: either the ControllerRollout exists but hasn't been reconciled yet (Numaplane startup)
 		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
+		// todo: revisit this - maybe we should wait in any case since pausing won't work if the Numaflow Controller isn't up to reconcile
 		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
+		return false, false, nil
 		// see if NumaflowControllerRollout exists
-		numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
+		/*numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: NumaflowControllerDeploymentName}, numaflowControllerRollout); err != nil {
 			if apierrors.IsNotFound(err) {
 				controllerRolloutExists = false
+				numaLogger.Debugf("No pause request found for numaflow controller on namespace %q because numaflow controller rollout doesn't exist", pipelineRollout.Namespace)
 			} else {
 				return false, err
 			}
-		}
+		}*/
 
 	}
-	controllerRequestsPause := (controllerRolloutExists && controllerPauseRequest != nil && *controllerPauseRequest)
+	controllerRequestsPause := controllerPauseRequest != nil && *controllerPauseRequest
 
 	isbsvcPauseRequest, found := GetPauseModule().getISBSvcPauseRequest(pipelineRollout.Namespace, isbsvcName)
-	isbsvcRolloutExists := true
+	//isbsvcRolloutExists := true
 	if !found {
 		// this can happen for 2 reasons: either the ISBServiceRollout exists but hasn't been reconciled yet (Numaplane startup)
 		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
+		return false, false, nil
 		// see if ISBServiceRollout exists
-		isbsvcRollout := &apiv1.ISBServiceRollout{}
+		/*isbsvcRollout := &apiv1.ISBServiceRollout{}
 		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: isbsvcName}, isbsvcRollout); err != nil {
 			if apierrors.IsNotFound(err) {
 				isbsvcRolloutExists = false
+				numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q because isbservice rollout doesn't exist", isbsvcName, pipelineRollout.Namespace)
 			} else {
 				return false, err
 			}
-		}
+		}*/
 	}
-	isbsvcRequestsPause := (isbsvcRolloutExists && isbsvcPauseRequest != nil && *isbsvcPauseRequest)
+	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
-	return controllerRequestsPause || isbsvcRequestsPause, nil
+	return controllerRequestsPause || isbsvcRequestsPause, true, nil
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
@@ -546,7 +554,7 @@ func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) b
 }
 
 func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
+	//numaLogger := logger.FromContext(ctx)
 	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
 	if err != nil {
 		return false, err
@@ -555,8 +563,15 @@ func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kube
 	if err != nil {
 		return false, err
 	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%q, pipelineWithoutLifecycleB=%q\n", string(pipelineWithoutLifecycleA.Spec.Raw), string(pipelineWithoutLifecycleB.Spec.Raw))
-	return reflect.DeepEqual(pipelineWithoutLifecycleA.Spec.Raw, pipelineWithoutLifecycleB.Spec.Raw), nil
+
+	var aAsMap map[string]interface{}
+	var bAsMap map[string]interface{}
+	json.Unmarshal(pipelineWithoutLifecycleA.Spec.Raw, &aAsMap)
+	json.Unmarshal(pipelineWithoutLifecycleB.Spec.Raw, &bAsMap)
+
+	//numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
+
+	return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
 }
 
 func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
