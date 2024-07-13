@@ -511,8 +511,9 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 				assert.NotNil(t, err)
 			} else {
 				assert.Nil(t, err)
-				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, withoutLifecycle.Spec.Raw)
-				assert.False(t, strings.Contains(string(withoutLifecycle.Spec.Raw), "desiredPhase"))
+				bytes, _ := json.Marshal(withoutLifecycle)
+				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
+				assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
 			}
 		})
 	}

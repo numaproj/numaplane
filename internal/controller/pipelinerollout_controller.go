@@ -566,15 +566,6 @@ func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kube
 	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
 
 	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
-
-	/*var aAsMap map[string]interface{}
-	var bAsMap map[string]interface{}
-	json.Unmarshal(pipelineWithoutLifecycleA.Spec.Raw, &aAsMap)
-	json.Unmarshal(pipelineWithoutLifecycleB.Spec.Raw, &bAsMap)*/
-
-	//numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
-
-	//return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
 }
 
 func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {

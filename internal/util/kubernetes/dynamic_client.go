@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/numaproj/numaplane/internal/util"
@@ -134,8 +133,16 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		if err != nil {
 			return fmt.Errorf("error attempting to convert unstructured resource to generic object: %v", err)
 		}
-
-		if reflect.DeepEqual(currentObj.Spec, object.Spec) {
+		/*
+			if reflect.DeepEqual(currentObj.Spec, object.Spec) {
+				numaLogger.Debugf("skipping update of resource %s/%s since not necessary", object.Namespace, object.Name)
+				return nil
+			}*/
+		equalSpecs, err := CompareSpecs(currentObj, object)
+		if err != nil {
+			return err
+		}
+		if equalSpecs {
 			numaLogger.Debugf("skipping update of resource %s/%s since not necessary", object.Namespace, object.Name)
 			return nil
 		}
