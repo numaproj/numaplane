@@ -38,17 +38,15 @@ func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
+// recursively remove any nulls, empty maps, and empty arrays from the map
 func removeNullValuesFromMap(m map[string]interface{}) bool {
 
 	for k, v := range m {
-		fmt.Printf("deletethis: testing k=%q,v=%v\n", k, v)
 		if v == nil {
-			fmt.Printf("deletethis: deleting k=%v because value is nil\n", k)
 			delete(m, k)
 		} else if nestedMap, ok := v.(map[string]interface{}); ok {
 			removeNullValuesFromMap(nestedMap)
 			if len(nestedMap) == 0 {
-				fmt.Printf("deletethis: deleting k=%v because inner map was deleted\n", k)
 				delete(m, k)
 			}
 		} else if nestedSlice, ok := v.([]interface{}); ok {
@@ -64,12 +62,9 @@ func removeNullValuesFromMap(m map[string]interface{}) bool {
 				}
 			}
 			if allMapsEmpty {
-				fmt.Printf("deletethis: deleting k=%v because inner slice has all empty maps\n", k)
 				delete(m, k)
 			}
 
-		} else {
-			fmt.Printf("deletethis: not nil, not a map, v:%v\n", reflect.TypeOf(v))
 		}
 	}
 	return false
