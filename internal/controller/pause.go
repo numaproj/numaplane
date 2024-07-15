@@ -79,11 +79,50 @@ func (pm *PauseModule) updateControllerPauseRequest(namespace string, pause bool
 	return true
 }
 
+func (pm *PauseModule) newISBServicePauseRequest(namespace string, isbsvcName string) {
+	namespacedName := namespaceName(namespace, isbsvcName)
+	pm.isbSvcRequestedPauseLock.Lock()
+	defer pm.isbSvcRequestedPauseLock.Unlock()
+	_, alreadyThere := pm.isbSvcRequestedPause[namespacedName]
+	if !alreadyThere {
+		pause := false
+		pm.isbSvcRequestedPause[namespacedName] = &pause
+	}
+}
+
+func (pm *PauseModule) deleteISBServicePauseRequest(namespace string, isbsvcName string) {
+	namespacedName := namespaceName(namespace, isbsvcName)
+	pm.isbSvcRequestedPauseLock.Lock()
+	defer pm.isbSvcRequestedPauseLock.Unlock()
+	delete(pm.isbSvcRequestedPause, namespacedName)
+}
+
 func (pm *PauseModule) getISBSvcPauseRequest(namespace string, isbsvcName string) (*bool, bool) {
 	pm.isbSvcRequestedPauseLock.RLock()
 	defer pm.isbSvcRequestedPauseLock.RUnlock()
 	entry, exists := pm.isbSvcRequestedPause[namespaceName(namespace, isbsvcName)]
 	return entry, exists
+}
+
+// update and return whether the value changed
+func (pm *PauseModule) updateISBServicePauseRequest(namespace string, isbsvcName string, pause bool) bool {
+	namespacedName := namespaceName(namespace, isbsvcName)
+	// first check to see if the same using read lock
+	pm.isbSvcRequestedPauseLock.RLock()
+	entry, _ := pm.isbSvcRequestedPause[namespacedName]
+	if entry != nil && *entry == pause {
+		// nothing to do
+		pm.isbSvcRequestedPauseLock.RUnlock()
+		return false
+	}
+	pm.isbSvcRequestedPauseLock.RUnlock()
+
+	// if not the same, use write lock to modify
+	pm.isbSvcRequestedPauseLock.Lock()
+	defer pm.isbSvcRequestedPauseLock.Unlock()
+	pm.isbSvcRequestedPause[namespacedName] = &pause
+	return true
+
 }
 
 func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {

@@ -127,7 +127,6 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
-	//r.queue.AddRateLimited(key)
 	r.queue.Add(key)
 }
 
@@ -660,10 +659,10 @@ func applyPipelineSpec(
 
 func pipelineLabels(pipelineSpec *PipelineSpec) (map[string]string, error) {
 	labelMapping := map[string]string{
-		"isbsvc-name": "default",
+		common.LabelKeyISBServiceName: "default",
 	}
 	if pipelineSpec.InterStepBufferServiceName != "" {
-		labelMapping["isbsvc-name"] = pipelineSpec.InterStepBufferServiceName
+		labelMapping[common.LabelKeyISBServiceName] = pipelineSpec.InterStepBufferServiceName
 	}
 
 	return labelMapping, nil

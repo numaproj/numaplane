@@ -306,7 +306,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 // todo: consider mixed use of Reconciler functions and non-struct functions
 func (r *NumaflowControllerRolloutReconciler) getPipelines(ctx context.Context, namespace string) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace)
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "", "")
 }
 
 func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Context, namespace string) (bool, error) {

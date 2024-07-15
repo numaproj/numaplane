@@ -25,6 +25,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -153,6 +155,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	if !isbServiceRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting ISBServiceRollout")
 		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
+			GetPauseModule().deleteISBServicePauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
 		// generate metrics for ISB Service deletion.
@@ -163,6 +166,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
 	if !controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
+	}
+
+	// make sure the memory has been created for ControllerPause request for when we need to use later
+	_, pauseRequestExists := GetPauseModule().getISBSvcPauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
+	if !pauseRequestExists {
+		GetPauseModule().newISBServicePauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
 	}
 
 	newISBSVCDef := kubernetes.GenericObject{
@@ -275,6 +284,28 @@ func isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServi
 	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingUnstruc.Object, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
+}
+
+// return whether an update was made
+func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context, isbService *kubernetes.GenericObject, pause bool) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	updated := GetPauseModule().updateISBServicePauseRequest(isbService.Namespace, isbService.Name, pause)
+	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
+		numaLogger.Infof("updated pause request = %t", pause)
+		pipelines, err := r.getPipelines(ctx, isbService)
+		if err != nil {
+			return false, err
+		}
+		for _, pipeline := range pipelines {
+			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
+		}
+	}
+	return updated, nil
+}
+
+func (r *ISBServiceRolloutReconciler) getPipelines(ctx context.Context, isbService *kubernetes.GenericObject) ([]*kubernetes.GenericObject, error) {
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", isbService.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyISBServiceName, isbService.Name), "")
 }
 
 // Apply pod disruption budget for the ISBService

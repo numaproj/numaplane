@@ -75,6 +75,8 @@ func ListResource(
 	version string,
 	pluralName string,
 	namespace string,
+	labelSelector string, // set to empty string if none
+	fieldSelector string, // set to empty string if none
 ) (*unstructured.UnstructuredList, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -86,7 +88,7 @@ func ListResource(
 		Version:  version,
 		Resource: pluralName,
 	}
-	return client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	return client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
 // ApplyCRSpec either creates or updates an object identified by the RawExtension, using the new definition,
@@ -163,8 +165,17 @@ func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, 
 	}
 }
 
-func ListCR(ctx context.Context, restConfig *rest.Config, apiGroup string, version string, pluralName string, namespace string) ([]*GenericObject, error) {
-	unstrucList, err := ListResource(ctx, restConfig, apiGroup, version, pluralName, namespace)
+func ListCR(ctx context.Context,
+	restConfig *rest.Config,
+	apiGroup string,
+	version string,
+	pluralName string,
+	namespace string,
+	// set to empty string if none
+	labelSelector string,
+	// set to empty string if none
+	fieldSelector string) ([]*GenericObject, error) {
+	unstrucList, err := ListResource(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if unstrucList != nil {
 		objects := make([]*GenericObject, len(unstrucList.Items))
 		for i, unstruc := range unstrucList.Items {

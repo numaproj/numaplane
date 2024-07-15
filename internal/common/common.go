@@ -12,6 +12,12 @@ const (
 	// EnvLogLevel log level that is defined by `--loglevel` option
 	EnvLogLevel = "NUMAPLANE_LOG_LEVEL"
 
+	NumaflowAPIGroup = "numaflow.numaproj.io"
+
+	NumaflowAPIVersion = "v1alpha1"
+
+	// LABELS:
+
 	// LabelKeyNumaplaneInstance Resource metadata labels (keys and values) used for tracking
 	LabelKeyNumaplaneInstance = "numaplane.numaproj.io/tracking-id"
 
@@ -20,9 +26,7 @@ const (
 	// LabelValueNumaplaneControllerConfig is the label value used to identify the configmap for the controller definitions
 	LabelValueNumaplaneControllerConfig = "numaflow-controller-definitions"
 
-	NumaflowAPIGroup = "numaflow.numaproj.io"
-
-	NumaflowAPIVersion = "v1alpha1"
+	LabelKeyISBServiceName = "numaplane.numaproj.io/isbsvc-name"
 )
 
 var (
