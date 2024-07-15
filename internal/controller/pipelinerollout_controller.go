@@ -127,7 +127,8 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
-	r.queue.AddRateLimited(key)
+	//r.queue.AddRateLimited(key)
+	r.queue.Add(key)
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
