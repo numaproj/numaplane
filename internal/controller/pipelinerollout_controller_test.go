@@ -143,6 +143,11 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
 		})
 
+		It("Should have the metrics updated", func() {
+			By("Verifying the PipelineRollout metric")
+			Expect(len(customMetrics.GetPipelineCounterMap())).Should(Equal(1))
+		})
+
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
 			By("updating the PipelineRollout")
 
@@ -517,5 +522,54 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestPipeLinLabels(t *testing.T) {
+	tests := []struct {
+		name          string
+		jsonInput     string
+		expectedLabel string
+		expectError   bool
+	}{
+		{
+			name:          "Valid Input",
+			jsonInput:     `{"interStepBufferServiceName": "buffer-service"}`,
+			expectedLabel: "buffer-service",
+			expectError:   false,
+		},
+		{
+			name:          "Missing InterStepBufferServiceName",
+			jsonInput:     `{}`,
+			expectedLabel: "default",
+			expectError:   false,
+		},
+		{
+			name:          "Invalid JSON",
+			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
+			expectedLabel: "",
+			expectError:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipelineRollout := &apiv1.PipelineRollout{
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+				},
+			}
+
+			var newPipelineSpec PipelineSpec
+			json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &newPipelineSpec)
+
+			labels, err := pipelineLabels(&newPipelineSpec)
+			if (err != nil) != tt.expectError {
+				t.Errorf("pipeLinLabels() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+			if err == nil && labels["isbsvc-name"] != tt.expectedLabel {
+				t.Errorf("pipeLinLabels() = %v, expected %v", labels["isbsvc-name"], tt.expectedLabel)
+			}
+		})
+	}
 }

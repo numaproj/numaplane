@@ -38,6 +38,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -47,20 +48,23 @@ const (
 
 // ISBServiceRolloutReconciler reconciles an ISBServiceRollout object
 type ISBServiceRolloutReconciler struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	restConfig *rest.Config
+	client        client.Client
+	scheme        *runtime.Scheme
+	restConfig    *rest.Config
+	customMetrics *metrics.CustomMetrics
 }
 
 func NewISBServiceRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
+	customMetrics *metrics.CustomMetrics,
 ) *ISBServiceRolloutReconciler {
 	return &ISBServiceRolloutReconciler{
 		client,
 		s,
 		restConfig,
+		customMetrics,
 	}
 }
 
@@ -132,6 +136,9 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
+	// generate metrics for ISB Service.
+	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+
 	numaLogger.Debug("reconciliation successful")
 
 	return result, nil
@@ -148,6 +155,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
+		// generate metrics for ISB Service deletion.
+		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		return ctrl.Result{}, nil
 	}
 
