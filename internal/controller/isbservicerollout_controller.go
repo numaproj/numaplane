@@ -96,7 +96,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
 
-	err := r.reconcile(ctx, isbServiceRollout)
+	result, err := r.reconcile(ctx, isbServiceRollout)
 	if err != nil {
 		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
@@ -134,11 +134,11 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	numaLogger.Debug("reconciliation successful")
 
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // reconcile does the real logic
-func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
@@ -148,7 +148,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
-		return nil
+		return ctrl.Result{}, nil
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
@@ -156,7 +156,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	obj := kubernetes.GenericObject{
+	newISBSVCDef := kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
@@ -169,28 +169,103 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	err := kubernetes.ApplyCRSpec(ctx, r.restConfig, &obj, "interstepbufferservices")
-	if err != nil {
-		numaLogger.Errorf(err, "failed to apply CR: %v", err)
-		return err
-	}
-
-	// after the Apply, Get the ISBService so that we can propagate its health into our Status
-	isbsvc, err := kubernetes.GetCR(ctx, r.restConfig, &obj, "interstepbufferservices")
+	isbService, err := kubernetes.GetCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
-		return err
+		return ctrl.Result{}, err
+	}
+	if err != nil {
+		// create object as it doesn't exist
+		if apierrors.IsNotFound(err) {
+			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbService.Namespace, isbService.Name)
+			err = kubernetes.CreateCR(ctx, r.restConfig, &newISBSVCDef, "isbsvcs")
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+		} else {
+			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
+		}
+
+	} else {
+		// perform logic related to updating
+
+		// update our Status with the Deployment's Status
+		processISBServiceStatus(ctx, isbService, isbServiceRollout)
+
+		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+		isbServiceNeedsUpdating, isbServiceIsUpdating, err := isISBServiceUpdating(ctx, isbServiceRollout, isbService)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
+
+		if isbServiceNeedsUpdating || isbServiceIsUpdating {
+			numaLogger.Info("ISBService either needs to or is in the process of updating")
+			// todo: only pause if the update requires pausing
+
+			// request pause if we haven't already
+			updated, err := r.requestPipelinesPause(ctx, isbService, true)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if !updated {
+				// check if the pipelines are all paused and we're trying to update the spec
+				if isbServiceNeedsUpdating {
+					allPaused, err := r.allPipelinesPaused(ctx, isbService)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					if allPaused {
+						numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
+						// update ISBService
+						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "isbsvcs")
+						if err != nil {
+							return ctrl.Result{}, err
+						}
+					} else {
+						numaLogger.Debugf("not all Pipelines have paused")
+					}
+				}
+
+			}
+			return delayedRequeue, nil
+
+		} else {
+			// remove any pause requirement if necessary
+			_, err := r.requestPipelinesPause(ctx, isbService, false)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
-		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
-
-	processISBServiceStatus(ctx, isbsvc, isbServiceRollout)
 
 	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
-	return nil
+	return ctrl.Result{}, nil
+}
+
+func isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+	isbServiceReconciled := isbServiceRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
+
+	existingUnstruc, err := kubernetes.ObjectToUnstructured(existingISBSVCDef)
+	if err != nil {
+		return false, false, err
+	}
+	newSpecAsMap := make(map[string]interface{})
+	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService, &newSpecAsMap)
+	if err != nil {
+		return false, false, err
+	}
+	// todo: see if we can just use DeepEqual
+	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingUnstruc.Object, newSpecAsMap)
+
+	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
 // Apply pod disruption budget for the ISBService
