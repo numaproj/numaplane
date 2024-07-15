@@ -56,11 +56,11 @@ func NestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 func CompareSpecs(a *GenericObject, b *GenericObject) (bool, error) {
 	aAsMap := make(map[string]interface{})
 	bAsMap := make(map[string]interface{})
-	err := json.Unmarshal(a.Spec.Raw, aAsMap)
+	err := json.Unmarshal(a.Spec.Raw, &aAsMap)
 	if err != nil {
 		return false, err
 	}
-	err = json.Unmarshal(b.Spec.Raw, bAsMap)
+	err = json.Unmarshal(b.Spec.Raw, &bAsMap)
 	if err != nil {
 		return false, err
 	}
