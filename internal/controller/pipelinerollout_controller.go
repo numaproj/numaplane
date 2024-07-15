@@ -117,7 +117,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 
 	namespacedName := namespacedNameToKey(req.NamespacedName)
-	r.queue.AddRateLimited(namespacedName)
+	r.queue.Add(namespacedName)
 	numaLogger.Debugf("added PipelineRollout %v to queue", namespacedName)
 	return ctrl.Result{}, nil
 }
