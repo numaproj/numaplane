@@ -383,10 +383,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
-	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
-	// issues for Numaflow versions that do not have ObservedGeneration
-	if pipelineObservedGeneration == 0 || pipeline.Generation <= pipelineObservedGeneration {
+	if pipeline.Generation <= pipelineObservedGeneration {
 		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 	} else {
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)

@@ -249,10 +249,7 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	case numaflowv1.ISBSvcPhaseUnknown:
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
-		// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-		// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
-		// issues for Numaflow versions that do not have ObservedGeneration
-		if isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration {
+		if isbsvc.Generation <= isbsvcStatus.ObservedGeneration {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
 			rollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between ISBService Generation and ObservedGeneration", rollout.Generation)
