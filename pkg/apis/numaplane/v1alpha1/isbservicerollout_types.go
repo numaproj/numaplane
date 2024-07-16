@@ -26,7 +26,12 @@ import (
 
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
-	InterStepBufferService runtime.RawExtension `json:"interStepBufferService"`
+	InterStepBufferService InterStepBufferService `json:"InterStepBufferService"`
+}
+
+// InterStepBufferService includes the spec of InterStepBufferService in Numaflow
+type InterStepBufferService struct {
+	Spec runtime.RawExtension `json:"spec"`
 }
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
@@ -44,7 +49,7 @@ type ISBServiceRollout struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ISBServiceRolloutSpec   `json:"spec,omitempty"`
+	Spec   ISBServiceRolloutSpec   `json:"spec"`
 	Status ISBServiceRolloutStatus `json:"status,omitempty"`
 }
 

@@ -60,8 +60,10 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			Name:      isbServiceRolloutName,
 		},
 		Spec: apiv1.ISBServiceRolloutSpec{
-			InterStepBufferService: runtime.RawExtension{
-				Raw: isbsSpecRaw,
+			InterStepBufferService: apiv1.InterStepBufferService{
+				Spec: runtime.RawExtension{
+					Raw: isbsSpecRaw,
+				},
 			},
 		},
 	}
@@ -79,7 +81,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			}, timeout, interval).Should(BeTrue())
 
 			createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
-			Expect(json.Unmarshal(createdResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
+			Expect(json.Unmarshal(createdResource.Spec.InterStepBufferService.Spec.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
 
 			By("Verifying the content of the ISBServiceRollout spec field")
 			Expect(createdInterStepBufferServiceSpec).Should(Equal(isbsSpec))
@@ -155,7 +157,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Update the spec
-			currentISBServiceRollout.Spec.InterStepBufferService.Raw = newIsbsSpecRaw //runtime.RawExtension{Raw: newIsbsSpecRaw}
+			currentISBServiceRollout.Spec.InterStepBufferService.Spec.Raw = newIsbsSpecRaw //runtime.RawExtension{Raw: newIsbsSpecRaw}
 
 			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
 
@@ -168,7 +170,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				}
 
 				createdInterStepBufferServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
-				Expect(json.Unmarshal(updatedResource.Spec.InterStepBufferService.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
+				Expect(json.Unmarshal(updatedResource.Spec.InterStepBufferService.Spec.Raw, &createdInterStepBufferServiceSpec)).ToNot(HaveOccurred())
 
 				return createdInterStepBufferServiceSpec, nil
 			}, timeout, interval).Should(Equal(newIsbsSpec))

@@ -304,7 +304,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
-		Spec: pipelineRollout.Spec.Pipeline,
+		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}
 
 	// Get the object to see if it exists
@@ -528,7 +528,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	labelMapping := map[string]string{
 		"isbsvc-name": "default",
 	}
-	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &pipelineSpec); err != nil {
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 	if pipelineSpec.InterStepBufferServiceName != "" {

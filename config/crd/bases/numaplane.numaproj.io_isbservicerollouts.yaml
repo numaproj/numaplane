@@ -47,11 +47,18 @@ spec:
           spec:
             description: ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
             properties:
-              interStepBufferService:
+              InterStepBufferService:
+                description: InterStepBufferService includes the spec of InterStepBufferService
+                  in Numaflow
+                properties:
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
                 type: object
-                x-kubernetes-preserve-unknown-fields: true
             required:
-            - interStepBufferService
+            - InterStepBufferService
             type: object
           status:
             description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
@@ -144,6 +151,8 @@ spec:
                 - Failed
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
