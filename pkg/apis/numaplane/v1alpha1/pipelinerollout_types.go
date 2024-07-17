@@ -28,7 +28,12 @@ const (
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
-	Pipeline runtime.RawExtension `json:"pipeline"`
+	Pipeline Pipeline `json:"pipeline"`
+}
+
+// Pipeline includes the spec of Pipeline in Numaflow
+type Pipeline struct {
+	Spec runtime.RawExtension `json:"spec"`
 }
 
 // PipelineRolloutStatus defines the observed state of PipelineRollout
