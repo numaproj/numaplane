@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -320,6 +319,7 @@ func (r *ISBServiceRolloutReconciler) getPipelines(ctx context.Context, isbServi
 }
 
 func (r *ISBServiceRolloutReconciler) allPipelinesPaused(ctx context.Context, isbService *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
 	pipelines, err := r.getPipelines(ctx, isbService)
 	if err != nil {
 		return false, err
@@ -329,7 +329,8 @@ func (r *ISBServiceRolloutReconciler) allPipelinesPaused(ctx context.Context, is
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "paused" {
+		if status.Phase != "Paused" {
+			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
 			return false, nil
 		}
 	}
@@ -412,7 +413,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
 	}
 	if statefulSet == nil {
-		return false, "", errors.New("StatefulSet not found")
+		return false, "StatefulSet not found, may not have been created", nil
 	}
 	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
 		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil

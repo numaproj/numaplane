@@ -335,7 +335,7 @@ func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Con
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "paused" {
+		if status.Phase != "Paused" {
 			return false, nil
 		}
 	}
