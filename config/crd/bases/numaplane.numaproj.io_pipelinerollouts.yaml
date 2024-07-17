@@ -48,8 +48,14 @@ spec:
             description: PipelineRolloutSpec defines the desired state of PipelineRollout
             properties:
               pipeline:
+                description: Pipeline includes the spec of Pipeline in Numaflow
+                properties:
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
                 type: object
-                x-kubernetes-preserve-unknown-fields: true
             required:
             - pipeline
             type: object
