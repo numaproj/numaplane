@@ -21,11 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,6 +66,7 @@ func NewISBServiceRolloutReconciler(
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 ) *ISBServiceRolloutReconciler {
+
 	return &ISBServiceRolloutReconciler{
 		client,
 		s,
@@ -208,10 +212,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		newISBSVCDef.ResourceVersion = existingISBServiceDef.ResourceVersion
 
 		// update our Status with the Deployment's Status
-		processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
+		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-		isbServiceNeedsUpdating, isbServiceIsUpdating, err := isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+		isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -267,12 +271,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	return ctrl.Result{}, nil
 }
 
-func isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
-	// todo: change this to check generation==observedGeneration for both ISBService and underlying StatefulSet
-	isbServiceReconciled := isbServiceRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
+func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+
+	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
+	if err != nil {
+		return false, false, err
+	}
 
 	existingSpecAsMap := make(map[string]interface{})
-	err := json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
+	err = json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
 	if err != nil {
 		return false, false, err
 	}
@@ -306,7 +313,7 @@ func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context,
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelines(ctx context.Context, isbService *kubernetes.GenericObject) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", isbService.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyISBServiceName, isbService.Name), "")
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", isbService.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyISBServiceNameForPipeline, isbService.Name), "")
 }
 
 func (r *ISBServiceRolloutReconciler) allPipelinesPaused(ctx context.Context, isbService *kubernetes.GenericObject) (bool, error) {
@@ -355,7 +362,61 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 	return nil
 }
 
-func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
+// Each ISBService has one underlying StatefulSet
+func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc *kubernetes.GenericObject) (*appsv1.StatefulSet, error) {
+	statefulSetSelector := labels.NewSelector()
+	requirement, err := labels.NewRequirement(common.LabelKeyISBServiceNameForStatefulSet, selection.Equals, []string{isbsvc.Name})
+	if err != nil {
+		return nil, err
+	}
+	statefulSetSelector.Add(*requirement)
+
+	var statefulSetList appsv1.StatefulSetList
+	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector})
+	if err != nil {
+		return nil, err
+	}
+	if len(statefulSetList.Items) > 1 {
+		return nil, fmt.Errorf("Unexpected: isbsvc %s/%s has multiple StatefulSets", isbsvc.Namespace, isbsvc.Name)
+	} else if len(statefulSetList.Items) == 0 {
+		return nil, nil
+	} else {
+		return &(statefulSetList.Items[0]), nil
+	}
+}
+
+// determine if the ISBService, including its underlying StatefulSet, has been reconciled
+func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *kubernetes.GenericObject) (bool, string, error) {
+	numaLogger := logger.FromContext(ctx)
+	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to parse Status from InterstepBufferService CR: %+v, %v", isbsvc, err)
+	}
+	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
+
+	statefulSet, err := r.getStatefulSet(ctx, isbsvc)
+	if err != nil {
+		return false, "", err
+	}
+
+	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
+	// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
+	// issues for Numaflow versions that do not have ObservedGeneration
+	isbsvcReconciled := (isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration)
+
+	if !isbsvcReconciled {
+		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
+	}
+	if statefulSet == nil {
+		return false, "StatefulSet not found, maybe it hasn't been created yet", nil
+	}
+	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
+		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil
+	}
+	return true, "", nil
+}
+
+func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
 	numaLogger := logger.FromContext(ctx)
 	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
 	if err != nil {
@@ -374,13 +435,17 @@ func processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObje
 	case numaflowv1.ISBSvcPhaseUnknown:
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
-		// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-		// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
-		// issues for Numaflow versions that do not have ObservedGeneration
-		if isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration {
+
+		reconciled, nonreconciledReason, err := r.isISBServiceReconciled(ctx, isbsvc)
+		if err != nil {
+			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
+			return
+		}
+
+		if reconciled {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
-			rollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between ISBService Generation and ObservedGeneration", rollout.Generation)
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledReason, rollout.Generation)
 		}
 	}
 }

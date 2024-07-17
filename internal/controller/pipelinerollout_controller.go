@@ -661,10 +661,10 @@ func applyPipelineSpec(
 
 func pipelineLabels(pipelineSpec *PipelineSpec) (map[string]string, error) {
 	labelMapping := map[string]string{
-		common.LabelKeyISBServiceName: "default",
+		common.LabelKeyISBServiceNameForPipeline: "default",
 	}
 	if pipelineSpec.InterStepBufferServiceName != "" {
-		labelMapping[common.LabelKeyISBServiceName] = pipelineSpec.InterStepBufferServiceName
+		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
 	}
 
 	return labelMapping, nil
