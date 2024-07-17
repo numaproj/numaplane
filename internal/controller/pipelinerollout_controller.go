@@ -601,6 +601,6 @@ func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
-		Spec: pipelineRollout.Spec.Pipeline,
+		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}, nil
 }
