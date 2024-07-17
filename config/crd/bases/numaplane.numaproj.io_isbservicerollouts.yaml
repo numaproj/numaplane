@@ -47,7 +47,7 @@ spec:
           spec:
             description: ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
             properties:
-              InterStepBufferService:
+              interStepBufferService:
                 description: InterStepBufferService includes the spec of InterStepBufferService
                   in Numaflow
                 properties:
@@ -58,7 +58,7 @@ spec:
                 - spec
                 type: object
             required:
-            - InterStepBufferService
+            - interStepBufferService
             type: object
           status:
             description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout

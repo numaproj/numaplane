@@ -26,7 +26,7 @@ import (
 
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
-	InterStepBufferService InterStepBufferService `json:"InterStepBufferService"`
+	InterStepBufferService InterStepBufferService `json:"interStepBufferService"`
 }
 
 // InterStepBufferService includes the spec of InterStepBufferService in Numaflow
