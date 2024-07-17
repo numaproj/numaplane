@@ -573,7 +573,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineRollout.Status.MarkFailed(pipelineRollout.Generation, err.Error())
+	pipelineRollout.Status.MarkFailed(err.Error())
 
 	statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 	if statusUpdateErr != nil {

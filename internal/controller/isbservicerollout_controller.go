@@ -318,7 +318,7 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {
 	numaLogger := logger.FromContext(ctx)
 
-	isbServiceRollout.Status.MarkFailed(isbServiceRollout.Generation, err.Error())
+	isbServiceRollout.Status.MarkFailed(err.Error())
 
 	statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 	if statusUpdateErr != nil {

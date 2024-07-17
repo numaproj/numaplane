@@ -66,21 +66,12 @@ type Status struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// InitializeConditions initializes the conditions to Unknown
-func (s *Status) InitializeConditions(conditionTypes ...ConditionType) {
-	for _, t := range conditionTypes {
-		c := metav1.Condition{
-			Type:   string(t),
-			Status: metav1.ConditionUnknown,
-			Reason: "Unknown",
-		}
-		s.setCondition(c)
-	}
-}
-
-func (status *Status) SetPhase(phase Phase, msg string, generation int64) {
+func (status *Status) SetPhase(phase Phase, msg string) {
 	status.Phase = phase
 	status.Message = msg
+}
+
+func (status *Status) SetObservedGeneration(generation int64) {
 	status.ObservedGeneration = generation
 }
 
@@ -114,26 +105,26 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 	return nil
 }
 
-// Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
+// Init sets certain Status parameters to a default initial state
 func (status *Status) Init(generation int64) {
-	status.MarkPending(generation)
-	status.InitializeConditions(ConditionChildResourceDeployed, ConditionChildResourceHealthy)
+	status.SetObservedGeneration(generation)
+	status.MarkPending()
 }
 
 // MarkPending sets Phase to Pending
-func (status *Status) MarkPending(generation int64) {
-	status.SetPhase(PhasePending, "Progressing", generation)
+func (status *Status) MarkPending() {
+	status.SetPhase(PhasePending, "Progressing")
 }
 
 // MarkDeployed sets Phase to Deployed
 func (status *Status) MarkDeployed(generation int64) {
-	status.SetPhase(PhaseDeployed, "Deployed", generation)
+	status.SetPhase(PhaseDeployed, "Deployed")
 	status.MarkTrue(ConditionChildResourceDeployed, generation)
 }
 
 // MarkFailed sets Phase to Failed
-func (status *Status) MarkFailed(generation int64, message string) {
-	status.SetPhase(PhaseFailed, message, generation)
+func (status *Status) MarkFailed(message string) {
+	status.SetPhase(PhaseFailed, message)
 }
 
 func (status *Status) MarkChildResourcesHealthy(generation int64) {
