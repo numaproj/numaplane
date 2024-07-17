@@ -347,6 +347,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Object already exists
 
+	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
+
 	// propagate the pipeline's status into PipelineRollout's status
 	var pipelineStatus kubernetes.GenericStatus
 	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)

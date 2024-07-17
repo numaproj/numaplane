@@ -26,6 +26,11 @@ const (
 	// LabelValueNumaplaneControllerConfig is the label value used to identify the configmap for the controller definitions
 	LabelValueNumaplaneControllerConfig = "numaflow-controller-definitions"
 
+	LabelKeyReplicaSetPart   = "app.kubernetes.io/part-of"
+	LabelValueNumaflowPart   = "numaflow"
+	LabelKeyReplicaSetName   = "app.kubernetes.io/name"
+	LabelValueControllerName = "controller-manager"
+
 	LabelKeyISBServiceName = "numaplane.numaproj.io/isbsvc-name"
 )
 

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	policyv1 "k8s.io/api/policy/v1"
@@ -187,16 +188,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService,
 	}
 
-	isbService, err := kubernetes.GetCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
-	if err != nil {
-		numaLogger.Errorf(err, "failed to get ISBServices: %v", err)
-		return ctrl.Result{}, err
-	}
+	existingISBServiceDef, err := kubernetes.GetCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbService.Namespace, isbService.Name)
-			err = kubernetes.CreateCR(ctx, r.restConfig, &newISBSVCDef, "isbsvcs")
+			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
+			err = kubernetes.CreateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -208,11 +205,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// perform logic related to updating
 
+		newISBSVCDef.ResourceVersion = existingISBServiceDef.ResourceVersion
+
 		// update our Status with the Deployment's Status
-		processISBServiceStatus(ctx, isbService, isbServiceRollout)
+		processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-		isbServiceNeedsUpdating, isbServiceIsUpdating, err := isISBServiceUpdating(ctx, isbServiceRollout, isbService)
+		isbServiceNeedsUpdating, isbServiceIsUpdating, err := isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -224,21 +223,21 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			// todo: only pause if the update requires pausing
 
 			// request pause if we haven't already
-			updated, err := r.requestPipelinesPause(ctx, isbService, true)
+			updated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
 			if !updated {
 				// check if the pipelines are all paused and we're trying to update the spec
 				if isbServiceNeedsUpdating {
-					allPaused, err := r.allPipelinesPaused(ctx, isbService)
+					allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
 					if allPaused {
 						numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
 						// update ISBService
-						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "isbsvcs")
+						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 						if err != nil {
 							return ctrl.Result{}, err
 						}
@@ -252,7 +251,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 		} else {
 			// remove any pause requirement if necessary
-			_, err := r.requestPipelinesPause(ctx, isbService, false)
+			_, err := r.requestPipelinesPause(ctx, existingISBServiceDef, false)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -269,9 +268,11 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 }
 
 func isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+	// todo: change this to check generation==observedGeneration for both ISBService and underlying StatefulSet
 	isbServiceReconciled := isbServiceRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
 
-	existingUnstruc, err := kubernetes.ObjectToUnstructured(existingISBSVCDef)
+	existingSpecAsMap := make(map[string]interface{})
+	err := json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
 	if err != nil {
 		return false, false, err
 	}
@@ -281,7 +282,7 @@ func isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServi
 		return false, false, err
 	}
 	// todo: see if we can just use DeepEqual
-	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingUnstruc.Object, newSpecAsMap)
+	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
@@ -306,6 +307,23 @@ func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context,
 
 func (r *ISBServiceRolloutReconciler) getPipelines(ctx context.Context, isbService *kubernetes.GenericObject) ([]*kubernetes.GenericObject, error) {
 	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", isbService.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyISBServiceName, isbService.Name), "")
+}
+
+func (r *ISBServiceRolloutReconciler) allPipelinesPaused(ctx context.Context, isbService *kubernetes.GenericObject) (bool, error) {
+	pipelines, err := r.getPipelines(ctx, isbService)
+	if err != nil {
+		return false, err
+	}
+	for _, pipeline := range pipelines {
+		status, err := kubernetes.ParseStatus(pipeline)
+		if err != nil {
+			return false, err
+		}
+		if status.Phase != "paused" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // Apply pod disruption budget for the ISBService

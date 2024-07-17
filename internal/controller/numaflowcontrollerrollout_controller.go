@@ -81,6 +81,7 @@ type NumaflowControllerRolloutReconciler struct {
 	kubectl       kubeUtil.Kubectl
 	stateCache    sync.LiveStateCache
 	customMetrics *metrics.CustomMetrics
+	//replicaSetLabelSelector labels.Selector
 }
 
 func NewNumaflowControllerRolloutReconciler(
@@ -97,6 +98,18 @@ func NewNumaflowControllerRolloutReconciler(
 		return nil, err
 	}
 
+	/*replicaSetLabelSelector := labels.NewSelector()
+	requirement, err := labels.NewRequirement(common.LabelKeyReplicaSetPart, selection.Equals, []string{common.LabelValueNumaflowPart})
+	if err != nil {
+		return nil, err
+	}
+	replicaSetLabelSelector.Add(*requirement)
+	requirement, err = labels.NewRequirement(common.LabelKeyReplicaSetName, selection.Equals, []string{common.LabelValueControllerName})
+	if err != nil {
+		return nil, err
+	}
+	replicaSetLabelSelector.Add(*requirement)*/
+
 	restConfig := rawConfig
 	return &NumaflowControllerRolloutReconciler{
 		client,
@@ -106,6 +119,7 @@ func NewNumaflowControllerRolloutReconciler(
 		kubectl,
 		stateCache,
 		customMetrics,
+		//replicaSetLabelSelector,
 	}, nil
 }
 
@@ -241,7 +255,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 
 		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
-		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
+		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -345,9 +359,20 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)
 // return if it needs to update and if it is already in the middle of an update
-func isControllerDeploymentUpdating(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
+func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	controllerDeploymentReconciled := controllerRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
+	// todo: change this to check generation==observedGeneration for both Deployment and ReplicaSet
+	//controllerDeploymentReconciled := controllerRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
+
+	/*existingReplicaSetList := &appsv1.ReplicaSetList{}
+
+	r.client.List(ctx, existingReplicaSetList, &client.ListOptions{
+		Namespace:     controllerRollout.Namespace,
+		LabelSelector: r.replicaSetLabelSelector})*/
+
+	_, healthConditionReason, _ := processDeploymentHealth(ctx, existingDeployment)
+	controllerDeploymentReconciled := healthConditionReason != "Progressing"
+
 	currentVersion, err := getControllerDeploymentVersion(existingDeployment)
 	if err != nil {
 		return false, false, err
@@ -634,7 +659,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", NumaflowImageName, deployment)
 }
 
-func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
+func processDeploymentHealth(ctx context.Context, deployment *appsv1.Deployment) (bool, string, string) {
 	deploymentSpec := deployment.Spec
 	deploymentStatus := deployment.Status
 
@@ -643,28 +668,34 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 		cond := getDeploymentCondition(deploymentStatus, appsv1.DeploymentProgressing)
 		if cond != nil && cond.Reason == "ProgressDeadlineExceeded" {
 			msg := fmt.Sprintf("Deployment %q exceeded its progress deadline", deployment.Name)
-			controllerRollout.Status.MarkChildResourcesUnhealthy("Degraded", msg, controllerRollout.Generation)
-			return nil
+			return false, "Degraded", msg
 		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
 			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
-			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
-			return nil
+			return false, "Progressing", msg
 		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
 			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
-			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
-			return nil
+			return false, "Progressing", msg
 		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
 			msg := fmt.Sprintf("Waiting for Deployment rollout to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
-			controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
-			return nil
+			return false, "Progressing", msg
 		}
 	} else {
 		msg := "Waiting for Deployment rollout to finish: observed deployment generation less than desired generation"
-		controllerRollout.Status.MarkChildResourcesUnhealthy("Progressing", msg, controllerRollout.Generation)
-		return nil
+		return false, "Progressing", msg
 	}
 
-	controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
+	return true, "", ""
+}
+
+// todo: could pass in the values instead of recalculating them
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
+	healthy, conditionReason, conditionMsg := processDeploymentHealth(ctx, deployment)
+
+	if healthy {
+		controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
+	} else {
+		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, deployment.Generation)
+	}
 
 	return nil
 }

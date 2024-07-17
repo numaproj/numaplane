@@ -122,9 +122,9 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 
 			_, err = client.Resource(gvr).Namespace(object.Namespace).Create(ctx, unstruct, metav1.CreateOptions{})
 			if err != nil {
-				return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+				return fmt.Errorf("failed to create Resource %s/%s of type %+v, err=%v", object.Namespace, object.Name, gvr, err)
 			}
-			numaLogger.Infof("successfully created resource %s/%s", object.Namespace, object.Name)
+			numaLogger.Infof("successfully created resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
 		} else {
 			return fmt.Errorf("error attempting to Get resources; GVR=%+v err: %v", gvr, err)
 		}
@@ -138,7 +138,7 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 		}
 
 		if reflect.DeepEqual(currentObj.Spec, object.Spec) {
-			numaLogger.Debugf("skipping update of resource %s/%s since not necessary", object.Namespace, object.Name)
+			numaLogger.Debugf("skipping update of resource %s/%s of type %+v since not necessary", object.Namespace, object.Name, gvr)
 			return nil
 		}
 
@@ -147,9 +147,9 @@ func ApplyCRSpec(ctx context.Context, restConfig *rest.Config, object *GenericOb
 
 		_, err = client.Resource(gvr).Namespace(object.Namespace).Update(ctx, resource, metav1.UpdateOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to update Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+			return fmt.Errorf("failed to update Resource %s/%s of type %+v, err=%v", object.Namespace, object.Name, gvr, err)
 		}
-		numaLogger.Infof("successfully updated resource %s/%s", object.Namespace, object.Name)
+		numaLogger.Infof("successfully updated resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
 
 	}
 	return nil
@@ -217,9 +217,9 @@ func CreateCR(
 
 	_, err = client.Resource(gvr).Namespace(object.Namespace).Create(ctx, unstruct, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create Resource %s/%s, err=%v", object.Namespace, object.Name, err)
+		return fmt.Errorf("failed to create resource %s/%s of type %+v, err=%v", object.Namespace, object.Name, gvr, err)
 	}
-	numaLogger.Infof("successfully created resource %s/%s", object.Namespace, object.Name)
+	numaLogger.Infof("successfully created resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
 	return nil
 }
 
@@ -262,7 +262,7 @@ func UpdateUnstructuredCR(
 
 	_, err = client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to update Resource %s/%s, err=%v", namespace, name, err)
+		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
