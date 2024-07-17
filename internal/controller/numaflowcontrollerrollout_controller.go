@@ -134,6 +134,8 @@ func NewNumaflowControllerRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(context.Background(), numaLogger)
 
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {

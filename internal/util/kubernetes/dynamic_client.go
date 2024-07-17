@@ -175,8 +175,14 @@ func ListCR(ctx context.Context,
 	labelSelector string,
 	// set to empty string if none
 	fieldSelector string) ([]*GenericObject, error) {
+	numaLogger := logger.FromContext(ctx)
 	unstrucList, err := ListResource(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	if err != nil {
+		return nil, err
+	}
+
 	if unstrucList != nil {
+		numaLogger.Debugf("found %d %s", len(unstrucList.Items), pluralName)
 		objects := make([]*GenericObject, len(unstrucList.Items))
 		for i, unstruc := range unstrucList.Items {
 			obj, err := UnstructuredToObject(&unstruc)
@@ -185,6 +191,7 @@ func ListCR(ctx context.Context,
 			}
 			objects[i] = obj
 		}
+		return objects, nil
 	}
 
 	return nil, err

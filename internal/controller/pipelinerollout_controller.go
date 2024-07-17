@@ -127,6 +127,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
+	fmt.Printf("deletethis: enqueuePipeline key=%q\n", key)
 	r.queue.Add(key)
 }
 

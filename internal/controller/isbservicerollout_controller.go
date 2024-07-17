@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -90,6 +91,8 @@ func NewISBServiceRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(context.Background(), numaLogger)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
@@ -373,6 +376,7 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 
 	var statefulSetList appsv1.StatefulSetList
 	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector})
+	fmt.Printf("deletethis: namespace=%q, label selector requirement=%+v\n", isbsvc.Namespace, requirement)
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +412,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
 	}
 	if statefulSet == nil {
-		return false, "StatefulSet not found, maybe it hasn't been created yet", nil
+		return false, "", errors.New("StatefulSet not found")
 	}
 	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
 		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil

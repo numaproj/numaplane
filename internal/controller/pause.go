@@ -42,8 +42,7 @@ func (pm *PauseModule) newControllerPauseRequest(namespace string) {
 	defer pm.controllerRequestedPauseLock.Unlock()
 	_, alreadyThere := pm.controllerRequestedPause[namespace]
 	if !alreadyThere {
-		pause := false
-		pm.controllerRequestedPause[namespace] = &pause
+		pm.controllerRequestedPause[namespace] = nil
 	}
 }
 
@@ -85,8 +84,7 @@ func (pm *PauseModule) newISBServicePauseRequest(namespace string, isbsvcName st
 	defer pm.isbSvcRequestedPauseLock.Unlock()
 	_, alreadyThere := pm.isbSvcRequestedPause[namespacedName]
 	if !alreadyThere {
-		pause := false
-		pm.isbSvcRequestedPause[namespacedName] = &pause
+		pm.isbSvcRequestedPause[namespacedName] = nil
 	}
 }
 
