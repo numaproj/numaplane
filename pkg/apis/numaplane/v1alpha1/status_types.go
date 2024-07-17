@@ -142,18 +142,27 @@ func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, ge
 // setCondition sets a condition
 func (s *Status) setCondition(condition metav1.Condition) {
 	var conditions []metav1.Condition
-	for _, c := range s.Conditions {
-		if c.Type != condition.Type {
-			conditions = append(conditions, c)
+	for _, currCondition := range s.Conditions {
+		if currCondition.Type != condition.Type {
+			conditions = append(conditions, currCondition)
 		} else {
-			condition.LastTransitionTime = c.LastTransitionTime
-			if reflect.DeepEqual(&condition, &c) {
+			// Do not update lastTransitionTime if the status nor the reason of the condition change
+			if currCondition.Status == condition.Status && currCondition.Reason == condition.Reason {
+				condition.LastTransitionTime = currCondition.LastTransitionTime
+			}
+
+			if reflect.DeepEqual(&condition, &currCondition) {
 				return
 			}
 		}
 	}
-	condition.LastTransitionTime = metav1.NewTime(time.Now())
+
+	if condition.LastTransitionTime == metav1.NewTime(time.Time{}) {
+		condition.LastTransitionTime = metav1.NewTime(time.Now())
+	}
+
 	conditions = append(conditions, condition)
+
 	// Sort for easy read
 	sort.Slice(conditions, func(i, j int) bool { return conditions[i].Type < conditions[j].Type })
 	s.Conditions = conditions
