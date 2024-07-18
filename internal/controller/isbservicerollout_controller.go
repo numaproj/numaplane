@@ -191,7 +191,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			Namespace:       isbServiceRollout.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
 		},
-		Spec: isbServiceRollout.Spec.InterStepBufferService,
+		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}
 
 	existingISBServiceDef, err := kubernetes.GetCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")

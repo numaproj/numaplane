@@ -305,8 +305,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 	defer pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert PipelineRollout Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Raw), err)
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert PipelineRollout Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
 	}
 
 	labels, err := pipelineLabels(&newPipelineSpec)
@@ -325,7 +325,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
-		Spec: pipelineRollout.Spec.Pipeline,
+		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}
 
 	// Get the object to see if it exists
@@ -494,10 +494,8 @@ func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout
 }
 
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
-	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-	// `pipelineObservedGeneration == 0` is used to avoid backward compatibility
-	// issues for Numaflow versions that do not have ObservedGeneration
-	return observedGeneration == 0 || generation <= observedGeneration
+	// note that in older versions of Numaflow that don't include "observedGeneration" this runs the danger of falsely returning "true"
+	return generation <= observedGeneration
 }
 
 // Set the Condition in the Status for child resource health
@@ -611,7 +609,6 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interfa
 						if ok {
 							delete(lifecycleMap, "desiredPhase")
 							specMap["lifecycle"] = lifecycleMap
-							//unstrucNew.Object["spec"] = specMap
 							return specMap, nil
 						}
 					}

@@ -103,8 +103,10 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			Name:      pipelineRolloutName,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: runtime.RawExtension{
-				Raw: pipelineSpecRaw,
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{
+					Raw: pipelineSpecRaw,
+				},
 			},
 		},
 	}
@@ -122,7 +124,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			}, timeout, interval).Should(BeTrue())
 
 			createdPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
-			Expect(json.Unmarshal(createdResource.Spec.Pipeline.Raw, &createdPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+			Expect(json.Unmarshal(createdResource.Spec.Pipeline.Spec.Raw, &createdPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
 
 			By("Verifying the content of the pipeline spec field")
 			Expect(createdPipelineRolloutPipelineSpec).Should(Equal(pipelineSpec))
@@ -176,7 +178,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 			Expect(err).ToNot(HaveOccurred())
 
-			currentPipelineRollout.Spec.Pipeline.Raw = pipelineSpecRaw
+			currentPipelineRollout.Spec.Pipeline.Spec.Raw = pipelineSpecRaw
 
 			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
 
@@ -189,7 +191,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				updatedPipelineRolloutPipelineSpec := numaflowv1.PipelineSpec{}
-				Expect(json.Unmarshal(updatedResource.Spec.Pipeline.Raw, &updatedPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
+				Expect(json.Unmarshal(updatedResource.Spec.Pipeline.Spec.Raw, &updatedPipelineRolloutPipelineSpec)).ToNot(HaveOccurred())
 
 				return updatedPipelineRolloutPipelineSpec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
@@ -555,12 +557,14 @@ func TestPipeLinLabels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pipelineRollout := &apiv1.PipelineRollout{
 				Spec: apiv1.PipelineRolloutSpec{
-					Pipeline: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+					},
 				},
 			}
 
 			var newPipelineSpec PipelineSpec
-			json.Unmarshal(pipelineRollout.Spec.Pipeline.Raw, &newPipelineSpec)
+			json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec)
 
 			labels, err := pipelineLabels(&newPipelineSpec)
 			if (err != nil) != tt.expectError {
