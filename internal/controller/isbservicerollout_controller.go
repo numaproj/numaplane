@@ -391,6 +391,10 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 }
 
 // determine if the ISBService, including its underlying StatefulSet, has been reconciled
+// so, this requires:
+// 1. ISBService.Status.ObservedGeneration == ISBService.Generation
+// 2. StatefulSet.Status.ObservedGeneration == StatefulSet.Generation
+// 3. StatefulSet.Status.UpdatedReplicas == StatefulSet.Spec.Replicas
 func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *kubernetes.GenericObject) (bool, string, error) {
 	numaLogger := logger.FromContext(ctx)
 	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
@@ -417,6 +421,13 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	}
 	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
 		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil
+	}
+	specifiedReplicas := int32(1)
+	if statefulSet.Spec.Replicas != nil {
+		specifiedReplicas = *statefulSet.Spec.Replicas
+	}
+	if specifiedReplicas != statefulSet.Status.UpdatedReplicas {
+		return false, fmt.Sprintf("StatefulSet UpdatedReplicas (%d) != specified replicas (%d)", statefulSet.Status.UpdatedReplicas, specifiedReplicas), nil
 	}
 	return true, "", nil
 }
