@@ -377,7 +377,6 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 
 	var statefulSetList appsv1.StatefulSetList
 	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector})
-	fmt.Printf("deletethis: namespace=%q, label selector requirement=%+v\n", isbsvc.Namespace, requirement)
 	if err != nil {
 		return nil, err
 	}
