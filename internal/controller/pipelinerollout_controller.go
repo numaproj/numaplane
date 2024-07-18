@@ -352,27 +352,25 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// propagate the pipeline's status into PipelineRollout's status
 	var pipelineStatus kubernetes.GenericStatus
 	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
-	pipelineReconciled := pipelineRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
-	// todo: consider having a Pipeline struct which includes everything
+	// todo: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
 	var existingPipelineSpec PipelineSpec
 	if err = json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	// Does pipeline spec need to be updated?
-	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, &newPipelineDef)
+	// Does pipeline spec need to be updated or is it already being updated?
+	pipelineNeedsToUpdate, pipelineIsUpdating, err := isPipelineUpdating(ctx, &newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return false, err
 	}
-	pipelineNeedsToOrIsUpdating := !pipelineSpecsEqual || !pipelineReconciled
 
-	numaLogger.Debugf("pipelineNeedsToOrIsUpdating=%t, pipelineSpecsEqual=%t, pipelineReconciled=%t", pipelineNeedsToOrIsUpdating, pipelineSpecsEqual, pipelineReconciled)
+	numaLogger.Debugf("pipelineNeedsToUpdate=%t, pipelineIsUpdating=%t", pipelineNeedsToUpdate, pipelineIsUpdating)
 
 	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
-	if pipelineNeedsToOrIsUpdating {
+	if pipelineNeedsToUpdate || pipelineIsUpdating {
 		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, &newPipelineDef)
 		if err != nil {
 			return false, err
@@ -397,7 +395,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// if it's safe to Update and we need to, do it now
-	if !pipelineSpecsEqual {
+	if pipelineNeedsToUpdate {
 		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
@@ -416,6 +414,26 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
 	resultPipeline.Labels = newPipeline.Labels
 	return resultPipeline
+}
+
+// return:
+// - does it need to update?
+// - is it in the middle of updating?
+func isPipelineUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, bool, error) {
+	// propagate the pipeline's status into PipelineRollout's status
+	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
+	if err != nil {
+		return false, false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
+	}
+
+	pipelineReconciled := pipelineObservedGenerationCurrent(newPipelineDef.Generation, pipelineStatus.ObservedGeneration)
+
+	// Does pipeline spec need to be updated?
+	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
+	if err != nil {
+		return false, false, err
+	}
+	return !pipelineSpecsEqual, !pipelineReconciled, nil
 }
 
 // make sure our Lifecycle is what we need it to be
