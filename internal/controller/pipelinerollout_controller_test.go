@@ -36,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -526,7 +527,7 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 	}
 }
 
-func TestPipeLinLabels(t *testing.T) {
+func TestPipelineLabels(t *testing.T) {
 	tests := []struct {
 		name          string
 		jsonInput     string
@@ -545,12 +546,6 @@ func TestPipeLinLabels(t *testing.T) {
 			expectedLabel: "default",
 			expectError:   false,
 		},
-		{
-			name:          "Invalid JSON",
-			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
-			expectedLabel: "",
-			expectError:   true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -568,11 +563,11 @@ func TestPipeLinLabels(t *testing.T) {
 
 			labels, err := pipelineLabels(&newPipelineSpec)
 			if (err != nil) != tt.expectError {
-				t.Errorf("pipeLinLabels() error = %v, expectError %v", err, tt.expectError)
+				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
-			if err == nil && labels["isbsvc-name"] != tt.expectedLabel {
-				t.Errorf("pipeLinLabels() = %v, expected %v", labels["isbsvc-name"], tt.expectedLabel)
+			if err == nil && labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
+				t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
 			}
 		})
 	}

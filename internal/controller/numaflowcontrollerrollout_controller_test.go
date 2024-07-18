@@ -260,7 +260,7 @@ spec:
 	})
 })
 
-func Test_getControllerDeploymentTag(t *testing.T) {
+func Test_getControllerDeploymentVersion(t *testing.T) {
 	testCases := []struct {
 		name        string
 		containers  []corev1.Container
@@ -276,7 +276,7 @@ func Test_getControllerDeploymentTag(t *testing.T) {
 					Image: "quay.io/numaproj/numaflow:v1.0.2",
 				},
 			},
-			expectedTag: "v1.0.2",
+			expectedTag: "1.0.2",
 		},
 		{
 			name: "images have no paths",
@@ -288,7 +288,7 @@ func Test_getControllerDeploymentTag(t *testing.T) {
 					Image: "numaflow:v1.0.2", // valid if it's in the default registry
 				},
 			},
-			expectedTag: "v1.0.2",
+			expectedTag: "1.0.2",
 		},
 	}
 
