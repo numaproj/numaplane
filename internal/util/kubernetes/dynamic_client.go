@@ -37,7 +37,7 @@ type GenericStatus struct {
 }
 
 func ParseStatus(obj *GenericObject) (GenericStatus, error) {
-	if len(obj.Status.Raw) == 0 {
+	if obj == nil || len(obj.Status.Raw) == 0 {
 		return GenericStatus{}, nil
 	}
 

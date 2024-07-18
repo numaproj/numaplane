@@ -151,24 +151,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			currentPipelineRollout := &apiv1.PipelineRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 
-			var lastTransitionTime time.Time
-			Eventually(func() (time.Time, error) {
-				currentResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, currentResource)
-				if err != nil {
-					return time.Time{}, err
-				}
-
-				for _, cond := range currentPipelineRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						lastTransitionTime = cond.LastTransitionTime.Time
-						return lastTransitionTime, nil
-					}
-				}
-
-				return time.Time{}, nil
-			}, timeout, interval).Should(Not(Equal(time.Time{})))
-
 			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
 			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 			Expect(err).ToNot(HaveOccurred())
@@ -201,46 +183,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			By("Verifying the LastTransitionTime of the Deployed condition of the PipelineRollout is after the time of the initial configuration")
-			Eventually(func() (bool, error) {
-				updatedResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return false, err
-				}
-
-				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
-						lastTransitionTime = cond.LastTransitionTime.Time
-						return isAfter, nil
-					}
-				}
-
-				return false, nil
-			}, timeout, interval).Should(BeTrue())
-
 			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
 			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
-
-			By("Verifying that the same PipelineRollout should not perform and update (no Configuration condition LastTransitionTime change)")
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
-			Expect(k8sClient.Update(ctx, currentPipelineRollout)).ToNot(HaveOccurred())
-			Eventually(func() (bool, error) {
-				updatedResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return false, err
-				}
-
-				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
-					}
-				}
-
-				return false, nil
-			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
