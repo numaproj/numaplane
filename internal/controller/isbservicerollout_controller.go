@@ -41,6 +41,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -216,48 +217,61 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// update our Status with the Deployment's Status
 		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-		isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("error getting global config: %w", err)
 		}
+		if globalConfig.DataLossPrevention {
 
-		numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
-
-		if isbServiceNeedsUpdating || isbServiceIsUpdating {
-			numaLogger.Info("ISBService either needs to or is in the process of updating")
-			// todo: only pause if the update requires pausing
-
-			// request pause if we haven't already
-			updated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
+			// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+			isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			if !updated {
-				// check if the pipelines are all paused and we're trying to update the spec
-				if isbServiceNeedsUpdating {
-					allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					if allPaused {
-						numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
-						// update ISBService
-						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
+
+			numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
+
+			if isbServiceNeedsUpdating || isbServiceIsUpdating {
+				numaLogger.Info("ISBService either needs to or is in the process of updating")
+				// todo: only pause if the update requires pausing
+
+				// request pause if we haven't already
+				updated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if !updated {
+					// check if the pipelines are all paused and we're trying to update the spec
+					if isbServiceNeedsUpdating {
+						allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
 						if err != nil {
 							return ctrl.Result{}, err
 						}
-					} else {
-						numaLogger.Debugf("not all Pipelines have paused")
+						if allPaused {
+							numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
+							// update ISBService
+							err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
+							if err != nil {
+								return ctrl.Result{}, err
+							}
+						} else {
+							numaLogger.Debugf("not all Pipelines have paused")
+						}
 					}
+
 				}
+				return delayedRequeue, nil
 
+			} else {
+				// remove any pause requirement if necessary
+				_, err := r.requestPipelinesPause(ctx, existingISBServiceDef, false)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-			return delayedRequeue, nil
-
 		} else {
-			// remove any pause requirement if necessary
-			_, err := r.requestPipelinesPause(ctx, existingISBServiceDef, false)
+			// update ISBService
+			err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -376,7 +390,7 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 	statefulSetSelector.Add(*requirement)
 
 	var statefulSetList appsv1.StatefulSetList
-	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector})
+	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector}) //todo: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
 	if err != nil {
 		return nil, err
 	}

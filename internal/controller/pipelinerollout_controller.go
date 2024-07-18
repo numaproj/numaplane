@@ -42,6 +42,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -376,14 +377,23 @@ func (r *PipelineRolloutReconciler) reconcile(
 			return false, err
 		}
 	}
-	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	externalPauseRequest := false
+
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting global config: %w", err)
 	}
-	if !pauseRequestsKnown {
-		numaLogger.Debugf("incomplete pause request information")
-		return false, nil
+	if globalConfig.DataLossPrevention {
+		// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+		var pauseRequestsKnown bool
+		externalPauseRequest, pauseRequestsKnown, err = r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+		if err != nil {
+			return false, err
+		}
+		if !pauseRequestsKnown {
+			numaLogger.Debugf("incomplete pause request information")
+			return false, nil
+		}
 	}
 
 	// make sure our Lifecycle is what we need it to be

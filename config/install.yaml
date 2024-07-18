@@ -852,6 +852,14 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets

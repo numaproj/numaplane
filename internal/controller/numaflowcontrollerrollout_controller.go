@@ -256,49 +256,56 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			return ctrl.Result{}, err
 		}
 
-		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
-		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
+		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("error getting global config: %w", err)
 		}
+		if globalConfig.DataLossPrevention {
 
-		numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
-
-		if controllerDeploymentNeedsUpdating || controllerDeploymentIsUpdating {
-			numaLogger.Info("Numaflow Controller either needs to or is in the process of updating")
-			// request pause if we haven't already
-			updated, err := r.requestPipelinesPause(ctx, namespace, true)
+			// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
+			controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			if !updated {
-				// check if the pipelines are all paused and we're trying to update the spec
-				if controllerDeploymentNeedsUpdating {
-					allPaused, err := r.allPipelinesPaused(ctx, namespace)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					if allPaused {
-						numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
-						// apply controller
-						phase, err := r.sync(controllerRollout, namespace, numaLogger)
+
+			numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
+
+			if controllerDeploymentNeedsUpdating || controllerDeploymentIsUpdating {
+				numaLogger.Info("Numaflow Controller either needs to or is in the process of updating")
+				// request pause if we haven't already
+				updated, err := r.requestPipelinesPause(ctx, namespace, true)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if !updated {
+					// check if the pipelines are all paused and we're trying to update the spec
+					if controllerDeploymentNeedsUpdating {
+						allPaused, err := r.allPipelinesPaused(ctx, namespace)
 						if err != nil {
 							return ctrl.Result{}, err
 						}
-						if phase != gitopsSyncCommon.OperationSucceeded {
-							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
+						if allPaused {
+							numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
+							// apply controller
+							phase, err := r.sync(controllerRollout, namespace, numaLogger)
+							if err != nil {
+								return ctrl.Result{}, err
+							}
+							if phase != gitopsSyncCommon.OperationSucceeded {
+								return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
+							}
+						} else {
+							numaLogger.Debugf("not all Pipelines have paused")
 						}
-					} else {
-						numaLogger.Debugf("not all Pipelines have paused")
 					}
 				}
-			}
-			return delayedRequeue, nil
-		} else {
-			// remove any pause requirement if necessary
-			_, err := r.requestPipelinesPause(ctx, namespace, false)
-			if err != nil {
-				return ctrl.Result{}, err
+				return delayedRequeue, nil
+			} else {
+				// remove any pause requirement if necessary
+				_, err := r.requestPipelinesPause(ctx, namespace, false)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 
