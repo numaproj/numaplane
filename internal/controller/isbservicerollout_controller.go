@@ -286,7 +286,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 		return false, false, err
 	}
 	newSpecAsMap := make(map[string]interface{})
-	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService, &newSpecAsMap)
+	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
 	if err != nil {
 		return false, false, err
 	}

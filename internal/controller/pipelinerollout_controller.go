@@ -489,13 +489,13 @@ func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout
 	if pipelineObservedGenerationCurrent(pipeline.Generation, pipelineObservedGeneration) {
 		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 	} else {
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", fmt.Sprintf("Mismatch between Pipeline Generation %d and ObservedGeneration %d", pipeline.Generation, pipelineObservedGeneration), pipelineRollout.Generation)
 	}
 }
 
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	// note that in older versions of Numaflow that don't include "observedGeneration" this runs the danger of falsely returning "true"
-	return generation <= observedGeneration
+	return generation <= observedGeneration || observedGeneration == 0 // todo: don't allow 0
 }
 
 // Set the Condition in the Status for child resource health
