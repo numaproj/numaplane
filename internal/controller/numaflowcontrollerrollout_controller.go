@@ -622,7 +622,7 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
 	numaLogger := logger.FromContext(ctx)
 
-	controllerRollout.Status.MarkFailed(controllerRollout.Generation, err.Error())
+	controllerRollout.Status.MarkFailed(err.Error())
 
 	statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, controllerRollout)
 	if statusUpdateErr != nil {
