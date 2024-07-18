@@ -347,7 +347,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Object already exists
 
-	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
+	newPipelineDef = *mergePipeline(existingPipelineDef, &newPipelineDef)
 
 	// propagate the pipeline's status into PipelineRollout's status
 	var pipelineStatus kubernetes.GenericStatus
@@ -408,6 +408,14 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	return false, nil
+}
+
+// take the existing pipeline and merge anything needed from the new pipeline definition
+func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
+	resultPipeline := existingPipeline.DeepCopy()
+	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
+	resultPipeline.Labels = newPipeline.Labels
+	return resultPipeline
 }
 
 // make sure our Lifecycle is what we need it to be

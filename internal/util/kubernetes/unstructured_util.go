@@ -66,3 +66,13 @@ func CompareSpecs(a *GenericObject, b *GenericObject) (bool, error) {
 	}
 	return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
 }
+
+func (obj *GenericObject) DeepCopy() *GenericObject {
+	result := &GenericObject{}
+	result.TypeMeta.Kind = obj.TypeMeta.Kind
+	result.TypeMeta.APIVersion = obj.TypeMeta.APIVersion
+	result.ObjectMeta = *obj.ObjectMeta.DeepCopy()
+	result.Spec = *obj.Spec.DeepCopy()
+	result.Status = *obj.Status.DeepCopy()
+	return result
+}
