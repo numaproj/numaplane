@@ -36,7 +36,7 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
         <Box
           sx={{
             height: "25px",
-            width: "821px",
+            width: "830px",
             paddingLeft: "1rem",
             marginLeft: "1rem",
             backgroundColor: "cornsilk",
@@ -59,15 +59,11 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
         </Box>
       )}
       <Box sx={{ marginTop: "1rem" }}>
-        <ArgoRolloutComponent
-          application={props.application}
-          tree={props.tree}
-          resource={props.resource as any}
-        />
+        <ArgoRolloutComponent />
       </Box>
       <Box
         sx={{
-          width: "818px",
+          width: "830px",
           marginLeft: "18px",
           padding: "10px",
           boxSizing: "border-box",
