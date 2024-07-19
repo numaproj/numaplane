@@ -206,9 +206,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 
 	} else {
+		// Object already exists
 		// perform logic related to updating
 
-		newISBSVCDef.ResourceVersion = existingISBServiceDef.ResourceVersion
+		newISBSVCDef = *mergeISBService(existingISBServiceDef, &newISBSVCDef)
 
 		// update our Status with the Deployment's Status
 		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
@@ -281,6 +282,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
 	return ctrl.Result{}, nil
+}
+
+// take the existing pipeline and merge anything needed from the new pipeline definition
+func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
+	resultISBService := existingISBService.DeepCopy()
+	resultISBService.Spec = *newISBService.Spec.DeepCopy()
+	return resultISBService
 }
 
 func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {

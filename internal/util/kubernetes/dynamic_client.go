@@ -47,7 +47,7 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
-func GetResource(
+func GetUnstructuredCR(
 	ctx context.Context,
 	restConfig *rest.Config,
 	object *GenericObject,
@@ -66,7 +66,7 @@ func GetResource(
 	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
 }
 
-func ListResource(
+func ListUnstructuredCR(
 	ctx context.Context,
 	restConfig *rest.Config,
 	apiGroup string,
@@ -91,7 +91,7 @@ func ListResource(
 
 // look up a Resource
 func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
-	unstruc, err := GetResource(ctx, restConfig, object, pluralName)
+	unstruc, err := GetUnstructuredCR(ctx, restConfig, object, pluralName)
 	if unstruc != nil {
 		return UnstructuredToObject(unstruc)
 	} else {
@@ -110,7 +110,7 @@ func ListCR(ctx context.Context,
 	// set to empty string if none
 	fieldSelector string) ([]*GenericObject, error) {
 	numaLogger := logger.FromContext(ctx)
-	unstrucList, err := ListResource(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	unstrucList, err := ListUnstructuredCR(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, err
 	}

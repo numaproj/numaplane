@@ -81,7 +81,6 @@ type NumaflowControllerRolloutReconciler struct {
 	kubectl       kubeUtil.Kubectl
 	stateCache    sync.LiveStateCache
 	customMetrics *metrics.CustomMetrics
-	//replicaSetLabelSelector labels.Selector
 }
 
 func NewNumaflowControllerRolloutReconciler(
@@ -97,18 +96,6 @@ func NewNumaflowControllerRolloutReconciler(
 	if err != nil {
 		return nil, err
 	}
-
-	/*replicaSetLabelSelector := labels.NewSelector()
-	requirement, err := labels.NewRequirement(common.LabelKeyReplicaSetPart, selection.Equals, []string{common.LabelValueNumaflowPart})
-	if err != nil {
-		return nil, err
-	}
-	replicaSetLabelSelector.Add(*requirement)
-	requirement, err = labels.NewRequirement(common.LabelKeyReplicaSetName, selection.Equals, []string{common.LabelValueControllerName})
-	if err != nil {
-		return nil, err
-	}
-	replicaSetLabelSelector.Add(*requirement)*/
 
 	restConfig := rawConfig
 	return &NumaflowControllerRolloutReconciler{
@@ -366,7 +353,9 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 }
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)
-// return if it needs to update and if it is already in the middle of an update
+// return values:
+// - does it need to update?
+// - is it already in the middle of an update?
 func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
