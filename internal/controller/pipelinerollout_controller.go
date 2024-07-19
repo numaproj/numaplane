@@ -111,10 +111,6 @@ func NewPipelineRolloutReconciler(
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PipelineRollout object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
@@ -355,7 +351,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
-	// todo: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
+	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
 	var existingPipelineSpec PipelineSpec
 	if err = json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
@@ -408,7 +404,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if pipelineNeedsToUpdate {
 		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
-			err = applyPipelineSpec(ctx, r.restConfig, &newPipelineDef)
+			err = updatePipelineSpec(ctx, r.restConfig, &newPipelineDef)
 			if err != nil {
 				return false, err
 			}
@@ -449,7 +445,7 @@ func isPipelineUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericO
 // make sure our Lifecycle is what we need it to be
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
 	numaLogger := logger.FromContext(ctx)
-	var existingPipelineSpec PipelineSpec //todo: consider that I'm doing this here and in the methods being called both
+	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
@@ -477,44 +473,17 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	numaLogger := logger.FromContext(ctx)
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	controllerPauseRequest, found := GetPauseModule().getControllerPauseRequest(pipelineRollout.Namespace)
-	//controllerRolloutExists := true
 	if !found {
-		// this can happen for 2 reasons: either the ControllerRollout exists but hasn't been reconciled yet (Numaplane startup)
-		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
-		// todo: revisit this - maybe we should wait in any case since pausing won't work if the Numaflow Controller isn't up to reconcile
 		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
 		return false, false, nil
-		// see if NumaflowControllerRollout exists
-		/*numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
-		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: NumaflowControllerDeploymentName}, numaflowControllerRollout); err != nil {
-			if apierrors.IsNotFound(err) {
-				controllerRolloutExists = false
-				numaLogger.Debugf("No pause request found for numaflow controller on namespace %q because numaflow controller rollout doesn't exist", pipelineRollout.Namespace)
-			} else {
-				return false, err
-			}
-		}*/
 
 	}
 	controllerRequestsPause := controllerPauseRequest != nil && *controllerPauseRequest
 
 	isbsvcPauseRequest, found := GetPauseModule().getISBSvcPauseRequest(pipelineRollout.Namespace, isbsvcName)
-	//isbsvcRolloutExists := true
 	if !found {
-		// this can happen for 2 reasons: either the ISBServiceRollout exists but hasn't been reconciled yet (Numaplane startup)
-		// or it doesn't exist at all - in the first case, we need to wait to find out what it needs)
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
 		return false, false, nil
-		// see if ISBServiceRollout exists
-		/*isbsvcRollout := &apiv1.ISBServiceRollout{}
-		if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: isbsvcName}, isbsvcRollout); err != nil {
-			if apierrors.IsNotFound(err) {
-				isbsvcRolloutExists = false
-				numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q because isbservice rollout doesn't exist", isbsvcName, pipelineRollout.Namespace)
-			} else {
-				return false, err
-			}
-		}*/
 	}
 	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
 
@@ -619,7 +588,7 @@ func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kube
 	}
 	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
 
-	//todo: revisit this - in the main branch it seems sufficient to do reflect.DeepEqual on the two RawExtensions
+	//todo: revisit this - sometimes reflect.DeepEqual seems sufficient?
 	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
 }
 
@@ -675,15 +644,14 @@ func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
-func applyPipelineSpec(
+func updatePipelineSpec(
 	ctx context.Context,
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// TODO: use UpdateSpec instead
-	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
+	err := kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
 		return err

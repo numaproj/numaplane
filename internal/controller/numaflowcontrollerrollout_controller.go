@@ -327,7 +327,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return ctrl.Result{}, nil
 }
 
-// todo: consider mixed use of Reconciler functions and non-struct functions
 func (r *NumaflowControllerRolloutReconciler) getPipelines(ctx context.Context, namespace string) ([]*kubernetes.GenericObject, error) {
 	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "", "")
 }
@@ -370,14 +369,6 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 // return if it needs to update and if it is already in the middle of an update
 func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, existingDeployment *appsv1.Deployment) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// todo: change this to check generation==observedGeneration for both Deployment and ReplicaSet
-	//controllerDeploymentReconciled := controllerRollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy).Reason != "Progressing"
-
-	/*existingReplicaSetList := &appsv1.ReplicaSetList{}
-
-	r.client.List(ctx, existingReplicaSetList, &client.ListOptions{
-		Namespace:     controllerRollout.Namespace,
-		LabelSelector: r.replicaSetLabelSelector})*/
 
 	_, healthConditionReason, _ := processDeploymentHealth(ctx, existingDeployment)
 	controllerDeploymentReconciled := healthConditionReason != "Progressing"
@@ -696,7 +687,7 @@ func processDeploymentHealth(ctx context.Context, deployment *appsv1.Deployment)
 	return true, "", ""
 }
 
-// todo: could pass in the values instead of recalculating them
+// TODO: could pass in the values instead of recalculating them
 func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
 	healthy, conditionReason, conditionMsg := processDeploymentHealth(ctx, deployment)
 

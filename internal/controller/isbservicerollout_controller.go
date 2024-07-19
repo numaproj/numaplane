@@ -82,10 +82,6 @@ func NewISBServiceRolloutReconciler(
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ISBServiceRollout object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
@@ -233,7 +229,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 			if isbServiceNeedsUpdating || isbServiceIsUpdating {
 				numaLogger.Info("ISBService either needs to or is in the process of updating")
-				// todo: only pause if the update requires pausing
+				// TODO: maybe only pause if the update requires pausing
 
 				// request pause if we haven't already
 				updated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
@@ -304,7 +300,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	if err != nil {
 		return false, false, err
 	}
-	// todo: see if we can just use DeepEqual
+	// TODO: see if we can just use DeepEqual
 	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
@@ -390,7 +386,7 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 	statefulSetSelector.Add(*requirement)
 
 	var statefulSetList appsv1.StatefulSetList
-	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector}) //todo: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
+	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +435,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet.Spec.Replicas != nil {
 		specifiedReplicas = *statefulSet.Spec.Replicas
 	}
-	if specifiedReplicas != statefulSet.Status.UpdatedReplicas { // todo: or should I look at whether UpdatedRevision == CurrentRevision
+	if specifiedReplicas != statefulSet.Status.UpdatedReplicas { // TODO: keep this, or is this a better test?: UpdatedRevision == CurrentRevision
 		return false, fmt.Sprintf("StatefulSet UpdatedReplicas (%d) != specified replicas (%d)", statefulSet.Status.UpdatedReplicas, specifiedReplicas), nil
 	}
 	return true, "", nil
