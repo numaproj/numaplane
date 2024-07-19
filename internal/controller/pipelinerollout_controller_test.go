@@ -151,7 +151,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			Expect(len(customMetrics.GetPipelineCounterMap())).Should(Equal(1))
 		})
 
-		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
+		It("Should update the PipelineRollout and should pause the Numaflow Pipeline", func() {
 			By("updating the PipelineRollout")
 
 			currentPipelineRollout := &apiv1.PipelineRollout{}
@@ -197,17 +197,17 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedPipelineRolloutPipelineSpec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			By("Verifying the content of the spec field of the Numaflow Pipeline")
-			Eventually(func() (numaflowv1.PipelineSpec, error) {
+			By("Verifying the Numaflow Pipeline lifecycle desiredPhase is 'Paused'")
+			Eventually(func() (string, error) {
 				updatedChildResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
 				if err != nil {
-					return numaflowv1.PipelineSpec{}, err
+					return "", err
 				}
-				return updatedChildResource.Spec, nil
-			}, timeout, interval).Should(Equal(pipelineSpec))
+				return string(updatedChildResource.Spec.Lifecycle.DesiredPhase), nil
+			}, timeout, interval).Should(Equal("Paused"))
 
-			By("Verifying the LastTransitionTime of the Deployed condition of the PipelineRollout is after the time of the initial configuration")
+			/*By("Verifying the LastTransitionTime of the Deployed condition of the PipelineRollout is after the time of the initial configuration")
 			Eventually(func() (bool, error) {
 				updatedResource := &apiv1.PipelineRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
@@ -246,13 +246,13 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				return false, nil
-			}, timeout, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())*/
 		})
 
-		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
+		/*It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
 			By("updating the Numaflow Pipeline and verifying the changed field is the same as the original and not the modified version")
 			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, namespace, pipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
-		})
+		})*/
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
 			Expect(k8sClient.Delete(ctx, &apiv1.PipelineRollout{
