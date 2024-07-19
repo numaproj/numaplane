@@ -30,11 +30,6 @@ func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}
 
 	removeNullValuesFromMap(aNoNulls)
 	removeNullValuesFromMap(bNoNulls)
-
-	aAsJson, _ := json.Marshal(aNoNulls)
-	bAsJson, _ := json.Marshal(bNoNulls)
-
-	fmt.Printf("deletethis: aAsJson=%v, bAsJson=%v\n", string(aAsJson), string(bAsJson))
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
