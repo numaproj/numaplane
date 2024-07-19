@@ -1,11 +1,10 @@
 const path = require("path");
 const webpack = require("webpack");
-const TerserWebpackPlugin = require("terser-webpack-plugin");
 // What are the options for groupKind
-const groupKind = "argoproj.io/Rollout";
 const extName = "Numarollout";
 
 const config = {
+  mode: "production",
   entry: {
     extension: "./src/index.tsx",
   },
