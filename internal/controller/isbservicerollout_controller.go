@@ -439,7 +439,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet.Spec.Replicas != nil {
 		specifiedReplicas = *statefulSet.Spec.Replicas
 	}
-	if specifiedReplicas != statefulSet.Status.UpdatedReplicas {
+	if specifiedReplicas != statefulSet.Status.UpdatedReplicas { // todo: or should I look at whether UpdatedRevision == CurrentRevision
 		return false, fmt.Sprintf("StatefulSet UpdatedReplicas (%d) != specified replicas (%d)", statefulSet.Status.UpdatedReplicas, specifiedReplicas), nil
 	}
 	return true, "", nil

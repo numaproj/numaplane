@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/numaproj/numaplane/internal/util/logger"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -108,6 +109,11 @@ var _ = BeforeSuite(func() {
 		// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
 		UseExistingCluster: &useExistingCluster,
 	}
+
+	numaLogger := logger.New().WithName("controller-manager")
+
+	numaLogger.SetLevel(3) // change to 4 for "debug" level
+	logger.SetBaseLogger(numaLogger)
 
 	var err error
 	// cfg is defined in this file globally.
