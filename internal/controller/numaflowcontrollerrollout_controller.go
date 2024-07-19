@@ -236,9 +236,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	}
 	defer controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
-	// make sure the memory has been created for ControllerPause request for when we need to use later
 	_, pauseRequestExists := GetPauseModule().getControllerPauseRequest(namespace)
 	if !pauseRequestExists {
+		// this is just creating an entry in the map if it doesn't already exist
 		GetPauseModule().newControllerPauseRequest(namespace)
 	}
 

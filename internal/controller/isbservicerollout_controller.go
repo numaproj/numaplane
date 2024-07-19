@@ -172,9 +172,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	// make sure the memory has been created for ControllerPause request for when we need to use later
 	_, pauseRequestExists := GetPauseModule().getISBSvcPauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
 	if !pauseRequestExists {
+		// this is just creating an entry in the map if it doesn't already exist
 		GetPauseModule().newISBServicePauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
 	}
 
