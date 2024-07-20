@@ -365,16 +365,14 @@ func (r *PipelineRolloutReconciler) reconcile(
 			return false, err
 		}
 	}
-	externalPauseRequest := false
 
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
 		return false, fmt.Errorf("error getting global config: %w", err)
 	}
-	if globalConfig.DataLossPrevention {
+	if globalConfig.DataLossPrevention { // feature flag
 		// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-		var pauseRequestsKnown bool
-		externalPauseRequest, pauseRequestsKnown, err = r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+		externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 		if err != nil {
 			return false, err
 		}
@@ -382,26 +380,32 @@ func (r *PipelineRolloutReconciler) reconcile(
 			numaLogger.Debugf("incomplete pause request information")
 			return false, nil
 		}
-	}
 
-	// make sure our Lifecycle is what we need it to be
-	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
-	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t", shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest)
-	err = r.setPipelineLifecycle(ctx, pipelineRollout, shouldBePaused, existingPipelineDef)
-	if err != nil {
-		return false, err
-	}
-
-	// if it's safe to Update and we need to, do it now
-	if pipelineNeedsToUpdate {
-		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
-			numaLogger.Infof("it's safe to update Pipeline so updating now")
-			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
-			if err != nil {
-				return false, err
-			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		// make sure our Lifecycle is what we need it to be
+		shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
+		numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t", shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest)
+		err = r.setPipelineLifecycle(ctx, pipelineRollout, shouldBePaused, existingPipelineDef)
+		if err != nil {
+			return false, err
 		}
+
+		// if it's safe to Update and we need to, do it now
+		if pipelineNeedsToUpdate {
+			if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
+				numaLogger.Infof("it's safe to update Pipeline so updating now")
+				err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+				if err != nil {
+					return false, err
+				}
+				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			}
+		}
+	} else {
+		err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+		if err != nil {
+			return false, err
+		}
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
 	return false, nil
