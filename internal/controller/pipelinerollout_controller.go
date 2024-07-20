@@ -153,7 +153,18 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{}, statusUpdateErr
+			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	// Update PipelineRollout Status based on child resource (Pipeline) Status
+	err = r.processPipelineStatus(ctx, pipelineRollout)
+	if err != nil {
+		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
+		if statusUpdateErr != nil {
+			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -167,7 +178,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				return ctrl.Result{}, statusUpdateErr
+				return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
 			}
 
 			return ctrl.Result{}, err
@@ -180,7 +191,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			return ctrl.Result{}, statusUpdateErr
+			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
 		}
 	}
 
@@ -299,39 +310,21 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	defer pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	defer pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation) // todo: why did I put this here? maybe shouldn't be here if we get an error
 
-	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert PipelineRollout Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
-	}
-
-	labels, err := pipelineLabels(&newPipelineSpec)
+	newPipelineDef, err := makePipelineDefinition(pipelineRollout)
 	if err != nil {
 		return false, err
 	}
 
-	newPipelineDef := kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pipeline",
-			APIVersion: common.NumaflowGroupVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name,
-			Namespace:       pipelineRollout.Namespace,
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
-		},
-		Spec: pipelineRollout.Spec.Pipeline.Spec,
-	}
-
 	// Get the object to see if it exists
-	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, &newPipelineDef, "pipelines")
+	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
+
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
-			err = kubernetes.CreateCR(ctx, r.restConfig, &newPipelineDef, "pipelines")
+			err = kubernetes.CreateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
 				return false, err
 			}
@@ -344,21 +337,21 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Object already exists
 
-	newPipelineDef = *mergePipeline(existingPipelineDef, &newPipelineDef)
-
-	// propagate the pipeline's status into PipelineRollout's status
-	var pipelineStatus kubernetes.GenericStatus
-	processPipelineStatus(ctx, existingPipelineDef, pipelineRollout, &pipelineStatus)
+	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
+	var newPipelineSpec PipelineSpec
+	if err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
+	}
 	var existingPipelineSpec PipelineSpec
 	if err = json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
 	// Does pipeline spec need to be updated or is it already being updated?
-	pipelineNeedsToUpdate, pipelineIsUpdating, err := isPipelineUpdating(ctx, &newPipelineDef, existingPipelineDef)
+	pipelineNeedsToUpdate, pipelineIsUpdating, err := isPipelineUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -368,7 +361,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToUpdate || pipelineIsUpdating {
-		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, &newPipelineDef)
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
 		}
@@ -404,7 +397,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if pipelineNeedsToUpdate {
 		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
-			err = updatePipelineSpec(ctx, r.restConfig, &newPipelineDef)
+			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
 			if err != nil {
 				return false, err
 			}
@@ -491,6 +484,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
+
 	if pipelineObservedGenerationCurrent(pipeline.Generation, pipelineObservedGeneration) {
 		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 	} else {
@@ -504,15 +498,29 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 }
 
 // Set the Condition in the Status for child resource health
-// pipeline and pipelineRollout are passed in; pipelineStatus is passed back
-func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
+
+func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
-	status, err := kubernetes.ParseStatus(pipeline)
+
+	pipelineDef, err := makePipelineDefinition(pipelineRollout)
 	if err != nil {
-		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
-		return
+		return err
 	}
-	pipelineStatus = &status
+
+	// Get existing Pipeline
+	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, pipelineDef, "pipelines")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
+		} else {
+			return fmt.Errorf("error getting Pipeline for status processing: %v", err)
+		}
+	}
+
+	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
+	if err != nil {
+		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
+	}
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
@@ -522,15 +530,15 @@ func processPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObje
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
 		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(fmt.Sprintf("Pipeline%s", string(pipelinePhase)), pipelineRollout.Generation)
-		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
+		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhaseDeleting:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	default:
-		setPipelineHealthStatus(pipeline, pipelineRollout, pipelineStatus.ObservedGeneration)
+		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
 	}
-
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
@@ -660,9 +668,13 @@ func updatePipelineSpec(
 	return nil
 }
 
-func pipelineLabels(pipelineSpec *PipelineSpec) (map[string]string, error) {
+func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+	var pipelineSpec PipelineSpec
 	labelMapping := map[string]string{
 		common.LabelKeyISBServiceNameForPipeline: "default",
+	}
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 	if pipelineSpec.InterStepBufferServiceName != "" {
 		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
@@ -696,7 +708,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineRollout.Status.MarkFailed(pipelineRollout.Generation, err.Error())
+	pipelineRollout.Status.MarkFailed(err.Error())
 
 	statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 	if statusUpdateErr != nil {
@@ -704,6 +716,29 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	}
 
 	return statusUpdateErr
+
+}
+
+func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
+
+	labels, err := pipelineLabels(pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pipeline",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pipelineRollout.Name,
+			Namespace:       pipelineRollout.Namespace,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
+		},
+		Spec: pipelineRollout.Spec.Pipeline.Spec,
+	}, nil
 
 }
 

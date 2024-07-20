@@ -157,24 +157,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			currentPipelineRollout := &apiv1.PipelineRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 
-			var lastTransitionTime time.Time
-			Eventually(func() (time.Time, error) {
-				currentResource := &apiv1.PipelineRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, currentResource)
-				if err != nil {
-					return time.Time{}, err
-				}
-
-				for _, cond := range currentPipelineRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						lastTransitionTime = cond.LastTransitionTime.Time
-						return lastTransitionTime, nil
-					}
-				}
-
-				return time.Time{}, nil
-			}, timeout, interval).Should(Not(Equal(time.Time{})))
-
 			pipelineSpec.InterStepBufferServiceName = "my-isbsvc-updated"
 			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 			Expect(err).ToNot(HaveOccurred())
@@ -246,7 +228,11 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				}
 
 				return false, nil
-			}, timeout, interval).Should(BeTrue())*/
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)*/
+
 		})
 
 		/*It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
@@ -546,6 +532,12 @@ func TestPipelineLabels(t *testing.T) {
 			expectedLabel: "default",
 			expectError:   false,
 		},
+		{
+			name:          "Invalid JSON",
+			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
+			expectedLabel: "",
+			expectError:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -558,10 +550,7 @@ func TestPipelineLabels(t *testing.T) {
 				},
 			}
 
-			var newPipelineSpec PipelineSpec
-			json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec)
-
-			labels, err := pipelineLabels(&newPipelineSpec)
+			labels, err := pipelineLabels(pipelineRollout)
 			if (err != nil) != tt.expectError {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return

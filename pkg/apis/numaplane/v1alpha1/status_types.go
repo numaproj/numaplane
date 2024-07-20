@@ -66,21 +66,12 @@ type Status struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// InitializeConditions initializes the conditions to Unknown
-func (s *Status) InitializeConditions(conditionTypes ...ConditionType) {
-	for _, t := range conditionTypes {
-		c := metav1.Condition{
-			Type:   string(t),
-			Status: metav1.ConditionUnknown,
-			Reason: "Unknown",
-		}
-		s.setCondition(c)
-	}
-}
-
-func (status *Status) SetPhase(phase Phase, msg string, generation int64) {
+func (status *Status) SetPhase(phase Phase, msg string) {
 	status.Phase = phase
 	status.Message = msg
+}
+
+func (status *Status) SetObservedGeneration(generation int64) {
 	status.ObservedGeneration = generation
 }
 
@@ -114,26 +105,26 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 	return nil
 }
 
-// Init sets various Status parameters (Conditions, Phase, etc.) to a default initial state
+// Init sets certain Status parameters to a default initial state
 func (status *Status) Init(generation int64) {
-	status.MarkPending(generation)
-	status.InitializeConditions(ConditionChildResourceDeployed, ConditionChildResourceHealthy)
+	status.SetObservedGeneration(generation)
+	status.MarkPending()
 }
 
 // MarkPending sets Phase to Pending
-func (status *Status) MarkPending(generation int64) {
-	status.SetPhase(PhasePending, "Progressing", generation)
+func (status *Status) MarkPending() {
+	status.SetPhase(PhasePending, "Progressing")
 }
 
 // MarkDeployed sets Phase to Deployed
 func (status *Status) MarkDeployed(generation int64) {
-	status.SetPhase(PhaseDeployed, "Deployed", generation)
+	status.SetPhase(PhaseDeployed, "Deployed")
 	status.MarkTrue(ConditionChildResourceDeployed, generation)
 }
 
 // MarkFailed sets Phase to Failed
-func (status *Status) MarkFailed(generation int64, message string) {
-	status.SetPhase(PhaseFailed, message, generation)
+func (status *Status) MarkFailed(message string) {
+	status.SetPhase(PhaseFailed, message)
 }
 
 func (status *Status) MarkChildResourcesHealthy(generation int64) {
@@ -151,18 +142,27 @@ func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, ge
 // setCondition sets a condition
 func (s *Status) setCondition(condition metav1.Condition) {
 	var conditions []metav1.Condition
-	for _, c := range s.Conditions {
-		if c.Type != condition.Type {
-			conditions = append(conditions, c)
+	for _, currCondition := range s.Conditions {
+		if currCondition.Type != condition.Type {
+			conditions = append(conditions, currCondition)
 		} else {
-			condition.LastTransitionTime = c.LastTransitionTime
-			if reflect.DeepEqual(&condition, &c) {
+			// Do not update lastTransitionTime if the status nor the reason of the condition change
+			if currCondition.Status == condition.Status && currCondition.Reason == condition.Reason {
+				condition.LastTransitionTime = currCondition.LastTransitionTime
+			}
+
+			if reflect.DeepEqual(&condition, &currCondition) {
 				return
 			}
 		}
 	}
-	condition.LastTransitionTime = metav1.NewTime(time.Now())
+
+	if condition.LastTransitionTime == metav1.NewTime(time.Time{}) {
+		condition.LastTransitionTime = metav1.NewTime(time.Now())
+	}
+
 	conditions = append(conditions, condition)
+
 	// Sort for easy read
 	sort.Slice(conditions, func(i, j int) bool { return conditions[i].Type < conditions[j].Type })
 	s.Conditions = conditions
