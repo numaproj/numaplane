@@ -310,8 +310,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	defer pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation) // todo: why did I put this here? maybe shouldn't be here if we get an error
-
 	newPipelineDef, err := makePipelineDefinition(pipelineRollout)
 	if err != nil {
 		return false, err
@@ -328,6 +326,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err != nil {
 				return false, err
 			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 			return false, nil
 		}
@@ -401,6 +400,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err != nil {
 				return false, err
 			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
 	}
 

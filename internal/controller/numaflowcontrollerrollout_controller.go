@@ -221,7 +221,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if !controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
-	defer controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
 	_, pauseRequestExists := GetPauseModule().getControllerPauseRequest(namespace)
 	if !pauseRequestExists {
@@ -281,6 +280,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 							if phase != gitopsSyncCommon.OperationSucceeded {
 								return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 							}
+							controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 						} else {
 							numaLogger.Debugf("not all Pipelines have paused")
 						}
@@ -310,6 +310,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
+	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 
 	return ctrl.Result{}, nil
 }

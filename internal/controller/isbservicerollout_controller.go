@@ -201,6 +201,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				return ctrl.Result{}, err
 			}
 
+			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+
 		} else {
 			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
 		}
@@ -251,6 +253,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 							if err != nil {
 								return ctrl.Result{}, err
 							}
+
+							isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 						} else {
 							numaLogger.Debugf("not all Pipelines have paused")
 						}
@@ -272,14 +276,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 		}
 	}
 
 	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
-
-	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 
 	return ctrl.Result{}, nil
 }
