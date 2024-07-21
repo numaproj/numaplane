@@ -196,6 +196,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
+			isbServiceRollout.Status.MarkPending()
+
 			err = kubernetes.CreateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 			if err != nil {
 				return ctrl.Result{}, err
@@ -213,22 +215,34 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 		newISBSVCDef = *mergeISBService(existingISBServiceDef, &newISBSVCDef)
 
-		// update our Status with the Deployment's Status
+		// update our Status with the ISBService's Status
 		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
+		//todo: move these to initialization since we don't want to support changing them while running
 		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error getting global config: %w", err)
 		}
+		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+		isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
+
+		// set the Status appropriately to "Pending" or "Deployed"
+		// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+		// if there's a generation mismatch - this means we haven't even observed the current generation
+		// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
+		// we may match the second case and not the first if we need to update something other than ISBService spec
+		if isbServiceNeedsUpdating || isbServiceRollout.Status.ObservedGeneration < isbServiceRollout.Generation {
+			isbServiceRollout.Status.MarkPending()
+		} else {
+			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+		}
+
 		if globalConfig.DataLossPrevention {
-
-			// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-			isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
 
 			if isbServiceNeedsUpdating || isbServiceIsUpdating {
 				numaLogger.Info("ISBService either needs to or is in the process of updating")

@@ -310,7 +310,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
-	controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+	controllerRollout.Status.MarkDeployed(controllerRollout.Generation) //todo: call MarkPending() somewhere?
 
 	return ctrl.Result{}, nil
 }

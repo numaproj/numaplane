@@ -108,7 +108,10 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 // Init sets certain Status parameters to a default initial state
 func (status *Status) Init(generation int64) {
 	status.SetObservedGeneration(generation)
-	status.MarkPending()
+	// rationale for commenting this out:
+	// "Pending" is now something we indicate when a rollout has been updated and we are trying to deploy it,
+	// as opposed to meaning that we're "pending reconciliation"
+	//status.MarkPending()
 }
 
 // MarkPending sets Phase to Pending

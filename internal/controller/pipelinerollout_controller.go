@@ -321,6 +321,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 
+			pipelineRollout.Status.MarkPending()
+
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
@@ -356,6 +358,17 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	numaLogger.Debugf("pipelineNeedsToUpdate=%t, pipelineIsUpdating=%t", pipelineNeedsToUpdate, pipelineIsUpdating)
+
+	// set the Status appropriately to "Pending" or "Deployed"
+	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
+	// if there's a generation mismatch - this means we haven't even observed the current generation
+	// we may match the first case and not the second when we've observed the generation change but we're pausing
+	// we may match the second case and not the first if we need to update something other than Pipeline spec
+	if pipelineNeedsToUpdate || pipelineRollout.Status.ObservedGeneration < pipelineRollout.Generation {
+		pipelineRollout.Status.MarkPending()
+	} else {
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	}
 
 	// If there is a need to update, does it require a pause?
 	var pipelineUpdateRequiresPause bool
