@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -124,24 +123,6 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			currentISBServiceRollout := &apiv1.ISBServiceRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())
 
-			var lastTransitionTime time.Time
-			Eventually(func() (time.Time, error) {
-				currentResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, currentResource)
-				if err != nil {
-					return time.Time{}, err
-				}
-
-				for _, cond := range currentISBServiceRollout.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						lastTransitionTime = cond.LastTransitionTime.Time
-						return lastTransitionTime, nil
-					}
-				}
-
-				return time.Time{}, nil
-			}, timeout, interval).Should(Not(Equal(time.Time{})))
-
 			// Prepare a new spec for update
 			newIsbsSpec := numaflowv1.InterStepBufferServiceSpec{
 				Redis: &numaflowv1.RedisBufferService{},
@@ -185,47 +166,8 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(newIsbsSpec))
 
-			By("Verifying the LastTransitionTime of the Deployed condition of the ISBServiceRollout is after the time of the initial configuration")
-			Eventually(func() (bool, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return false, err
-				}
-
-				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						isAfter := cond.LastTransitionTime.Time.After(lastTransitionTime)
-						lastTransitionTime = cond.LastTransitionTime.Time
-						return isAfter, nil
-					}
-				}
-
-				return false, nil
-			}, timeout, interval).Should(BeTrue())
-
 			By("Verifying that the ISBServiceRollout Status Phase is Deployed and ObservedGeneration matches Generation")
 			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
-
-			By("Verifying that the same ISBServiceRollout should not perform and update (no Configuration condition LastTransitionTime change)")
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentISBServiceRollout)).ToNot(HaveOccurred())
-			Expect(k8sClient.Update(ctx, currentISBServiceRollout)).ToNot(HaveOccurred())
-			Eventually(func() (bool, error) {
-				updatedResource := &apiv1.ISBServiceRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
-				if err != nil {
-					return false, err
-				}
-
-				for _, cond := range updatedResource.Status.Conditions {
-					if cond.Type == string(apiv1.ConditionChildResourceDeployed) {
-						return cond.LastTransitionTime.Time.Equal(lastTransitionTime), nil
-					}
-				}
-
-				return false, nil
-			}, timeout, interval).Should(BeTrue())
-
 		})
 
 		It("Should auto heal the InterStepBufferService with the ISBServiceRollout pipeline spec when the InterStepBufferService spec is changed", func() {

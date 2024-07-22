@@ -4,6 +4,7 @@ import { RolloutComponentContext } from "./RolloutComponentWrapper";
 import { Box } from "@mui/material";
 import { SquareCheckIcon } from "../utils/SquareCheckIcon";
 import { SquareCancelIcon } from "../utils/SquareCancelIcon";
+import { ISB, ISB_KUBERNETES, POD } from "../utils/Constants";
 
 export const ISBRollout = () => {
   const { props } = useContext(RolloutComponentContext);
@@ -28,21 +29,21 @@ export const ISBRollout = () => {
   }, [props?.tree]);
 
   const isbPods = useMemo(() => {
-    if (!kindToNodeMap || !kindToNodeMap.get("Pod")) {
+    if (!kindToNodeMap || !kindToNodeMap.get(POD)) {
       return [];
     }
-    const pods = kindToNodeMap.get("Pod");
+    const pods = kindToNodeMap.get(POD);
     if (!pods) {
       return [];
     }
-    return pods.filter((node) => node.name.indexOf("isbsvc") >= 0);
+    return pods.filter((node) => node.name.indexOf(ISB_KUBERNETES) >= 0);
   }, [kindToNodeMap]);
 
   const isbName = useMemo(() => {
-    if (!kindToNodeMap || !kindToNodeMap.get("Pod")) {
+    if (!kindToNodeMap || !kindToNodeMap.get(POD)) {
       return "";
     }
-    const isbService = kindToNodeMap.get("InterStepBufferService");
+    const isbService = kindToNodeMap.get(ISB);
     if (!isbService || !isbService[0]) {
       return "";
     }

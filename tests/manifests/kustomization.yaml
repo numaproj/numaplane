@@ -23,6 +23,8 @@ configMapGenerator:
   namespace: numaplane-system
   files:
     - controller_definitions.yaml
-  behavior: merge  # Optional, defaults to "create"
   options:
     immutable: true
+    disableNameSuffixHash: true
+    labels:
+      numaplane.numaproj.io/config: numaflow-controller-definitions
