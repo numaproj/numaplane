@@ -29,11 +29,11 @@ func GetPauseModule() *PauseModule {
 }
 
 type PauseModule struct {
-	// map of namespace (where Numaflow Controller lives) to PauseRequest
-	controllerRequestedPause     map[string]*bool
+	// map of namespace (where Numaflow Controller lives) to Pause Request
+	controllerRequestedPause     map[string]*bool // having *bool gives us 3 states: [true=pause-required, false=pause-not-required, nil=unknown]
 	controllerRequestedPauseLock sync.RWMutex
-	// map of ISBService namespaced name to PauseRequest
-	isbSvcRequestedPause     map[string]*bool
+	// map of ISBService namespaced name to Pause Request
+	isbSvcRequestedPause     map[string]*bool // having *bool gives us 3 states: [true=pause-required, false=pause-not-required, nil=unknown]
 	isbSvcRequestedPauseLock sync.RWMutex
 }
 
@@ -63,7 +63,7 @@ func (pm *PauseModule) getControllerPauseRequest(namespace string) (*bool, bool)
 func (pm *PauseModule) updateControllerPauseRequest(namespace string, pause bool) bool {
 	// first check to see if the same using read lock
 	pm.controllerRequestedPauseLock.RLock()
-	entry, _ := pm.controllerRequestedPause[namespace]
+	entry := pm.controllerRequestedPause[namespace]
 	if entry != nil && *entry == pause {
 		// nothing to do
 		pm.controllerRequestedPauseLock.RUnlock()
@@ -107,7 +107,7 @@ func (pm *PauseModule) updateISBServicePauseRequest(namespace string, isbsvcName
 	namespacedName := namespaceName(namespace, isbsvcName)
 	// first check to see if the same using read lock
 	pm.isbSvcRequestedPauseLock.RLock()
-	entry, _ := pm.isbSvcRequestedPause[namespacedName]
+	entry := pm.isbSvcRequestedPause[namespacedName]
 	if entry != nil && *entry == pause {
 		// nothing to do
 		pm.isbSvcRequestedPauseLock.RUnlock()
@@ -123,6 +123,7 @@ func (pm *PauseModule) updateISBServicePauseRequest(namespace string, isbsvcName
 
 }
 
+// pause pipeline
 func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
@@ -132,9 +133,9 @@ func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Confi
 	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Paused")
 }
 
+// resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-// for performance reasons, caller should check that it's safe to run first, since this operation locks the map
 func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) (bool, error) {
 	pm.controllerRequestedPauseLock.RLock()
 	defer pm.controllerRequestedPauseLock.RUnlock()
@@ -149,7 +150,7 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 	}
 	isbsvcPauseRequest := pm.isbSvcRequestedPause[getISBSvcName(existingPipelineSpec)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
-		// somebody is requesting to pause
+		// somebody is requesting to pause - can't run
 		return false, nil
 	}
 

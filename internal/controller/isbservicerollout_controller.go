@@ -249,11 +249,11 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				// TODO: maybe only pause if the update requires pausing
 
 				// request pause if we haven't already
-				updated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
+				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
-				if !updated {
+				if !pauseRequestUpdated { // don't do this yet if we just made a request - it's too soon for anything to have happened
 					// check if the pipelines are all paused and we're trying to update the spec
 					if isbServiceNeedsUpdating {
 						allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
@@ -309,6 +309,10 @@ func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService
 	return resultISBService
 }
 
+// return:
+// - whether ISBService needs to update
+// - whether it's in the process of being updated
+// - error if any
 func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
 
 	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
@@ -326,12 +330,13 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	if err != nil {
 		return false, false, err
 	}
-	// TODO: see if we can just use DeepEqual
+	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
 	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
+// request that Pipelines pause
 // return whether an update was made
 func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context, isbService *kubernetes.GenericObject, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -443,9 +448,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 		return false, "", err
 	}
 
-	// NOTE: this assumes that Numaflow default ObservedGeneration is -1
-	// `isbsvcStatus.ObservedGeneration == 0` is used to avoid backward compatibility
-	// issues for Numaflow versions that do not have ObservedGeneration
+	// TODO: for testing at the moment, need to allow for older versions of Numaflow which don't use ObservedGeneration
+	// can remove the initial condition once that's no longer the case
 	isbsvcReconciled := (isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration)
 
 	if !isbsvcReconciled {
