@@ -3,7 +3,7 @@ FROM golang:1.21 as builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG KUSTOMIZE_VERSION="v5.3.0"
-ARG HELM_VERSION="v3.13.2"
+ARG HELM_VERSION="v3.15.3"
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
