@@ -265,12 +265,12 @@ func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericO
 	// Rationale for commenting this out:
 	// If we get a conflict, it means that the Status we were starting from in this reconciliation was old.
 	// If the new Status is derived from the old Status, then that would've been an invalid state.
-	// todo: since the primary motivation for this retry logic was to avoid errors showing up in the log, we may be
-	// able to instead conditionally log a warning vs an error for that
+	// TODO: since the primary motivation for this retry logic was to avoid errors showing up in the log, we may be
+	// able to instead conditionally log a warning vs an error for that in the caller
 	//err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
 	if err != nil {
-		// NOTE: report the error as-is and do not check for resource existance fo retry purposes
+		// NOTE: report the error as-is and do not check for resource existance for retry purposes
 		return err
 	}
 

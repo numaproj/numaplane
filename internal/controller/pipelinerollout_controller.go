@@ -598,10 +598,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func isPipelinePausing(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePausing)
-}
-
 func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 }

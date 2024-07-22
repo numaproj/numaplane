@@ -74,12 +74,12 @@ var outputJson string = `
 
 func Test_removeNullValuesFromMap(t *testing.T) {
 	inputMap := make(map[string]interface{})
-	json.Unmarshal([]byte(inputJson), &inputMap)
+	_ = json.Unmarshal([]byte(inputJson), &inputMap)
 	fmt.Printf("before removing nulls: %v", inputMap)
 	removeNullValuesFromMap(inputMap)
 	fmt.Printf("after removing nulls: %v", inputMap)
 
 	outputMap := make(map[string]interface{})
-	json.Unmarshal([]byte(outputJson), &outputMap)
+	_ = json.Unmarshal([]byte(outputJson), &outputMap)
 	assert.True(t, reflect.DeepEqual(inputMap, outputMap))
 }
