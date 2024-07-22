@@ -68,10 +68,14 @@ func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(observedGeneration int64) {
-	status.MarkTrue(ConditionPipelinePausingOrPaused, observedGeneration)
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(generation int64) {
+	status.MarkTrue(ConditionPipelinePausingOrPaused, generation)
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPausedWithReason(reason string, observedGeneration int64) {
-	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, "", observedGeneration)
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPausedWithReason(reason string, generation int64) {
+	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, "", generation)
+}
+
+func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
+	status.MarkFalse(ConditionPipelinePausingOrPaused, "", "", generation)
 }

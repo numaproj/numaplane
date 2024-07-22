@@ -416,6 +416,8 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
+	pipelineRollout.Status.MarkPipelineUnpaused(pipelineDef.Generation)
+
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	switch pipelinePhase {
 	case numaflowv1.PipelinePhaseFailed:
