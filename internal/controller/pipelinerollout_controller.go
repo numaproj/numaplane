@@ -148,7 +148,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -159,7 +159,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -173,7 +173,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+				return ctrl.Result{}, statusUpdateErr
 			}
 
 			return ctrl.Result{}, err
@@ -186,7 +186,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 

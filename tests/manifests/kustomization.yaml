@@ -25,3 +25,6 @@ configMapGenerator:
     - controller_definitions.yaml
   options:
     immutable: true
+    disableNameSuffixHash: true
+    labels:
+      numaplane.numaproj.io/config: numaflow-controller-definitions
