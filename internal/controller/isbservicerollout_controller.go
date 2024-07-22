@@ -88,7 +88,7 @@ func NewISBServiceRolloutReconciler(
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
-	ctx = logger.WithLogger(context.Background(), numaLogger)
+	ctx = logger.WithLogger(ctx, numaLogger)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
