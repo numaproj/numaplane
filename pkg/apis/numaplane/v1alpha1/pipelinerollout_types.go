@@ -68,14 +68,12 @@ func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(generation int64) {
-	status.MarkTrue(ConditionPipelinePausingOrPaused, generation)
+// NOTE: not setting a reason to avoid changing the LastTransitionTime based on reason change between pausing and unpausing of the pipeline
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(message string, generation int64) {
+	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, "", message, generation)
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPausedWithReason(reason string, generation int64) {
-	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, "", generation)
-}
-
+// NOTE: not setting a reason to avoid changing the LastTransitionTime based on reason change between pausing and unpausing of the pipeline
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "", "", generation)
 }
