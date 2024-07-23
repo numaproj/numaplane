@@ -20,6 +20,8 @@ export const SquareCheckIcon = ({ tooltipTitle }: CheckIconProps) => {
           cursor: "pointer",
           margin: "3px",
         }}
+        aria-label={`Status: Success for ${tooltipTitle}`}
+        data-testid={`tooltip-${tooltipTitle}`}
       >
         <i className="fa fa-check" />
       </Box>
