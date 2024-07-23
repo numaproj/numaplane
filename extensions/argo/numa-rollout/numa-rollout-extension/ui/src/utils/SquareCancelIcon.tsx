@@ -1,11 +1,11 @@
-import { Tooltip } from "@mui/material";
+import { Box, Tooltip } from "@mui/material";
 import React from "react";
 import { CheckIconProps } from "./SquareCheckIcon";
 
 export const SquareCancelIcon = ({ tooltipTitle }: CheckIconProps) => {
   return (
     <Tooltip title={tooltipTitle}>
-      <div
+      <Box
         style={{
           width: "25px",
           height: "25px",
@@ -18,9 +18,11 @@ export const SquareCancelIcon = ({ tooltipTitle }: CheckIconProps) => {
           cursor: "pointer",
           margin: "3px",
         }}
+        aria-label={`Status: Failed for ${tooltipTitle}`}
+        data-testid={`tooltip-${tooltipTitle}`}
       >
         <i className="fa fa-times" />
-      </div>
+      </Box>
     </Tooltip>
   );
 };
