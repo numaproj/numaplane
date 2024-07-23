@@ -73,5 +73,5 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 }
 
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
-	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline Unpaused", generation)
+	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
 }
