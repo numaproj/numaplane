@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -428,7 +429,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultPipeline := existingPipeline.DeepCopy()
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
-	resultPipeline.Labels = newPipeline.Labels
+	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
 	return resultPipeline
 }
 

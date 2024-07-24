@@ -304,6 +304,51 @@ var yamlHasDesiredPhase = `
 }
 `
 
+var yamlHasDesiredPhaseDifferentUDF = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "SOMETHING_ELSE"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
 var yamlDesiredPhaseWrongType = `
 {
 	  "interStepBufferServiceName": "default",
@@ -438,6 +483,55 @@ var yamlNoLifecycle = `
 }
 `
 
+var yamlNoLifecycleWithNulls = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {},
+			"RANDOM_KEY":
+			{
+				"RANDOM_INNER_KEY": {}
+			}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
 func Test_pipelineWithoutLifecycle(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -478,6 +572,48 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
 				assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
 			}
+		})
+	}
+}
+
+func Test_pipelineSpecEqual(t *testing.T) {
+	testCases := []struct {
+		name          string
+		specYaml1     string
+		specYaml2     string
+		expectedEqual bool
+		expectedError bool
+	}{
+		{
+			name:          "Equal Except for Lifecycle and null values",
+			specYaml1:     yamlHasDesiredPhase,
+			specYaml2:     yamlNoLifecycleWithNulls,
+			expectedEqual: true,
+			expectedError: false,
+		},
+		{
+			name:          "Not Equal",
+			specYaml1:     yamlHasDesiredPhase,
+			specYaml2:     yamlHasDesiredPhaseDifferentUDF,
+			expectedEqual: false,
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj1 := &kubernetes.GenericObject{}
+			obj1.Spec.Raw = []byte(tc.specYaml1)
+			obj2 := &kubernetes.GenericObject{}
+			obj2.Spec.Raw = []byte(tc.specYaml2)
+			equal, err := pipelineSpecEqual(context.Background(), obj1, obj2)
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedEqual, equal)
+			}
+
 		})
 	}
 }
