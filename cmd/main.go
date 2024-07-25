@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -227,5 +226,4 @@ func loadConfigs() {
 	// feature flag
 	common.DataLossPrevention = config.DataLossPrevention
 
-	fmt.Printf("deletethis: DataLossPrevention=%t\n", common.DataLossPrevention)
 }
