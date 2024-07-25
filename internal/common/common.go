@@ -39,4 +39,6 @@ var (
 		Version:  NumaflowAPIVersion,
 		Resource: "pipelines",
 	}
+
+	DataLossPrevention bool
 )

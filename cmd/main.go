@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -37,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -104,24 +106,9 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
-	// Load Config For the pod
-	configManager := config.GetConfigManagerInstance()
-	err := configManager.LoadAllConfigs(func(err error) {
-		numaLogger.Error(err, "Failed to reload global configuration file")
-	},
-		config.WithConfigsPath(configPath),
-		config.WithConfigFileName("config"))
-	if err != nil {
-		numaLogger.Fatal(err, "Failed to load config file")
-	}
-	config, err := configManager.GetConfig()
-	if err != nil {
-		numaLogger.Fatal(err, "Failed to get config")
-	}
-	numaLogger.SetLevel(config.LogLevel)
-	logger.SetBaseLogger(numaLogger)
+	loadConfigs()
+
 	ctx := logger.WithLogger(context.Background(), numaLogger)
-	clog.SetLogger(*numaLogger.LogrLogger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -214,4 +201,31 @@ func main() {
 		os.Exit(1)
 	}
 
+}
+
+func loadConfigs() {
+
+	configManager := config.GetConfigManagerInstance()
+	err := configManager.LoadAllConfigs(func(err error) {
+		numaLogger.Error(err, "Failed to reload global configuration file")
+	},
+		config.WithConfigsPath(configPath),
+		config.WithConfigFileName("config"))
+	if err != nil {
+		numaLogger.Fatal(err, "Failed to load config file")
+	}
+	config, err := configManager.GetConfig()
+	if err != nil {
+		numaLogger.Fatal(err, "Failed to get config")
+	}
+
+	// anything we need to set based on our main Numaplane Config?
+	numaLogger.SetLevel(config.LogLevel)
+	logger.SetBaseLogger(numaLogger)
+	clog.SetLogger(*numaLogger.LogrLogger)
+
+	// feature flag
+	common.DataLossPrevention = config.DataLossPrevention
+
+	fmt.Printf("deletethis: DataLossPrevention=%t\n", common.DataLossPrevention)
 }

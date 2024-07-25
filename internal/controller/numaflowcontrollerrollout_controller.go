@@ -248,11 +248,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if deploymentExists {
 		numaLogger.Debugf("found existing numaflow-controller Deployment")
 
-		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error getting global config: %w", err)
-		}
-		if globalConfig.DataLossPrevention {
+		if common.DataLossPrevention {
 
 			// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
 			controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)

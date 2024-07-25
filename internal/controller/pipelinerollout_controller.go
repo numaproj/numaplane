@@ -43,7 +43,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
 
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -371,11 +370,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return false, fmt.Errorf("error getting global config: %w", err)
-	}
-	if globalConfig.DataLossPrevention { // feature flag
+	if common.DataLossPrevention { // feature flag
 		// If there is a need to update, does it require a pause?
 		var pipelineUpdateRequiresPause bool
 		if pipelineNeedsToUpdate || pipelineIsUpdating {

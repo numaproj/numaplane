@@ -41,7 +41,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -218,11 +217,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// update our Status with the ISBService's Status
 		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-		//todo: move these to initialization since we don't want to support changing them while running
-		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error getting global config: %w", err)
-		}
 		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
 		isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 		if err != nil {
@@ -242,7 +236,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 		}
 
-		if globalConfig.DataLossPrevention {
+		if common.DataLossPrevention {
 
 			if isbServiceNeedsUpdating || isbServiceIsUpdating {
 				numaLogger.Info("ISBService either needs to or is in the process of updating")
