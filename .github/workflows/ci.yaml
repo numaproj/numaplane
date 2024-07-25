@@ -105,3 +105,53 @@ jobs:
 
       - name: Verify docker image
         run: make image
+  
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Restore go build cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-v1-${{ hashFiles('**/go.mod') }}
+      
+      - name: Setup Golang
+        uses: actions/setup-go@v4.0.0
+        with:
+          go-version: '1.21'
+
+      - name: Add bins to PATH
+        run: |
+          echo /home/runner/go/bin >> $GITHUB_PATH
+          echo /usr/local/bin >> $GITHUB_PATH
+
+      - name: Install k3d
+        run: |
+          curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
+          echo 'k3d installed'
+          k3d --version
+
+      - name: Create a cluster
+        run: |
+          export PATH=$PATH:/usr/local/bin
+          k3d cluster create e2e
+          k3d kubeconfig get e2e > ~/.kube/config
+          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
+          echo 'Waiting for the cluster to be ready...'
+          until kubectl cluster-info; do sleep 1; done
+
+      - name: Install Numaplane
+        env:
+          GOPATH: /home/runner/go
+        run:
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+
+      - name: Run tests
+        env:
+          GOPATH: /home/runner/go
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make e2e-test
