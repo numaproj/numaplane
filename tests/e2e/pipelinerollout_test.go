@@ -75,8 +75,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 		pipelineRolloutName = "e2e-pipeline-rollout"
 	)
 
-	rolloutgvr := getPipelineRolloutGVR()
-	pipelinegvr := getPipelineGVR()
+	rolloutgvr := getGVRForPipelineRollout()
+	pipelinegvr := getGVRForPipeline()
 
 	It("Should create the PipelineRollout if it does not exist", func() {
 
@@ -191,16 +191,16 @@ func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructure
 }
 
 func createPipelineRollout(ctx context.Context, rollout *unstructured.Unstructured) error {
-	_, err := dynamicClient.Resource(getPipelineRolloutGVR()).Namespace(rollout.GetNamespace()).Create(ctx, rollout, metav1.CreateOptions{})
+	_, err := dynamicClient.Resource(getGVRForPipelineRollout()).Namespace(rollout.GetNamespace()).Create(ctx, rollout, metav1.CreateOptions{})
 	return err
 }
 
 func deletePipelineRollout(ctx context.Context, namespace, name string) error {
-	err := dynamicClient.Resource(getPipelineRolloutGVR()).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	err := dynamicClient.Resource(getGVRForPipelineRollout()).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	return err
 }
 
-func getPipelineRolloutGVR() schema.GroupVersionResource {
+func getGVRForPipelineRollout() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaplane.numaproj.io",
 		Version:  "v1alpha1",
@@ -208,7 +208,7 @@ func getPipelineRolloutGVR() schema.GroupVersionResource {
 	}
 }
 
-func getPipelineGVR() schema.GroupVersionResource {
+func getGVRForPipeline() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
