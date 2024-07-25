@@ -158,7 +158,7 @@ func CreateUnstructuredCR(
 	name string,
 ) error {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Debugf("will update resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
 
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -167,10 +167,10 @@ func CreateUnstructuredCR(
 
 	_, err = client.Resource(gvr).Namespace(namespace).Create(ctx, unstruc, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+		return fmt.Errorf("failed to create resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	}
 
-	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Infof("successfully created resource %s/%s of type %+v", namespace, name, gvr)
 	return nil
 }
 
