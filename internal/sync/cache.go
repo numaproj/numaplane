@@ -361,6 +361,10 @@ func (c *liveStateCache) Init(numaLogger *logger.NumaLogger) error {
 		return fmt.Errorf("error on init live state cache: %w", err)
 	}
 	c.cacheSettings = *setting
+	// Register the callback for configuration changes
+	controllerConfig.GetConfigManagerInstance().RegisterCallback(func(config controllerConfig.GlobalConfig) {
+		c.getCluster()
+	})
 	return nil
 }
 
