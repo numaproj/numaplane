@@ -44,8 +44,6 @@ type ISBServiceRolloutStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +k8s:openapi-gen=true
 // ISBServiceRollout is the Schema for the isbservicerollouts API
 type ISBServiceRollout struct {
 	metav1.TypeMeta   `json:",inline"`
