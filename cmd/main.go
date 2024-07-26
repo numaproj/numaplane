@@ -181,7 +181,6 @@ func main() {
 		kubectl,
 		customMetrics,
 	)
-
 	if err != nil {
 		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
 	}
