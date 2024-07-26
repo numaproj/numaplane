@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/kubernetes/pkg/apis/apps"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 
@@ -69,6 +71,8 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 			Controller: apiv1.Controller{Version: "1.1.7"},
 		}
 
+		time.Sleep(3 * time.Second)
+
 		// get current NumaflowControllerRollout
 		createdResource := &unstructured.Unstructured{}
 		Eventually(func() bool {
@@ -99,9 +103,13 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 			createdNumaflowController = unstruct
 			return true
 		}).WithTimeout(timeout).Should(BeTrue())
+		createdNumaflowControllerSpec := apps.Deployment{}
+		bytes, err := json.Marshal(createdNumaflowController)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(bytes, &createdNumaflowControllerSpec)
+		Expect(err).ShouldNot(HaveOccurred())
 
-		controllerImage, _, _ := unstructured.NestedString(createdNumaflowController.Object, "spec", "template", "spec", "image")
-		Expect(controllerImage).Should(Equal("quay.io/numaproj/numaflow:v1.1.7"))
+		Expect(createdNumaflowControllerSpec.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/numaproj/numaflow:v1.1.7"))
 
 	})
 
