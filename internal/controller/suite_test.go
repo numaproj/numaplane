@@ -43,7 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -65,7 +64,6 @@ const (
 var (
 	cfg             *rest.Config
 	k8sClient       client.Client
-	k8sManager      manager.Manager
 	testEnv         *envtest.Environment
 	externalCRDsDir string
 	customMetrics   *metrics.CustomMetrics
@@ -77,7 +75,9 @@ func TestControllers(t *testing.T) {
 	RunSpecs(t, "Controllers Suite")
 }
 
-func prepareKubernetesEnvironment() {
+var _ = BeforeSuite(func() {
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
 	// Download Numaflow CRDs
 	crdsURLs := []string{
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
@@ -110,8 +110,12 @@ func prepareKubernetesEnvironment() {
 		UseExistingCluster: &useExistingCluster,
 	}
 
-	var err error
+	numaLogger := logger.New().WithName("controller-manager")
 
+	numaLogger.SetLevel(3) // change to 4 for "debug" level
+	logger.SetBaseLogger(numaLogger)
+
+	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
@@ -125,25 +129,11 @@ func prepareKubernetesEnvironment() {
 
 	//+kubebuilder:scaffold:scheme
 
-	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
-
-}
-
-var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	numaLogger := logger.New().WithName("controller-manager")
-
-	numaLogger.SetLevel(3) // change to 4 for "debug" level
-	logger.SetBaseLogger(numaLogger)
-
-	prepareKubernetesEnvironment()
-
-	var err error
 
 	customMetrics = metrics.RegisterCustomMetrics()
 
