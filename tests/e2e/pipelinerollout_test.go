@@ -85,6 +85,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		err := createPipelineRollout(ctx, pipelineRolloutSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
+		// TODO: make this a common function
 		createdResource := &unstructured.Unstructured{}
 		Eventually(func() bool {
 			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
@@ -93,7 +94,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdResource = unstruct
 			return true
-		}, "500s").Should(BeTrue())
+		}).WithTimeout(timeout).Should(BeTrue())
 
 		createPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"].(map[string]interface{})
@@ -128,6 +129,99 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		By("Verifying the content of the pipeline spec")
 		Expect(createdPipelineSpec).Should(Equal(pipelineSpec))
+
+	})
+
+	It("Should automatically heal a Pipeline if it is updated directly", func() {
+
+		// get child Pipeline
+		createdPipeline := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdPipeline = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+
+		// modify spec to have different isbsvc name
+		createdPipeline.Object["spec"].(map[string]interface{})["interStepBufferServiceName"] = "new-isbsvc"
+
+		// update child Pipeline
+		_, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// allow time for self healing to reconcile
+		time.Sleep(5 * time.Second)
+
+		// get updated Pipeline again to compare spec
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdPipeline = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+		createdPipelineSpec := numaflowv1.PipelineSpec{}
+		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
+		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("Verifying that the child Pipeline spec has been restored to the original")
+		Expect(createdPipelineSpec).Should(Equal(pipelineSpec))
+
+	})
+
+	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
+
+		// new Pipeline spec
+		updatedPipelineSpec := pipelineSpec
+		updatedPipelineSpec.InterStepBufferServiceName = "updated-isbsvc"
+
+		// get current PipelineRollout
+		createdResource := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdResource = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+
+		// update spec.pipeline.spec of returned PipelineRollout object
+		createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"] = updatedPipelineSpec
+
+		// update the PipelineRollout
+		_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// wait for update to reconcile
+		time.Sleep(5 * time.Second)
+
+		// get Pipeline to check that spec has been updated
+		createdPipeline := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdPipeline = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+		createdPipelineSpec := numaflowv1.PipelineSpec{}
+		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
+		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("Verifying the content of the pipeline spec")
+		Expect(createdPipelineSpec).Should(Equal(updatedPipelineSpec))
 
 	})
 
