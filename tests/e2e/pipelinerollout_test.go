@@ -94,7 +94,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdResource = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		createPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"].(map[string]interface{})
@@ -118,7 +118,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdPipeline = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		createdPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
@@ -143,7 +143,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdPipeline = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		// modify spec to have different isbsvc name
 		createdPipeline.Object["spec"].(map[string]interface{})["interStepBufferServiceName"] = "new-isbsvc"
@@ -163,7 +163,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdPipeline = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 		createdPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
 		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
@@ -191,7 +191,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdResource = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		// update spec.pipeline.spec of returned PipelineRollout object
 		createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"] = updatedPipelineSpec
@@ -212,7 +212,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			createdPipeline = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 		createdPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
 		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
@@ -239,7 +239,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
@@ -250,7 +250,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
 
 	})
 

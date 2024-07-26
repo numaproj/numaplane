@@ -54,13 +54,13 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(timeout).Should(Succeed())
+		}).WithTimeout(testTimeout).Should(Succeed())
 
 		By("Verifying that the NumaflowController was created")
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(timeout).Should(Succeed())
+		}).WithTimeout(testTimeout).Should(Succeed())
 
 	})
 
@@ -82,7 +82,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 			}
 			createdResource = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		// update spec of returned NumaflowControllerRollout object
 		createdResource.Object["spec"] = updatedNumaflowControllerSpec
@@ -102,7 +102,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 			}
 			createdNumaflowController = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 		createdNumaflowControllerSpec := apps.Deployment{}
 		bytes, err := json.Marshal(createdNumaflowController)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -127,7 +127,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -138,7 +138,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 
 	})
 

@@ -44,7 +44,8 @@ var (
 	testEnv       *envtest.Environment
 	ctx           context.Context
 	cancel        context.CancelFunc
-	timeout       = 5 * time.Minute
+	suiteTimeout  = 5 * time.Minute
+	testTimeout   = 1 * time.Minute
 )
 
 var _ = BeforeSuite(func() {
@@ -52,7 +53,7 @@ var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout)
 
 	var err error
 	scheme := runtime.NewScheme()

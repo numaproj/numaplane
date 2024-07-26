@@ -64,13 +64,13 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(timeout).Should(Succeed())
+		}).WithTimeout(testTimeout).Should(Succeed())
 
 		By("Verifying that the ISBService was created")
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(timeout).Should(Succeed())
+		}).WithTimeout(testTimeout).Should(Succeed())
 
 	})
 
@@ -91,7 +91,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 			}
 			createdResource = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 		// update spec.interstepbufferservice.spec of returned ISBServiceRollout object
 		createdResource.Object["spec"].(map[string]interface{})["interStepBufferService"].(map[string]interface{})["spec"] = updatedISBServiceSpec
@@ -111,7 +111,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 			}
 			createdISBService = unstruct
 			return true
-		}).WithTimeout(timeout).Should(BeTrue())
+		}).WithTimeout(testTimeout).Should(BeTrue())
 		createdISBServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
 		rawISBServiceSpec := createdISBService.Object["spec"].(map[string]interface{})
 		rawISBServiceSpecBytes, err := json.Marshal(rawISBServiceSpec)
@@ -138,7 +138,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -149,23 +149,13 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 				return false
 			}
 			return true
-		}, timeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
 
 	})
 
 })
 
 func createISBServiceRolloutSpec(name, namespace string) *unstructured.Unstructured {
-
-	// spec := numaflowv1.InterStepBufferServiceSpec{
-	// 	Redis: &numaflowv1.RedisBufferService{},
-	// 	JetStream: &numaflowv1.JetStreamBufferService{
-	// 		Version: "latest",
-	// 		Persistence: &numaflowv1.PersistenceStrategy{
-	// 			VolumeSize: &numaflowv1.DefaultVolumeSize,
-	// 		},
-	// 	},
-	// }
 
 	rawSpec, err := json.Marshal(isbServiceSpec)
 	Expect(err).ToNot(HaveOccurred())
