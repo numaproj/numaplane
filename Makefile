@@ -90,15 +90,13 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(KUBECTL) kustomize config/default > config/install.yaml
 
-#.PHONY: generate
-#generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-#	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-
 .PHONY: codegen
 codegen: manifests controller-gen
+## Generate pkg/client directory
 	./hack/update-codegen.sh
 	rm -rf ./vendor
 	go mod tidy
+## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." 
 
 .PHONY: fmt
