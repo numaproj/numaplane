@@ -80,6 +80,8 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = "1.0.0"
 
+		time.Sleep(3 * time.Second)
+
 		// get current ISBServiceRollout
 		createdResource := &unstructured.Unstructured{}
 		Eventually(func() bool {
