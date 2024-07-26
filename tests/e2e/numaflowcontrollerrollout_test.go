@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		numaflowControllerRolloutName = "numaflow-controller"
 	)
 	gvr := getGVRForNumaflowControllerRollout()
+	deploygvr := getGVRForDeployment()
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 
@@ -57,6 +59,49 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(timeout).Should(Succeed())
+
+	})
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+
+		// new NumaflowController spec
+		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: "1.1.7"},
+		}
+
+		// get current NumaflowControllerRollout
+		createdResource := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdResource = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+
+		// update spec of returned NumaflowControllerRollout object
+		createdResource.Object["spec"] = updatedNumaflowControllerSpec
+
+		// update the NumaflowControllerRollout
+		_, err := dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// wait for update to reconcile
+		time.Sleep(5 * time.Second)
+
+		createdNumaflowController := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(deploygvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdNumaflowController = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+
+		controllerImage, _, _ := unstructured.NestedString(createdNumaflowController.Object, "spec", "template", "spec", "image")
+		Expect(controllerImage).Should(Equal("quay.io/numaproj/numaflow:v1.1.7"))
 
 	})
 
@@ -103,7 +148,6 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *unstructured.U
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			// TODO: can we also set this to `latest` like ISBService?
 			Controller: apiv1.Controller{Version: "1.2.1"},
 		},
 	}

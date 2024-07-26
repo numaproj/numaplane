@@ -220,7 +220,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("Verifying the content of the pipeline spec")
+		By("Verifying pipeline spec is equal to updated spec")
 		Expect(createdPipelineSpec).Should(Equal(updatedPipelineSpec))
 
 	})

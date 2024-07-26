@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+var isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	Redis: &numaflowv1.RedisBufferService{},
+	JetStream: &numaflowv1.JetStreamBufferService{
+		Version: "latest",
+		Persistence: &numaflowv1.PersistenceStrategy{
+			VolumeSize: &numaflowv1.DefaultVolumeSize,
+		},
+	},
+}
 
 var _ = Describe("ISBServiceRollout e2e", func() {
 
@@ -60,6 +71,54 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 			_, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(timeout).Should(Succeed())
+
+	})
+
+	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
+
+		// new ISBService spec
+		updatedISBServiceSpec := isbServiceSpec
+		updatedISBServiceSpec.JetStream.Version = "1.0.0"
+
+		// get current ISBServiceRollout
+		createdResource := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdResource = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+
+		// update spec.interstepbufferservice.spec of returned ISBServiceRollout object
+		createdResource.Object["spec"].(map[string]interface{})["interStepBufferService"].(map[string]interface{})["spec"] = updatedISBServiceSpec
+
+		// update the ISBServiceRollout
+		_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// wait for update to reconcile
+		time.Sleep(5 * time.Second)
+
+		createdISBService := &unstructured.Unstructured{}
+		Eventually(func() bool {
+			unstruct, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			createdISBService = unstruct
+			return true
+		}).WithTimeout(timeout).Should(BeTrue())
+		createdISBServiceSpec := numaflowv1.InterStepBufferServiceSpec{}
+		rawISBServiceSpec := createdISBService.Object["spec"].(map[string]interface{})
+		rawISBServiceSpecBytes, err := json.Marshal(rawISBServiceSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		err = json.Unmarshal(rawISBServiceSpecBytes, &createdISBServiceSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("Verifying isbService spec is equal to updated spec")
+		Expect(createdISBServiceSpec).Should(Equal(updatedISBServiceSpec))
 
 	})
 
@@ -96,17 +155,17 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 func createISBServiceRolloutSpec(name, namespace string) *unstructured.Unstructured {
 
-	spec := numaflowv1.InterStepBufferServiceSpec{
-		Redis: &numaflowv1.RedisBufferService{},
-		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "latest",
-			Persistence: &numaflowv1.PersistenceStrategy{
-				VolumeSize: &numaflowv1.DefaultVolumeSize,
-			},
-		},
-	}
+	// spec := numaflowv1.InterStepBufferServiceSpec{
+	// 	Redis: &numaflowv1.RedisBufferService{},
+	// 	JetStream: &numaflowv1.JetStreamBufferService{
+	// 		Version: "latest",
+	// 		Persistence: &numaflowv1.PersistenceStrategy{
+	// 			VolumeSize: &numaflowv1.DefaultVolumeSize,
+	// 		},
+	// 	},
+	// }
 
-	rawSpec, err := json.Marshal(spec)
+	rawSpec, err := json.Marshal(isbServiceSpec)
 	Expect(err).ToNot(HaveOccurred())
 
 	ISBServiceRollout := &apiv1.ISBServiceRollout{
