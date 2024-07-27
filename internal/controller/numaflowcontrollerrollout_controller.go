@@ -258,10 +258,22 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 			numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
 
+			// set the Status appropriately to "Pending" or "Deployed"
+			// if controllerDeploymentNeedsUpdating - this means there's a mismatch between the desired NumaflowControllerRollout version and actual
+			// if there's a generation mismatch - this means we haven't even observed the current generation
+			// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
+			// we may match the second case and not the first if we need to update something other than Numaflow Controller version
+			if controllerDeploymentNeedsUpdating || controllerRollout.Status.ObservedGeneration < controllerRollout.Generation {
+				controllerRollout.Status.MarkPending()
+			} else {
+				controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+			}
+
 			if controllerDeploymentNeedsUpdating || controllerDeploymentIsUpdating {
 				numaLogger.Info("Numaflow Controller either needs to or is in the process of updating")
+
 				// request pause if we haven't already
-				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, namespace, true)
+				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, controllerRollout, true)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -282,7 +294,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 							if phase != gitopsSyncCommon.OperationSucceeded {
 								return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 							}
-							controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 						} else {
 							numaLogger.Debugf("not all Pipelines have paused")
 						}
@@ -291,7 +302,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 				return delayedRequeue, nil
 			} else {
 				// remove any pause requirement if necessary
-				_, err := r.requestPipelinesPause(ctx, namespace, false)
+				_, err := r.requestPipelinesPause(ctx, controllerRollout, false)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -313,7 +324,6 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
-	controllerRollout.Status.MarkDeployed(controllerRollout.Generation) //TODO: call MarkPending() somewhere?
 
 	return ctrl.Result{}, nil
 }
@@ -340,13 +350,13 @@ func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Con
 }
 
 // request Pipelines in the namespace either to pause or not to pause
-func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, namespace string, pause bool) (bool, error) {
+func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	updated := GetPauseModule().updateControllerPauseRequest(namespace, pause)
+	updated := GetPauseModule().updateControllerPauseRequest(controllerRollout.Namespace, pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		numaLogger.Infof("updated pause request = %t", pause)
-		pipelines, err := r.getPipelines(ctx, namespace)
+		pipelines, err := r.getPipelines(ctx, controllerRollout.Namespace)
 		if err != nil {
 			return false, err
 		}
@@ -354,6 +364,14 @@ func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.
 			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
 		}
 	}
+
+	if pause {
+		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
+	} else {
+		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
+
+	}
+
 	return updated, nil
 }
 
@@ -526,6 +544,8 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	}
 
 	syncCtx.Sync()
+
+	rollout.Status.MarkDeployed(rollout.Generation)
 
 	phase, _, _ := syncCtx.GetState()
 	return phase, nil

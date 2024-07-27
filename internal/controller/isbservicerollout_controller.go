@@ -243,7 +243,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				// TODO: maybe only pause if the update requires pausing
 
 				// request pause if we haven't already
-				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, existingISBServiceDef, true)
+				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, true)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -273,7 +273,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 			} else {
 				// remove any pause requirement if necessary
-				_, err := r.requestPipelinesPause(ctx, existingISBServiceDef, false)
+				_, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, false)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -332,7 +332,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 
 // request that Pipelines pause
 // return whether an update was made
-func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context, isbService *kubernetes.GenericObject, pause bool) (bool, error) {
+func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, isbService *kubernetes.GenericObject, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	updated := GetPauseModule().updateISBServicePauseRequest(isbService.Namespace, isbService.Name, pause)
@@ -345,6 +345,12 @@ func (r *ISBServiceRolloutReconciler) requestPipelinesPause(ctx context.Context,
 		for _, pipeline := range pipelines {
 			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
 		}
+	}
+
+	if pause {
+		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)
+	} else {
+		isbServiceRollout.Status.MarkUnpausingPipelines(isbServiceRollout.Generation)
 	}
 	return updated, nil
 }
