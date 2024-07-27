@@ -37,11 +37,14 @@ type NumaflowControllerRolloutStatus struct {
 	Status `json:",inline"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:validation:XValidation:rule=(self.metadata.name == "numaflow-controller"), message="The metadata name must be 'numaflow-controller'"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
+// +genclient
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:validation:XValidation:rule=(self.metadata.name == "numaflow-controller"), message="The metadata name must be 'numaflow-controller'"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +k8s:openapi-gen=true
 
 // NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts API
 type NumaflowControllerRollout struct {

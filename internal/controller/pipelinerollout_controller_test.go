@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,20 +42,19 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var _ = Describe("PipelineRollout Controller", Ordered, func() {
-	const (
-		namespace           = "default"
-		pipelineRolloutName = "pipelinerollout-test"
-	)
+const (
+	testNamespace           = "default"
+	testPipelineRolloutName = "pipelinerollout-test"
+	testPipelineName        = testPipelineRolloutName
+)
 
-	ctx := context.Background()
-
-	pipelineSpecSourceRPU := int64(5)
-	pipelineSpecSourceDuration := metav1.Duration{
+var (
+	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
 
-	pipelineSpec := numaflowv1.PipelineSpec{
+	pipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "my-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -95,13 +95,26 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		},
 	}
 
-	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
-	Expect(err).ToNot(HaveOccurred())
-
-	pipelineRollout := &apiv1.PipelineRollout{
+	testPipeline = numaflowv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      pipelineRolloutName,
+			Name:      testPipelineName,
+			Namespace: testNamespace,
+		},
+		Spec: pipelineSpec,
+	}
+)
+
+func createPipelineRollout(pipelineSpec *numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+
+	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+	if err != nil {
+		panic(err)
+	}
+
+	return &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNamespace,
+			Name:      testPipelineRolloutName,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Pipeline: apiv1.Pipeline{
@@ -111,8 +124,15 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			},
 		},
 	}
+}
 
-	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
+
+	ctx := context.Background()
+
+	pipelineRollout := createPipelineRollout(&pipelineSpec)
+
+	resourceLookupKey := types.NamespacedName{Name: testPipelineRolloutName, Namespace: testNamespace}
 
 	Context("When applying a PipelineRollout spec", func() {
 		It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
@@ -143,7 +163,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 
 		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, testNamespace, testPipelineRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should have the metrics updated", func() {
@@ -206,7 +226,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
 			By("updating the Numaflow Pipeline and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, namespace, pipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
+			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, testNamespace, testPipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
@@ -258,6 +278,70 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 	})
 })
+
+// test cases:
+// - PipelineRollout told to pause: verify pipeline lifecycle gets changed
+// - PipelineRollout needs to update and isn't paused: verify pipeline lifecycle gets changed
+// - PipelineRollout needs to update and is paused: verify pipeline lifecycle set to Running and pipeline updated
+// - PipelineRollout allowed to run, doesn't need to update: verify pipeline lifecycle gets changed
+func Test_reconcile(t *testing.T) {
+	t.Run("External pause requests", func(t *testing.T) {
+		//err := numaflowv1.AddToScheme(scheme.Scheme)
+		//assert.NoError(t, err)
+		//err = apiv1.AddToScheme(scheme.Scheme)
+		//assert.NoError(t, err)
+
+		if k8sManager == nil {
+			RegisterFailHandler(Fail)
+			prepareKubernetesEnvironment()
+		}
+
+		//cl := fake.NewClientBuilder().Build()
+		ctx := context.Background()
+		//cfg, err = kubernetes.K8sRestConfig()
+		//assert.NoError(t, err)
+
+		err := apiv1.AddToScheme(scheme.Scheme)
+		assert.NoError(t, err)
+		r := &PipelineRolloutReconciler{
+			client:     k8sClient, //cl,
+			scheme:     scheme.Scheme,
+			restConfig: cfg,
+		}
+
+		fmt.Printf("deletethis: Test_reconcile: cfg=%+v, k8sClient=%+v\n", cfg, k8sClient)
+
+		// create PipelineRollout which creates Pipeline when reconciled
+
+		testRollout := createPipelineRollout(&pipelineSpec)
+		testRollout.UID = "fake-uid"
+		//err = cl.Create(ctx, testRollout)
+		//fmt.Printf("deletethis: testRollout=%+v\n", testRollout)
+		//assert.Nil(t, err)
+
+		_, err = r.reconcile(ctx, testRollout)
+		assert.NoError(t, err)
+
+		// verify we're Deployed, and verify Pipeline was created
+		condition := testRollout.Status.GetCondition(apiv1.ConditionChildResourceDeployed)
+		assert.NotNil(t, condition)
+		var pipelineRetrieved numaflowv1.Pipeline
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: testPipelineName}, &pipelineRetrieved)
+		assert.NoError(t, err)
+
+		// now reconcile PipelineRollout
+
+		// Numaflow Controller requests pause, ISBService is not yet in the system
+		// Expectation: PipelineRollout goes to Pending state
+		/*pause := true
+		GetPauseModule().controllerRequestedPause[testNamespace] = &pause
+
+		_, err = r.reconcile(ctx, testRollout)
+		assert.NoError(t, err)
+		assert.Equal(t, "Pending", testRollout.Status.Phase)*/
+
+	})
+}
 
 var yamlHasDesiredPhase = `
 {
