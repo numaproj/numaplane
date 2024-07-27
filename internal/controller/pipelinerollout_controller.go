@@ -59,6 +59,16 @@ const (
 
 var pipelineROReconciler *PipelineRolloutReconciler
 
+const (
+	PipelinePhaseUnknown   = ""
+	PipelinePhaseRunning   = "Running"
+	PipelinePhaseSucceeded = "Succeeded"
+	PipelinePhaseFailed    = "Failed"
+	PipelinePhasePausing   = "Pausing"
+	PipelinePhasePaused    = "Paused"
+	PipelinePhaseDeleting  = "Deleting"
+)
+
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
 	client     client.Client
@@ -390,7 +400,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			return false, nil
 		}
 
-		specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == "Paused")
+		specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePaused || newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePausing)
 
 		// make sure our Lifecycle is what we need it to be
 		shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
@@ -458,7 +468,7 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
-	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == "Paused"
+	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePaused
 
 	if paused && !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
