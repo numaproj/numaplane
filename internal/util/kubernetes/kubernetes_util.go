@@ -1,13 +1,10 @@
 package kubernetes
 
 import (
-	"os"
 	"regexp"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // this file is designed to hold utility functions for Kubernetes that are not specific to
@@ -32,24 +29,4 @@ func IsValidKubernetesManifestFile(fileName string) bool {
 		return true
 	}
 	return false
-}
-
-// K8sRestConfig returns a rest config for the kubernetes cluster.
-func K8sRestConfig() (*rest.Config, error) {
-	var restConfig *rest.Config
-	var err error
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		home, _ := os.UserHomeDir()
-		kubeconfig = home + "/.kube/config"
-		if _, err := os.Stat(kubeconfig); err != nil && os.IsNotExist(err) {
-			kubeconfig = ""
-		}
-	}
-	if kubeconfig != "" {
-		restConfig, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		restConfig, err = rest.InClusterConfig()
-	}
-	return restConfig, err
 }
