@@ -390,9 +390,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 			return false, nil
 		}
 
+		specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == "Paused")
+
 		// make sure our Lifecycle is what we need it to be
-		shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest
-		numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t", shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest)
+		shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
+		numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
+			shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
 		err = r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef)
 		if err != nil {
 			return false, err
@@ -464,6 +467,7 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 		}
 	} else if !paused && lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
+
 		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
 		if err != nil {
 			return err
