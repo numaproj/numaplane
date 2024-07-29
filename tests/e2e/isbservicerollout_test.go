@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -47,28 +46,25 @@ var isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 var _ = Describe("ISBServiceRollout e2e", func() {
 
 	const (
-		namespace             = "numaplane-system"
 		isbServiceRolloutName = "test-isbservice-rollout"
 	)
-	rolloutgvr := getGVRForISBServiceRollout()
 	isbservicegvr := getGVRForISBService()
 
 	It("Should create the ISBServiceRollout if it doesn't exist", func() {
 
-		isbServiceRolloutSpec := createISBServiceRolloutSpec(isbServiceRolloutName, namespace)
-
-		err := createISBServiceRollout(ctx, isbServiceRolloutSpec)
-		Expect(err).NotTo(HaveOccurred())
+		isbServiceRolloutSpec := createISBServiceRolloutSpec(isbServiceRolloutName, Namespace)
+		_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 
 		By("Verifying that the ISBServiceRollout was created")
 		Eventually(func() error {
-			_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		By("Verifying that the ISBService was created")
 		Eventually(func() error {
-			_, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
@@ -80,24 +76,21 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = "1.0.0"
 
+		rawSpec, err := json.Marshal(updatedISBServiceSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		time.Sleep(3 * time.Second)
 
 		// get current ISBServiceRollout
-		createdResource := &unstructured.Unstructured{}
+		rollout := &apiv1.ISBServiceRollout{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			createdResource = unstruct
-			return true
+			rollout, err = isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return err == nil
 		}).WithTimeout(testTimeout).Should(BeTrue())
 
-		// update spec.interstepbufferservice.spec of returned ISBServiceRollout object
-		createdResource.Object["spec"].(map[string]interface{})["interStepBufferService"].(map[string]interface{})["spec"] = updatedISBServiceSpec
-
 		// update the ISBServiceRollout
-		_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+		_, err = isbServiceRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// wait for update to reconcile
@@ -105,7 +98,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 		createdISBService := &unstructured.Unstructured{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -126,11 +119,11 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
 
-		err := deleteISBServiceRollout(ctx, isbServiceRolloutName, namespace)
-		Expect(err).NotTo(HaveOccurred())
+		err := isbServiceRolloutClient.Delete(ctx, isbServiceRolloutName, metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the ISBServiceRollout: " + err.Error())
@@ -141,7 +134,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(isbservicegvr).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the ISBService: " + err.Error())
@@ -155,12 +148,12 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 })
 
-func createISBServiceRolloutSpec(name, namespace string) *unstructured.Unstructured {
+func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
 
 	rawSpec, err := json.Marshal(isbServiceSpec)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).ShouldNot(HaveOccurred())
 
-	ISBServiceRollout := &apiv1.ISBServiceRollout{
+	isbServiceRollout := &apiv1.ISBServiceRollout{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "numaplane.numaproj.io/v1alpha1",
 			Kind:       "ISBServiceRollout",
@@ -178,27 +171,10 @@ func createISBServiceRolloutSpec(name, namespace string) *unstructured.Unstructu
 		},
 	}
 
-	unstructuredObj, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(ISBServiceRollout)
-	return &unstructured.Unstructured{Object: unstructuredObj}
+	return isbServiceRollout
 
 }
 
-func createISBServiceRollout(ctx context.Context, rollout *unstructured.Unstructured) error {
-	_, err := dynamicClient.Resource(getGVRForISBServiceRollout()).Namespace(rollout.GetNamespace()).Create(ctx, rollout, metav1.CreateOptions{})
-	return err
-}
-
-func deleteISBServiceRollout(ctx context.Context, name, namespace string) error {
-	return dynamicClient.Resource(getGVRForISBServiceRollout()).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-}
-
-func getGVRForISBServiceRollout() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaplane.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "isbservicerollouts",
-	}
-}
 func getGVRForISBService() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",

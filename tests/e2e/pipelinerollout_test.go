@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -71,48 +70,27 @@ var pipelineSpec = numaflowv1.PipelineSpec{
 var _ = Describe("PipelineRollout e2e", func() {
 
 	const (
-		namespace           = "numaplane-system"
 		pipelineRolloutName = "e2e-pipeline-rollout"
 	)
 
-	rolloutgvr := getGVRForPipelineRollout()
 	pipelinegvr := getGVRForPipeline()
 
 	It("Should create the PipelineRollout if it does not exist", func() {
 
-		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, namespace)
-
-		err := createPipelineRollout(ctx, pipelineRolloutSpec)
+		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, Namespace)
+		_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// TODO: make this a common function
-		createdResource := &unstructured.Unstructured{}
-		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			createdResource = unstruct
-			return true
-		}).WithTimeout(testTimeout).Should(BeTrue())
+		By("Verifying that the PipelineRollout was created")
+		Eventually(func() error {
+			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
 
-		createPipelineSpec := numaflowv1.PipelineSpec{}
-		rawPipelineSpec := createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"].(map[string]interface{})
-		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		err = json.Unmarshal(rawPipelineSpecBytes, &createPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("Verifying the content of the pipeline spec field")
-		Expect(createPipelineSpec).Should(Equal(pipelineSpec))
-
-	})
-
-	It("Should create a Pipeline", func() {
-
+		By("Verifying that the Pipeline was created")
 		createdPipeline := &unstructured.Unstructured{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -120,14 +98,13 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return true
 		}).WithTimeout(testTimeout).Should(BeTrue())
 
+		By("Verifying the content of the pipeline spec")
 		createdPipelineSpec := numaflowv1.PipelineSpec{}
 		rawPipelineSpec := createdPipeline.Object["spec"].(map[string]interface{})
 		rawPipelineSpecBytes, err := json.Marshal(rawPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		err = json.Unmarshal(rawPipelineSpecBytes, &createdPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
-
-		By("Verifying the content of the pipeline spec")
 		Expect(createdPipelineSpec).Should(Equal(pipelineSpec))
 
 	})
@@ -137,7 +114,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		// get child Pipeline
 		createdPipeline := &unstructured.Unstructured{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -149,7 +126,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		createdPipeline.Object["spec"].(map[string]interface{})["interStepBufferServiceName"] = "new-isbsvc"
 
 		// update child Pipeline
-		_, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
+		_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// allow time for self healing to reconcile
@@ -157,7 +134,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// get updated Pipeline again to compare spec
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -182,22 +159,19 @@ var _ = Describe("PipelineRollout e2e", func() {
 		updatedPipelineSpec := pipelineSpec
 		updatedPipelineSpec.InterStepBufferServiceName = "updated-isbsvc"
 
+		rawSpec, err := json.Marshal(updatedPipelineSpec)
+		Expect(err).ToNot(HaveOccurred())
+
 		// get current PipelineRollout
-		createdResource := &unstructured.Unstructured{}
+		rollout := &apiv1.PipelineRollout{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			createdResource = unstruct
-			return true
+			rollout, err = pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return err == nil
 		}).WithTimeout(testTimeout).Should(BeTrue())
 
-		// update spec.pipeline.spec of returned PipelineRollout object
-		createdResource.Object["spec"].(map[string]interface{})["pipeline"].(map[string]interface{})["spec"] = updatedPipelineSpec
-
 		// update the PipelineRollout
-		_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		rollout.Spec.Pipeline.Spec.Raw = rawSpec
+		_, err = pipelineRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// wait for update to reconcile
@@ -206,7 +180,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		// get Pipeline to check that spec has been updated
 		createdPipeline := &unstructured.Unstructured{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -227,11 +201,11 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should delete the PipelineRollout and child Pipeline", func() {
 
-		err := deletePipelineRollout(ctx, namespace, pipelineRolloutName)
+		err := pipelineRolloutClient.Delete(ctx, pipelineRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(rolloutgvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the PipelineRollout: " + err.Error())
@@ -242,7 +216,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(pipelinegvr).Namespace(namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the Pipeline: " + err.Error())
@@ -256,7 +230,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 })
 
-func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructured {
+func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ToNot(HaveOccurred())
@@ -279,27 +253,8 @@ func createPipelineRolloutSpec(name, namespace string) *unstructured.Unstructure
 		},
 	}
 
-	unstructuredObj, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(pipelineRollout)
-	return &unstructured.Unstructured{Object: unstructuredObj}
+	return pipelineRollout
 
-}
-
-func createPipelineRollout(ctx context.Context, rollout *unstructured.Unstructured) error {
-	_, err := dynamicClient.Resource(getGVRForPipelineRollout()).Namespace(rollout.GetNamespace()).Create(ctx, rollout, metav1.CreateOptions{})
-	return err
-}
-
-func deletePipelineRollout(ctx context.Context, namespace, name string) error {
-	err := dynamicClient.Resource(getGVRForPipelineRollout()).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-	return err
-}
-
-func getGVRForPipelineRollout() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaplane.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "pipelinerollouts",
-	}
 }
 
 func getGVRForPipeline() schema.GroupVersionResource {

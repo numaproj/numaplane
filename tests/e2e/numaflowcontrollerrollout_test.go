@@ -17,14 +17,12 @@ limitations under the License.
 package e2e
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/kubernetes/pkg/apis/apps"
 
@@ -37,34 +35,33 @@ import (
 var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 	const (
-		namespace                     = "numaplane-system"
 		numaflowControllerRolloutName = "numaflow-controller"
 	)
-	gvr := getGVRForNumaflowControllerRollout()
 	deploygvr := getGVRForDeployment()
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 
-		numaflowControllerRolloutSpec := createNumaflowControllerRolloutSpec(numaflowControllerRolloutName, namespace)
-
-		err := createNumaflowControllerRollout(ctx, numaflowControllerRolloutSpec)
-		Expect(err).NotTo(HaveOccurred())
+		numaflowControllerRolloutSpec := createNumaflowControllerRolloutSpec(numaflowControllerRolloutName, Namespace)
+		_, err := numaflowControllerRolloutClient.Create(ctx, numaflowControllerRolloutSpec, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 
 		By("Verifying that the NumaflowControllerRollout was created")
 		Eventually(func() error {
-			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		By("Verifying that the NumaflowController was created")
 		Eventually(func() error {
-			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+
+		var err error
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
@@ -74,21 +71,15 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		time.Sleep(3 * time.Second)
 
 		// get current NumaflowControllerRollout
-		createdResource := &unstructured.Unstructured{}
+		rollout := &apiv1.NumaflowControllerRollout{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			createdResource = unstruct
-			return true
+			rollout, err = numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return err == nil
 		}).WithTimeout(testTimeout).Should(BeTrue())
 
-		// update spec of returned NumaflowControllerRollout object
-		createdResource.Object["spec"] = updatedNumaflowControllerSpec
-
 		// update the NumaflowControllerRollout
-		_, err := dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, createdResource, metav1.UpdateOptions{})
+		rollout.Spec = updatedNumaflowControllerSpec
+		_, err = numaflowControllerRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// wait for update to reconcile
@@ -96,7 +87,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 		createdNumaflowController := &unstructured.Unstructured{}
 		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(deploygvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			unstruct, err := dynamicClient.Resource(deploygvr).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if err != nil {
 				return false
 			}
@@ -115,11 +106,11 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 	It("Should delete the NumaflowControllerRollout and child NumaflowController", func() {
 
-		err := deleteNumaflowControllerRollout(ctx, numaflowControllerRolloutName, namespace)
-		Expect(err).NotTo(HaveOccurred())
+		err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the NumaflowControllerRollout: " + err.Error())
@@ -130,7 +121,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the deployment: " + err.Error())
@@ -144,7 +135,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 })
 
-func createNumaflowControllerRolloutSpec(name, namespace string) *unstructured.Unstructured {
+func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
 
 	controllerRollout := &apiv1.NumaflowControllerRollout{
 		TypeMeta: metav1.TypeMeta{
@@ -160,26 +151,8 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *unstructured.U
 		},
 	}
 
-	unstructuredObj, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(controllerRollout)
-	return &unstructured.Unstructured{Object: unstructuredObj}
+	return controllerRollout
 
-}
-
-func createNumaflowControllerRollout(ctx context.Context, rollout *unstructured.Unstructured) error {
-	_, err := dynamicClient.Resource(getGVRForNumaflowControllerRollout()).Namespace(rollout.GetNamespace()).Create(ctx, rollout, metav1.CreateOptions{})
-	return err
-}
-
-func deleteNumaflowControllerRollout(ctx context.Context, name, namespace string) error {
-	return dynamicClient.Resource(getGVRForNumaflowControllerRollout()).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-}
-
-func getGVRForNumaflowControllerRollout() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaplane.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "numaflowcontrollerrollouts",
-	}
 }
 
 func getGVRForDeployment() schema.GroupVersionResource {
