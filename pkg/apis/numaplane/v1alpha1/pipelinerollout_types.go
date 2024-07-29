@@ -41,11 +41,11 @@ type PipelineRolloutStatus struct {
 	Status `json:",inline"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
-
+// +genclient
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
 // PipelineRollout is the Schema for the pipelinerollouts API
 type PipelineRollout struct {
 	metav1.TypeMeta   `json:",inline"`
