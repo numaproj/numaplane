@@ -26,13 +26,6 @@ export const component = Extension;
 ((window: any) => {
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
-    "Rollout",
-    "Numarollout",
-    { icon: "fa fa-chart-area" }
-  );
-  window?.extensionsAPI?.registerResourceExtension(
-    component,
     "numaplane.numaproj.io",
     "ISBServiceRollout",
     "Numarollout",
