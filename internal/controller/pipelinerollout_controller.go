@@ -163,7 +163,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -174,7 +174,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -188,7 +188,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+				return ctrl.Result{}, statusUpdateErr
 			}
 
 			return ctrl.Result{}, err
@@ -201,7 +201,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
@@ -561,7 +561,9 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	case numaflowv1.PipelinePhaseFailed:
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
 	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
-		pipelineRollout.Status.MarkPipelinePausingOrPausedWithReason(fmt.Sprintf("Pipeline%s", string(pipelinePhase)), pipelineRollout.Generation)
+		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
+		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
+		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
 	case numaflowv1.PipelinePhaseUnknown:
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
@@ -569,6 +571,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	default:
 		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
+		pipelineRollout.Status.MarkPipelineUnpaused(pipelineDef.Generation)
 	}
 	return nil
 }

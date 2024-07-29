@@ -4,8 +4,9 @@ metadata:
   name: simple-isbservice
 spec:
   interStepBufferService:
-    jetstream:
-      replicas: 1
-      version: latest
-      persistence:
-        volumeSize: 1Gi
+    spec:
+      jetstream:
+        replicas: 1
+        version: latest
+        persistence:
+          volumeSize: 1Gi
