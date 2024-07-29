@@ -58,7 +58,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 		By("Verifying that the ISBServiceRollout was created")
 		Eventually(func() error {
-			isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
