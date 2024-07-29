@@ -109,7 +109,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: codegen fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -short -v $$(go list ./... | grep -v /tests/e2e) 
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -race -short -v $$(go list ./... | grep -v /tests/e2e) 
 
 .PHONY: test-e2e
 test-e2e: codegen fmt vet envtest ## Run e2e tests.
