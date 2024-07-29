@@ -29,27 +29,27 @@ export const component = Extension;
     "numaplane.numaproj.io",
     "ISBServiceRollout",
     "Numarollout",
-    { icon: "fa fa-chart-area" }
+    { icon: "fa fa-window-restore" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
     "numaplane.numaproj.io",
     "NumaflowControllerRollout",
     "Numarollout",
-    { icon: "fa fa-chart-area" }
+    { icon: "fa fa-window-restore" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
     "numaplane.numaproj.io",
     "PipelineRollout",
     "Numarollout",
-    { icon: "fa fa-chart-area" }
+    { icon: "fa fa-window-restore" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
     "*",
     "Deployment",
     "Numarollout",
-    { icon: "fa fa-chart-area" }
+    { icon: "fa fa-window-restore" }
   );
 })(window);
