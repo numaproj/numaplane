@@ -3,8 +3,8 @@ module github.com/numaproj/numaplane
 go 1.21
 
 require (
-	github.com/argoproj/argo-cd/v2 v2.11.3
-	github.com/argoproj/gitops-engine v0.7.1-0.20240514190100-8a3ce6d85caa
+	github.com/argoproj/argo-cd/v2 v2.11.6
+	github.com/argoproj/gitops-engine v0.7.1-0.20240715141605-18ba62e1f1fb
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-logr/logr v1.4.1
 	github.com/numaproj/numaflow v1.2.1
