@@ -41,10 +41,9 @@ import (
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	numaplaneversioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
-
-	"github.com/numaproj/numaplane/internal/controller/config"
 )
 
 const (
@@ -315,10 +314,16 @@ func Test_reconcile(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Make sure "dataLossPrevention" feature flag is turned on
-	configManager := config.GetConfigManagerInstance()
+	//configManager := config.GetConfigManagerInstance()
 	// todo: make sure this works when called from root level too
-	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath("./testdata/"), config.WithConfigFileName("config"))
-	assert.NoError(t, err)
+	//err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath("./testdata/"), config.WithConfigFileName("config"))
+	//assert.NoError(t, err)
+	common.DataLossPrevention = true
+
+	numaLogger := logger.GetBaseLogger()
+	numaLogger.LogLevel = logger.DebugLevel // TODO: why isn't this working?
+	logger.SetBaseLogger(numaLogger)
+	ctx := logger.WithLogger(context.Background(), numaLogger)
 
 	r := &PipelineRolloutReconciler{
 		client:     numaplaneClient,
@@ -357,7 +362,7 @@ func Test_reconcile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create PipelineRollout and Pipeline first, and then reconcile() the PipelineRollout
 			pipelineRollout := createPipelineRollout(&pipelineSpec)
-			pipelineRollout, err := numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Create(context.Background(), pipelineRollout, metav1.CreateOptions{})
+			pipelineRollout, err := numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Create(ctx, pipelineRollout, metav1.CreateOptions{})
 			assert.Nil(t, err)
 
 			pipeline := numaflowv1.Pipeline{
@@ -367,28 +372,29 @@ func Test_reconcile(t *testing.T) {
 				},
 				Spec: pipelineSpec,
 			}
-			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Create(context.Background(), &pipeline, metav1.CreateOptions{})
+			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Create(ctx, &pipeline, metav1.CreateOptions{})
 			assert.Nil(t, err)
 
 			// set Controller-Directed pause and ISBService-directed pause appropriately
 			GetPauseModule().controllerRequestedPause[pipelineRollout.Namespace] = tc.controllerDirectedPause
 			GetPauseModule().isbSvcRequestedPause[fmt.Sprintf("%s/%s", pipelineRollout.Namespace, pipelineSpec.InterStepBufferServiceName)] = tc.isbServiceDirectedPause
 
-			needsRequeue, err := r.reconcile(context.Background(), pipelineRollout)
+			needsRequeue, err := r.reconcile(ctx, pipelineRollout)
 			assert.Nil(t, err)
 			assert.Equal(t, false, needsRequeue)
 
 			// get Pipeline definition
-			retrievedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Get(context.Background(), pipelineRollout.Name, metav1.GetOptions{})
+			retrievedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
 			assert.Nil(t, err)
 			// check DesiredPhase
 			assert.Equal(t, tc.expectedPipelineDesiredPhase, string(retrievedPipeline.Spec.Lifecycle.DesiredPhase))
 
-			// get PipelineRollout definition
+			// check PipelineRollout Phase
+			assert.Equal(t, tc.expectedPhase, pipelineRollout.Status.Phase)
 
 			// Delete the PipelineRollout and Pipeline at the end
-			numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Delete(context.Background(), pipelineRollout.Name, metav1.DeleteOptions{}) // todo: if this test fails, will the garbage be left on the cluster?
-			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Delete(context.Background(), pipeline.Name, metav1.DeleteOptions{})
+			numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Delete(ctx, pipelineRollout.Name, metav1.DeleteOptions{}) // todo: if this test fails, will the garbage be left on the cluster?
+			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Delete(ctx, pipeline.Name, metav1.DeleteOptions{})
 
 		})
 	}

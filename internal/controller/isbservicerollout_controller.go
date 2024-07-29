@@ -410,7 +410,7 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 // Each ISBService has one underlying StatefulSet
 func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc *kubernetes.GenericObject) (*appsv1.StatefulSet, error) {
 	statefulSetSelector := labels.NewSelector()
-	requirement, err := labels.NewRequirement(common.LabelKeyISBServiceNameForStatefulSet, selection.Equals, []string{isbsvc.Name})
+	requirement, err := labels.NewRequirement(numaflowv1.KeyISBSvcName, selection.Equals, []string{isbsvc.Name})
 	if err != nil {
 		return nil, err
 	}
