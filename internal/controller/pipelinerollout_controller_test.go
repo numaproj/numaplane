@@ -32,29 +32,34 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplaneversioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
+
+	"github.com/numaproj/numaplane/internal/controller/config"
 )
 
-var _ = Describe("PipelineRollout Controller", Ordered, func() {
-	const (
-		namespace           = "default"
-		pipelineRolloutName = "pipelinerollout-test"
-	)
+const (
+	testNamespace           = "default"
+	testPipelineRolloutName = "pipelinerollout-test"
+	testPipelineName        = testPipelineRolloutName
+)
 
-	ctx := context.Background()
-
-	pipelineSpecSourceRPU := int64(5)
-	pipelineSpecSourceDuration := metav1.Duration{
+var (
+	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
 
-	pipelineSpec := numaflowv1.PipelineSpec{
+	pipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "my-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -95,13 +100,26 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		},
 	}
 
-	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
-	Expect(err).ToNot(HaveOccurred())
-
-	pipelineRollout := &apiv1.PipelineRollout{
+	testPipeline = numaflowv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      pipelineRolloutName,
+			Name:      testPipelineName,
+			Namespace: testNamespace,
+		},
+		Spec: pipelineSpec,
+	}
+)
+
+func createPipelineRollout(pipelineSpec *numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+
+	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+	if err != nil {
+		panic(err)
+	}
+
+	return &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNamespace,
+			Name:      testPipelineRolloutName,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Pipeline: apiv1.Pipeline{
@@ -111,6 +129,17 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			},
 		},
 	}
+}
+
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
+	const (
+		namespace           = "default"
+		pipelineRolloutName = "pipelinerollout-test"
+	)
+
+	ctx := context.Background()
+
+	pipelineRollout := createPipelineRollout(&pipelineSpec)
 
 	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
 
@@ -258,6 +287,112 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 	})
 })
+
+// this tests reconcile() with "DataLossPrevention" feature flag on
+// test cases:
+// - Normal cases:
+// - PipelineRollout told to pause: verify pipeline lifecycle gets changed, verify Phase == Pending, Conditions.PipelinePausedOrPausing set, Conditions.Deployed not set
+// - PipelineRollout needs to update and isn't paused: verify pipeline lifecycle gets changed, verify Phase == Pending, Conditions.PipelinePausedOrPausing set, Conditions.Deployed not set
+// - PipelineRollout needs to update and is paused: verify pipeline lifecycle set to Running and pipeline updated, verify Phase == Deployed, Conditions.PipelinePausedOrPausing still set, Conditions.Deployed set
+// - PipelineRollout allowed to run from paused state, doesn't need to update: verify pipeline lifecycle gets changed, verify Phase still equals Deployed, Conditions.PipelinePausedOrPausing not set, Conditions.Deployed was already set from before
+// - auto-healing - somebody modified Pipeline spec - need to set to pause to overwrite safely
+// - Just after Numaplane starts up: Controller-directed pause and ISBService-directed pause information not available
+// - Failure cases:
+// - PipelineRollout's Pipeline spec is invalid - TBD
+// - Pipeline gets into a failed state for some other reason - TBD
+func Test_reconcile(t *testing.T) {
+	restConfig, err := kubernetes.K8sRestConfig()
+	assert.Nil(t, err)
+
+	err = numaflowv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
+	err = apiv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
+
+	numaflowClientSet := numaflowversioned.NewForConfigOrDie(restConfig)
+	numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
+	numaplaneClient, err := client.New(restConfig, client.Options{}) //todo: actually, if we have this, do we need numaplaneClientSet?
+	assert.Nil(t, err)
+
+	// Make sure "dataLossPrevention" feature flag is turned on
+	configManager := config.GetConfigManagerInstance()
+	// todo: make sure this works when called from root level too
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath("./testdata/"), config.WithConfigFileName("config"))
+	assert.NoError(t, err)
+
+	r := &PipelineRolloutReconciler{
+		client:     numaplaneClient,
+		scheme:     scheme.Scheme,
+		restConfig: restConfig,
+	}
+
+	trueVal := true
+	truePtr := &trueVal
+	falseVal := false
+	falsePtr := &falseVal
+
+	testCases := []struct {
+		name                         string
+		newPipelineSpec              numaflowv1.PipelineSpec
+		controllerDirectedPause      *bool
+		isbServiceDirectedPause      *bool
+		expectedPipelineDesiredPhase string
+		expectedPhase                apiv1.Phase
+		expectedConditionsSet        map[apiv1.ConditionType]bool // these are the ones we expect to have been set from before, as well as whether they're set to true or false
+	}{
+		{
+			name:                         "PipelineRollout told to pause",
+			newPipelineSpec:              pipelineSpec,
+			controllerDirectedPause:      truePtr,
+			isbServiceDirectedPause:      falsePtr,
+			expectedPipelineDesiredPhase: PipelinePhasePaused,
+			expectedPhase:                apiv1.PhasePending,
+			expectedConditionsSet: map[apiv1.ConditionType]bool{
+				apiv1.ConditionPipelinePausingOrPaused: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create PipelineRollout and Pipeline first, and then reconcile() the PipelineRollout
+			pipelineRollout := createPipelineRollout(&pipelineSpec)
+			pipelineRollout, err := numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Create(context.Background(), pipelineRollout, metav1.CreateOptions{})
+			assert.Nil(t, err)
+
+			pipeline := numaflowv1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pipelineRollout.Name,
+					Namespace: pipelineRollout.Namespace,
+				},
+				Spec: pipelineSpec,
+			}
+			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Create(context.Background(), &pipeline, metav1.CreateOptions{})
+			assert.Nil(t, err)
+
+			// set Controller-Directed pause and ISBService-directed pause appropriately
+			GetPauseModule().controllerRequestedPause[pipelineRollout.Namespace] = tc.controllerDirectedPause
+			GetPauseModule().isbSvcRequestedPause[fmt.Sprintf("%s/%s", pipelineRollout.Namespace, pipelineSpec.InterStepBufferServiceName)] = tc.isbServiceDirectedPause
+
+			needsRequeue, err := r.reconcile(context.Background(), pipelineRollout)
+			assert.Nil(t, err)
+			assert.Equal(t, false, needsRequeue)
+
+			// get Pipeline definition
+			retrievedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Get(context.Background(), pipelineRollout.Name, metav1.GetOptions{})
+			assert.Nil(t, err)
+			// check DesiredPhase
+			assert.Equal(t, tc.expectedPipelineDesiredPhase, string(retrievedPipeline.Spec.Lifecycle.DesiredPhase))
+
+			// get PipelineRollout definition
+
+			// Delete the PipelineRollout and Pipeline at the end
+			numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Delete(context.Background(), pipelineRollout.Name, metav1.DeleteOptions{}) // todo: if this test fails, will the garbage be left on the cluster?
+			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Delete(context.Background(), pipeline.Name, metav1.DeleteOptions{})
+
+		})
+	}
+}
 
 var yamlHasDesiredPhase = `
 {
