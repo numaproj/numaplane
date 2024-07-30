@@ -156,8 +156,11 @@ var _ = Describe("PipelineRollout e2e", func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
 		// isbsvc/controller must be up to update pipeline as of PR #125
-		isbsvcrollout := CreateISBServiceRolloutSpec("my-isbsvc", Namespace)
-		_, err := isbServiceRolloutClient.Create(ctx, isbsvcrollout, metav1.CreateOptions{})
+		isbsvcrollout1 := CreateISBServiceRolloutSpec("my-isbsvc", Namespace)
+		_, err := isbServiceRolloutClient.Create(ctx, isbsvcrollout1, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		isbsvcrollout2 := CreateISBServiceRolloutSpec("new-isbsvc", Namespace)
+		_, err = isbServiceRolloutClient.Create(ctx, isbsvcrollout2, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 		numaflowcontrollerrollout := CreateNumaflowControllerRolloutSpec("numaflow-controller", Namespace)
 		_, err = numaflowControllerRolloutClient.Create(ctx, numaflowcontrollerrollout, metav1.CreateOptions{})
@@ -236,6 +239,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// delete isbsvc/controller
 		err = isbServiceRolloutClient.Delete(ctx, "my-isbsvc", metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		err = isbServiceRolloutClient.Delete(ctx, "new-isbsvc", metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 		err = numaflowControllerRolloutClient.Delete(ctx, "numaflow-controller", metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
