@@ -65,7 +65,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.1.7"},
+			Controller: apiv1.Controller{Version: "0.01"},
 		}
 
 		time.Sleep(3 * time.Second)
@@ -100,7 +100,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		err = json.Unmarshal(bytes, &createdNumaflowControllerSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		Expect(createdNumaflowControllerSpec.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/numaproj/numaflow:v1.1.7"))
+		Expect(createdNumaflowControllerSpec.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/numaproj/numaflow:v0.01"))
 
 	})
 
@@ -147,7 +147,7 @@ func CreateNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.2.1"},
+			Controller: apiv1.Controller{Version: "0.0.2"},
 		},
 	}
 
