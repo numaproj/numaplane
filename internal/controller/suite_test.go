@@ -143,7 +143,7 @@ var _ = BeforeSuite(func() {
 		cfg, customMetrics).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	stateCache := sync.NewLiveStateCache(cfg)
+	stateCache := sync.NewLiveStateCache(cfg, customMetrics)
 	err = stateCache.Init(nil)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -154,15 +154,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
-	err = (&NumaflowControllerRolloutReconciler{
-		client:        k8sManager.GetClient(),
-		scheme:        k8sManager.GetScheme(),
-		restConfig:    cfg,
-		rawConfig:     cfg,
-		kubectl:       kubernetes.NewKubectl(),
-		stateCache:    stateCache,
-		customMetrics: customMetrics,
-	}).SetupWithManager(k8sManager)
+	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(),
+		k8sManager.GetScheme(), cfg, kubernetes.NewKubectl(), customMetrics)
+	Expect(err).ToNot(HaveOccurred())
+	err = numaflowControllerReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {

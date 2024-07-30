@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -82,6 +83,7 @@ func NewISBServiceRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	startTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
@@ -89,6 +91,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
+			r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get ISBServiceRollout", "request", req)
 			return ctrl.Result{}, err
 		}
@@ -104,9 +107,10 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
+			r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-
+		r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 		return ctrl.Result{}, err
 	}
 
@@ -118,25 +122,29 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 			if statusUpdateErr != nil {
+				r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-
+			r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
 		isbServiceRollout.Status = isbServiceRolloutStatus
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(startTime).Seconds())
 	}
 
 	// Update the Status subresource
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
+			r.customMetrics.ISBServiceSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate metrics for ISB Service.
 	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 
 	numaLogger.Debug("reconciliation successful")
 
@@ -145,6 +153,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 // reconcile does the real logic
 func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
@@ -156,6 +165,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
 		return nil
 	}
 

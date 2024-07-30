@@ -24,14 +24,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -142,7 +141,9 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the PipelineRollout metric")
-			Expect(len(customMetrics.GetPipelineCounterMap())).Should(Equal(1))
+			Expect(testutil.ToFloat64(customMetrics.PipelinesGauge.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.PipelineSynced.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.PipelineSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {

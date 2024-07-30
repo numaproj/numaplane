@@ -118,11 +118,13 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	namespacedName := namespacedNameToKey(req.NamespacedName)
 	r.queue.Add(namespacedName)
+	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
 	numaLogger.Debugf("added PipelineRollout %v to queue", namespacedName)
 	return ctrl.Result{}, nil
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
+	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
@@ -133,6 +135,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
+			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get PipelineRollout")
 			return ctrl.Result{}, err
 		}
@@ -148,6 +151,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
+			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -159,6 +163,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
+			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -170,9 +175,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		pipelineRolloutStatus := pipelineRollout.Status
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
 			numaLogger.Error(err, "Error Updating PipelineRollout", "PipelineRollout", pipelineRollout)
-
+			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
+				r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
 
@@ -180,18 +186,21 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
 		pipelineRollout.Status = pipelineRolloutStatus
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(startTime).Seconds())
 	}
 
 	// Update the Status subresource
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
+			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate the metrics for the Pipeline.
 	r.customMetrics.IncPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(startTime).Seconds())
 
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
@@ -267,7 +276,7 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 func keyToNamespacedName(key string) (k8stypes.NamespacedName, error) {
 	index := strings.Index(key, "/")
 	if index < 0 {
-		return k8stypes.NamespacedName{}, fmt.Errorf("Improperly formatted key: %q", key)
+		return k8stypes.NamespacedName{}, fmt.Errorf("improperly formatted key: %q", key)
 	}
 	return k8stypes.NamespacedName{Namespace: key[0:index], Name: key[index+1:]}, nil
 }
@@ -282,6 +291,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (bool, error) {
+	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 	// is PipelineRollout being deleted? need to remove the finalizer, so it can
 	// (OwnerReference will delete the underlying Pipeline through Cascading deletion)
@@ -292,6 +302,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(startTime).Seconds())
 		return false, nil
 	}
 
