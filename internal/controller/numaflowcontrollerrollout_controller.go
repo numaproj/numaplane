@@ -145,7 +145,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -172,7 +172,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 			if statusUpdateErr != nil {
-				return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+				return ctrl.Result{}, statusUpdateErr
 			}
 
 			return ctrl.Result{}, err
@@ -185,7 +185,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 

@@ -41,11 +41,11 @@ type PipelineRolloutStatus struct {
 	Status `json:",inline"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
-
+// +genclient
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
 // PipelineRollout is the Schema for the pipelinerollouts API
 type PipelineRollout struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -68,10 +68,10 @@ func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(observedGeneration int64) {
-	status.MarkTrue(ConditionPipelinePausingOrPaused, observedGeneration)
+func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message string, generation int64) {
+	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, message, generation)
 }
 
-func (status *PipelineRolloutStatus) MarkPipelinePausingOrPausedWithReason(reason string, observedGeneration int64) {
-	status.MarkTrueWithReason(ConditionPipelinePausingOrPaused, reason, "", observedGeneration)
+func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
+	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
 }

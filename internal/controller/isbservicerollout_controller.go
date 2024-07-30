@@ -110,7 +110,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 
 		return ctrl.Result{}, err
@@ -124,7 +124,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 			if statusUpdateErr != nil {
-				return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+				return ctrl.Result{}, statusUpdateErr
 			}
 
 			return ctrl.Result{}, err
@@ -137,7 +137,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
-			return ctrl.Result{RequeueAfter: statusUpdateErrorRequeueAfterDuration}, statusUpdateErr
+			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 

@@ -1,18 +1,22 @@
-import React from "react";
-import { render } from "@testing-library/react";
-import "@testing-library/jest-dom";
-
-import { RolloutComponentWrapper } from "./RolloutComponentWrapper";
-import { ArgoPropType } from "../ArgoPropType";
-import { mockProps } from "./rolloutObjectMockProps";
+import { render, screen } from "@testing-library/react";
+import { mockISBRolloutProps } from "../../mocks/mockProps";
+import {
+  RolloutComponentContext,
+  RolloutComponentWrapper,
+} from "./RolloutComponentWrapper";
 
 describe("RolloutComponentWrapper", () => {
-  it("should render the component", () => {
-    const { getByText } = render(
-      <RolloutComponentWrapper {...(mockProps as any)} />
+  it("should render", () => {
+    render(
+      <RolloutComponentWrapper
+        tree={mockISBRolloutProps.props.tree}
+        resource={mockISBRolloutProps.props.resource as any}
+        application={mockISBRolloutProps.props.application}
+        {...mockISBRolloutProps}
+      />
     );
-    expect(
-      getByText("This is Numarollout Component for ISBServiceRollout")
-    ).toBeInTheDocument();
+
+    const doc = screen.getByText("Actual Weight");
+    expect(doc).toBeInTheDocument();
   });
 });
