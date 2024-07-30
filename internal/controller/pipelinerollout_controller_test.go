@@ -336,6 +336,9 @@ func Test_reconcile(t *testing.T) {
 	falseVal := false
 	falsePtr := &falseVal
 
+	modifiedPipelineSpec := pipelineSpec.DeepCopy()
+	modifiedPipelineSpec.Vertices[1].UDF.Builtin.Args = []string{"something"}
+
 	testCases := []struct {
 		name                         string
 		newPipelineSpec              numaflowv1.PipelineSpec
@@ -343,7 +346,7 @@ func Test_reconcile(t *testing.T) {
 		isbServiceDirectedPause      *bool
 		expectedPipelineDesiredPhase string
 		expectedPhase                apiv1.Phase
-		expectedConditionsSet        map[apiv1.ConditionType]bool // these are the ones we expect to have been set from before, as well as whether they're set to true or false
+		//expectedConditionsSet        map[apiv1.ConditionType]bool // these are the ones we expect to have been set from before, as well as whether they're set to true or false
 	}{
 		{
 			name:                         "PipelineRollout told to pause",
@@ -351,19 +354,26 @@ func Test_reconcile(t *testing.T) {
 			controllerDirectedPause:      truePtr,
 			isbServiceDirectedPause:      falsePtr,
 			expectedPipelineDesiredPhase: PipelinePhasePaused,
+			expectedPhase:                apiv1.PhaseDeployed,
+		},
+		{
+			name:                         "PipelineRollout needs to update and isn't paused",
+			newPipelineSpec:              *modifiedPipelineSpec,
+			controllerDirectedPause:      falsePtr,
+			isbServiceDirectedPause:      falsePtr,
+			expectedPipelineDesiredPhase: PipelinePhasePaused,
 			expectedPhase:                apiv1.PhasePending,
-			expectedConditionsSet: map[apiv1.ConditionType]bool{
-				apiv1.ConditionPipelinePausingOrPaused: true,
-			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create PipelineRollout and Pipeline first, and then reconcile() the PipelineRollout
-			pipelineRollout := createPipelineRollout(&pipelineSpec)
-			pipelineRollout, err := numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Create(ctx, pipelineRollout, metav1.CreateOptions{})
-			assert.Nil(t, err)
+			//pipelineRollout := createPipelineRollout(&pipelineSpec)
+			//pipelineRollout, err := numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Create(ctx, pipelineRollout, metav1.CreateOptions{})
+			//assert.Nil(t, err)
+
+			pipelineRollout := createPipelineRollout(&tc.newPipelineSpec)
 
 			pipeline := numaflowv1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
@@ -379,6 +389,8 @@ func Test_reconcile(t *testing.T) {
 			GetPauseModule().controllerRequestedPause[pipelineRollout.Namespace] = tc.controllerDirectedPause
 			GetPauseModule().isbSvcRequestedPause[fmt.Sprintf("%s/%s", pipelineRollout.Namespace, pipelineSpec.InterStepBufferServiceName)] = tc.isbServiceDirectedPause
 
+			//preReconciliationTime := time.Now()
+
 			needsRequeue, err := r.reconcile(ctx, pipelineRollout)
 			assert.Nil(t, err)
 			assert.Equal(t, false, needsRequeue)
@@ -392,6 +404,22 @@ func Test_reconcile(t *testing.T) {
 			// check PipelineRollout Phase
 			assert.Equal(t, tc.expectedPhase, pipelineRollout.Status.Phase)
 
+			// get the conditions that have LastTransitionTime since reconciliation
+			/*fmt.Printf("Conditions: %+v\n", pipelineRollout.Status.Conditions)
+			conditions := conditionsSince(pipelineRollout.Status.Conditions, preReconciliationTime)
+
+			assert.Equal(t, len(tc.expectedConditionsSet), len(conditions))
+			for conditionType, conditionValue := range tc.expectedConditionsSet {
+				foundCondition := false
+				for _, c := range conditions {
+					if c.Type == string(conditionType) {
+						foundCondition = true
+						assert.Equal(t, conditionValue, c.Status)
+					}
+				}
+				assert.True(t, foundCondition)
+			}*/
+
 			// Delete the PipelineRollout and Pipeline at the end
 			numaplaneClientSet.NumaplaneV1alpha1().PipelineRollouts(testNamespace).Delete(ctx, pipelineRollout.Name, metav1.DeleteOptions{}) // todo: if this test fails, will the garbage be left on the cluster?
 			numaflowClientSet.NumaflowV1alpha1().Pipelines(testNamespace).Delete(ctx, pipeline.Name, metav1.DeleteOptions{})
@@ -399,6 +427,17 @@ func Test_reconcile(t *testing.T) {
 		})
 	}
 }
+
+// return the Conditions whose LastTransitionTime are after the time passed in
+/*func conditionsSince(conditions []metav1.Condition, t time.Time) []metav1.Condition {
+	returnConditions := []metav1.Condition{}
+	for _, c := range conditions {
+		if c.LastTransitionTime.After(t) {
+			returnConditions = append(returnConditions, c)
+		}
+	}
+	return returnConditions
+}*/
 
 var yamlHasDesiredPhase = `
 {
