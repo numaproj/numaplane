@@ -238,7 +238,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout*2).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
 
 	})
 
