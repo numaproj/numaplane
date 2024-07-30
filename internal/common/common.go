@@ -26,8 +26,8 @@ const (
 	// LabelValueNumaplaneControllerConfig is the label value used to identify the configmap for the controller definitions
 	LabelValueNumaplaneControllerConfig = "numaflow-controller-definitions"
 
-	LabelKeyISBServiceNameForStatefulSet = "numaflow.numaproj.io/isbsvc-name"
-
+	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline
+	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
 	LabelKeyISBServiceNameForPipeline = "numaplane.numaproj.io/isbsvc-name"
 )
 

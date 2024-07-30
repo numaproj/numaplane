@@ -21,6 +21,7 @@ func StructToStruct(src any, dest any) error {
 	return nil
 }
 
+// compare 2 maps for equality, ignoring any null values, empty maps, and empty arrays
 func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}) bool {
 	aNoNulls := make(map[string]interface{})
 	maps.Copy(aNoNulls, a)
