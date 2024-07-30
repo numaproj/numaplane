@@ -52,7 +52,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 	It("Should create the ISBServiceRollout if it doesn't exist", func() {
 
-		isbServiceRolloutSpec := createISBServiceRolloutSpec(isbServiceRolloutName, Namespace)
+		isbServiceRolloutSpec := CreateISBServiceRolloutSpec(isbServiceRolloutName, Namespace)
 		_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -148,7 +148,7 @@ var _ = Describe("ISBServiceRollout e2e", func() {
 
 })
 
-func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
+func CreateISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
 
 	rawSpec, err := json.Marshal(isbServiceSpec)
 	Expect(err).ShouldNot(HaveOccurred())

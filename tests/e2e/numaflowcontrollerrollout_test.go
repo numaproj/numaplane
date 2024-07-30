@@ -41,7 +41,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 
-		numaflowControllerRolloutSpec := createNumaflowControllerRolloutSpec(numaflowControllerRolloutName, Namespace)
+		numaflowControllerRolloutSpec := CreateNumaflowControllerRolloutSpec(numaflowControllerRolloutName, Namespace)
 		_, err := numaflowControllerRolloutClient.Create(ctx, numaflowControllerRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -135,7 +135,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 
 })
 
-func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
+func CreateNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
 
 	controllerRollout := &apiv1.NumaflowControllerRollout{
 		TypeMeta: metav1.TypeMeta{

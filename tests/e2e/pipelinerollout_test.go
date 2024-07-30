@@ -77,7 +77,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should create the PipelineRollout if it does not exist", func() {
 
-		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, Namespace)
+		pipelineRolloutSpec := CreatePipelineRolloutSpec(pipelineRolloutName, Namespace)
 		_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -155,12 +155,20 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
+		// isbsvc/controller must be up to update pipeline as of PR #125
+		isbsvcrollout := CreateISBServiceRolloutSpec("my-isbsvc", Namespace)
+		_, err := isbServiceRolloutClient.Create(ctx, isbsvcrollout, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		numaflowcontrollerrollout := CreateNumaflowControllerRolloutSpec("numaflow-controller", Namespace)
+		_, err = numaflowControllerRolloutClient.Create(ctx, numaflowcontrollerrollout, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
 		// new Pipeline spec
 		updatedPipelineSpec := pipelineSpec
 		updatedPipelineSpec.InterStepBufferServiceName = "updated-isbsvc"
 
 		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).ShouldNot(HaveOccurred())
 
 		// get current PipelineRollout
 		rollout := &apiv1.PipelineRollout{}
@@ -197,6 +205,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 		By("Verifying pipeline spec is equal to updated spec")
 		Expect(createdPipelineSpec).Should(Equal(updatedPipelineSpec))
 
+		// delete isbsvc/controller made for this case
+		err = isbServiceRolloutClient.Delete(ctx, "my-isbsvc", metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		err = numaflowControllerRolloutClient.Delete(ctx, "numaflow-controller", metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
 	})
 
 	It("Should delete the PipelineRollout and child Pipeline", func() {
@@ -230,10 +244,10 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 })
 
-func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
+func CreatePipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).ShouldNot(HaveOccurred())
 
 	pipelineRollout := &apiv1.PipelineRollout{
 		TypeMeta: metav1.TypeMeta{
