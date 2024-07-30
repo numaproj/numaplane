@@ -525,8 +525,7 @@ func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout
 }
 
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
-	// TODO: allowing for observedGeneration = 0 for testing purposes; can disallow once we are no longer testing with an older version of Numaflow
-	return generation <= observedGeneration || observedGeneration == 0
+	return generation <= observedGeneration
 }
 
 // Set the Condition in the Status for child resource health

@@ -448,9 +448,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 		return false, "", err
 	}
 
-	// TODO: for testing at the moment, need to allow for older versions of Numaflow which don't use ObservedGeneration
-	// can remove the initial condition once that's no longer the case
-	isbsvcReconciled := (isbsvcStatus.ObservedGeneration == 0 || isbsvc.Generation <= isbsvcStatus.ObservedGeneration)
+	isbsvcReconciled := isbsvc.Generation <= isbsvcStatus.ObservedGeneration
 
 	if !isbsvcReconciled {
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
