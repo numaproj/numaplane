@@ -100,7 +100,7 @@ var _ = Describe("NumaflowControllerRollout e2e", func() {
 		err = json.Unmarshal(bytes, &createdNumaflowControllerSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		Expect(createdNumaflowControllerSpec.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/numaproj/numaflow:v0.01"))
+		Expect(createdNumaflowControllerSpec.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/numaio/numaflow-rc:v0.01"))
 
 	})
 
