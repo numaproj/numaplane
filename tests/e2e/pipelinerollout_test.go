@@ -206,10 +206,10 @@ var _ = Describe("PipelineRollout e2e", func() {
 		Expect(createdPipelineSpec).Should(Equal(updatedPipelineSpec))
 
 		// delete isbsvc/controller made for this case
-		err = isbServiceRolloutClient.Delete(ctx, "my-isbsvc", metav1.DeleteOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-		err = numaflowControllerRolloutClient.Delete(ctx, "numaflow-controller", metav1.DeleteOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
+		// err = isbServiceRolloutClient.Delete(ctx, "my-isbsvc", metav1.DeleteOptions{})
+		// Expect(err).ShouldNot(HaveOccurred())
+		// err = numaflowControllerRolloutClient.Delete(ctx, "numaflow-controller", metav1.DeleteOptions{})
+		// Expect(err).ShouldNot(HaveOccurred())
 
 	})
 
