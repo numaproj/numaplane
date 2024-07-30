@@ -65,7 +65,7 @@ const (
 const (
 	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
 	NumaflowControllerDeploymentName    = "numaflow-controller"
-	NumaflowImageName                   = "numaflow"
+	DefaultNumaflowControllerImageName  = "numaflow"
 )
 
 var (
@@ -644,6 +644,16 @@ func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ct
 
 // get the tag of the numaflow container
 func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
+
+	c, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
+	}
+	imageNames := []string{DefaultNumaflowControllerImageName}
+	if c.NumaflowControllerImageNames != nil && len(c.NumaflowControllerImageNames) > 0 {
+		imageNames = c.NumaflowControllerImageNames
+	}
+
 	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
 	containers := deployment.Spec.Template.Spec.Containers
 	for _, c := range containers {
@@ -659,7 +669,15 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			imageName = imageName[finalSlash+1:]
 
 		}
-		if imageName == NumaflowImageName {
+		// is this is the Numaflow Controller itself?
+		isNumaflowController := false
+		for _, nfControllerImageName := range imageNames {
+			if imageName == nfControllerImageName {
+				isNumaflowController = true
+				break
+			}
+		}
+		if isNumaflowController {
 			if tag == "" {
 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
 			} else {
@@ -671,7 +689,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			}
 		}
 	}
-	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", NumaflowImageName, deployment)
+	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
 }
 
 func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, string) {

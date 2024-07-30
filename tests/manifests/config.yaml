@@ -3,6 +3,9 @@ clusterName: "staging-usw2-k8s"
 syncTimeIntervalMs: 30000
 cascadeDeletion: false
 dataLossPrevention: true
+numaflowControllerImageNames:
+  - numaflow
+  - numaflow-rc
 includedResources: "group=apps,kind=Deployment;\
 group=,kind=ConfigMap;group=,kind=ServiceAccount;\
 group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
