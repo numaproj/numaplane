@@ -451,6 +451,7 @@ func isPipelineUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericO
 		return false, false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
 	}
 
+	// TODO: will need to update this to account for Vertex ObservedGeneration once that's ready
 	pipelineReconciled := pipelineObservedGenerationCurrent(newPipelineDef.Generation, pipelineStatus.ObservedGeneration)
 
 	// Does pipeline spec need to be updated?
@@ -650,13 +651,11 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interfa
 			if ok {
 				lifecycleMapAsInterface, found := specMap["lifecycle"]
 				if found {
+					lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
 					if ok {
-						lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
-						if ok {
-							delete(lifecycleMap, "desiredPhase")
-							specMap["lifecycle"] = lifecycleMap
-							return specMap, nil
-						}
+						delete(lifecycleMap, "desiredPhase")
+						specMap["lifecycle"] = lifecycleMap
+						return specMap, nil
 					}
 				}
 			}

@@ -296,7 +296,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	return ctrl.Result{}, nil
 }
 
-// take the existing pipeline and merge anything needed from the new pipeline definition
+// take the existing ISBService and merge anything needed from the new ISBService definition
 func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
@@ -414,7 +414,7 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 	if err != nil {
 		return nil, err
 	}
-	statefulSetSelector.Add(*requirement)
+	statefulSetSelector = statefulSetSelector.Add(*requirement)
 
 	var statefulSetList appsv1.StatefulSetList
 	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
@@ -422,7 +422,7 @@ func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc
 		return nil, err
 	}
 	if len(statefulSetList.Items) > 1 {
-		return nil, fmt.Errorf("Unexpected: isbsvc %s/%s has multiple StatefulSets", isbsvc.Namespace, isbsvc.Name)
+		return nil, fmt.Errorf("unexpected: isbsvc %s/%s has multiple StatefulSets: %+v", isbsvc.Namespace, isbsvc.Name, statefulSetList.Items)
 	} else if len(statefulSetList.Items) == 0 {
 		return nil, nil
 	} else {
@@ -489,7 +489,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	default:
 
-		reconciled, nonreconciledReason, err := r.isISBServiceReconciled(ctx, isbsvc)
+		reconciled, nonreconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc)
 		if err != nil {
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
@@ -498,7 +498,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 		if reconciled {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
-			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledReason, rollout.Generation)
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
 		}
 	}
 }
