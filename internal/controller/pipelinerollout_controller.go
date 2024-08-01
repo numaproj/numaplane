@@ -349,22 +349,32 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
+	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+	return false, err
+}
+
+// take the existing pipeline and merge anything needed from the new pipeline definition
+func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
+	resultPipeline := existingPipeline.DeepCopy()
+	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
+	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
+	return resultPipeline
+}
+func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject) error {
+	numaLogger := logger.FromContext(ctx)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
-	var newPipelineSpec PipelineSpec
-	if err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
-	}
+
 	var existingPipelineSpec PipelineSpec
-	if err = json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
+	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
 	// Does pipeline spec need to be updated? is it already being updated?
 	pipelineNeedsToUpdate, pipelineIsUpdating, err := isPipelineUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	numaLogger.Debugf("pipelineNeedsToUpdate=%t, pipelineIsUpdating=%t", pipelineNeedsToUpdate, pipelineIsUpdating)
@@ -381,64 +391,72 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	if common.DataLossPrevention { // feature flag
-		// If there is a need to update, does it require a pause?
-		var pipelineUpdateRequiresPause bool
-		if pipelineNeedsToUpdate || pipelineIsUpdating {
-			pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
-			if err != nil {
-				return false, err
-			}
-		}
-
-		// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-		externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+		err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate, pipelineIsUpdating)
 		if err != nil {
-			return false, err
-		}
-		if !pauseRequestsKnown {
-			numaLogger.Debugf("incomplete pause request information")
-			return false, nil
-		}
-
-		specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePaused || newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePausing)
-
-		// make sure our Lifecycle is what we need it to be
-		shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
-		numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
-			shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
-		err = r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef)
-		if err != nil {
-			return false, err
-		}
-
-		// if it's safe to Update and we need to, do it now
-		if pipelineNeedsToUpdate {
-			if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
-				numaLogger.Infof("it's safe to update Pipeline so updating now")
-				err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
-				if err != nil {
-					return false, err
-				}
-				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			}
+			return err
 		}
 	} else {
 		err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
 		if err != nil {
-			return false, err
+			return err
 		}
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
-
-	return false, nil
+	return nil
 }
 
-// take the existing pipeline and merge anything needed from the new pipeline definition
-func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
-	resultPipeline := existingPipeline.DeepCopy()
-	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
-	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
-	return resultPipeline
+func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool, pipelineIsUpdating bool) error {
+
+	numaLogger := logger.FromContext(ctx)
+	var err error
+
+	var newPipelineSpec PipelineSpec
+	if err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
+	}
+
+	// If there is a need to update, does it require a pause?
+	var pipelineUpdateRequiresPause bool
+	if pipelineNeedsToUpdate || pipelineIsUpdating {
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	if err != nil {
+		return err
+	}
+	if !pauseRequestsKnown {
+		numaLogger.Debugf("incomplete pause request information")
+		return nil
+	}
+
+	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePaused || newPipelineSpec.Lifecycle.DesiredPhase == PipelinePhasePausing)
+
+	// make sure our Lifecycle is what we need it to be
+	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
+	err = r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef)
+	if err != nil {
+		return err
+	}
+
+	// if it's safe to Update and we need to, do it now
+	if pipelineNeedsToUpdate {
+		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
+			numaLogger.Infof("it's safe to update Pipeline so updating now")
+			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+			if err != nil {
+				return err
+			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		}
+	}
+	return nil
 }
 
 // return:

@@ -177,7 +177,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		GetPauseModule().newISBServicePauseRequest(isbServiceRollout.Namespace, isbServiceRollout.Name)
 	}
 
-	newISBSVCDef := kubernetes.GenericObject{
+	newISBServiceDef := &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
@@ -190,14 +190,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}
 
-	existingISBServiceDef, err := kubernetes.GetCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
+	existingISBServiceDef, err := kubernetes.GetCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			err = kubernetes.CreateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
+			err = kubernetes.CreateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -212,81 +212,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists
 		// perform logic related to updating
 
-		newISBSVCDef = *mergeISBService(existingISBServiceDef, &newISBSVCDef)
-
-		// update our Status with the ISBService's Status
-		r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
-
-		// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-		isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
+		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-
-		numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
-
-		// set the Status appropriately to "Pending" or "Deployed"
-		// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
-		// if there's a generation mismatch - this means we haven't even observed the current generation
-		// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-		// we may match the second case and not the first if we need to update something other than ISBService spec
-		if isbServiceNeedsUpdating || isbServiceRollout.Status.ObservedGeneration < isbServiceRollout.Generation {
-			isbServiceRollout.Status.MarkPending()
-		} else {
-			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-		}
-
-		if common.DataLossPrevention {
-
-			if isbServiceNeedsUpdating || isbServiceIsUpdating {
-				numaLogger.Info("ISBService either needs to or is in the process of updating")
-				// TODO: maybe only pause if the update requires pausing
-
-				// request pause if we haven't already
-				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, true)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				// If we need to update the ISBService, pause the pipelines
-				// Don't do this yet if we just made a request - it's too soon for anything to have happened
-				if !pauseRequestUpdated && isbServiceNeedsUpdating {
-
-					// check if the pipelines are all paused and we're trying to update the spec
-					allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					if allPaused {
-						numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
-						// update ISBService
-						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
-						if err != nil {
-							return ctrl.Result{}, err
-						}
-
-						isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-					} else {
-						numaLogger.Debugf("not all Pipelines have paused")
-					}
-
-				}
-				return common.DefaultDelayedRequeue, nil
-
-			} else {
-				// remove any pause requirement if necessary
-				_, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, false)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		} else {
-			// update ISBService
-			err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+		if needsRequeue {
+			return common.DefaultDelayedRequeue, nil
 		}
 	}
 
@@ -302,6 +234,91 @@ func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 	return resultISBService
+}
+
+// process an existing ISBService
+// return:
+// - true if needs a requeue
+// - error if any
+func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBServiceDef *kubernetes.GenericObject, newISBServiceDef *kubernetes.GenericObject) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// update our Status with the ISBService's Status
+	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
+
+	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+	isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+	if err != nil {
+		return false, err
+	}
+
+	numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
+
+	// set the Status appropriately to "Pending" or "Deployed"
+	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// if there's a generation mismatch - this means we haven't even observed the current generation
+	// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
+	// we may match the second case and not the first if we need to update something other than ISBService spec
+	if isbServiceNeedsUpdating || isbServiceRollout.Status.ObservedGeneration < isbServiceRollout.Generation {
+		isbServiceRollout.Status.MarkPending()
+	} else {
+		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+	}
+
+	if common.DataLossPrevention {
+
+		if isbServiceNeedsUpdating || isbServiceIsUpdating {
+			numaLogger.Info("ISBService either needs to or is in the process of updating")
+			// TODO: maybe only pause if the update requires pausing
+
+			// request pause if we haven't already
+			pauseRequestUpdated, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, true)
+			if err != nil {
+				return false, err
+			}
+			// If we need to update the ISBService, pause the pipelines
+			// Don't do this yet if we just made a request - it's too soon for anything to have happened
+			if !pauseRequestUpdated && isbServiceNeedsUpdating {
+
+				// check if the pipelines are all paused and we're trying to update the spec
+				allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
+				if err != nil {
+					return false, err
+				}
+				if allPaused {
+					numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
+					// update ISBService
+					err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+					if err != nil {
+						return false, err
+					}
+
+					isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+				} else {
+					numaLogger.Debugf("not all Pipelines have paused")
+				}
+
+			}
+			return true, nil
+
+		} else {
+			// remove any pause requirement if necessary
+			_, err := r.requestPipelinesPause(ctx, isbServiceRollout, existingISBServiceDef, false)
+			if err != nil {
+				return false, err
+			}
+		}
+	} else {
+		// update ISBService
+		err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+		if err != nil {
+			return false, err
+		}
+
+		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+	}
+	return false, nil
 }
 
 // return:

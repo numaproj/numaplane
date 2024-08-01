@@ -40,6 +40,7 @@ import (
 const (
 	numaflowControllerRolloutName = "numaflow-controller"
 	isbServiceRolloutName         = "test-isbservice-rollout"
+	isbServiceStatefulSetName     = "isbsvc-test-isbservice-rollout-js"
 	pipelineRolloutName           = "test-pipeline-rollout"
 )
 
@@ -103,13 +104,25 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		By("Verifying that the NumaflowController was created")
+		By("Verifying that the Numaflow Controller was created")
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually Deployment and its Pods are up (NumaflowControllerRollout.Conditions.ChildResourcesHealthy)
+		By("Verifying that the Numaflow ControllerRollout is ready")
+		By("Verifying that the Numaflow ControllerRollout is ready")
+		Eventually(func() bool {
+			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			if rollout == nil {
+				return false
+			}
+			childResourcesHealthyCondition := rollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy)
+			if childResourcesHealthyCondition == nil {
+				return false
+			}
+			return childResourcesHealthyCondition.Status == metav1.ConditionTrue
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 	})
 
@@ -131,7 +144,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		time.Sleep(30 * time.Second) // TODO: replace with verification that Eventually ISBService and its Pods are up (ISBServiceRollout.Conditions.ChildResourcesHealthy)
+		// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
+		By("Verifying that the StatefulSet was created and is ready")
+		Eventually(func() bool {
+			statefulSet, _ := kubeClient.AppsV1().StatefulSets(Namespace).Get(ctx, isbServiceStatefulSetName, metav1.GetOptions{})
+			return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == 3
+		}).WithTimeout(testTimeout).Should(BeTrue())
 
 	})
 
