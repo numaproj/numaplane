@@ -131,7 +131,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually ISBService and its Pods are up (ISBServiceRollout.Conditions.ChildResourcesHealthy)
+		time.Sleep(30 * time.Second) // TODO: replace with verification that Eventually ISBService and its Pods are up (ISBServiceRollout.Conditions.ChildResourcesHealthy)
 
 	})
 
