@@ -112,7 +112,7 @@ var _ = BeforeSuite(func() {
 
 	numaLogger := logger.New().WithName("controller-manager")
 
-	numaLogger.SetLevel(3) // change to 4 for "debug" level
+	numaLogger.SetLevel(4) // change to 3 for "info" level
 	logger.SetBaseLogger(numaLogger)
 
 	var err error

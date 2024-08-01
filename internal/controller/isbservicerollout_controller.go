@@ -247,29 +247,30 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				if err != nil {
 					return ctrl.Result{}, err
 				}
-				if !pauseRequestUpdated { // don't do this yet if we just made a request - it's too soon for anything to have happened
+				// If we need to update the ISBService, pause the pipelines
+				// Don't do this yet if we just made a request - it's too soon for anything to have happened
+				if !pauseRequestUpdated && isbServiceNeedsUpdating {
+
 					// check if the pipelines are all paused and we're trying to update the spec
-					if isbServiceNeedsUpdating {
-						allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
+					allPaused, err := r.allPipelinesPaused(ctx, existingISBServiceDef)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					if allPaused {
+						numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
+						// update ISBService
+						err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
 						if err != nil {
 							return ctrl.Result{}, err
 						}
-						if allPaused {
-							numaLogger.Infof("confirmed all Pipelines have paused so ISBService can safely update")
-							// update ISBService
-							err = kubernetes.UpdateCR(ctx, r.restConfig, &newISBSVCDef, "interstepbufferservices")
-							if err != nil {
-								return ctrl.Result{}, err
-							}
 
-							isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-						} else {
-							numaLogger.Debugf("not all Pipelines have paused")
-						}
+						isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+					} else {
+						numaLogger.Debugf("not all Pipelines have paused")
 					}
 
 				}
-				return delayedRequeue, nil
+				return common.DefaultDelayedRequeue, nil
 
 			} else {
 				// remove any pause requirement if necessary

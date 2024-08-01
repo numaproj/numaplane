@@ -2,6 +2,9 @@ package common
 
 import (
 	"fmt"
+	"time"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -40,5 +43,9 @@ var (
 		Resource: "pipelines",
 	}
 
+	// default requeue time used by Reconcilers
+	DefaultDelayedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
+
+	// DataLossPrevention is a feature flag used to turn on/off the automatic pause feature for pipelines based on how it's set in the Config
 	DataLossPrevention bool
 )

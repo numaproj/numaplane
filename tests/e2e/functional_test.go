@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -148,8 +149,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		By("Verifying that the Pipeline was created")
 		EventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(pipelineSpec.Vertices) == 2
-			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
+			//return len(pipelineSpec.Vertices) == 2
+			return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
 		})
 		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually Pipeline and its Pods are up (PipelineRollout.Conditions.ChildResourcesHealthy)
 
@@ -177,7 +178,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// update child Pipeline
-		retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
 			return err
 		})
@@ -214,7 +215,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// update the PipelineRollout
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
-		retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			_, err = pipelineRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{}) // TODO: should use RetryOnConflict for all Updates
 			return err
 		})

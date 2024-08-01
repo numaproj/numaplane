@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/argoproj/gitops-engine/pkg/diff"
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
@@ -66,10 +65,6 @@ const (
 	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
 	NumaflowControllerDeploymentName    = "numaflow-controller"
 	DefaultNumaflowControllerImageName  = "numaflow"
-)
-
-var (
-	delayedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
 )
 
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
@@ -277,29 +272,32 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 				if err != nil {
 					return ctrl.Result{}, err
 				}
-				if !pauseRequestUpdated { // don't do this yet if we just made a request - it's too soon for anything to have happened
+
+				// If we need to update the ISBService, pause the pipelines
+				// Don't do this yet if we just made a request - it's too soon for anything to have happened
+				if !pauseRequestUpdated && controllerDeploymentNeedsUpdating {
+
 					// check if the pipelines are all paused and we're trying to update the spec
-					if controllerDeploymentNeedsUpdating {
-						allPaused, err := r.allPipelinesPaused(ctx, namespace)
+					allPaused, err := r.allPipelinesPaused(ctx, namespace)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					if allPaused {
+						numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
+						// apply controller
+						phase, err := r.sync(controllerRollout, namespace, numaLogger)
 						if err != nil {
 							return ctrl.Result{}, err
 						}
-						if allPaused {
-							numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
-							// apply controller
-							phase, err := r.sync(controllerRollout, namespace, numaLogger)
-							if err != nil {
-								return ctrl.Result{}, err
-							}
-							if phase != gitopsSyncCommon.OperationSucceeded {
-								return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
-							}
-						} else {
-							numaLogger.Debugf("not all Pipelines have paused")
+						if phase != gitopsSyncCommon.OperationSucceeded {
+							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 						}
+					} else {
+						numaLogger.Debugf("not all Pipelines have paused")
 					}
+
 				}
-				return delayedRequeue, nil
+				return common.DefaultDelayedRequeue, nil
 			} else {
 				// remove any pause requirement if necessary
 				_, err := r.requestPipelinesPause(ctx, controllerRollout, false)
