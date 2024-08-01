@@ -9,5 +9,5 @@ spec:
       # Example from https://github.com/numaproj/numaflow/blob/main/examples/0-isbsvc-jetstream.yaml
       jetstream:
         version: 2.10.3
-        persistence:
-          volumeSize: 1Gi
+        #persistence:
+        #  volumeSize: 1Gi
