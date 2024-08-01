@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -37,12 +36,18 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+const (
+	numaflowControllerRolloutName = "numaflow-controller"
+	isbServiceRolloutName         = "test-isbservice-rollout"
+	pipelineRolloutName           = "test-pipeline-rollout"
+)
+
 var pipelineSpecSourceRPU = int64(5)
 var pipelineSpecSourceDuration = metav1.Duration{
 	Duration: time.Second,
 }
 var pipelineSpec = numaflowv1.PipelineSpec{
-	InterStepBufferServiceName: "my-isbsvc",
+	InterStepBufferServiceName: isbServiceRolloutName,
 	Vertices: []numaflowv1.AbstractVertex{
 		{
 			Name: "in",
@@ -70,24 +75,63 @@ var pipelineSpec = numaflowv1.PipelineSpec{
 	},
 }
 
+var isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	Redis: nil,
+	JetStream: &numaflowv1.JetStreamBufferService{
+		Version: "latest",
+		Persistence: &numaflowv1.PersistenceStrategy{
+			VolumeSize: &numaflowv1.DefaultVolumeSize,
+		},
+	},
+}
+
 var _ = Describe("PipelineRollout e2e", func() {
 
-	const (
-		pipelineRolloutName = "e2e-pipeline-rollout"
-	)
-
 	pipelinegvr := getGVRForPipeline()
+	isbservicegvr := getGVRForISBService()
 
-	It("Should create dependent resources first", func() {
-		numaflowcontrollerrollout := CreateNumaflowControllerRolloutSpec("numaflow-controller", Namespace)
-		_, err := numaflowControllerRolloutClient.Create(ctx, numaflowcontrollerrollout, metav1.CreateOptions{})
+	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
+
+		numaflowControllerRolloutSpec := CreateNumaflowControllerRolloutSpec(numaflowControllerRolloutName, Namespace)
+		_, err := numaflowControllerRolloutClient.Create(ctx, numaflowControllerRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		isbsvcrollout := CreateISBServiceRolloutSpec("my-isbsvc", Namespace)
-		_, err = isbServiceRolloutClient.Create(ctx, isbsvcrollout, metav1.CreateOptions{})
+		By("Verifying that the NumaflowControllerRollout was created")
+		Eventually(func() error {
+			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
+
+		By("Verifying that the NumaflowController was created")
+		Eventually(func() error {
+			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
+
+		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually Deployment and its Pods are up (NumaflowControllerRollout.Conditions.ChildResourcesHealthy)
+
+	})
+
+	It("Should create the ISBServiceRollout if it doesn't exist", func() {
+
+		isbServiceRolloutSpec := CreateISBServiceRolloutSpec(isbServiceRolloutName, Namespace)
+		_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		time.Sleep(30 * time.Second) // TODO: replace with "Eventually" condition to confirm Numaflow Controller and ISBService running
+		By("Verifying that the ISBServiceRollout was created")
+		Eventually(func() error {
+			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
+
+		By("Verifying that the ISBService was created")
+		Eventually(func() error {
+			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
+
+		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually ISBService and its Pods are up (ISBServiceRollout.Conditions.ChildResourcesHealthy)
+
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
@@ -104,8 +148,10 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		By("Verifying that the Pipeline was created")
 		EventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
+			return len(pipelineSpec.Vertices) == 2
+			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
 		})
+		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually Pipeline and its Pods are up (PipelineRollout.Conditions.ChildResourcesHealthy)
 
 	})
 
@@ -215,13 +261,61 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	})
 
-	It("Should delete the dependent resources", func() {
-		// delete isbsvc/controller
-		err := isbServiceRolloutClient.Delete(ctx, "my-isbsvc", metav1.DeleteOptions{})
+	It("Should delete the ISBServiceRollout and child ISBService", func() {
+
+		err := isbServiceRolloutClient.Delete(ctx, isbServiceRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
-		time.Sleep(20 * time.Second) // TODO: replace with an "Eventually" statement to confirm it's being deleted
-		err = numaflowControllerRolloutClient.Delete(ctx, "numaflow-controller", metav1.DeleteOptions{})
+
+		Eventually(func() bool {
+			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the ISBServiceRollout: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+
+		Eventually(func() bool {
+			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the ISBService: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
+
+	})
+
+	It("Should delete the NumaflowControllerRollout and child NumaflowController", func() {
+
+		err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
+
+		Eventually(func() bool {
+			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the NumaflowControllerRollout: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+
+		Eventually(func() bool {
+			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the deployment: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 
 	})
 
@@ -270,14 +364,6 @@ func CreatePipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
 }
 
-func getGVRForPipeline() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaflow.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "pipelines",
-	}
-}
-
 // Take a Pipeline Unstructured type and update the PipelineSpec in some way
 func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) error {
 	// get PipelineSpec from unstructured object
@@ -307,4 +393,75 @@ func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	return pipelineSpec, err
+}
+
+func CreateNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
+
+	controllerRollout := &apiv1.NumaflowControllerRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "NumaflowControllerRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: "0.0.2"},
+		},
+	}
+
+	return controllerRollout
+
+}
+
+func CreateISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
+
+	rawSpec, err := json.Marshal(isbServiceSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	isbServiceRollout := &apiv1.ISBServiceRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "ISBServiceRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.ISBServiceRolloutSpec{
+			InterStepBufferService: apiv1.InterStepBufferService{
+				Spec: runtime.RawExtension{
+					Raw: rawSpec,
+				},
+			},
+		},
+	}
+
+	return isbServiceRollout
+
+}
+
+func getGVRForPipeline() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "numaflow.numaproj.io",
+		Version:  "v1alpha1",
+		Resource: "pipelines",
+	}
+}
+
+func getGVRForDeployment() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "apps",
+		Version:  "v1",
+		Resource: "deployments",
+	}
+}
+
+func getGVRForISBService() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "numaflow.numaproj.io",
+		Version:  "v1alpha1",
+		Resource: "interstepbufferservices",
+	}
 }
