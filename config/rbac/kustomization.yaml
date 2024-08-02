@@ -13,3 +13,6 @@ resources:
   - numaflowcontrollerrollout_viewer_role.yaml
   - isbservicerollout_editor_role.yaml
   - isbservicerollout_viewer_role.yaml
+  - numaplane-aggregate-to-admin.yaml
+  - numaplane-aggregate-to-edit.yaml
+  - numaplane-aggregate-to-view.yaml
