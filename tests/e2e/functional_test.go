@@ -178,6 +178,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return podsList != nil && len(podsList.Items) == 3 // 3 = 2 Vertices + daemon
 
 		}).WithTimeout(testTimeout).Should(BeTrue())
+
+		podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
+		if len(podsList.Items) < 3 {
+			fmt.Printf("\ndeletethis: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
+		}
+
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
