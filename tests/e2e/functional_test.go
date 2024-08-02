@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -111,7 +112,6 @@ var _ = Describe("PipelineRollout e2e", func() {
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		By("Verifying that the Numaflow ControllerRollout is ready")
-		By("Verifying that the Numaflow ControllerRollout is ready")
 		Eventually(func() bool {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if rollout == nil {
@@ -170,8 +170,15 @@ var _ = Describe("PipelineRollout e2e", func() {
 			//return len(pipelineSpec.Vertices) == 2
 			return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
 		})
-		time.Sleep(20 * time.Second) // TODO: replace with verification that Eventually Pipeline and its Pods are up (PipelineRollout.Conditions.ChildResourcesHealthy)
 
+		// Get Pipeline Pods to verify they're all up
+		// TODO: eventually we can use PipelineRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
+		By("Verifying that the Pipeline is ready")
+		Eventually(func() bool {
+			podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
+			return podsList != nil && len(podsList.Items) == 3 // 3 = 2 Vertices + daemon
+
+		}).WithTimeout(testTimeout).Should(BeTrue())
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
