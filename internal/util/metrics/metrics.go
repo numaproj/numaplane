@@ -50,6 +50,7 @@ type CustomMetrics struct {
 }
 
 const (
+	LabelIntuit     = "intuit_alert"
 	LabelVersion    = "version"
 	LabelType       = "type"
 	LabelPhase      = "phase"
@@ -57,103 +58,120 @@ const (
 )
 
 var (
+	defaultLabels               = prometheus.Labels{LabelIntuit: "true"}
 	pipelineLock                sync.Mutex
 	isbServiceLock              sync.Mutex
 	numaflowControllerLock      sync.Mutex
 	numaflowControllerMaxSynced int
 	pipelinesGauge              = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_pipelines_running",
-		Help: "Number of Numaflow pipelines running",
+		Name:        "numaflow_pipelines_running",
+		Help:        "Number of Numaflow pipelines running",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// pipelineSynced Check the total number of pipeline synced
 	pipelineSynced = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "pipeline_synced_total",
-		Help: "The total number of pipeline synced",
+		Name:        "pipeline_synced_total",
+		Help:        "The total number of pipeline synced",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// pipelineSyncFailed Check the total number of pipeline syncs failed
 	pipelineSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "pipeline_sync_failed_total",
-		Help: "The total number of pipeline sync failed",
+		Name:        "pipeline_sync_failed_total",
+		Help:        "The total number of pipeline sync failed",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// pipelineRolloutQueueLength check the length of queue
 	pipelineRolloutQueueLength = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "pipeline_rollout_queue_length",
-		Help: "The length of pipeline rollout queue",
+		Name:        "pipeline_rollout_queue_length",
+		Help:        "The length of pipeline rollout queue",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// isbServiceGauge is the gauge for the number of running ISB services.
 	isbServiceGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_isb_services_running",
-		Help: "Number of Numaflow ISB Service running",
+		Name:        "numaflow_isb_services_running",
+		Help:        "Number of Numaflow ISB Service running",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// isbServicesSynced Check the total number of ISB services synced
 	isbServicesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "isb_services_synced_total",
-		Help: "The total number of ISB service synced",
+		Name:        "isb_services_synced_total",
+		Help:        "The total number of ISB service synced",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// isbServiceSyncFailed Check the total number of ISB service syncs failed
 	isbServiceSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "isb_service_sync_failed_total",
-		Help: "The total number of ISB service sync failed",
+		Name:        "isb_service_sync_failed_total",
+		Help:        "The total number of ISB service sync failed",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// numaflowControllerGauge is the gauge for the number of running numaflow controllers.
 	numaflowControllerGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_controller_running",
-		Help: "Number of Numaflow controller running",
+		Name:        "numaflow_controller_running",
+		Help:        "Number of Numaflow controller running",
+		ConstLabels: defaultLabels,
 	}, []string{LabelVersion})
 
 	// numaflowControllerSyncFailed Check the total number of Numaflow controller syncs failed
 	numaflowControllerSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "numaflow_controller_sync_failed_total",
-		Help: "The total number of Numaflow controller sync failed",
+		Name:        "numaflow_controller_sync_failed_total",
+		Help:        "The total number of Numaflow controller sync failed",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// numaflowKubeRequestCounter Check the total number of kubernetes request for numaflow controller
 	numaflowKubeRequestCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "numaflow_kube_request_total",
-		Help: "The total number of kubernetes request for numaflow controller",
+		Name:        "numaflow_kube_request_total",
+		Help:        "The total number of kubernetes request for numaflow controller",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// numaflowKubectlExecutionCounter Check the total number of kubectl execution for numaflow controller
 	numaflowKubectlExecutionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "numaflow_kubectl_execution_total",
-		Help: "The total number of kubectl execution for numaflow controller",
+		Name:        "numaflow_kubectl_execution_total",
+		Help:        "The total number of kubectl execution for numaflow controller",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// reconciliationDuration is the histogram for the duration of pipeline, isb service and numaflow controller reconciliation.
 	reconciliationDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "numaplane_reconciliation_duration_seconds",
-		Help: "Duration of pipeline reconciliation",
+		Name:        "numaplane_reconciliation_duration_seconds",
+		Help:        "Duration of pipeline reconciliation",
+		ConstLabels: defaultLabels,
 	}, []string{LabelType, LabelPhase})
 
 	// numaflowControllerSynced Check the total number of Numaflow controllers synced
 	numaflowControllerSynced = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_controller_synced_total", //
-		Help: "The total number of Numaflow controller synced",
+		Name:        "numaflow_controller_synced_total", //
+		Help:        "The total number of Numaflow controller synced",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// kubeResourceMonitored count the number of monitored kubernetes resource objects in cache
 	kubeResourceMonitored = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_kube_resource_monitored",
-		Help: "Number of monitored kubernetes resource object in cache",
+		Name:        "numaflow_kube_resource_monitored",
+		Help:        "Number of monitored kubernetes resource object in cache",
+		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// kubeResourceCache count the number of kubernetes resource objects in cache
 	kubeResourceCache = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "numaflow_kube_resource_cache",
-		Help: "Number of kubernetes resource object in cache",
+		Name:        "numaflow_kube_resource_cache",
+		Help:        "Number of kubernetes resource object in cache",
+		ConstLabels: defaultLabels,
 	}, []string{LabelK8SVersion})
 
 	// clusterCacheError count the total number of cluster cache errors
 	clusterCacheError = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "numaflow_cluster_cache_error_total",
-		Help: "The total number of cluster cache error",
+		Name:        "numaflow_cluster_cache_error_total",
+		Help:        "The total number of cluster cache error",
+		ConstLabels: defaultLabels,
 	}, []string{})
 )
 
