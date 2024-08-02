@@ -34,6 +34,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -170,6 +171,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
 		})
 
+		By("Verifying that the Pipeline is running")
+		EventuallyPipelineStatus(Namespace, pipelineRolloutName,
+			func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
+				return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
+			})
+
 		// Get Pipeline Pods to verify they're all up
 		// TODO: eventually we can use PipelineRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
 		By("Verifying that the Pipeline is ready")
@@ -181,7 +188,13 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
 		if len(podsList.Items) < 3 {
-			fmt.Printf("\ndeletethis: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
+			fmt.Printf("\ndebug info: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
+			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			if err != nil {
+				fmt.Println("debug info: error getting pipeline")
+			} else {
+				fmt.Printf("debug info: unstruct=%+v\n\n", unstruct)
+			}
 		}
 
 	})
@@ -368,6 +381,26 @@ func EventuallyPipelineSpec(namespace string, pipelineName string, f func(numafl
 	}).WithPolling(5 * time.Second).WithTimeout(testTimeout).Should(BeTrue())
 }
 
+func EventuallyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+
+	var retrievedPipelineSpec numaflowv1.PipelineSpec
+	var retrievedPipelineStatus kubernetes.GenericStatus
+	Eventually(func() bool {
+		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		if retrievedPipelineSpec, err = getPipelineSpec(unstruct); err != nil {
+			return false
+		}
+		if retrievedPipelineStatus, err = getPipelineStatus(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedPipelineSpec, retrievedPipelineStatus)
+	}).WithPolling(5 * time.Second).WithTimeout(testTimeout).Should(BeTrue())
+}
+
 func CreatePipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
@@ -424,6 +457,13 @@ func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	return pipelineSpec, err
+}
+
+func getPipelineStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
+	statusMap := u.Object["status"]
+	var pipelineStatus kubernetes.GenericStatus
+	err := util.StructToStruct(&statusMap, &pipelineStatus)
+	return pipelineStatus, err
 }
 
 func CreateNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
