@@ -2,7 +2,7 @@ logLevel: 4
 clusterName: "staging-usw2-k8s"
 syncTimeIntervalMs: 30000
 cascadeDeletion: false
-dataLossPrevention: true
+dataLossPrevention: false
 numaflowControllerImageNames:
   - numaflow
   - numaflow-rc

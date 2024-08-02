@@ -147,36 +147,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		document("Verifying that the Pipeline was created")
-		eventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
-		document("Verifying that the Pipeline is running")
-		eventuallyPipelineStatus(Namespace, pipelineRolloutName,
-			func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-				return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
-			})
-
-		// Get Pipeline Pods to verify they're all up
-		// TODO: eventually we can use PipelineRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
-		document("Verifying that the Pipeline is ready")
-		Eventually(func() bool {
-			podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
-			return podsList != nil && len(podsList.Items) >= 3 // 3 = 2 Vertices + daemon
-
-		}).WithTimeout(testTimeout).Should(BeTrue())
-
-		podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
-		if len(podsList.Items) < 3 {
-			fmt.Printf("\ndebug info: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			if err != nil {
-				fmt.Println("debug info: error getting pipeline")
-			} else {
-				fmt.Printf("debug info: unstruct=%+v\n\n", unstruct)
-			}
-		}
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
 
@@ -196,7 +172,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// get updated Pipeline again to compare spec
 		document("Verifying self-healing")
-		eventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
 		})
 
@@ -228,7 +204,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		// get Pipeline to check that spec has been updated to correct spec
 		updatedPipelineSpecRunning := updatedPipelineSpec
 		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
-		eventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
 		})
 
@@ -248,9 +224,15 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		verifyNumaflowControllerReady(Namespace)
 
-		eventuallyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.1.7"
 		})
+
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+
+	})
+
+	It("Should make sure Pipeline is running", func() {
 
 	})
 
@@ -269,9 +251,11 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		eventuallyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == "1.0.0"
 		})
+
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
 
@@ -395,7 +379,8 @@ func snapshotCluster(testName string) {
 	}
 }
 
-func eventuallyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployment) bool) {
+// verify that the Deployment matches some criteria
+func verifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployment) bool) {
 	document("verifying Numaflow Controller Deployment")
 	Eventually(func() bool {
 		deployment, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -406,7 +391,28 @@ func eventuallyNumaflowControllerDeployment(namespace string, f func(appsv1.Depl
 	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
-func eventuallyISBServiceSpec(namespace string, name string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
+func verifyNumaflowControllerReady(namespace string) {
+	document("Verifying that the Numaflow Controller exists")
+	Eventually(func() error {
+		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		return err
+	}).WithTimeout(testTimeout).Should(Succeed())
+
+	document("Verifying that the Numaflow ControllerRollout is ready")
+	Eventually(func() bool {
+		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if rollout == nil {
+			return false
+		}
+		childResourcesHealthyCondition := rollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy)
+		if childResourcesHealthyCondition == nil {
+			return false
+		}
+		return childResourcesHealthyCondition.Status == metav1.ConditionTrue
+	}).WithTimeout(testTimeout).Should(BeTrue())
+}
+
+func verifyISBServiceSpec(namespace string, name string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
 
 	document("verifying ISBService Spec")
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
@@ -423,7 +429,36 @@ func eventuallyISBServiceSpec(namespace string, name string, f func(numaflowv1.I
 	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
-func eventuallyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
+func verifyISBSvcReady(namespace string, isbsvc string, nodeSize int) {
+	document("Verifying that the ISBService exists")
+	Eventually(func() error {
+		_, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		return err
+	}).WithTimeout(testTimeout).Should(Succeed())
+
+	// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
+	document("Verifying that the StatefulSet exists and is ready")
+	Eventually(func() bool {
+		statefulSet, _ := kubeClient.AppsV1().StatefulSets(namespace).Get(ctx, isbServiceStatefulSetName, metav1.GetOptions{})
+		return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == int32(nodeSize)
+	}).WithTimeout(testTimeout).Should(BeTrue())
+
+	document("Verifying that the StatefulSet Pods are in Running phase")
+	Eventually(func() bool {
+		podList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvc)})
+		podsInRunning := 0
+		if podList != nil {
+			for _, pod := range podList.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					podsInRunning += 1
+				}
+			}
+		}
+		return podsInRunning == nodeSize
+	}).WithTimeout(testTimeout).Should(BeTrue())
+}
+
+func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
 
 	document("verifying Pipeline Spec")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
@@ -440,7 +475,7 @@ func eventuallyPipelineSpec(namespace string, pipelineName string, f func(numafl
 	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
-func eventuallyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
 
 	document("verifying PipelineStatus")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
@@ -459,6 +494,48 @@ func eventuallyPipelineStatus(namespace string, pipelineName string, f func(numa
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}).WithTimeout(testTimeout).Should(BeTrue())
+}
+
+func verifyPipelineReady(namespace string, pipelineName string, numVertices int) {
+	document("Verifying that the Pipeline is running")
+	verifyPipelineStatus(namespace, pipelineName,
+		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
+			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
+		})
+
+	vertexLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyPipelineName, pipelineName, numaflowv1.KeyComponent, "vertex")
+	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyPipelineName, pipelineName, numaflowv1.KeyComponent, "daemon")
+
+	// Get Pipeline Pods to verify they're all up
+	// TODO: eventually we can use PipelineRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
+	document("Verifying that the Pipeline is ready")
+	// check "vertex" Pods
+	verifyPodsRunning(namespace, 2, vertexLabelSelector)
+	verifyPodsRunning(namespace, 1, daemonLabelSelector)
+
+}
+
+func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
+	document(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector))
+
+	Eventually(func() bool {
+		podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+		if podsList != nil && len(podsList.Items) >= numPods {
+			for _, pod := range podsList.Items {
+				if pod.Status.Phase != "Running" {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+
+	}).WithTimeout(testTimeout).Should(BeTrue())
+
+	podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+	if len(podsList.Items) < numPods {
+		fmt.Printf("\ndebug info: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
+	}
 }
 
 func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
@@ -650,56 +727,6 @@ func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollou
 
 	return isbServiceRollout
 
-}
-
-func verifyNumaflowControllerReady(namespace string) {
-	document("Verifying that the Numaflow Controller exists")
-	Eventually(func() error {
-		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
-
-	document("Verifying that the Numaflow ControllerRollout is ready")
-	Eventually(func() bool {
-		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		if rollout == nil {
-			return false
-		}
-		childResourcesHealthyCondition := rollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy)
-		if childResourcesHealthyCondition == nil {
-			return false
-		}
-		return childResourcesHealthyCondition.Status == metav1.ConditionTrue
-	}).WithTimeout(testTimeout).Should(BeTrue())
-}
-
-func verifyISBSvcReady(namespace string, isbsvc string, nodeSize int) {
-	document("Verifying that the ISBService exists")
-	Eventually(func() error {
-		_, err := dynamicClient.Resource(getGVRForISBService()).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
-
-	// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
-	document("Verifying that the StatefulSet exists and is ready")
-	Eventually(func() bool {
-		statefulSet, _ := kubeClient.AppsV1().StatefulSets(Namespace).Get(ctx, isbServiceStatefulSetName, metav1.GetOptions{})
-		return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == int32(nodeSize)
-	}).WithTimeout(testTimeout).Should(BeTrue())
-
-	document("Verifying that the StatefulSet Pods are in Running phase")
-	Eventually(func() bool {
-		podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvc)})
-		podsInRunning := 0
-		if podList != nil {
-			for _, pod := range podList.Items {
-				if pod.Status.Phase == corev1.PodRunning {
-					podsInRunning += 1
-				}
-			}
-		}
-		return podsInRunning == nodeSize
-	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
 func getGVRForPipeline() schema.GroupVersionResource {
