@@ -99,19 +99,19 @@ var _ = Describe("PipelineRollout e2e", func() {
 		_, err := numaflowControllerRolloutClient.Create(ctx, numaflowControllerRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("Verifying that the NumaflowControllerRollout was created")
+		document("Verifying that the NumaflowControllerRollout was created")
 		Eventually(func() error {
 			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		By("Verifying that the Numaflow Controller was created")
+		document("Verifying that the Numaflow Controller was created")
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		By("Verifying that the Numaflow ControllerRollout is ready")
+		document("Verifying that the Numaflow ControllerRollout is ready")
 		Eventually(func() bool {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if rollout == nil {
@@ -132,20 +132,20 @@ var _ = Describe("PipelineRollout e2e", func() {
 		_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("Verifying that the ISBServiceRollout was created")
+		document("Verifying that the ISBServiceRollout was created")
 		Eventually(func() error {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		By("Verifying that the ISBService was created")
+		document("Verifying that the ISBService was created")
 		Eventually(func() error {
 			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
-		By("Verifying that the StatefulSet was created and is ready")
+		document("Verifying that the StatefulSet was created and is ready")
 		Eventually(func() bool {
 			statefulSet, _ := kubeClient.AppsV1().StatefulSets(Namespace).Get(ctx, isbServiceStatefulSetName, metav1.GetOptions{})
 			return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == 3
@@ -159,19 +159,19 @@ var _ = Describe("PipelineRollout e2e", func() {
 		_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("Verifying that the PipelineRollout was created")
+		document("Verifying that the PipelineRollout was created")
 		Eventually(func() error {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
 
-		By("Verifying that the Pipeline was created")
+		document("Verifying that the Pipeline was created")
 		EventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
 		})
 
-		By("Verifying that the Pipeline is running")
+		document("Verifying that the Pipeline is running")
 		EventuallyPipelineStatus(Namespace, pipelineRolloutName,
 			func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 				return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
@@ -179,7 +179,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// Get Pipeline Pods to verify they're all up
 		// TODO: eventually we can use PipelineRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
-		By("Verifying that the Pipeline is ready")
+		document("Verifying that the Pipeline is ready")
 		Eventually(func() bool {
 			podsList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyPipelineName, pipelineRolloutName)})
 			return podsList != nil && len(podsList.Items) == 3 // 3 = 2 Vertices + daemon
@@ -202,6 +202,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
 		// get child Pipeline
+		document("Retrieving PipelineRollout")
 		createdPipeline := &unstructured.Unstructured{}
 		Eventually(func() bool {
 			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
@@ -220,6 +221,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 		})
 		Expect(err).ShouldNot(HaveOccurred())
 
+		document("Updating Pipeline directly")
+
 		// update child Pipeline
 		_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
@@ -231,8 +234,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		time.Sleep(5 * time.Second)
 
 		// get updated Pipeline again to compare spec
-		pipelineSpecRunning := pipelineSpec
-		pipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+		document("Verifying self-healing")
 		EventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
 		})
@@ -240,6 +242,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 	})
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
+
+		document("Updating Pipeline spec in PipelineRollout")
 
 		// new Pipeline spec
 		updatedPipelineSpec := pipelineSpec
@@ -250,11 +254,14 @@ var _ = Describe("PipelineRollout e2e", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// get current PipelineRollout
+		document("Getting current PipelineRollout")
 		rollout := &apiv1.PipelineRollout{}
 		Eventually(func() bool {
 			rollout, err = pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err == nil
 		}).WithTimeout(testTimeout).Should(BeTrue())
+
+		document("Updating PipelineRollout")
 
 		// update the PipelineRollout
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
@@ -267,6 +274,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 		// wait for update to reconcile
 		time.Sleep(5 * time.Second)
 
+		document("Verifying Pipeline got updated")
+
 		// get Pipeline to check that spec has been updated to correct spec
 		updatedPipelineSpecRunning := updatedPipelineSpec
 		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
@@ -278,9 +287,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should delete the PipelineRollout and child Pipeline", func() {
 
+		document("Deleting PipelineRollout")
+
 		err := pipelineRolloutClient.Delete(ctx, pipelineRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
+		document("Verifying PipelineRollout deletion")
 		Eventually(func() bool {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -291,6 +303,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			return true
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+
+		document("Verifying Pipeline deletion")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
@@ -307,8 +321,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
 
+		document("Deleting ISBServiceRollout")
+
 		err := isbServiceRolloutClient.Delete(ctx, isbServiceRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
+
+		document("Verifying ISBServiceRollout deletion")
 
 		Eventually(func() bool {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -320,6 +338,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			return true
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+
+		document("Verifying ISBService deletion")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -335,10 +355,12 @@ var _ = Describe("PipelineRollout e2e", func() {
 	})
 
 	It("Should delete the NumaflowControllerRollout and child NumaflowController", func() {
+		document("Deleting NumaflowControllerRollout")
 
 		err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
+		document("Verifying NumaflowControllerRollout deletion")
 		Eventually(func() bool {
 			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -349,6 +371,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 			}
 			return true
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+
+		document("Verifying Numaflow Controller deletion")
 
 		Eventually(func() bool {
 			_, err := dynamicClient.Resource(getGVRForDeployment()).Namespace(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -364,6 +388,21 @@ var _ = Describe("PipelineRollout e2e", func() {
 	})
 
 })
+
+func document(testName string) {
+	snapshotCluster(testName)
+	By(testName)
+}
+
+func snapshotCluster(testName string) {
+	fmt.Printf("*** PODS IN NAMESPACE *** Test: %s\n", testName)
+	podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{})
+	if podList != nil {
+		for _, pod := range podList.Items {
+			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
+		}
+	}
+}
 
 func EventuallyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
 
