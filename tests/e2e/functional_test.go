@@ -214,8 +214,6 @@ var _ = Describe("PipelineRollout e2e", func() {
 		rawSpec, err := json.Marshal(updatedPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		document("Updating PipelineRollout")
-
 		// update the PipelineRollout
 		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			rollout.Spec.Pipeline.Spec.Raw = rawSpec
@@ -243,9 +241,6 @@ var _ = Describe("PipelineRollout e2e", func() {
 			Controller: apiv1.Controller{Version: "1.1.7"},
 		}
 
-		time.Sleep(3 * time.Second)
-
-		document("Updating NumaflowControllerRollout version")
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
 			rollout.Spec = updatedNumaflowControllerSpec
 			return rollout, nil
@@ -255,6 +250,27 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		eventuallyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.1.7"
+		})
+
+	})
+
+	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
+
+		// new ISBService spec
+		updatedISBServiceSpec := isbServiceSpec
+		updatedISBServiceSpec.JetStream.Version = "1.0.0"
+		rawSpec, err := json.Marshal(updatedISBServiceSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+			rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+
+		eventuallyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Version == "1.0.0"
 		})
 
 	})
@@ -390,9 +406,26 @@ func eventuallyNumaflowControllerDeployment(namespace string, f func(appsv1.Depl
 	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
+func eventuallyISBServiceSpec(namespace string, name string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
+
+	document("verifying ISBService Spec")
+	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
+	Eventually(func() bool {
+		unstruct, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		if retrievedISBServiceSpec, err = getISBServiceSpec(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedISBServiceSpec)
+	}).WithTimeout(testTimeout).Should(BeTrue())
+}
+
 func eventuallyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
 
-	document("verifying PipelineSpec")
+	document("verifying Pipeline Spec")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	Eventually(func() bool {
 		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
@@ -420,7 +453,7 @@ func eventuallyPipelineStatus(namespace string, pipelineName string, f func(numa
 		if retrievedPipelineSpec, err = getPipelineSpec(unstruct); err != nil {
 			return false
 		}
-		if retrievedPipelineStatus, err = getPipelineStatus(unstruct); err != nil {
+		if retrievedPipelineStatus, err = getNumaflowResourceStatus(unstruct); err != nil {
 			return false
 		}
 
@@ -456,6 +489,7 @@ func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 }
 
 func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error)) {
+	document("updating NumaflowControllerRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		if err != nil {
@@ -473,6 +507,7 @@ func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout
 }
 
 func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error)) {
+	document("updating ISBServiceRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -490,6 +525,7 @@ func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 }
 
 func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
+	document("updating PipelineRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		if err != nil {
@@ -546,6 +582,14 @@ func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.Pipeline
 	return nil
 }
 
+// Get ISBServiceSpec from Unstructured type
+func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceSpec, error) {
+	specMap := u.Object["spec"]
+	var isbServiceSpec numaflowv1.InterStepBufferServiceSpec
+	err := util.StructToStruct(&specMap, &isbServiceSpec)
+	return isbServiceSpec, err
+}
+
 // Get PipelineSpec from Unstructured type
 func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, error) {
 	specMap := u.Object["spec"]
@@ -554,11 +598,11 @@ func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 	return pipelineSpec, err
 }
 
-func getPipelineStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
+func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
 	statusMap := u.Object["status"]
-	var pipelineStatus kubernetes.GenericStatus
-	err := util.StructToStruct(&statusMap, &pipelineStatus)
-	return pipelineStatus, err
+	var status kubernetes.GenericStatus
+	err := util.StructToStruct(&statusMap, &status)
+	return status, err
 }
 
 func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.NumaflowControllerRollout {
