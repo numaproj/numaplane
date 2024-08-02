@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -54,6 +56,8 @@ const (
 	loggerName                = "pipelinerollout-reconciler"
 	numWorkers                = 16 // can consider making configurable
 )
+
+var pipelineROReconciler *PipelineRolloutReconciler
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
@@ -94,6 +98,7 @@ func NewPipelineRolloutReconciler(
 		&sync.WaitGroup{},
 		customMetrics,
 	}
+	pipelineROReconciler = r
 
 	r.runWorkers(ctx)
 
@@ -106,20 +111,20 @@ func NewPipelineRolloutReconciler(
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PipelineRollout object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 
-	namespacedName := namespacedNameToKey(req.NamespacedName)
-	r.queue.Add(namespacedName)
-	numaLogger.Debugf("added PipelineRollout %v to queue", namespacedName)
+	r.enqueuePipeline(req.NamespacedName)
+	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
 	return ctrl.Result{}, nil
+}
+
+func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
+	key := namespacedNameToKey(namespacedName)
+	r.queue.Add(key)
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
@@ -254,12 +259,17 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 
 	// based on result, may need to add this back to the queue
 	if err != nil {
+		numaLogger.Errorf(err, "PipelineRollout %v reconcile returned error: %v", namespacedName, err)
 		r.queue.AddRateLimited(key)
 	} else {
 		if result.Requeue {
+			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue", namespacedName)
 			r.queue.AddRateLimited(key)
 		} else if result.RequeueAfter > 0 {
+			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %d seconds", namespacedName, result.RequeueAfter)
 			r.queue.AddAfter(key, result.RequeueAfter)
+		} else {
+			numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
 		}
 	}
 }
@@ -310,10 +320,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
+
+			pipelineRollout.Status.MarkPending()
+
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
 				return false, err
 			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 			return false, nil
 		}
@@ -321,76 +336,209 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
-	// If the pipeline already exists, first check if the pipeline status
-	// is pausing. If so, re-enqueue immediately.
-	pausing := isPipelinePausing(ctx, existingPipelineDef)
-	if pausing {
-		// re-enqueue
-		return true, nil
+	// Object already exists
+
+	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
+	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+	return false, err
+}
+
+// take the existing pipeline and merge anything needed from the new pipeline definition
+func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
+	resultPipeline := existingPipeline.DeepCopy()
+	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
+	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
+	return resultPipeline
+}
+func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// Get the fields we need from both the Pipeline spec we have and the one we want
+	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
+
+	var existingPipelineSpec PipelineSpec
+	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	// Check if the pipeline status is paused. If so, apply the change and
-	// resume.
-	paused := isPipelinePaused(ctx, existingPipelineDef)
-	if paused {
-		// Apply the new spec and resume the pipeline
-		// TODO: in the future, need to take into account whether Numaflow Controller
-		//       or ISBService is being installed to determine whether it's safe to unpause
-		newObj, err := setPipelineDesiredStatus(newPipelineDef, "Running")
-		if err != nil {
-			return false, err
-		}
-		newPipelineDef = newObj
-
-		err = applyPipelineSpec(ctx, r.restConfig, newPipelineDef)
-		if err != nil {
-			return false, err
-		}
-
-		return false, nil
-	}
-
-	// If pipeline status is not above, detect if pausing is required.
-	shouldPause, err := needsPausing(existingPipelineDef, newPipelineDef)
+	// Does pipeline spec need to be updated? is it already being updated?
+	pipelineNeedsToUpdate, pipelineIsUpdating, err := isPipelineUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
-		return false, err
-	}
-	if shouldPause {
-		// Use the existing spec, then pause and re-enqueue
-		newPipelineDef.Spec = existingPipelineDef.Spec
-		newObj, err := setPipelineDesiredStatus(newPipelineDef, "Paused")
-		if err != nil {
-			return false, err
-		}
-		newPipelineDef = newObj
-
-		err = applyPipelineSpec(ctx, r.restConfig, newPipelineDef)
-		if err != nil {
-			return false, err
-		}
-		return true, err
+		return err
 	}
 
-	// If no need to pause, just apply the spec
-	err = applyPipelineSpec(ctx, r.restConfig, newPipelineDef)
+	numaLogger.Debugf("pipelineNeedsToUpdate=%t, pipelineIsUpdating=%t", pipelineNeedsToUpdate, pipelineIsUpdating)
+
+	// set the Status appropriately to "Pending" or "Deployed"
+	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
+	// if there's a generation mismatch - this means we haven't even observed the current generation
+	// we may match the first case and not the second when we've observed the generation change but we're pausing
+	// we may match the second case and not the first if we need to update something other than Pipeline spec
+	if pipelineNeedsToUpdate || pipelineRollout.Status.ObservedGeneration < pipelineRollout.Generation {
+		pipelineRollout.Status.MarkPending()
+	} else {
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	}
+
+	if common.DataLossPrevention { // feature flag
+		err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate, pipelineIsUpdating)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+		if err != nil {
+			return err
+		}
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	}
+	return nil
+}
+
+func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool, pipelineIsUpdating bool) error {
+
+	numaLogger := logger.FromContext(ctx)
+	var err error
+
+	var newPipelineSpec PipelineSpec
+	if err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &newPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
+	}
+
+	// If there is a need to update, does it require a pause?
+	var pipelineUpdateRequiresPause bool
+	if pipelineNeedsToUpdate || pipelineIsUpdating {
+		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
-		return false, err
+		return err
+	}
+	if !pauseRequestsKnown {
+		numaLogger.Debugf("incomplete pause request information")
+		return nil
 	}
 
-	pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	return false, nil
+	// make sure our Lifecycle is what we need it to be
+	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
+	err = r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef)
+	if err != nil {
+		return err
+	}
+
+	// if it's safe to Update and we need to, do it now
+	if pipelineNeedsToUpdate {
+		if !pipelineUpdateRequiresPause || (pipelineUpdateRequiresPause && isPipelinePaused(ctx, existingPipelineDef)) {
+			numaLogger.Infof("it's safe to update Pipeline so updating now")
+			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+			if err != nil {
+				return err
+			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		}
+	}
+	return nil
+}
+
+// return:
+// - does it need to update?
+// - is it in the middle of updating?
+func isPipelineUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, bool, error) {
+	// propagate the pipeline's status into PipelineRollout's status
+	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
+	if err != nil {
+		return false, false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
+	}
+
+	// TODO: will need to update this to account for Vertex ObservedGeneration once that's ready
+	pipelineReconciled := pipelineObservedGenerationCurrent(newPipelineDef.Generation, pipelineStatus.ObservedGeneration)
+
+	// Does pipeline spec need to be updated?
+	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
+	if err != nil {
+		return false, false, err
+	}
+	return !pipelineSpecsEqual, !pipelineReconciled, nil
+}
+
+// make sure our Pipeline's Lifecycle is what we need it to be
+func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
+	numaLogger := logger.FromContext(ctx)
+	var existingPipelineSpec PipelineSpec
+	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return err
+	}
+	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
+
+	if paused && !lifeCycleIsPaused {
+		numaLogger.Info("pausing pipeline")
+		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
+			return err
+		}
+	} else if !paused && lifeCycleIsPaused {
+		numaLogger.Info("resuming pipeline")
+
+		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
+		if err != nil {
+			return err
+		}
+		if !run {
+			numaLogger.Infof("new pause request, can't resume pipeline at this time, will try again later")
+		}
+	}
+	return nil
+}
+
+// check for all pause requests for this Pipeline (i.e. both from Numaflow Controller and ISBService)
+// return:
+// - whether there's a pause request
+// - whether all pause requests are known
+// - error if any
+func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	controllerPauseRequest, found := GetPauseModule().getControllerPauseRequest(pipelineRollout.Namespace)
+	if !found {
+		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
+		return false, false, nil
+
+	}
+	controllerRequestsPause := controllerPauseRequest != nil && *controllerPauseRequest
+
+	isbsvcPauseRequest, found := GetPauseModule().getISBSvcPauseRequest(pipelineRollout.Namespace, isbsvcName)
+	if !found {
+		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
+		return false, false, nil
+	}
+	isbsvcRequestsPause := (isbsvcPauseRequest != nil && *isbsvcPauseRequest)
+
+	return controllerRequestsPause || isbsvcRequestsPause, true, nil
 }
 
 func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
-	if pipeline.Generation <= pipelineObservedGeneration {
+
+	if pipelineObservedGenerationCurrent(pipeline.Generation, pipelineObservedGeneration) {
 		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
 	} else {
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Mismatch between Pipeline Generation and ObservedGeneration", pipelineRollout.Generation)
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", fmt.Sprintf("Mismatch between Pipeline Generation %d and ObservedGeneration %d", pipeline.Generation, pipelineObservedGeneration), pipelineRollout.Generation)
 	}
 }
 
+func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
+	return generation <= observedGeneration
+}
+
 // Set the Condition in the Status for child resource health
+
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
@@ -433,7 +581,6 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineDef.Generation)
 	}
-
 	return nil
 }
 
@@ -472,35 +619,64 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func setPipelineDesiredStatus(obj *kubernetes.GenericObject, status string) (*kubernetes.GenericObject, error) {
-	unstruc, err := kubernetes.ObjectToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	err = unstructured.SetNestedField(unstruc.Object, status, "spec", "lifecycle", "desiredPhase")
-	if err != nil {
-		return nil, err
-	}
-
-	newObj, err := kubernetes.UnstructuredToObject(unstruc)
-	if err != nil {
-		return nil, err
-	}
-	return newObj, nil
-}
-
-func isPipelinePausing(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePausing)
-}
-
 func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 }
 
-// TODO: detect engine, now always not pause, enable to pause when we can detect spec change
+// pipelineSpecEqual() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove lifecycle field from comparison, as well as any nulls to test for equality
+	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
+	if err != nil {
+		return false, err
+	}
+	pipelineWithoutLifecycleB, err := pipelineWithoutLifecycle(b)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
+
+	//TODO: revisit this - why is reflect.DeepEqual sometimes sufficient?
+	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+}
+
+// remove 'lifecycle' key/value pair from Pipeline spec
+func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
+	unstruc, err := kubernetes.ObjectToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	_, found, err := unstructured.NestedString(unstruc.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		unstrucNew := unstruc.DeepCopy()
+		specMapAsInterface, found := unstrucNew.Object["spec"]
+		if found {
+			specMap, ok := specMapAsInterface.(map[string]interface{})
+			if ok {
+				lifecycleMapAsInterface, found := specMap["lifecycle"]
+				if found {
+					lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
+					if ok {
+						delete(lifecycleMap, "desiredPhase")
+						specMap["lifecycle"] = lifecycleMap
+						return specMap, nil
+					}
+				}
+			}
+
+			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
+		}
+	}
+	return unstruc.Object["spec"].(map[string]interface{}), nil
+}
+
+// TODO: detect engine determines when Pipeline spec change requires pausing
 func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
-	return false, nil
+	return true, nil
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
@@ -516,15 +692,14 @@ func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
-func applyPipelineSpec(
+func updatePipelineSpec(
 	ctx context.Context,
 	restConfig *rest.Config,
 	obj *kubernetes.GenericObject,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// TODO: use UpdateSpec instead
-	err := kubernetes.ApplyCRSpec(ctx, restConfig, obj, "pipelines")
+	err := kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 	if err != nil {
 		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
 		return err
@@ -534,18 +709,15 @@ func applyPipelineSpec(
 }
 
 func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
-	var pipelineSpec struct {
-		InterStepBufferServiceName string `json:"interStepBufferServiceName"`
-	}
+	var pipelineSpec PipelineSpec
 	labelMapping := map[string]string{
-		"isbsvc-name": "default",
+		common.LabelKeyISBServiceNameForPipeline: "default",
 	}
 	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 	if pipelineSpec.InterStepBufferServiceName != "" {
-		labelMapping["isbsvc-name"] = pipelineSpec.InterStepBufferServiceName
-
+		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
 	}
 
 	return labelMapping, nil
@@ -588,6 +760,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
+
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
@@ -606,4 +779,25 @@ func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}, nil
+
+}
+
+func getISBSvcName(pipeline PipelineSpec) string {
+	if pipeline.InterStepBufferServiceName == "" {
+		return "default"
+	}
+	return pipeline.InterStepBufferServiceName
+}
+
+// keep track of the minimum number of fields we need to know about
+type PipelineSpec struct {
+	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
+	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
+}
+
+type lifecycle struct {
+	// DesiredPhase used to bring the pipeline from current phase to desired phase
+	// +kubebuilder:default=Running
+	// +optional
+	DesiredPhase string `json:"desiredPhase,omitempty"`
 }

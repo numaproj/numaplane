@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -52,6 +53,7 @@ var (
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
+	kubeClient                      kubernetes.Interface
 )
 
 const (
@@ -92,6 +94,10 @@ var _ = BeforeSuite(func() {
 
 	numaflowControllerRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().NumaflowControllerRollouts(Namespace)
 	Expect(numaflowControllerRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	kubeClient, err = kubernetes.NewForConfig(cfg)
+	Expect(kubeClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
 	dynamicClient = *dynamic.NewForConfigOrDie(cfg)

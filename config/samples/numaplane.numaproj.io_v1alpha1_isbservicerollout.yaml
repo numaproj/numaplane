@@ -8,6 +8,4 @@ spec:
     spec:
       # Example from https://github.com/numaproj/numaflow/blob/main/examples/0-isbsvc-jetstream.yaml
       jetstream:
-        version: latest
-        persistence:
-          volumeSize: 1Gi
+        version: 2.10.3
