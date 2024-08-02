@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,53 +47,61 @@ const (
 	pipelineRolloutName           = "test-pipeline-rollout"
 )
 
-var pipelineSpecSourceRPU = int64(5)
-var pipelineSpecSourceDuration = metav1.Duration{
-	Duration: time.Second,
-}
-var pipelineSpec = numaflowv1.PipelineSpec{
-	InterStepBufferServiceName: isbServiceRolloutName,
-	Vertices: []numaflowv1.AbstractVertex{
-		{
-			Name: "in",
-			Source: &numaflowv1.Source{
-				Generator: &numaflowv1.GeneratorSource{
-					RPU:      &pipelineSpecSourceRPU,
-					Duration: &pipelineSpecSourceDuration,
+var (
+	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceDuration = metav1.Duration{
+		Duration: time.Second,
+	}
+	pipelineSpec = numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: isbServiceRolloutName,
+		Vertices: []numaflowv1.AbstractVertex{
+			{
+				Name: "in",
+				Source: &numaflowv1.Source{
+					Generator: &numaflowv1.GeneratorSource{
+						RPU:      &pipelineSpecSourceRPU,
+						Duration: &pipelineSpecSourceDuration,
+					},
+				},
+			},
+			{
+				Name: "out",
+				Sink: &numaflowv1.Sink{
+					AbstractSink: numaflowv1.AbstractSink{
+						Log: &numaflowv1.Log{},
+					},
 				},
 			},
 		},
-		{
-			Name: "out",
-			Sink: &numaflowv1.Sink{
-				AbstractSink: numaflowv1.AbstractSink{
-					Log: &numaflowv1.Log{},
-				},
+		Edges: []numaflowv1.Edge{
+			{
+				From: "in",
+				To:   "out",
 			},
 		},
-	},
-	Edges: []numaflowv1.Edge{
-		{
-			From: "in",
-			To:   "out",
-		},
-	},
-}
+	}
 
-var isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-	Redis: nil,
-	JetStream: &numaflowv1.JetStreamBufferService{
-		Version: "latest",
-		Persistence: &numaflowv1.PersistenceStrategy{
-			VolumeSize: &numaflowv1.DefaultVolumeSize,
+	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: "latest",
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &numaflowv1.DefaultVolumeSize,
+			},
 		},
-	},
+	}
+
+	pipelinegvr   schema.GroupVersionResource
+	isbservicegvr schema.GroupVersionResource
+)
+
+func init() {
+
+	pipelinegvr = getGVRForPipeline()
+	isbservicegvr = getGVRForISBService()
 }
 
 var _ = Describe("PipelineRollout e2e", func() {
-
-	pipelinegvr := getGVRForPipeline()
-	isbservicegvr := getGVRForISBService()
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 
@@ -140,7 +149,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		document("Verifying that the Pipeline was created")
 		eventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
-			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec)
+			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
 		document("Verifying that the Pipeline is running")
@@ -173,34 +182,14 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
-		// get child Pipeline
-		document("Retrieving PipelineRollout")
-		createdPipeline := &unstructured.Unstructured{}
-		Eventually(func() bool {
-			unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			createdPipeline = unstruct
-			return true
-		}).WithTimeout(testTimeout).Should(BeTrue())
+		document("Updating Pipeline directly")
 
-		// modify Pipeline Spec to verify it gets auto-healed
-		err := updatePipelineSpec(createdPipeline, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
+		// update child Pipeline
+		updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
 			rpu := int64(10)
 			pipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
 			return pipelineSpec, nil
 		})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		document("Updating Pipeline directly")
-
-		// update child Pipeline
-		_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Update(ctx, createdPipeline, metav1.UpdateOptions{})
-			return err
-		})
-		Expect(err).ShouldNot(HaveOccurred())
 
 		// allow time for self healing to reconcile
 		time.Sleep(5 * time.Second)
@@ -225,23 +214,13 @@ var _ = Describe("PipelineRollout e2e", func() {
 		rawSpec, err := json.Marshal(updatedPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// get current PipelineRollout
-		document("Getting current PipelineRollout")
-		rollout := &apiv1.PipelineRollout{}
-		Eventually(func() bool {
-			rollout, err = pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return err == nil
-		}).WithTimeout(testTimeout).Should(BeTrue())
-
 		document("Updating PipelineRollout")
 
 		// update the PipelineRollout
-		rollout.Spec.Pipeline.Spec.Raw = rawSpec
-		_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			_, err = pipelineRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{}) // TODO: should use RetryOnConflict for all Updates
-			return err
+		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return rollout, nil
 		})
-		Expect(err).ShouldNot(HaveOccurred())
 
 		// wait for update to reconcile
 		time.Sleep(5 * time.Second)
@@ -253,6 +232,29 @@ var _ = Describe("PipelineRollout e2e", func() {
 		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 		eventuallyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
+		})
+
+	})
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+
+		// new NumaflowController spec
+		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: "1.1.7"},
+		}
+
+		time.Sleep(3 * time.Second)
+
+		document("Updating NumaflowControllerRollout version")
+		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+			rollout.Spec = updatedNumaflowControllerSpec
+			return rollout, nil
+		})
+
+		verifyNumaflowControllerReady(Namespace)
+
+		eventuallyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.1.7"
 		})
 
 	})
@@ -377,11 +379,23 @@ func snapshotCluster(testName string) {
 	}
 }
 
+func eventuallyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployment) bool) {
+	document("verifying Numaflow Controller Deployment")
+	Eventually(func() bool {
+		deployment, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		return f(*deployment)
+	}).WithTimeout(testTimeout).Should(BeTrue())
+}
+
 func eventuallyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
 
+	document("verifying PipelineSpec")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	Eventually(func() bool {
-		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -390,15 +404,16 @@ func eventuallyPipelineSpec(namespace string, pipelineName string, f func(numafl
 		}
 
 		return f(retrievedPipelineSpec)
-	}).WithPolling(5 * time.Second).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
 func eventuallyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
 
+	document("verifying PipelineStatus")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus kubernetes.GenericStatus
 	Eventually(func() bool {
-		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -410,7 +425,7 @@ func eventuallyPipelineStatus(namespace string, pipelineName string, f func(numa
 		}
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}).WithPolling(5 * time.Second).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
 func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
@@ -440,8 +455,76 @@ func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
 }
 
+func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error)) {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		rollout, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		*rollout, err = f(*rollout)
+		if err != nil {
+			return err
+		}
+		_, err = numaflowControllerRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error)) {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		rollout, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		*rollout, err = f(*rollout)
+		if err != nil {
+			return err
+		}
+		_, err = isbServiceRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		rollout, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		*rollout, err = f(*rollout)
+		if err != nil {
+			return err
+		}
+		_, err = pipelineRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+
+		unstruct, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		retrievedPipeline := unstruct
+
+		// modify Pipeline Spec to verify it gets auto-healed
+		err = updatePipelineSpec(retrievedPipeline, f)
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
 // Take a Pipeline Unstructured type and update the PipelineSpec in some way
 func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) error {
+
 	// get PipelineSpec from unstructured object
 	specMap := u.Object["spec"]
 	var pipelineSpec numaflowv1.PipelineSpec
