@@ -176,6 +176,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
 		})
 
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+
 	})
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
@@ -207,6 +209,8 @@ var _ = Describe("PipelineRollout e2e", func() {
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
 		})
+
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
 
