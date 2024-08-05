@@ -215,7 +215,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.5"},
+			Controller: apiv1.Controller{Version: "0.0.6"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -224,7 +224,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 		})
 
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.5"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
 		})
 
 		verifyNumaflowControllerReady(Namespace)
@@ -692,7 +692,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.4"},
+			Controller: apiv1.Controller{Version: "0.0.7"},
 		},
 	}
 
