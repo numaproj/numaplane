@@ -155,3 +155,14 @@ jobs:
         env:
           GOPATH: /home/runner/go
         run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
+
+      - name: Install Numaplane with dataLossPrevention=true
+        env:
+          GOPATH: /home/runner/go
+        run:
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true TEST_MANIFEST_DIR=tests/manifests/special-cases/pause make start
+
+      - name: Run tests with dataLossPrevention=true
+        env:
+          GOPATH: /home/runner/go
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
