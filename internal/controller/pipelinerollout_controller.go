@@ -407,7 +407,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 	}
 
 	// is the Pipeline currently being reconciled?
-	pipelineUpdating, err := pipelineIsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return err
 	}
@@ -461,9 +461,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 	return nil
 }
 
-// return:
-// - does it need to update?
-// - is it in the middle of updating? (in a way that required it to be Paused)
 func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
@@ -473,7 +470,7 @@ func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.Gener
 	return !pipelineSpecsEqual, nil
 }
 
-func pipelineIsUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, err
