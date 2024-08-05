@@ -19,6 +19,9 @@ package controller
 import (
 	"context"
 	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -265,3 +268,47 @@ spec:
 		})
 	})
 })
+
+func Test_getControllerDeploymentVersion(t *testing.T) {
+	testCases := []struct {
+		name        string
+		containers  []corev1.Container
+		expectedTag string
+	}{
+		{
+			name: "standard",
+			containers: []corev1.Container{
+				{
+					Image: "some/path/sidecar:latest",
+				},
+				{
+					Image: "quay.io/numaproj/numaflow:v1.0.2",
+				},
+			},
+			expectedTag: "1.0.2",
+		},
+		{
+			name: "images have no paths",
+			containers: []corev1.Container{
+				{
+					Image: "sidecar",
+				},
+				{
+					Image: "numaflow:v1.0.2", // valid if it's in the default registry
+				},
+			},
+			expectedTag: "1.0.2",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			deployment := appsv1.Deployment{}
+			deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, tc.containers...)
+			tag, err := getControllerDeploymentVersion(&deployment)
+			assert.Nil(t, err)
+			assert.Equal(t, tc.expectedTag, tag)
+		})
+	}
+
+}

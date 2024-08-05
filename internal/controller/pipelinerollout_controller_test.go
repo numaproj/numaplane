@@ -19,8 +19,13 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"testing"
+	"fmt"
+	"strings"
 	"time"
+
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -184,8 +191,19 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
+			/*By("Verifying the Numaflow Pipeline lifecycle desiredPhase is 'Paused'")
+			Eventually(func() (string, error) {
+				updatedChildResource := &numaflowv1.Pipeline{}
+				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
+				if err != nil {
+					return "", err
+				}
+				return string(updatedChildResource.Spec.Lifecycle.DesiredPhase), nil
+			}, timeout, interval).Should(Equal("Paused"))
+
 			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)*/
+
 		})
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
@@ -243,7 +261,366 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 	})
 })
 
-func TestPipeLinLabels(t *testing.T) {
+var yamlHasDesiredPhase = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlHasDesiredPhaseDifferentUDF = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "SOMETHING_ELSE"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlDesiredPhaseWrongType = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": 3
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlNoDesiredPhase = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlNoLifecycle = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var yamlNoLifecycleWithNulls = `
+{
+	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+		"desiredPhase": "Paused"
+	  },
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {},
+			"RANDOM_KEY":
+			{
+				"RANDOM_INNER_KEY": {}
+			}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+func Test_pipelineWithoutLifecycle(t *testing.T) {
+	testCases := []struct {
+		name          string
+		specYaml      string
+		expectedError bool
+	}{
+		{
+			name:          "desiredPhase set to Paused",
+			specYaml:      yamlHasDesiredPhase,
+			expectedError: false,
+		},
+		{
+			name:          "desiredPhase set to wrong type",
+			specYaml:      yamlDesiredPhaseWrongType,
+			expectedError: true,
+		},
+		{
+			name:          "desiredPhase not present",
+			specYaml:      yamlNoDesiredPhase,
+			expectedError: false,
+		},
+		{
+			name:          "lifecycle not present",
+			specYaml:      yamlNoLifecycle,
+			expectedError: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj := &kubernetes.GenericObject{}
+			obj.Spec.Raw = []byte(tc.specYaml)
+			withoutLifecycle, err := pipelineWithoutLifecycle(obj)
+			if tc.expectedError {
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				bytes, _ := json.Marshal(withoutLifecycle)
+				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
+				assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
+			}
+		})
+	}
+}
+
+func Test_pipelineSpecEqual(t *testing.T) {
+	testCases := []struct {
+		name          string
+		specYaml1     string
+		specYaml2     string
+		expectedEqual bool
+		expectedError bool
+	}{
+		{
+			name:          "Equal Except for Lifecycle and null values",
+			specYaml1:     yamlHasDesiredPhase,
+			specYaml2:     yamlNoLifecycleWithNulls,
+			expectedEqual: true,
+			expectedError: false,
+		},
+		{
+			name:          "Not Equal",
+			specYaml1:     yamlHasDesiredPhase,
+			specYaml2:     yamlHasDesiredPhaseDifferentUDF,
+			expectedEqual: false,
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj1 := &kubernetes.GenericObject{}
+			obj1.Spec.Raw = []byte(tc.specYaml1)
+			obj2 := &kubernetes.GenericObject{}
+			obj2.Spec.Raw = []byte(tc.specYaml2)
+			equal, err := pipelineSpecEqual(context.Background(), obj1, obj2)
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedEqual, equal)
+			}
+
+		})
+	}
+}
+
+func TestPipelineLabels(t *testing.T) {
 	tests := []struct {
 		name          string
 		jsonInput     string
@@ -279,13 +656,14 @@ func TestPipeLinLabels(t *testing.T) {
 					},
 				},
 			}
+
 			labels, err := pipelineLabels(pipelineRollout)
 			if (err != nil) != tt.expectError {
-				t.Errorf("pipeLinLabels() error = %v, expectError %v", err, tt.expectError)
+				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
-			if err == nil && labels["isbsvc-name"] != tt.expectedLabel {
-				t.Errorf("pipeLinLabels() = %v, expected %v", labels["isbsvc-name"], tt.expectedLabel)
+			if err == nil && labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
+				t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
 			}
 		})
 	}

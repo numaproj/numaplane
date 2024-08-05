@@ -46,6 +46,10 @@ const (
 
 	// ConditionChildResourceDeployed indicates that the child resource was deployed.
 	ConditionChildResourceDeployed ConditionType = "ChildResourceDeployed"
+
+	// ConditionPausingPipelines applies to ISBServiceRollout or NumaflowControllerRollout for when they are in the process
+	// of pausing pipelines
+	ConditionPausingPipelines ConditionType = "PausingPipelines"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -108,7 +112,10 @@ func (s *Status) GetCondition(t ConditionType) *metav1.Condition {
 // Init sets certain Status parameters to a default initial state
 func (status *Status) Init(generation int64) {
 	status.SetObservedGeneration(generation)
-	status.MarkPending()
+	// rationale for commenting this out:
+	// "Pending" is now something we indicate when a rollout has been updated and we are trying to deploy it,
+	// as opposed to meaning that we're "pending reconciliation"
+	//status.MarkPending()
 }
 
 // MarkPending sets Phase to Pending
@@ -137,6 +144,14 @@ func (status *Status) MarkChildResourcesUnhealthy(reason, message string, genera
 
 func (status *Status) MarkChildResourcesHealthUnknown(reason, message string, generation int64) {
 	status.MarkUnknown(ConditionChildResourceHealthy, reason, message, generation)
+}
+
+func (status *Status) MarkPausingPipelines(generation int64) {
+	status.MarkTrueWithReason(ConditionPausingPipelines, "Pause", "pause needed for update", generation)
+}
+
+func (status *Status) MarkUnpausingPipelines(generation int64) {
+	status.MarkFalse(ConditionPausingPipelines, "NoPause", "no need for pause", generation)
 }
 
 // setCondition sets a condition
