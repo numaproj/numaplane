@@ -9,38 +9,38 @@ import (
 )
 
 type CustomMetrics struct {
-	// PipelinesGauge is the gauge for the number of running pipelines.
-	PipelinesGauge *prometheus.GaugeVec
+	// PipelinesRunning is the gauge for the number of running pipelines.
+	PipelinesRunning *prometheus.GaugeVec
 	// PipelineCounterMap contains the information of all running pipelines with "name_namespace" as a key.
 	PipelineCounterMap map[string]struct{}
-	// PipelineSyncFailed is the counter for the total number of pipeline syncing failed.
-	PipelineSyncFailed *prometheus.CounterVec
+	// PipelinesSyncFailed is the counter for the total number of failed synced.
+	PipelinesSyncFailed *prometheus.CounterVec
 	// PipelineRolloutQueueLength is the gauge for the length of pipeline rollout queue.
 	PipelineRolloutQueueLength *prometheus.GaugeVec
-	// PipelineSynced is the counter for the total number of pipeline synced.
-	PipelineSynced *prometheus.CounterVec
-	// ISBServiceGauge is the gauge for the number of running ISB services.
-	ISBServiceGauge *prometheus.GaugeVec
+	// PipelinesSynced is the counter for the total number of pipelines synced.
+	PipelinesSynced *prometheus.CounterVec
+	// ISBServicesRunning is the gauge for the number of running ISB services.
+	ISBServicesRunning *prometheus.GaugeVec
 	// ISBServiceCounterMap contains the information of all running isb services with "name_namespace" as a key.
 	ISBServiceCounterMap map[string]struct{}
-	// ISBServiceSyncFailed is the counter for the total number of ISB service syncing failed.
-	ISBServiceSyncFailed *prometheus.CounterVec
+	// ISBServicesSyncFailed is the counter for the total number of ISB service syncing failed.
+	ISBServicesSyncFailed *prometheus.CounterVec
 	// ISBServicesSynced is the counter for the total number of ISB service synced.
 	ISBServicesSynced *prometheus.CounterVec
 	// NumaflowControllerVersionCounter contains the information of all running numaflow controllers with "version" as a key and "name_namespace" as a value.
 	NumaflowControllerVersionCounter map[string]map[string]struct{}
-	// NumaflowControllerGauge is the gauge for the number of running numaflow controllers with a specific version.
-	NumaflowControllerGauge *prometheus.GaugeVec
-	// NumaflowControllerSyncFailed is the counter for the total number of Numaflow controller syncing failed.
-	NumaflowControllerSyncFailed *prometheus.CounterVec
-	// NumaflowControllerSynced in the gauge for the total number of Numaflow controllers synced.
-	NumaflowControllerSynced *prometheus.GaugeVec
+	// NumaflowControllerRunning is the gauge for the number of running numaflow controllers with a specific version.
+	NumaflowControllerRunning *prometheus.GaugeVec
+	// NumaflowControllersSyncFailed is the counter for the total number of Numaflow controller syncing failed.
+	NumaflowControllersSyncFailed *prometheus.CounterVec
+	// NumaflowControllersSynced in the counter for the total number of Numaflow controllers synced.
+	NumaflowControllersSynced *prometheus.CounterVec
 	// ReconciliationDuration is the histogram for the duration of pipeline, isb service and numaflow controller reconciliation.
 	ReconciliationDuration *prometheus.HistogramVec
-	// NumaflowKubeRequestCounter Count the number of kubernetes required during numaflow controller reconciliation
-	NumaflowKubeRequestCounter *prometheus.CounterVec
-	// NumaflowKubectlExecutionCounter Count the number of kubectl executions during numaflow controller reconciliation
-	NumaflowKubectlExecutionCounter *prometheus.CounterVec
+	// NumaflowControllerKubeRequestCounter Count the number of kubernetes requests during numaflow controller reconciliation
+	NumaflowControllerKubeRequestCounter *prometheus.CounterVec
+	// NumaflowControllerKubectlExecutionCounter Count the number of kubectl executions during numaflow controller reconciliation
+	NumaflowControllerKubectlExecutionCounter *prometheus.CounterVec
 	// KubeResourceMonitored count the number of monitored kubernetes resource objects in cache
 	KubeResourceMonitored *prometheus.GaugeVec
 	// KubeResourceCache count the number of kubernetes resource objects in cache
@@ -58,26 +58,26 @@ const (
 )
 
 var (
-	defaultLabels               = prometheus.Labels{LabelIntuit: "true"}
-	pipelineLock                sync.Mutex
-	isbServiceLock              sync.Mutex
-	numaflowControllerLock      sync.Mutex
-	numaflowControllerMaxSynced int
-	pipelinesGauge              = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	defaultLabels          = prometheus.Labels{LabelIntuit: "true"}
+	pipelineLock           sync.Mutex
+	isbServiceLock         sync.Mutex
+	numaflowControllerLock sync.Mutex
+
+	pipelinesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipelines_running",
 		Help:        "Number of Numaflow pipelines running",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// pipelineSynced Check the total number of pipeline synced
-	pipelineSynced = promauto.NewCounterVec(prometheus.CounterOpts{
+	// pipelinesSynced Check the total number of pipeline synced
+	pipelinesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "pipeline_synced_total",
 		Help:        "The total number of pipeline synced",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// pipelineSyncFailed Check the total number of pipeline syncs failed
-	pipelineSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	// pipelinesSyncFailed Check the total number of pipeline syncs failed
+	pipelinesSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "pipeline_sync_failed_total",
 		Help:        "The total number of pipeline sync failed",
 		ConstLabels: defaultLabels,
@@ -90,8 +90,8 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// isbServiceGauge is the gauge for the number of running ISB services.
-	isbServiceGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// isbServicesRunning is the gauge for the number of running ISB services.
+	isbServicesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_isb_services_running",
 		Help:        "Number of Numaflow ISB Service running",
 		ConstLabels: defaultLabels,
@@ -104,37 +104,44 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// isbServiceSyncFailed Check the total number of ISB service syncs failed
-	isbServiceSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	// isbServicesSyncFailed Check the total number of ISB service syncs failed
+	isbServicesSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "isb_service_sync_failed_total",
 		Help:        "The total number of ISB service sync failed",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// numaflowControllerGauge is the gauge for the number of running numaflow controllers.
-	numaflowControllerGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// numaflowControllerRunning is the gauge for the number of running numaflow controllers.
+	numaflowControllerRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_controller_running",
 		Help:        "Number of Numaflow controller running",
 		ConstLabels: defaultLabels,
 	}, []string{LabelVersion})
 
-	// numaflowControllerSyncFailed Check the total number of Numaflow controller syncs failed
-	numaflowControllerSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	// numaflowControllersSynced Check the total number of Numaflow controllers synced
+	numaflowControllersSynced = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaflow_controller_synced_total",
+		Help:        "The total number of Numaflow controller synced",
+		ConstLabels: defaultLabels,
+	}, []string{})
+
+	// numaflowControllersSyncFailed Check the total number of Numaflow controller syncs failed
+	numaflowControllersSyncFailed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaflow_controller_sync_failed_total",
 		Help:        "The total number of Numaflow controller sync failed",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// numaflowKubeRequestCounter Check the total number of kubernetes request for numaflow controller
-	numaflowKubeRequestCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "numaflow_kube_request_total",
+	// numaflowControllerKubeRequestCounter Check the total number of kubernetes requests for numaflow controller
+	numaflowControllerKubeRequestCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaflow_controller_kube_request_total",
 		Help:        "The total number of kubernetes request for numaflow controller",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// numaflowKubectlExecutionCounter Check the total number of kubectl execution for numaflow controller
-	numaflowKubectlExecutionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "numaflow_kubectl_execution_total",
+	// numaflowControllerKubectlExecutionCounter Check the total number of kubectl executions for numaflow controller
+	numaflowControllerKubectlExecutionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaflow_controller_kubectl_execution_total",
 		Help:        "The total number of kubectl execution for numaflow controller",
 		ConstLabels: defaultLabels,
 	}, []string{})
@@ -146,15 +153,8 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{LabelType, LabelPhase})
 
-	// numaflowControllerSynced Check the total number of Numaflow controllers synced
-	numaflowControllerSynced = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_controller_synced_total", //
-		Help:        "The total number of Numaflow controller synced",
-		ConstLabels: defaultLabels,
-	}, []string{})
-
-	// kubeResourceMonitored count the number of monitored kubernetes resource objects in cache
-	kubeResourceMonitored = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	// kubeResourceCacheMonitored count the number of monitored kubernetes resource objects in cache
+	kubeResourceCacheMonitored = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_kube_resource_monitored",
 		Help:        "Number of monitored kubernetes resource object in cache",
 		ConstLabels: defaultLabels,
@@ -177,42 +177,39 @@ var (
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics() *CustomMetrics {
-	metrics.Registry.MustRegister(pipelinesGauge, pipelineSynced, isbServiceGauge, numaflowControllerGauge, reconciliationDuration,
-		pipelineSyncFailed, pipelineRolloutQueueLength, isbServiceSyncFailed, numaflowControllerSyncFailed, numaflowKubeRequestCounter,
-		numaflowKubectlExecutionCounter, kubeResourceMonitored, kubeResourceCache, clusterCacheError)
+	metrics.Registry.MustRegister(pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
+		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, numaflowControllerKubeRequestCounter,
+		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError)
 
 	return &CustomMetrics{
-		PipelinesGauge:                   pipelinesGauge,
-		PipelineCounterMap:               make(map[string]struct{}),
-		PipelineSynced:                   pipelineSynced,
-		PipelineSyncFailed:               pipelineSyncFailed,
-		PipelineRolloutQueueLength:       pipelineRolloutQueueLength,
-		ISBServiceGauge:                  isbServiceGauge,
-		ISBServiceCounterMap:             make(map[string]struct{}),
-		ISBServicesSynced:                isbServicesSynced,
-		ISBServiceSyncFailed:             isbServiceSyncFailed,
-		NumaflowControllerGauge:          numaflowControllerGauge,
-		NumaflowControllerVersionCounter: make(map[string]map[string]struct{}),
-		NumaflowControllerSynced:         numaflowControllerSynced,
-		NumaflowControllerSyncFailed:     numaflowControllerSyncFailed,
-		NumaflowKubeRequestCounter:       numaflowKubeRequestCounter,
-		NumaflowKubectlExecutionCounter:  numaflowKubectlExecutionCounter,
-		ReconciliationDuration:           reconciliationDuration,
-		KubeResourceMonitored:            kubeResourceMonitored,
-		KubeResourceCache:                kubeResourceCache,
-		ClusterCacheError:                clusterCacheError,
+		PipelinesRunning:                          pipelinesRunning,
+		PipelineCounterMap:                        make(map[string]struct{}),
+		PipelinesSynced:                           pipelinesSynced,
+		PipelinesSyncFailed:                       pipelinesSyncFailed,
+		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
+		ISBServicesRunning:                        isbServicesRunning,
+		ISBServiceCounterMap:                      make(map[string]struct{}),
+		ISBServicesSynced:                         isbServicesSynced,
+		ISBServicesSyncFailed:                     isbServicesSyncFailed,
+		NumaflowControllerRunning:                 numaflowControllerRunning,
+		NumaflowControllerVersionCounter:          make(map[string]map[string]struct{}),
+		NumaflowControllersSynced:                 numaflowControllersSynced,
+		NumaflowControllersSyncFailed:             numaflowControllersSyncFailed,
+		NumaflowControllerKubeRequestCounter:      numaflowControllerKubeRequestCounter,
+		NumaflowControllerKubectlExecutionCounter: numaflowControllerKubectlExecutionCounter,
+		ReconciliationDuration:                    reconciliationDuration,
+		KubeResourceMonitored:                     kubeResourceCacheMonitored,
+		KubeResourceCache:                         kubeResourceCache,
+		ClusterCacheError:                         clusterCacheError,
 	}
 }
 
-// IncPipelineMetrics increments the pipeline counter if it doesn't already know about the pipeline
-func (m *CustomMetrics) IncPipelineMetrics(name, namespace string) {
+// IncPipelinesRunningMetrics increments the pipeline counter if it doesn't already know about the pipeline
+func (m *CustomMetrics) IncPipelinesRunningMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
-	if _, ok := m.PipelineCounterMap[name+"_"+namespace]; !ok {
-		m.PipelineCounterMap[name+"_"+namespace] = struct{}{}
-		m.PipelineSynced.WithLabelValues().Inc()
-	}
-	m.PipelinesGauge.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
+	m.PipelineCounterMap[name+"_"+namespace] = struct{}{}
+	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
 }
 
 // DecPipelineMetrics decrements the pipeline counter
@@ -220,18 +217,15 @@ func (m *CustomMetrics) DecPipelineMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
 	delete(m.PipelineCounterMap, name+"_"+namespace)
-	m.PipelinesGauge.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
+	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
 }
 
 // IncISBServiceMetrics increments the ISBService counter if it doesn't already know about the ISBService
 func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
-	if _, ok := m.ISBServiceCounterMap[name+"_"+namespace]; !ok {
-		m.ISBServiceCounterMap[name+"_"+namespace] = struct{}{}
-		m.ISBServicesSynced.WithLabelValues().Inc()
-	}
-	m.ISBServiceGauge.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
+	m.ISBServiceCounterMap[name+"_"+namespace] = struct{}{}
+	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
 }
 
 // DecISBServiceMetrics decrements the ISBService counter
@@ -239,7 +233,7 @@ func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
 	delete(m.ISBServiceCounterMap, name+"_"+namespace)
-	m.ISBServiceGauge.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
+	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
 }
 
 // IncNumaflowControllerMetrics increments the Numaflow Controller counter
@@ -252,14 +246,8 @@ func (m *CustomMetrics) IncNumaflowControllerMetrics(name, namespace, version st
 		m.NumaflowControllerVersionCounter[version] = make(map[string]struct{})
 	}
 	m.NumaflowControllerVersionCounter[version][name+"_"+namespace] = struct{}{}
-	var totalNumaflowRunning int
 	for key, value := range m.NumaflowControllerVersionCounter {
-		m.NumaflowControllerGauge.WithLabelValues(key).Set(float64(len(value)))
-		totalNumaflowRunning += len(value)
-	}
-	if totalNumaflowRunning > numaflowControllerMaxSynced {
-		numaflowControllerMaxSynced = totalNumaflowRunning
-		m.NumaflowControllerSynced.WithLabelValues().Set(float64(numaflowControllerMaxSynced))
+		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
 	}
 }
 
@@ -269,6 +257,6 @@ func (m *CustomMetrics) DecNumaflowControllerMetrics(name, namespace, version st
 	defer numaflowControllerLock.Unlock()
 	delete(m.NumaflowControllerVersionCounter[version], name+"_"+namespace)
 	for key, value := range m.NumaflowControllerVersionCounter {
-		m.NumaflowControllerGauge.WithLabelValues(key).Set(float64(len(value)))
+		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
 	}
 }

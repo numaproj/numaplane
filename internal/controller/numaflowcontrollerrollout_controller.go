@@ -21,8 +21,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/argoproj/gitops-engine/pkg/diff"
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
@@ -95,7 +95,7 @@ func NewNumaflowControllerRolloutReconciler(
 	}
 
 	kubectl.SetOnKubectlRun(func(command string) (kubeUtil.CleanupFunc, error) {
-		customMetrics.NumaflowKubectlExecutionCounter.WithLabelValues().Inc()
+		customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues().Inc()
 		return func() {}, nil
 	})
 	restConfig := newRawConfig
@@ -124,13 +124,14 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
+	r.customMetrics.NumaflowControllersSynced.WithLabelValues().Inc()
 
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get NumaflowControllerRollout", "request", req)
 			return ctrl.Result{}, err
 		}
@@ -148,10 +149,10 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
-			r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-		r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+		r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 		return ctrl.Result{}, err
 	}
 
@@ -176,10 +177,10 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 			if statusUpdateErr != nil {
-				r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+				r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-			r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -191,14 +192,13 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
 		if statusUpdateErr != nil {
-			r.customMetrics.NumaflowControllerSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate the metrics for the numaflow controller based on a numaflow version.
 	r.customMetrics.IncNumaflowControllerMetrics(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version)
-	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(startTime).Seconds())
 
 	numaLogger.Debug("reconciliation successful")
 
@@ -338,6 +338,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
 
+	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(startTime).Seconds())
 	return ctrl.Result{}, nil
 }
 

@@ -118,7 +118,7 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 	r.enqueuePipeline(req.NamespacedName)
 	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
-  r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
+	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
 	return ctrl.Result{}, nil
 }
 
@@ -132,6 +132,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
+	r.customMetrics.PipelinesSynced.WithLabelValues().Inc()
 
 	// Get PipelineRollout CR
 	pipelineRollout := &apiv1.PipelineRollout{}
@@ -139,7 +140,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get PipelineRollout")
 			return ctrl.Result{}, err
 		}
@@ -155,7 +156,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -167,7 +168,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -179,10 +180,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		pipelineRolloutStatus := pipelineRollout.Status
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
 			numaLogger.Error(err, "Error Updating PipelineRollout", "PipelineRollout", pipelineRollout)
-			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+				r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
 
@@ -197,14 +198,13 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelineSyncFailed.WithLabelValues().Inc()
+			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate the metrics for the Pipeline.
-	r.customMetrics.IncPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
-	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(startTime).Seconds())
+	r.customMetrics.IncPipelinesRunningMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
@@ -339,7 +339,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(startTime).Seconds())
 			return false, nil
 		}
 

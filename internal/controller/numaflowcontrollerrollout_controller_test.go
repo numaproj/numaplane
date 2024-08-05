@@ -116,10 +116,10 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the Numaflow Controller metric")
-			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerSynced.WithLabelValues())).Should(Equal(float64(2)))
-			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
-			Expect(testutil.ToFloat64(customMetrics.NumaflowKubeRequestCounter.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.NumaflowKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubeRequestCounter.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 		})
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {
