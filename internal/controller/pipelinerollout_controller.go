@@ -451,23 +451,29 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 
 // return:
 // - does it need to update?
-// - is it in the middle of updating?
+// - is it in the middle of updating? (in a way that required it to be Paused)
 func isPipelineUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, bool, error) {
 	// propagate the pipeline's status into PipelineRollout's status
-	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
+	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
 	}
+	var existingPipelineSpec PipelineSpec
+	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+		return false, false, err
+	}
 
 	// TODO: will need to update this to account for Vertex ObservedGeneration once that's ready
-	pipelineReconciled := pipelineObservedGenerationCurrent(newPipelineDef.Generation, pipelineStatus.ObservedGeneration)
+	pipelineReconciled := pipelineObservedGenerationCurrent(newPipelineDef.Generation, existingPipelineStatus.ObservedGeneration)
+
+	existingPipelinePauseDesired := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
 
 	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, false, err
 	}
-	return !pipelineSpecsEqual, !pipelineReconciled, nil
+	return !pipelineSpecsEqual, (!pipelineReconciled && existingPipelinePauseDesired), nil
 }
 
 // make sure our Pipeline's Lifecycle is what we need it to be

@@ -113,7 +113,7 @@ test: codegen fmt vet envtest ## Run tests.
 
 .PHONY: test-e2e
 test-e2e: codegen fmt vet envtest ## Run e2e tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" GOFLAGS="-count=1" go test -v ./tests/e2e/...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" GOFLAGS="-count=1" go test -v -failfast ./tests/e2e/... 
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v1.58.0
