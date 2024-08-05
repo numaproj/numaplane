@@ -128,7 +128,7 @@ func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.Name
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
-	startTime := time.Now()
+	syncStartTime := time.Now()
 	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
@@ -152,7 +152,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	pipelineRollout.Status.Init(pipelineRollout.Generation)
 
-	requeue, err := r.reconcile(ctx, pipelineRollout)
+	requeue, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
@@ -191,7 +191,6 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
 		pipelineRollout.Status = pipelineRolloutStatus
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(startTime).Seconds())
 	}
 
 	// Update the Status subresource
@@ -299,8 +298,8 @@ func namespacedNameToKey(namespacedName k8stypes.NamespacedName) string {
 func (r *PipelineRolloutReconciler) reconcile(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
+	syncStartTime time.Time,
 ) (bool, error) {
-	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 	// is PipelineRollout being deleted? need to remove the finalizer, so it can
 	// (OwnerReference will delete the underlying Pipeline through Cascading deletion)
@@ -311,7 +310,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(startTime).Seconds())
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		return false, nil
 	}
 
@@ -339,7 +338,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return false, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(startTime).Seconds())
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 			return false, nil
 		}
 
@@ -349,7 +348,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
-	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
 	return false, err
 }
 
@@ -360,7 +359,8 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
 	return resultPipeline
 }
-func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject) error {
+func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
+	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 	numaLogger := logger.FromContext(ctx)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
@@ -391,7 +391,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	if common.DataLossPrevention { // feature flag
-		err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate, pipelineIsUpdating)
+		err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate, pipelineIsUpdating, syncStartTime)
 		if err != nil {
 			return err
 		}
@@ -401,11 +401,13 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return err
 		}
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 	return nil
 }
 
-func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool, pipelineIsUpdating bool) error {
+func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate, pipelineIsUpdating bool, syncStartTime time.Time) error {
 
 	numaLogger := logger.FromContext(ctx)
 	var err error
@@ -454,6 +456,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
 	}
 	return nil

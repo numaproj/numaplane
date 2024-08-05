@@ -120,7 +120,7 @@ func NewNumaflowControllerRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	startTime := time.Now()
+	syncStartTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
@@ -143,7 +143,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	numaflowControllerRollout.Status.Init(numaflowControllerRollout.Generation)
 
-	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
+	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace, syncStartTime)
 	if err != nil {
 
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
@@ -185,7 +185,6 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
 		numaflowControllerRollout.Status = numaflowControllerRolloutStatus
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(startTime).Seconds())
 	}
 
 	// Update the Status subresource
@@ -223,8 +222,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	ctx context.Context,
 	controllerRollout *apiv1.NumaflowControllerRollout,
 	namespace string,
+	syncStartTime time.Time,
 ) (ctrl.Result, error) {
-	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
 	if !controllerRollout.DeletionTimestamp.IsZero() {
@@ -235,7 +234,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
 		r.customMetrics.DecNumaflowControllerMetrics(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		return ctrl.Result{}, nil
 	}
 
@@ -304,6 +303,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 						if err != nil {
 							return ctrl.Result{}, err
 						}
+
+						r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 						if phase != gitopsSyncCommon.OperationSucceeded {
 							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 						}
@@ -338,7 +339,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
 
-	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(startTime).Seconds())
+	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 	return ctrl.Result{}, nil
 }
 
