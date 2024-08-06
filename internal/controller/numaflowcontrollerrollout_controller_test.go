@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -111,6 +112,13 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 				}
 				return false
 			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("Should have the metrics updated", func() {
+			By("Verifying the Numaflow Controller metric")
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 		})
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {

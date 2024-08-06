@@ -3,6 +3,7 @@ package sync
 import (
 	"errors"
 	"fmt"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	"net"
 	"net/url"
 	"os/exec"
@@ -102,23 +103,26 @@ type liveStateCache struct {
 	cluster       clustercache.ClusterCache
 	cacheSettings cacheSettings
 	lock          sync.RWMutex
+	customMetrics *metrics.CustomMetrics
 }
 
 func newLiveStateCache(
-	cluster clustercache.ClusterCache,
+	cluster clustercache.ClusterCache, customMetrics *metrics.CustomMetrics,
 ) LiveStateCache {
 	numaLogger := logger.New().WithName("live state cache")
 	return &liveStateCache{
-		cluster: cluster,
-		logger:  numaLogger,
+		cluster:       cluster,
+		logger:        numaLogger,
+		customMetrics: customMetrics,
 	}
 }
 
 func NewLiveStateCache(
-	clusterCacheConfig *rest.Config,
+	clusterCacheConfig *rest.Config, customMetrics *metrics.CustomMetrics,
 ) LiveStateCache {
 	return &liveStateCache{
 		clusterCacheConfig: clusterCacheConfig,
+		customMetrics:      customMetrics,
 	}
 }
 
@@ -418,7 +422,13 @@ func parseResourceFilter(rules string) (*[]ResourceType, error) {
 }
 
 func (c *liveStateCache) GetClusterCache() (clustercache.ClusterCache, error) {
-	return c.getSyncedCluster()
+	clusterCache, err := c.getSyncedCluster()
+	if err != nil {
+		c.customMetrics.ClusterCacheError.WithLabelValues().Inc()
+		return nil, err
+	}
+	c.customMetrics.KubeResourceCache.WithLabelValues(clusterCache.GetClusterInfo().K8SVersion).Set(float64(clusterCache.GetClusterInfo().ResourcesCount))
+	return clusterCache, nil
 }
 
 func (c *liveStateCache) GetManagedLiveObjs(
@@ -429,10 +439,12 @@ func (c *liveStateCache) GetManagedLiveObjs(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster info: %w", err)
 	}
-	return clusterInfo.GetManagedLiveObjs(targetObjs, func(r *clustercache.Resource) bool {
-		// distinguish by numaplane resource's name and namespace
+	liveObjs, err := clusterInfo.GetManagedLiveObjs(targetObjs, func(r *clustercache.Resource) bool {
+		// distinguish it by numaplane resource's name and namespace
 		return resInfo(r).Name == name && r.Ref.Namespace == namespace
 	})
+	c.customMetrics.KubeResourceMonitored.WithLabelValues().Set(float64(len(liveObjs)))
+	return liveObjs, err
 }
 
 type NoopNormalizer struct {

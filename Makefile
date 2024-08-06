@@ -37,6 +37,8 @@ GCFLAGS="all=-N -l"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
 
+TEST_MANIFEST_DIR ?= tests/manifests/default
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -113,7 +115,7 @@ test: codegen fmt vet envtest ## Run tests.
 
 .PHONY: test-e2e
 test-e2e: codegen fmt vet envtest ## Run e2e tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" GOFLAGS="-count=1" go test -v ./tests/e2e/...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" GOFLAGS="-count=1" go test -v ./tests/e2e/... 
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v1.58.0
@@ -179,8 +181,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 .PHONY: start
 start: image
-	$(KUBECTL) apply -f tests/manifests/numaplane-ns.yaml
-	$(KUBECTL) kustomize tests/manifests | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
+	$(KUBECTL) apply -f tests/manifests/default/numaplane-ns.yaml
+	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 
 ##@ Build Dependencies
 
