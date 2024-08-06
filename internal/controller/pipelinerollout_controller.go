@@ -460,7 +460,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
 	}
 	return nil

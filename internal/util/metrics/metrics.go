@@ -37,10 +37,10 @@ type CustomMetrics struct {
 	NumaflowControllersSynced *prometheus.CounterVec
 	// ReconciliationDuration is the histogram for the duration of pipeline, isb service and numaflow controller reconciliation.
 	ReconciliationDuration *prometheus.HistogramVec
-	// NumaflowControllerKubeRequestCounter Count the number of kubernetes requests during numaflow controller reconciliation
-	NumaflowControllerKubeRequestCounter *prometheus.CounterVec
 	// NumaflowControllerKubectlExecutionCounter Count the number of kubectl executions during numaflow controller reconciliation
 	NumaflowControllerKubectlExecutionCounter *prometheus.CounterVec
+	// KubeRequestCounter Count the number of kubernetes requests during reconciliation
+	KubeRequestCounter *prometheus.CounterVec
 	// KubeResourceMonitored count the number of monitored kubernetes resource objects in cache
 	KubeResourceMonitored *prometheus.GaugeVec
 	// KubeResourceCache count the number of kubernetes resource objects in cache
@@ -132,13 +132,6 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// numaflowControllerKubeRequestCounter Check the total number of kubernetes requests for numaflow controller
-	numaflowControllerKubeRequestCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "numaflow_controller_kube_request_total",
-		Help:        "The total number of kubernetes request for numaflow controller",
-		ConstLabels: defaultLabels,
-	}, []string{})
-
 	// numaflowControllerKubectlExecutionCounter Check the total number of kubectl executions for numaflow controller
 	numaflowControllerKubectlExecutionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaflow_controller_kubectl_execution_total",
@@ -153,23 +146,30 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{LabelType, LabelPhase})
 
+	// kubeRequestCounter Check the total number of kubernetes requests for numaflow controller
+	kubeRequestCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaplane_kube_request_total",
+		Help:        "The total number of kubernetes request for numaflow controller",
+		ConstLabels: defaultLabels,
+	}, []string{})
+
 	// kubeResourceCacheMonitored count the number of monitored kubernetes resource objects in cache
 	kubeResourceCacheMonitored = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_kube_resource_monitored",
+		Name:        "numaplane_kube_resource_monitored",
 		Help:        "Number of monitored kubernetes resource object in cache",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// kubeResourceCache count the number of kubernetes resource objects in cache
 	kubeResourceCache = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_kube_resource_cache",
+		Name:        "numaplane_kube_resource_cache",
 		Help:        "Number of kubernetes resource object in cache",
 		ConstLabels: defaultLabels,
 	}, []string{LabelK8SVersion})
 
 	// clusterCacheError count the total number of cluster cache errors
 	clusterCacheError = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "numaflow_cluster_cache_error_total",
+		Name:        "numaplane_cluster_cache_error_total",
 		Help:        "The total number of cluster cache error",
 		ConstLabels: defaultLabels,
 	}, []string{})
@@ -178,7 +178,7 @@ var (
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics() *CustomMetrics {
 	metrics.Registry.MustRegister(pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
-		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, numaflowControllerKubeRequestCounter,
+		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
 		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError)
 
 	return &CustomMetrics{
@@ -195,7 +195,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		NumaflowControllerVersionCounter:          make(map[string]map[string]struct{}),
 		NumaflowControllersSynced:                 numaflowControllersSynced,
 		NumaflowControllersSyncFailed:             numaflowControllersSyncFailed,
-		NumaflowControllerKubeRequestCounter:      numaflowControllerKubeRequestCounter,
+		KubeRequestCounter:                        kubeRequestCounter,
 		NumaflowControllerKubectlExecutionCounter: numaflowControllerKubectlExecutionCounter,
 		ReconciliationDuration:                    reconciliationDuration,
 		KubeResourceMonitored:                     kubeResourceCacheMonitored,

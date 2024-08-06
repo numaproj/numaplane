@@ -325,12 +325,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return false, err
 		}
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-	}
-
-	// generate update metrics only if we actually updated the ISBService
-	if isbServiceNeedsUpdating {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
+
 	return false, nil
 }
 

@@ -87,7 +87,6 @@ func NewNumaflowControllerRolloutReconciler(
 	customMetrics *metrics.CustomMetrics,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig, customMetrics)
-	newRawConfig := metrics.AddMetricsTransportWrapper(customMetrics, rawConfig)
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
 	err := stateCache.Init(numaLogger)
 	if err != nil {
@@ -98,12 +97,12 @@ func NewNumaflowControllerRolloutReconciler(
 		customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues().Inc()
 		return func() {}, nil
 	})
-	restConfig := newRawConfig
+	restConfig := rawConfig
 	return &NumaflowControllerRolloutReconciler{
 		client,
 		s,
 		restConfig,
-		newRawConfig,
+		rawConfig,
 		kubectl,
 		stateCache,
 		customMetrics,

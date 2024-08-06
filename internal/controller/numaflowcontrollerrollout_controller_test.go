@@ -118,7 +118,6 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the Numaflow Controller metric")
 			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues())).Should(BeNumerically(">", 1))
 			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
-			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubeRequestCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 		})
 
