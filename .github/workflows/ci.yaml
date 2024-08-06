@@ -151,7 +151,7 @@ jobs:
         run:
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
 
-      - name: Run tests
+      - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
         run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
@@ -162,7 +162,7 @@ jobs:
         run:
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true TEST_MANIFEST_DIR=tests/manifests/special-cases/pause make start
 
-      - name: Run tests with dataLossPrevention=true
+      - name: Run e2e tests with dataLossPrevention=true
         env:
           GOPATH: /home/runner/go
         run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
