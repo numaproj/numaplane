@@ -564,24 +564,41 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
+	// TODO: account for Pipeline's conditions to determine status
+	// Conditions to check: VerticesHealthy, SideInputsManagersHealthy, DaemonServiceHealthy
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
-	switch pipelinePhase {
-	case numaflowv1.PipelinePhaseFailed:
+	pipelineChildResourceHealth := childResourcesHealthy(pipelineStatus.Conditions)
+
+	if pipelinePhase == numaflowv1.PipelinePhaseFailed || pipelineChildResourceHealth == "False" {
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
-	case numaflowv1.PipelinePhasePaused, numaflowv1.PipelinePhasePausing:
+	} else if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
-	case numaflowv1.PipelinePhaseUnknown:
+	} else if pipelinePhase == numaflowv1.PipelinePhaseUnknown || pipelineChildResourceHealth == "Unknown" {
 		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
-	case numaflowv1.PipelinePhaseDeleting:
+	} else if pipelinePhase == numaflowv1.PipelinePhaseDeleting {
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
-	default:
+	} else {
 		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineDef.Generation)
 	}
+
 	return nil
+}
+
+func childResourcesHealthy(conditions []metav1.Condition) metav1.ConditionStatus {
+	for _, cond := range conditions {
+		switch cond.Type {
+		case "VerticesHealthy", "SideInputsManagersHealthy", "DaemonServiceHealthy":
+			// if any child resource unhealthy return status (false/unknown)
+			if cond.Status != "True" {
+				return cond.Status
+			}
+		}
+	}
+	return "True"
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
