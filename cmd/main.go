@@ -137,19 +137,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := kubernetes.StartConfigMapWatcher(ctx, mgr.GetConfig()); err != nil {
-		numaLogger.Fatal(err, "Failed to start configmap watcher")
-	}
-
 	// initialize the custom metrics with the global prometheus registry
 	customMetrics := metrics.RegisterCustomMetrics()
+	newRawConfig := metrics.AddMetricsTransportWrapper(customMetrics, mgr.GetConfig())
+
+	if err := kubernetes.StartConfigMapWatcher(ctx, newRawConfig); err != nil {
+		numaLogger.Fatal(err, "Failed to start configmap watcher")
+	}
 
 	//+kubebuilder:scaffold:builder
 
 	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		mgr.GetConfig(),
+		newRawConfig,
 		customMetrics,
 	)
 
@@ -162,7 +163,7 @@ func main() {
 	numaflowControllerRolloutReconciler, err := controller.NewNumaflowControllerRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		mgr.GetConfig(),
+		newRawConfig,
 		kubectl,
 		customMetrics,
 	)
@@ -177,7 +178,7 @@ func main() {
 	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		mgr.GetConfig(),
+		newRawConfig,
 		customMetrics,
 	)
 
