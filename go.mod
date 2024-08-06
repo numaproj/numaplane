@@ -23,6 +23,7 @@ require (
 )
 
 require (
+	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1
 	github.com/prometheus/client_golang v1.18.0
 	gopkg.in/yaml.v2 v2.4.0
 )

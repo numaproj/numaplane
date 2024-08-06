@@ -20,6 +20,8 @@ import (
 	"k8s.io/client-go/rest"
 	testcore "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
+
+	"github.com/numaproj/numaplane/internal/util/metrics"
 )
 
 var (
@@ -74,7 +76,8 @@ func newCluster(t *testing.T, objs ...runtime.Object) clustercache.ClusterCache 
 
 func newFakeLivStateCache(t *testing.T, objs ...runtime.Object) LiveStateCache {
 	cluster := newCluster(t, objs...)
-	clusterCache := newLiveStateCache(cluster)
+	customMetrics := metrics.RegisterCustomMetrics()
+	clusterCache := newLiveStateCache(cluster, customMetrics)
 	cluster.Invalidate(clustercache.SetPopulateResourceInfoHandler(clusterCache.PopulateResourceInfo))
 	return clusterCache
 }

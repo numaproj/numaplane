@@ -22,14 +22,15 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
@@ -114,7 +115,9 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the ISBService metric")
-			Expect(len(customMetrics.GetISBServiceCounterMap())).Should(Equal(1))
+			Expect(testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
