@@ -145,14 +145,13 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace, syncStartTime)
 	if err != nil {
-
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-		r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 		return ctrl.Result{}, err
 	}
 
@@ -174,13 +173,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
 		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout", "NumaflowControllerRollout", numaflowControllerRollout)
-
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 			if statusUpdateErr != nil {
 				r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -339,7 +337,11 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
 
-	r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+	// Generate the creation metrics only if the numaflow controller is newly created
+	if !deploymentExists {
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+	}
+
 	return ctrl.Result{}, nil
 }
 

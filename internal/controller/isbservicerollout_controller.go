@@ -112,12 +112,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	result, err := r.reconcile(ctx, isbServiceRollout, syncStartTime)
 	if err != nil {
 		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-		r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 		return ctrl.Result{}, err
 	}
 
@@ -126,13 +126,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		isbServiceRolloutStatus := isbServiceRollout.Status
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
-
+			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 			if statusUpdateErr != nil {
 				r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -325,8 +324,11 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			return false, err
 		}
-
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+	}
+
+	// generate update metrics only if we actually updated the ISBService
+	if isbServiceNeedsUpdating {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 	return false, nil

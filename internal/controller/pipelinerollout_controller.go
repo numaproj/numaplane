@@ -401,6 +401,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return err
 		}
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	}
+
+	// generate update metrics only if we actually updated the Pipeline
+	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 	return nil
