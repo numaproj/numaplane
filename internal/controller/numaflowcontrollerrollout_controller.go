@@ -154,17 +154,15 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, numaflowControllerRollout)
+	deployment, _, err := r.getNumaflowControllerDeployment(ctx, numaflowControllerRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if deploymentExists {
-		// update our Status with the Deployment's Status
-		err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	// update our Status with the Deployment's Status
+	err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Update the Spec if needed
@@ -223,10 +221,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	pm := GetPauseModule()
+	pauseModuleKey := pm.getNumaflowControllerKey(namespace)
+
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-			GetPauseModule().deleteControllerPauseRequest(namespace)
+			GetPauseModule().deletePauseRequest(pauseModuleKey)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
@@ -240,10 +241,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
 
-	_, pauseRequestExists := GetPauseModule().getControllerPauseRequest(namespace)
+	_, pauseRequestExists := GetPauseModule().getPauseRequest(pauseModuleKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		GetPauseModule().newControllerPauseRequest(namespace)
+		GetPauseModule().newPauseRequest(pauseModuleKey)
 	}
 
 	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controllerRollout)
@@ -369,7 +370,9 @@ func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Con
 func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	updated := GetPauseModule().updateControllerPauseRequest(controllerRollout.Namespace, pause)
+	pauseModuleKey := GetPauseModule().getNumaflowControllerKey(controllerRollout.Namespace)
+
+	updated := GetPauseModule().updatePauseRequest(pauseModuleKey, pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		numaLogger.Infof("updated pause request = %t", pause)
 		pipelines, err := r.getPipelines(ctx, controllerRollout.Namespace)
@@ -709,6 +712,12 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 }
 
 func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, string) {
+
+	if deployment == nil {
+		msg := "Numaflow Controller Deployment not found"
+		return false, "Progressing", msg
+	}
+
 	deploymentSpec := deployment.Spec
 	deploymentStatus := deployment.Status
 

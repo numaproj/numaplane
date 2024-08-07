@@ -530,8 +530,11 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 // - error if any
 func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	pm := GetPauseModule()
+
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerPauseRequest, found := GetPauseModule().getControllerPauseRequest(pipelineRollout.Namespace)
+	controllerPauseRequest, found := pm.getPauseRequest(pm.getNumaflowControllerKey(pipelineRollout.Namespace))
 	if !found {
 		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
 		return false, false, nil
@@ -539,7 +542,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	}
 	controllerRequestsPause := controllerPauseRequest != nil && *controllerPauseRequest
 
-	isbsvcPauseRequest, found := GetPauseModule().getISBSvcPauseRequest(pipelineRollout.Namespace, isbsvcName)
+	isbsvcPauseRequest, found := pm.getPauseRequest(pm.getISBServiceKey(pipelineRollout.Namespace, isbsvcName))
 	if !found {
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
 		return false, false, nil
