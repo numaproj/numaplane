@@ -564,8 +564,6 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
-	// TODO: account for Pipeline's conditions to determine status
-	// Conditions to check: VerticesHealthy, SideInputsManagersHealthy, DaemonServiceHealthy
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	pipelineChildResourceHealth := childResourcesHealthy(pipelineStatus.Conditions)
 

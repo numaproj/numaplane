@@ -497,14 +497,12 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 
 	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
 
-	// TODO: account for ISBService's conditions to determine status
-	// Conditions: ChildrenResourcesHealthy
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
-	childrenResourcesHealthyCond := getChildrenResourcesHealthyCondition(isbsvcStatus.Conditions)
+	childResourceHealth := childResourcesHealthy(isbsvcStatus.Conditions)
 
-	if isbSvcPhase == numaflowv1.ISBSvcPhaseFailed || (childrenResourcesHealthyCond != nil && childrenResourcesHealthyCond.Status == "False") {
+	if isbSvcPhase == numaflowv1.ISBSvcPhaseFailed || childResourceHealth == "False" {
 		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcFailed", "ISBService Failed", rollout.Generation)
-	} else if isbSvcPhase == numaflowv1.ISBSvcPhasePending || (childrenResourcesHealthyCond != nil && childrenResourcesHealthyCond.Status == "Unknown") {
+	} else if isbSvcPhase == numaflowv1.ISBSvcPhasePending || childResourceHealth == "Unknown" {
 		rollout.Status.MarkChildResourcesUnhealthy("ISBSvcPending", "ISBService Pending", rollout.Generation)
 	} else if isbSvcPhase == numaflowv1.ISBSvcPhaseUnknown {
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
@@ -514,7 +512,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
 		}
-		if reconciled && (childrenResourcesHealthyCond != nil && childrenResourcesHealthyCond.Status == "True") {
+		if reconciled && childResourceHealth == "True" {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
 			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
@@ -594,11 +592,11 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 	return statusUpdateErr
 }
 
-func getChildrenResourcesHealthyCondition(conditions []metav1.Condition) *metav1.Condition {
+func childrenResourcesHealthy(conditions []metav1.Condition) metav1.ConditionStatus {
 	for _, cond := range conditions {
-		if cond.Type == "ChildrenResourcesHealthy" {
-			return &cond
+		if cond.Type == "ChildrenResourcesHealthy" && cond.Status != "True" {
+			return cond.Status
 		}
 	}
-	return nil
+	return "True"
 }
