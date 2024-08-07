@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -85,15 +86,18 @@ func NewISBServiceRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	syncStartTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
+	r.customMetrics.ISBServicesSynced.WithLabelValues().Inc()
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
+			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get ISBServiceRollout", "request", req)
 			return ctrl.Result{}, err
 		}
@@ -105,14 +109,15 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	isbServiceRollout.Status.Init(isbServiceRollout.Generation)
 
-	result, err := r.reconcile(ctx, isbServiceRollout)
+	result, err := r.reconcile(ctx, isbServiceRollout, syncStartTime)
 	if err != nil {
 		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
+			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-
 		return ctrl.Result{}, err
 	}
 
@@ -121,12 +126,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		isbServiceRolloutStatus := isbServiceRollout.Status
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
-
+			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 			if statusUpdateErr != nil {
+				r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -137,20 +142,21 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
+			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate metrics for ISB Service.
 	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
-
 	numaLogger.Debug("reconciliation successful")
 
 	return result, nil
 }
 
 // reconcile does the real logic
-func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (ctrl.Result, error) {
+func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, syncStartTime time.Time) (ctrl.Result, error) {
+	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
@@ -163,6 +169,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
 		return ctrl.Result{}, nil
 	}
 
@@ -203,7 +210,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			}
 
 			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 		} else {
 			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
 		}
@@ -213,7 +220,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// perform logic related to updating
 
 		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
-		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef)
+		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -240,7 +247,8 @@ func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService
 // return:
 // - true if needs a requeue
 // - error if any
-func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBServiceDef *kubernetes.GenericObject, newISBServiceDef *kubernetes.GenericObject) (bool, error) {
+func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout,
+	existingISBServiceDef *kubernetes.GenericObject, newISBServiceDef *kubernetes.GenericObject, syncStartTime time.Time) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -295,6 +303,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 					}
 
 					isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+					r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 				} else {
 					numaLogger.Debugf("not all Pipelines have paused")
 				}
@@ -315,9 +324,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			return false, err
 		}
-
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
+
 	return false, nil
 }
 

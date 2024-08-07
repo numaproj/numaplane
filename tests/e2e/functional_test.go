@@ -84,10 +84,7 @@ var (
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "latest",
-			Persistence: &numaflowv1.PersistenceStrategy{
-				VolumeSize: &numaflowv1.DefaultVolumeSize,
-			},
+			Version: "2.9.6",
 		},
 	}
 
@@ -218,7 +215,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.1.7"},
+			Controller: apiv1.Controller{Version: "0.0.6"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -226,17 +223,13 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return rollout, nil
 		})
 
-		verifyNumaflowControllerReady(Namespace)
-
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.1.7"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
 		})
 
+		verifyNumaflowControllerReady(Namespace)
+
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
-
-	})
-
-	It("Should make sure Pipeline is running", func() {
 
 	})
 
@@ -244,7 +237,7 @@ var _ = Describe("PipelineRollout e2e", func() {
 
 		// new ISBService spec
 		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = "1.0.0"
+		updatedISBServiceSpec.JetStream.Version = "2.9.8"
 		rawSpec, err := json.Marshal(updatedISBServiceSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -253,11 +246,11 @@ var _ = Describe("PipelineRollout e2e", func() {
 			return rollout, nil
 		})
 
-		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
-
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == "1.0.0"
+			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
+
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
@@ -396,7 +389,7 @@ func verifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployme
 }
 
 func verifyNumaflowControllerReady(namespace string) {
-	document("Verifying that the Numaflow Controller exists")
+	document("Verifying that the Numaflow Controller Deployment exists")
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return err
@@ -413,6 +406,7 @@ func verifyNumaflowControllerReady(namespace string) {
 			return false
 		}
 		return childResourcesHealthyCondition.Status == metav1.ConditionTrue
+
 	}).WithTimeout(testTimeout).Should(BeTrue())
 }
 
@@ -698,7 +692,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.2"},
+			Controller: apiv1.Controller{Version: "0.0.7"},
 		},
 	}
 

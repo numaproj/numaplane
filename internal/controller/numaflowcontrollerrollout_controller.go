@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/argoproj/gitops-engine/pkg/diff"
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
@@ -85,13 +86,17 @@ func NewNumaflowControllerRolloutReconciler(
 	kubectl kubeUtil.Kubectl,
 	customMetrics *metrics.CustomMetrics,
 ) (*NumaflowControllerRolloutReconciler, error) {
-	stateCache := sync.NewLiveStateCache(rawConfig)
+	stateCache := sync.NewLiveStateCache(rawConfig, customMetrics)
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
 	err := stateCache.Init(numaLogger)
 	if err != nil {
 		return nil, err
 	}
 
+	kubectl.SetOnKubectlRun(func(command string) (kubeUtil.CleanupFunc, error) {
+		customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues().Inc()
+		return func() {}, nil
+	})
 	restConfig := rawConfig
 	return &NumaflowControllerRolloutReconciler{
 		client,
@@ -114,15 +119,18 @@ func NewNumaflowControllerRolloutReconciler(
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	syncStartTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
+	r.customMetrics.NumaflowControllersSynced.WithLabelValues().Inc()
 
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get NumaflowControllerRollout", "request", req)
 			return ctrl.Result{}, err
 		}
@@ -134,15 +142,15 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	numaflowControllerRollout.Status.Init(numaflowControllerRollout.Generation)
 
-	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace)
+	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace, syncStartTime)
 	if err != nil {
-
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
-
 		return ctrl.Result{}, err
 	}
 
@@ -164,12 +172,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
 		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout", "NumaflowControllerRollout", numaflowControllerRollout)
-
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 			if statusUpdateErr != nil {
+				r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 				return ctrl.Result{}, statusUpdateErr
 			}
-
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -180,6 +188,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	if numaflowControllerRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
 		if statusUpdateErr != nil {
+			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -210,6 +219,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	ctx context.Context,
 	controllerRollout *apiv1.NumaflowControllerRollout,
 	namespace string,
+	syncStartTime time.Time,
 ) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -221,6 +231,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
 		r.customMetrics.DecNumaflowControllerMetrics(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		return ctrl.Result{}, nil
 	}
 
@@ -289,6 +300,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 						if err != nil {
 							return ctrl.Result{}, err
 						}
+
+						r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 						if phase != gitopsSyncCommon.OperationSucceeded {
 							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 						}
@@ -321,6 +334,11 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
+	}
+
+	// Generate the creation metrics only if the numaflow controller is newly created
+	if !deploymentExists {
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 	}
 
 	return ctrl.Result{}, nil
