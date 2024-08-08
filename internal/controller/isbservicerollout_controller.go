@@ -159,15 +159,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
-	pm := GetPauseModule()
-	pauseModuleKey := pm.getISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
+	isbsvcKey := GetPauseModule().getISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
 	// (OwnerReference will delete the underlying ISBService through Cascading deletion)
 	if !isbServiceRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting ISBServiceRollout")
 		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
-			pm.deletePauseRequest(pm.getISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name))
+			GetPauseModule().deletePauseRequest(isbsvcKey)
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
 		// generate metrics for ISB Service deletion.
@@ -181,10 +180,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
 	}
 
-	_, pauseRequestExists := pm.getPauseRequest(pauseModuleKey)
+	_, pauseRequestExists := GetPauseModule().getPauseRequest(isbsvcKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		pm.newPauseRequest(pauseModuleKey)
+		GetPauseModule().newPauseRequest(isbsvcKey)
 	}
 
 	newISBServiceDef := &kubernetes.GenericObject{

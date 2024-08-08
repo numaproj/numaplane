@@ -221,13 +221,12 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	pm := GetPauseModule()
-	pauseModuleKey := pm.getNumaflowControllerKey(namespace)
+	controllerKey := GetPauseModule().getNumaflowControllerKey(namespace)
 
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-			GetPauseModule().deletePauseRequest(pauseModuleKey)
+			GetPauseModule().deletePauseRequest(controllerKey)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
@@ -241,10 +240,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
 
-	_, pauseRequestExists := GetPauseModule().getPauseRequest(pauseModuleKey)
+	_, pauseRequestExists := GetPauseModule().getPauseRequest(controllerKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		GetPauseModule().newPauseRequest(pauseModuleKey)
+		GetPauseModule().newPauseRequest(controllerKey)
 	}
 
 	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controllerRollout)
