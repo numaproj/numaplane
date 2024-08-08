@@ -49,7 +49,7 @@ func Test_watchConfigMaps(t *testing.T) {
 	// Wait for the controller to process the ConfigMap
 	time.Sleep(5 * time.Second)
 	// Validate the controller definition config is set correctly
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetControllerDefinitionsConfig()
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
 	assert.Len(t, definition, 2)
 
 	// Create the ConfigMap object in the fake clientset
@@ -59,6 +59,6 @@ func Test_watchConfigMaps(t *testing.T) {
 	// Wait for the controller to process the ConfigMap
 	time.Sleep(5 * time.Second)
 	// Validate the controller definition config is updated correctly
-	definition = config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetControllerDefinitionsConfig()
+	definition = config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
 	assert.Len(t, definition, 0)
 }

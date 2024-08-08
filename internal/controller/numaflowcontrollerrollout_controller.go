@@ -436,7 +436,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 
 	// Get the target manifests based on the version of the controller and throw an error if the definition not for a version.
 	version := rollout.Spec.Controller.Version
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetControllerDefinitionsConfig()
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
 	manifest := definition[version]
 	if len(manifest) == 0 {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)
