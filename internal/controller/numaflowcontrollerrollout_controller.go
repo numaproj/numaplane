@@ -326,51 +326,6 @@ func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Contex
 	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, "", "")
 }
 
-func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Context, namespace string) (bool, error) {
-	pipelines, err := r.getPipelineList(ctx, namespace, "")
-	if err != nil {
-		return false, err
-	}
-	for _, pipeline := range pipelines {
-		status, err := kubernetes.ParseStatus(pipeline)
-		if err != nil {
-			return false, err
-		}
-		if status.Phase != "Paused" {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// request Pipelines in the namespace either to pause or not to pause
-func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, pause bool) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	pauseModuleKey := GetPauseModule().getNumaflowControllerKey(controllerRollout.Namespace)
-
-	updated := GetPauseModule().updatePauseRequest(pauseModuleKey, pause)
-	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
-		numaLogger.Infof("updated pause request = %t", pause)
-		pipelines, err := r.getPipelineList(ctx, controllerRollout.Namespace, "")
-		if err != nil {
-			return false, err
-		}
-		for _, pipeline := range pipelines {
-			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
-		}
-	}
-
-	if pause {
-		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
-	} else {
-		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
-
-	}
-
-	return updated, nil
-}
-
 func (r *NumaflowControllerRolloutReconciler) getPauseModuleKey(rolloutNamespace string, rolloutName string) string {
 	return GetPauseModule().getNumaflowControllerKey(rolloutNamespace)
 }
