@@ -346,10 +346,28 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Object already exists
-
+	// if Pipeline is not owned by Rollout, fail and return
+	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
+		pipelineRollout.Status.MarkFailed(fmt.Sprintf("Pipeline %s already exists in namespace", pipelineRollout.Name))
+		return false, nil
+	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
 	return false, err
+}
+
+// determine if this Pipeline is owned by this PipelineRollout
+func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
+	// no owners
+	if len(ownerRefs) == 0 {
+		return false
+	}
+	for _, ref := range ownerRefs {
+		if ref.Kind == "PipelineRollout" && ref.UID == uid {
+			return true
+		}
+	}
+	return false
 }
 
 // take the existing pipeline and merge anything needed from the new pipeline definition
