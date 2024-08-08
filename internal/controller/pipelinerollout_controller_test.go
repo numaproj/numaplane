@@ -259,6 +259,34 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			})).ShouldNot(Succeed())
 		})
 	})
+
+	Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
+		It("Should be automatically failed", func() {
+			Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      "my-pipeline",
+				},
+				Spec: pipelineSpec,
+			})).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      "my-pipeline",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{
+							Raw: pipelineSpecRaw,
+						},
+					},
+				},
+			})).Should(Succeed())
+			time.Sleep(5 * time.Second)
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, "my-pipeline", apiv1.PhaseFailed)
+		})
+	})
+
 })
 
 var yamlHasDesiredPhase = `
