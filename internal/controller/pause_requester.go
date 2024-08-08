@@ -11,24 +11,25 @@ import (
 type PauseRequester interface {
 	getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error)
 
-	updateResource(ctx context.Context, rolloutNamespace string, rolloutName string, resourceDefinition *kubernetes.GenericObject) error
+	//updateResource(ctx context.Context, rolloutNamespace string, rolloutName string, resourceDefinition *kubernetes.GenericObject) error
 
 	markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error
 
 	getPauseModuleKey(rolloutNamespace string, rolloutName string) string
 
-	getChildType() string
+	// just a free form string to describe what we're deploying, for logging
+	getChildTypeString() string
 }
 
 // process a child object, pausing pipelines or resuming pipelines if needed
 // return:
 // - true if needs a requeue
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
-func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace string, rolloutName string, pauseRequester PauseRequester, newResourceDefinition *kubernetes.GenericObject,
-	resourceNeedsUpdating bool, resourceIsUpdating bool) (bool, error) {
+func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace string, rolloutName string, pauseRequester PauseRequester,
+	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	if resourceNeedsUpdating || resourceIsUpdating {
-		numaLogger.Infof("%s either needs to or is in the process of updating", pauseRequester.getChildType())
+		numaLogger.Infof("%s either needs to or is in the process of updating", pauseRequester.getChildTypeString())
 		// TODO: maybe only pause if the update requires pausing
 
 		// request pause if we haven't already
@@ -46,8 +47,12 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 				return false, err
 			}
 			if allPaused {
-				numaLogger.Infof("confirmed all Pipelines have paused so %s can safely update", pauseRequester.getChildType())
-				pauseRequester.updateResource(ctx, rolloutName, rolloutNamespace, newResourceDefinition)
+				numaLogger.Infof("confirmed all Pipelines have paused so %s can safely update", pauseRequester.getChildTypeString())
+				//pauseRequester.updateResource(ctx, rolloutName, rolloutNamespace, newResourceDefinition)
+				err = updateFunc()
+				if err != nil {
+					return false, err
+				}
 				// update ISBService
 				/*err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
 				if err != nil {

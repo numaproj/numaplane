@@ -239,7 +239,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	return ctrl.Result{}, nil
 }
 
-func (r *ISBServiceRolloutReconciler) getChildType() string {
+func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 	return "interstepbufferservice"
 }
 
@@ -282,7 +282,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	}
 
 	if common.DataLossPrevention {
-		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, newISBServiceDef, isbServiceNeedsUpdating, isbServiceIsUpdating)
+		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+			return kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+		})
 	} else {
 		// update ISBService
 		err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
@@ -296,9 +298,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	return false, nil
 }
 
+/*
 func (r *ISBServiceRolloutReconciler) updateResource(ctx context.Context, rolloutNamespace string, rolloutName string, resourceDefinition *kubernetes.GenericObject) error {
 	return kubernetes.UpdateCR(ctx, r.restConfig, resourceDefinition, "interstepbufferservices")
-}
+}*/
 
 func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
