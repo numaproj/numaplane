@@ -158,7 +158,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
 	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(),
 		k8sManager.GetScheme(), cfg, kubernetes.NewKubectl(), customMetrics)

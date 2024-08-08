@@ -37,7 +37,9 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 // watchConfigMaps watches for configmaps continuously and updates the controller definition config based on the configmap data
 func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace string) {
 	numaLogger := logger.FromContext(ctx)
+
 	configMapLabel := fmt.Sprintf("%s=%s", common.LabelKeyNumaplaneControllerConfig, common.LabelValueNumaplaneControllerConfig)
+
 	watcher, err := client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{
 		LabelSelector: configMapLabel,
 	})
@@ -45,6 +47,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 		numaLogger.Fatal(err, "failed to initialize watcher for configmaps")
 		return
 	}
+
 	for {
 		event, ok := <-watcher.ResultChan()
 		if !ok {
@@ -54,6 +57,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 			numaLogger.Error(err, "watcher channel closed, restarting watcher")
 			continue
 		}
+
 		configMap, ok := event.Object.(*corev1.ConfigMap)
 		if !ok {
 			numaLogger.Error(fmt.Errorf("failed to convert object to configmap"), "")
@@ -66,11 +70,12 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 				numaLogger.Error(err, "Failed to unmarshal controller config")
 				continue
 			}
+
 			// controller config definition is immutable, so no need to update the existing config
 			if event.Type == watch.Added {
-				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(controllerConfig)
+				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig)
 			} else if event.Type == watch.Deleted {
-				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveControllerDefinitionConfig(controllerConfig)
+				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig)
 			}
 		}
 	}
