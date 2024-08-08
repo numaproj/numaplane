@@ -17,7 +17,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
-// StartConfigMapWatcher will start a watcher for configmaps with the given label key and value
+// StartConfigMapWatcher will start a watcher for ConfigMaps with the given label key and value
 func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -34,14 +34,12 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 	return nil
 }
 
-// watchConfigMaps watches for configmaps continuously and updates the controller definition config based on the configmap data
+// watchConfigMaps watches for ConfigMaps continuously and updates the in-memory config objects based on the ConfigMaps data
 func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace string) {
 	numaLogger := logger.FromContext(ctx)
 
-	configMapLabel := fmt.Sprintf("%s=%s", common.LabelKeyNumaplaneControllerConfig, common.LabelValueNumaplaneControllerConfig)
-
 	watcher, err := client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{
-		LabelSelector: configMapLabel,
+		LabelSelector: common.LabelKeyNumaplaneControllerConfig,
 	})
 	if err != nil {
 		numaLogger.Fatal(err, "failed to initialize watcher for configmaps")
@@ -52,7 +50,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 		event, ok := <-watcher.ResultChan()
 		if !ok {
 			watcher, err = client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{
-				LabelSelector: configMapLabel,
+				LabelSelector: common.LabelKeyNumaplaneControllerConfig,
 			})
 			numaLogger.Error(err, "watcher channel closed, restarting watcher")
 			continue
@@ -63,20 +61,59 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 			numaLogger.Error(fmt.Errorf("failed to convert object to configmap"), "")
 		}
 
-		// Add or update the controller definition config based on a version if the configmap has the correct label
-		for _, v := range configMap.Data {
-			var controllerConfig config.NumaflowControllerDefinitionConfig
-			if err := yaml.Unmarshal([]byte(v), &controllerConfig); err != nil {
-				numaLogger.Error(err, "Failed to unmarshal controller config")
-				continue
+		labelVal := configMap.Labels[common.LabelKeyNumaplaneControllerConfig]
+		switch labelVal {
+		case common.LabelValueNumaflowControllerDefinitions:
+			handleNumaflowControllerDefinitionsConfigMapEvent(ctx, configMap, event)
+		case common.LabelValueUSDEConfig:
+			if err := handleUSDEConfigMapEvent(configMap, event); err != nil {
+				numaLogger.Error(err, "error while handling event on USDE ConfigMap")
 			}
-
-			// controller config definition is immutable, so no need to update the existing config
-			if event.Type == watch.Added {
-				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig)
-			} else if event.Type == watch.Deleted {
-				config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig)
-			}
+		default:
+			numaLogger.Errorf(err, "the ConfigMap named '%s' is not supported", configMap.Name)
 		}
 	}
+}
+
+func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, configMap *corev1.ConfigMap, event watch.Event) {
+	numaLogger := logger.FromContext(ctx)
+
+	// Add or update the controller definition config based on a version if the configmap has the correct label
+	for _, v := range configMap.Data {
+		var controllerConfig config.NumaflowControllerDefinitionConfig
+		if err := yaml.Unmarshal([]byte(v), &controllerConfig); err != nil {
+			numaLogger.Error(err, "failed to unmarshal Numaflow Controller Definitions config")
+			continue
+		}
+
+		// controller config definition is immutable, so no need to update the existing config
+		if event.Type == watch.Added {
+			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig)
+		} else if event.Type == watch.Deleted {
+			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig)
+		}
+	}
+}
+
+func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
+	usdeConfig := config.USDEConfig{}
+
+	err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
+
+	}
+
+	err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecExcludedPaths"]), &usdeConfig.ISBServiceSpecExcludedPaths)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling USDE ISBServiceSpecExcludedPaths: %v", err)
+	}
+
+	if event.Type == watch.Added || event.Type == watch.Modified {
+		config.GetConfigManagerInstance().UpdateUSDEConfig(&usdeConfig)
+	} else if event.Type == watch.Deleted {
+		config.GetConfigManagerInstance().UnsetUSDEConfig()
+	}
+
+	return nil
 }
