@@ -8,11 +8,15 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
+// PauseRequester interface manages the safe update of Rollouts by requesting Pipelines to pause
 type PauseRequester interface {
+	// get the list of Pipelines corresponding to a Rollout
 	getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error)
 
+	// mark this Rollout paused
 	markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error
 
+	// get the unique key corresponding to this Rollout
 	getPauseModuleKey(rolloutNamespace string, rolloutName string) string
 
 	// just a free form string to describe what we're deploying, for logging
@@ -68,7 +72,7 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 	return false, nil
 }
 
-// request that Pipelines pause
+// request that the Pipelines corresponding to this Rollout pause
 // return whether an update was made
 func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -91,6 +95,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 	return updated, err
 }
 
+// check if all Pipelines corresponding to this Rollout have paused
 func areAllPipelinesPaused(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
