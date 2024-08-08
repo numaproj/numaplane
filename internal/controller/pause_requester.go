@@ -17,7 +17,7 @@ type PauseRequester interface {
 	markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error
 
 	// get the unique key corresponding to this Rollout
-	getPauseModuleKey(rolloutNamespace string, rolloutName string) string
+	getRolloutKey(rolloutNamespace string, rolloutName string) string
 
 	// just a free form string to describe what we're deploying, for logging
 	getChildTypeString() string
@@ -79,7 +79,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 
 	pm := GetPauseModule()
 
-	updated := pm.updatePauseRequest(pauseRequester.getPauseModuleKey(rolloutNamespace, rolloutName), pause)
+	updated := pm.updatePauseRequest(pauseRequester.getRolloutKey(rolloutNamespace, rolloutName), pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		numaLogger.Infof("updated pause request = %t", pause)
 		pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)

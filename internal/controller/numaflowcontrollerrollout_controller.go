@@ -317,6 +317,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return ctrl.Result{}, nil
 }
 
+// for the purpose of logging
 func (r *NumaflowControllerRolloutReconciler) getChildTypeString() string {
 	return "Numaflow Controller"
 }
@@ -325,7 +326,7 @@ func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Contex
 	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, "", "")
 }
 
-func (r *NumaflowControllerRolloutReconciler) getPauseModuleKey(rolloutNamespace string, rolloutName string) string {
+func (r *NumaflowControllerRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
 	return GetPauseModule().getNumaflowControllerKey(rolloutNamespace)
 }
 

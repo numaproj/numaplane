@@ -238,6 +238,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	return ctrl.Result{}, nil
 }
 
+// for the purpose of logging
 func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 	return "interstepbufferservice"
 }
@@ -326,7 +327,7 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) getPauseModuleKey(rolloutNamespace string, rolloutName string) string {
+func (r *ISBServiceRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
 	return GetPauseModule().getISBServiceKey(rolloutNamespace, rolloutName)
 }
 
