@@ -733,7 +733,7 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 	if healthy {
 		controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
 	} else {
-		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, deployment.Generation)
+		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, controllerRollout.Generation)
 	}
 
 	return nil

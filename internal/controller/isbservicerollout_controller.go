@@ -283,25 +283,34 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	if common.DataLossPrevention {
 		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
-			return kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+			if err != nil {
+				return err
+			}
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+			return nil
 		})
 	} else {
 		// update ISBService
-		err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
 			return false, err
 		}
-		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
 	return false, nil
 }
 
-/*
-func (r *ISBServiceRolloutReconciler) updateResource(ctx context.Context, rolloutNamespace string, rolloutName string, resourceDefinition *kubernetes.GenericObject) error {
-	return kubernetes.UpdateCR(ctx, r.restConfig, resourceDefinition, "interstepbufferservices")
-}*/
+func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *kubernetes.GenericObject) error {
+	err := kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+	if err != nil {
+		return err
+	}
+
+	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+	return nil
+}
 
 func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
 	isbServiceRollout := &apiv1.ISBServiceRollout{}

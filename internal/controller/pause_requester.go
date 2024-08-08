@@ -11,8 +11,6 @@ import (
 type PauseRequester interface {
 	getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error)
 
-	//updateResource(ctx context.Context, rolloutNamespace string, rolloutName string, resourceDefinition *kubernetes.GenericObject) error
-
 	markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error
 
 	getPauseModuleKey(rolloutNamespace string, rolloutName string) string
@@ -33,34 +31,25 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 		// TODO: maybe only pause if the update requires pausing
 
 		// request pause if we haven't already
-		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rolloutName, rolloutNamespace, true)
+		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rolloutNamespace, rolloutName, true)
 		if err != nil {
 			return false, err
 		}
-		// If we need to update the ISBService, pause the pipelines
+		// If we need to update the child, pause the pipelines
 		// Don't do this yet if we just made a request - it's too soon for anything to have happened
 		if !pauseRequestUpdated && resourceNeedsUpdating {
 
-			// check if the pipelines are all paused and we're trying to update the spec
-			allPaused, err := areAllPipelinesPaused(ctx, pauseRequester, rolloutName, rolloutNamespace)
+			// check if the pipelines are all paused
+			allPaused, err := areAllPipelinesPaused(ctx, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
 				return false, err
 			}
 			if allPaused {
 				numaLogger.Infof("confirmed all Pipelines have paused so %s can safely update", pauseRequester.getChildTypeString())
-				//pauseRequester.updateResource(ctx, rolloutName, rolloutNamespace, newResourceDefinition)
 				err = updateFunc()
 				if err != nil {
 					return false, err
 				}
-				// update ISBService
-				/*err = kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
-				if err != nil {
-					return false, err
-				}
-
-				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())*/
 			} else {
 				numaLogger.Debugf("not all Pipelines have paused")
 			}
@@ -70,7 +59,7 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 
 	} else {
 		// remove any pause requirement if necessary
-		_, err := requestPipelinesPause(ctx, pauseRequester, rolloutName, rolloutNamespace, false)
+		_, err := requestPipelinesPause(ctx, pauseRequester, rolloutNamespace, rolloutName, false)
 		if err != nil {
 			return false, err
 		}
