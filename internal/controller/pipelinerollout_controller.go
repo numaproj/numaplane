@@ -406,6 +406,16 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 	return nil
 }
+
+// normal sequence of events when we need to pause:
+// - set Pipeline's desiredPhase=Paused
+// - wait for the desire to Pause to be reconciled completely
+//
+// - if we need to update the Pipeline spec:
+//   - update it
+//   - wait for the spec update to be reconciled completely
+//
+// - as long as there's no other requirement to pause, set desiredPhase=Running
 func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool, syncStartTime time.Time) error {
 
@@ -420,6 +430,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///// Determine if Pipeline needs to be paused or not
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// is the Pipeline currently being reconciled?
 	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
@@ -451,6 +465,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 		return nil
 	}
 
+	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
 	// make sure our Lifecycle is what we need it to be
