@@ -30,8 +30,8 @@ type NumaflowControllerDefinitionsManager struct {
 }
 
 type USDEConfig struct {
-	ExcludedPipelineSpecPaths   []string `json:"excludedPipelineSpecPaths" yaml:"excludedPipelineSpecPaths"`
-	ExcludedISBServiceSpecPaths []string `json:"excludedISBServiceSpecPaths" yaml:"excludedISBServiceSpecPaths"`
+	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
+	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
 }
 
 var instance *ConfigManager
@@ -196,6 +196,13 @@ func (cm *ConfigManager) UpdateUSDEConfig(config *USDEConfig) {
 	defer cm.usdeConfigLock.Unlock()
 
 	cm.usdeConfig = config
+}
+
+func (cm *ConfigManager) UnsetUSDEConfig() {
+	cm.usdeConfigLock.Lock()
+	defer cm.usdeConfigLock.Unlock()
+
+	cm.usdeConfig = &USDEConfig{}
 }
 
 func (cm *ConfigManager) GetUSDEConfig() *USDEConfig {

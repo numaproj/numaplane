@@ -34,7 +34,7 @@ func Test_watchConfigMaps(t *testing.T) {
 			Name:      "numaflow-controller-definitions-config",
 			Namespace: "default",
 			Labels: map[string]string{
-				common.LabelKeyNumaplaneControllerConfig: common.LabelValueNumaplaneControllerConfig,
+				common.LabelKeyNumaplaneControllerConfig: common.LabelValueNumaflowControllerDefinitions,
 			},
 		},
 		Data: map[string]string{
