@@ -39,6 +39,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -77,6 +78,7 @@ type NumaflowControllerRolloutReconciler struct {
 	kubectl       kubeUtil.Kubectl
 	stateCache    sync.LiveStateCache
 	customMetrics *metrics.CustomMetrics
+	recorder      record.EventRecorder
 }
 
 func NewNumaflowControllerRolloutReconciler(
@@ -85,6 +87,7 @@ func NewNumaflowControllerRolloutReconciler(
 	rawConfig *rest.Config,
 	kubectl kubeUtil.Kubectl,
 	customMetrics *metrics.CustomMetrics,
+	recorder record.EventRecorder,
 ) (*NumaflowControllerRolloutReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig, customMetrics)
 	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
@@ -106,6 +109,7 @@ func NewNumaflowControllerRolloutReconciler(
 		kubectl,
 		stateCache,
 		customMetrics,
+		recorder,
 	}, nil
 }
 
@@ -132,6 +136,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		} else {
 			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get NumaflowControllerRollout", "request", req)
+			r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "GetNumaflowControllerFailed", "Failed to get numaflow controller rollout: %v", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -145,10 +150,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	result, err := r.reconcile(ctx, numaflowControllerRollout, req.Namespace, syncStartTime)
 	if err != nil {
 		numaLogger.Errorf(err, "NumaflowControllerRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "ReconcileFailed", "Failed to reconcile numaflow controller rollout: %v", err.Error())
 		r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update status of numaflow controller rollout: %v", statusUpdateErr.Error())
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
@@ -156,12 +163,14 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	deployment, _, err := r.getNumaflowControllerDeployment(ctx, numaflowControllerRollout)
 	if err != nil {
+		r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "GetDeploymentFailed", "Failed to get numaflow controller deployment: %v", err.Error())
 		return ctrl.Result{}, err
 	}
 
 	// update our Status with the Deployment's Status
 	err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
 	if err != nil {
+		r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "ProcessStatusFailed", "Failed to process numaflow controller status: %v", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -170,10 +179,12 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
 		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
 			numaLogger.Error(err, "Error Updating NumaflowControllerRollout", "NumaflowControllerRollout", numaflowControllerRollout)
+			r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "UpdateFailed", "Failed to update numaflow controller rollout: %v", err.Error())
 			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
 			if statusUpdateErr != nil {
 				r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
+				r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update status of numaflow controller rollout: %v", statusUpdateErr.Error())
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -187,6 +198,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		statusUpdateErr := r.updateNumaflowControllerRolloutStatus(ctx, numaflowControllerRollout)
 		if statusUpdateErr != nil {
 			r.customMetrics.NumaflowControllersSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update status of numaflow controller rollout: %v", statusUpdateErr.Error())
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -195,7 +207,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	r.customMetrics.IncNumaflowControllerMetrics(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version)
 
 	numaLogger.Debug("reconciliation successful")
-
+	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
 	return result, nil
 }
 
@@ -225,6 +237,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
+		r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
 			GetPauseModule().deletePauseRequest(controllerKey)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
@@ -275,6 +288,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout.Namespace, controllerRollout.Name, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
+				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
 				if err != nil {
 					return err

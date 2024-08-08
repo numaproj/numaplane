@@ -152,6 +152,7 @@ func main() {
 		mgr.GetScheme(),
 		newRawConfig,
 		customMetrics,
+		mgr.GetEventRecorderFor(apiv1.RolloutPipeline),
 	)
 
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
@@ -166,6 +167,7 @@ func main() {
 		newRawConfig,
 		kubectl,
 		customMetrics,
+		mgr.GetEventRecorderFor(apiv1.RolloutNumaflowController),
 	)
 	if err != nil {
 		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
@@ -180,6 +182,7 @@ func main() {
 		mgr.GetScheme(),
 		newRawConfig,
 		customMetrics,
+		mgr.GetEventRecorderFor(apiv1.RolloutISBSvc),
 	)
 
 	if err = isbServiceRolloutReconciler.SetupWithManager(mgr); err != nil {

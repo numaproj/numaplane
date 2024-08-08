@@ -23,6 +23,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -59,6 +61,7 @@ type ISBServiceRolloutReconciler struct {
 	scheme        *runtime.Scheme
 	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
+	recorder      record.EventRecorder
 }
 
 func NewISBServiceRolloutReconciler(
@@ -66,6 +69,7 @@ func NewISBServiceRolloutReconciler(
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
+	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
 
 	return &ISBServiceRolloutReconciler{
@@ -73,6 +77,7 @@ func NewISBServiceRolloutReconciler(
 		s,
 		restConfig,
 		customMetrics,
+		recorder,
 	}
 }
 
@@ -99,6 +104,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		} else {
 			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get ISBServiceRollout", "request", req)
+			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "GetISBServiceFailed", "Failed to get isb service rollout: %v", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -112,10 +118,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	result, err := r.reconcile(ctx, isbServiceRollout, syncStartTime)
 	if err != nil {
 		numaLogger.Errorf(err, "ISBServiceRollout %v reconcile returned error: %v", req.NamespacedName, err)
+		r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "ReconcileFailed", "Failed to reconcile isb service rollout: %v", err.Error())
 		r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update isb service rollout status: %v", err.Error())
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
@@ -126,10 +134,12 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		isbServiceRolloutStatus := isbServiceRollout.Status
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			numaLogger.Error(err, "Error Updating ISBServiceRollout", "ISBServiceRollout", isbServiceRollout)
+			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "UpdateFailed", "Failed to update isb service rollout: %v", err.Error())
 			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 			if statusUpdateErr != nil {
 				r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
+				r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update isb service rollout status: %v", err.Error())
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -143,12 +153,14 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
 			r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update isb service rollout status: %v", err.Error())
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
 
 	// generate metrics for ISB Service.
 	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
 	return result, nil
@@ -283,6 +295,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	if common.DataLossPrevention {
 		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
 				return err

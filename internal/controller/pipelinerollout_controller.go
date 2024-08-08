@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,6 +74,7 @@ type PipelineRolloutReconciler struct {
 	shutdownWorkerWaitGroup *sync.WaitGroup
 	// customMetrics is used to generate the custom metrics for the Pipeline
 	customMetrics *metrics.CustomMetrics
+	recorder      record.EventRecorder
 }
 
 func NewPipelineRolloutReconciler(
@@ -80,6 +82,7 @@ func NewPipelineRolloutReconciler(
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
+	recorder record.EventRecorder,
 ) *PipelineRolloutReconciler {
 
 	numaLogger := logger.GetBaseLogger().WithName(loggerName)
@@ -97,6 +100,7 @@ func NewPipelineRolloutReconciler(
 		pipelineRolloutQueue,
 		&sync.WaitGroup{},
 		customMetrics,
+		recorder,
 	}
 	pipelineROReconciler = r
 
@@ -142,6 +146,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		} else {
 			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			numaLogger.Error(err, "Unable to get PipelineRollout")
+			r.recorder.Eventf(pipelineRollout, "Warning", "GetPipelineRolloutFailed", "Failed to get PipelineRollout: %v", err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -154,9 +159,11 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	requeue, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
+		r.recorder.Eventf(pipelineRollout, "Warning", "ReconcileFailed", "Failed to reconcile PipelineRollout: %v", err)
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -166,9 +173,11 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout)
 	if err != nil {
+		r.recorder.Eventf(pipelineRollout, "Warning", "ProcessPipelineStatusFailed", "Failed to process Pipeline Status: %v", err)
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
 			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -180,13 +189,14 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		pipelineRolloutStatus := pipelineRollout.Status
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
 			numaLogger.Error(err, "Error Updating PipelineRollout", "PipelineRollout", pipelineRollout)
+			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateFailed", "Failed to update PipelineRollout: %v", err)
 			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
 				r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+				r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
 				return ctrl.Result{}, statusUpdateErr
 			}
-
 			return ctrl.Result{}, err
 		}
 		// restore the original status, which would've been wiped in the previous call to Update()
@@ -198,6 +208,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
 			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -209,6 +220,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
+	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
@@ -455,6 +467,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 	if pipelineNeedsToUpdate {
 		if !*shouldBePaused || (*shouldBePaused && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
+			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
 			if err != nil {
 				return err
@@ -560,11 +573,13 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 
 	if paused && !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
+		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelinePause", "pausing pipeline")
 		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
 			return err
 		}
 	} else if !paused && lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
+		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
 		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
 		if err != nil {
@@ -572,6 +587,7 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 		}
 		if !run {
 			numaLogger.Infof("new pause request, can't resume pipeline at this time, will try again later")
+			r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResumeFailed", "new pause request, can't resume pipeline at this time, will try again later")
 		}
 	}
 	return nil
