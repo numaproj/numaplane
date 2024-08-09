@@ -480,7 +480,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// is the Pipeline currently being reconciled?
-	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
+	pipelineUpdating, err := pipelineIsUpdating(pipelineRollout, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return nil, err
 	}
@@ -531,13 +531,21 @@ func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.Gener
 	return !pipelineSpecsEqual, nil
 }
 
-func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+// return true if Pipeline (or its children) is still in the process of being reconciled
+func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, err
 	}
-	// TODO: will need to update this to account for Vertex ObservedGeneration once that's ready
-	return !pipelineObservedGenerationCurrent(newPipelineDef.Generation, existingPipelineStatus.ObservedGeneration), nil
+	// if Pipeline's ObservedGeneration is old, then Numaflow Controller hasn't even seen the generation change yet
+	if !pipelineObservedGenerationCurrent(newPipelineDef.Generation, existingPipelineStatus.ObservedGeneration) {
+		return true, nil
+	}
+
+	// note if Pipeline's children are still being updated
+	_, pipelineChildResourceReason := getPipelineChildResourceHealth(pipelineRollout.Status.Conditions)
+
+	return pipelineChildResourceReason == "Progressing", nil
 
 }
 
