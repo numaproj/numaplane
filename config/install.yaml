@@ -913,7 +913,6 @@ rules:
   resources:
   - configmaps
   - serviceaccounts
-  - secrets
   verbs:
   - '*'
 - apiGroups:
