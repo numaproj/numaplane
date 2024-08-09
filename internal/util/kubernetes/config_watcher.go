@@ -96,20 +96,24 @@ func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, conf
 }
 
 func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
-	usdeConfig := config.USDEConfig{}
-
-	err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
-
-	}
-
-	err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecExcludedPaths"]), &usdeConfig.ISBServiceSpecExcludedPaths)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling USDE ISBServiceSpecExcludedPaths: %v", err)
-	}
-
 	if event.Type == watch.Added || event.Type == watch.Modified {
+		usdeConfig := config.USDEConfig{}
+
+		if configMap == nil || configMap.Data == nil {
+			return fmt.Errorf("no ConfigMap or data field available")
+		}
+
+		err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
+
+		}
+
+		err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecExcludedPaths"]), &usdeConfig.ISBServiceSpecExcludedPaths)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling USDE ISBServiceSpecExcludedPaths: %v", err)
+		}
+
 		config.GetConfigManagerInstance().UpdateUSDEConfig(&usdeConfig)
 	} else if event.Type == watch.Deleted {
 		config.GetConfigManagerInstance().UnsetUSDEConfig()
