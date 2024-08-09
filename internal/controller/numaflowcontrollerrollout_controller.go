@@ -154,17 +154,15 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, numaflowControllerRollout)
+	deployment, _, err := r.getNumaflowControllerDeployment(ctx, numaflowControllerRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if deploymentExists {
-		// update our Status with the Deployment's Status
-		err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	// update our Status with the Deployment's Status
+	err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Update the Spec if needed
@@ -223,10 +221,12 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	controllerKey := GetPauseModule().getNumaflowControllerKey(namespace)
+
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-			GetPauseModule().deleteControllerPauseRequest(namespace)
+			GetPauseModule().deletePauseRequest(controllerKey)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
@@ -240,10 +240,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
 
-	_, pauseRequestExists := GetPauseModule().getControllerPauseRequest(namespace)
+	_, pauseRequestExists := GetPauseModule().getPauseRequest(controllerKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		GetPauseModule().newControllerPauseRequest(namespace)
+		GetPauseModule().newPauseRequest(controllerKey)
 	}
 
 	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controllerRollout)
@@ -251,73 +251,46 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, err
 	}
 
-	if deploymentExists {
+	if deploymentExists && common.DataLossPrevention {
 		numaLogger.Debugf("found existing numaflow-controller Deployment")
 
-		if common.DataLossPrevention {
+		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
+		controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-			// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
-			controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating, err := r.isControllerDeploymentUpdating(ctx, controllerRollout, deployment)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
+		numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
 
-			numaLogger.Debugf("controllerDeploymentNeedsUpdating=%t, controllerDeploymentIsUpdating=%t", controllerDeploymentNeedsUpdating, controllerDeploymentIsUpdating)
+		// set the Status appropriately to "Pending" or "Deployed"
+		// if controllerDeploymentNeedsUpdating - this means there's a mismatch between the desired NumaflowControllerRollout version and actual
+		// if there's a generation mismatch - this means we haven't even observed the current generation
+		// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
+		// we may match the second case and not the first if we need to update something other than Numaflow Controller version
+		if controllerDeploymentNeedsUpdating || controllerRollout.Status.ObservedGeneration < controllerRollout.Generation {
+			controllerRollout.Status.MarkPending()
+		} else {
+			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+		}
 
-			// set the Status appropriately to "Pending" or "Deployed"
-			// if controllerDeploymentNeedsUpdating - this means there's a mismatch between the desired NumaflowControllerRollout version and actual
-			// if there's a generation mismatch - this means we haven't even observed the current generation
-			// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-			// we may match the second case and not the first if we need to update something other than Numaflow Controller version
-			if controllerDeploymentNeedsUpdating || controllerRollout.Status.ObservedGeneration < controllerRollout.Generation {
-				controllerRollout.Status.MarkPending()
-			} else {
-				controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
-			}
-
-			if controllerDeploymentNeedsUpdating || controllerDeploymentIsUpdating {
-				numaLogger.Info("Numaflow Controller either needs to or is in the process of updating")
-
-				// request pause if we haven't already
-				pauseRequestUpdated, err := r.requestPipelinesPause(ctx, controllerRollout, true)
+		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout.Namespace, controllerRollout.Name, r, controllerDeploymentNeedsUpdating,
+			controllerDeploymentIsUpdating, func() error {
+				phase, err := r.sync(controllerRollout, namespace, numaLogger)
 				if err != nil {
-					return ctrl.Result{}, err
+					return err
 				}
 
-				// If we need to update the ISBService, pause the pipelines
-				// Don't do this yet if we just made a request - it's too soon for anything to have happened
-				if !pauseRequestUpdated && controllerDeploymentNeedsUpdating {
-
-					// check if the pipelines are all paused and we're trying to update the spec
-					allPaused, err := r.allPipelinesPaused(ctx, namespace)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
-					if allPaused {
-						numaLogger.Infof("confirmed all Pipelines have paused so Numaflow Controller can safely update")
-						// apply controller
-						phase, err := r.sync(controllerRollout, namespace, numaLogger)
-						if err != nil {
-							return ctrl.Result{}, err
-						}
-
-						r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
-						if phase != gitopsSyncCommon.OperationSucceeded {
-							return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
-						}
-					} else {
-						numaLogger.Debugf("not all Pipelines have paused")
-					}
-
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+				if phase != gitopsSyncCommon.OperationSucceeded {
+					return fmt.Errorf("sync operation is not successful")
 				}
-				return common.DefaultDelayedRequeue, nil
-			} else {
-				// remove any pause requirement if necessary
-				_, err := r.requestPipelinesPause(ctx, controllerRollout, false)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-			}
+				return nil
+			})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if needsRequeue {
+			return common.DefaultDelayedRequeue, nil
 		}
 
 	}
@@ -344,51 +317,17 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return ctrl.Result{}, nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) getPipelines(ctx context.Context, namespace string) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "", "")
+// for the purpose of logging
+func (r *NumaflowControllerRolloutReconciler) getChildTypeString() string {
+	return "Numaflow Controller"
 }
 
-func (r *NumaflowControllerRolloutReconciler) allPipelinesPaused(ctx context.Context, namespace string) (bool, error) {
-	pipelines, err := r.getPipelines(ctx, namespace)
-	if err != nil {
-		return false, err
-	}
-	for _, pipeline := range pipelines {
-		status, err := kubernetes.ParseStatus(pipeline)
-		if err != nil {
-			return false, err
-		}
-		if status.Phase != "Paused" {
-			return false, nil
-		}
-	}
-	return true, nil
+func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, _ string) ([]*kubernetes.GenericObject, error) {
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, "", "")
 }
 
-// request Pipelines in the namespace either to pause or not to pause
-func (r *NumaflowControllerRolloutReconciler) requestPipelinesPause(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, pause bool) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	updated := GetPauseModule().updateControllerPauseRequest(controllerRollout.Namespace, pause)
-	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
-		numaLogger.Infof("updated pause request = %t", pause)
-		pipelines, err := r.getPipelines(ctx, controllerRollout.Namespace)
-		if err != nil {
-			return false, err
-		}
-		for _, pipeline := range pipelines {
-			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
-		}
-	}
-
-	if pause {
-		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
-	} else {
-		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
-
-	}
-
-	return updated, nil
+func (r *NumaflowControllerRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
+	return GetPauseModule().getNumaflowControllerKey(rolloutNamespace)
 }
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)
@@ -709,6 +648,12 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 }
 
 func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, string) {
+
+	if deployment == nil {
+		msg := "Numaflow Controller Deployment not found"
+		return false, "Progressing", msg
+	}
+
 	deploymentSpec := deployment.Spec
 	deploymentStatus := deployment.Status
 
@@ -743,7 +688,22 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 	if healthy {
 		controllerRollout.Status.MarkChildResourcesHealthy(controllerRollout.Generation)
 	} else {
-		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, deployment.Generation)
+		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, controllerRollout.Generation)
+	}
+
+	return nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
+	rollout := &apiv1.NumaflowControllerRollout{}
+	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, rollout); err != nil {
+		return err
+	}
+
+	if paused {
+		rollout.Status.MarkPausingPipelines(rollout.Generation)
+	} else {
+		rollout.Status.MarkUnpausingPipelines(rollout.Generation)
 	}
 
 	return nil
