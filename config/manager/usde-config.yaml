@@ -11,14 +11,3 @@ data:
     - "watermark"
   isbServiceSpecExcludedPaths: |
     - "invalid"
----
-# TTODO: REMOVE BELOW BUT USE IT IN UNIT TESTS
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: numaplane-controller-notsupported-config
-  labels:
-    numaplane.numaproj.io/config: not-supported
-data:
-  x: "123"

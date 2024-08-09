@@ -1056,6 +1056,21 @@ metadata:
   name: numaplane-controller-config
   namespace: numaplane-system
 ---
+apiVersion: v1
+data:
+  isbServiceSpecExcludedPaths: |
+    - "invalid"
+  pipelineSpecExcludedPaths: |
+    - "lifecycle"
+    - "limits"
+    - "watermark"
+kind: ConfigMap
+metadata:
+  labels:
+    numaplane.numaproj.io/config: usde-config
+  name: numaplane-controller-usde-config
+  namespace: numaplane-system
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
