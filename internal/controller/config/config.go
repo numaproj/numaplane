@@ -205,9 +205,14 @@ func (cm *ConfigManager) UnsetUSDEConfig() {
 	cm.usdeConfig = &USDEConfig{}
 }
 
-func (cm *ConfigManager) GetUSDEConfig() *USDEConfig {
+func (cm *ConfigManager) GetUSDEConfig() (USDEConfig, error) {
 	cm.usdeConfigLock.Lock()
 	defer cm.usdeConfigLock.Unlock()
 
-	return cm.usdeConfig
+	usdeConfig, err := CloneWithSerialization(cm.usdeConfig)
+	if err != nil {
+		return USDEConfig{}, err
+	}
+
+	return *usdeConfig, nil
 }

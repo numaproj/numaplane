@@ -97,14 +97,16 @@ func Test_watchConfigMaps(t *testing.T) {
 		ISBServiceSpecExcludedPaths: []string{"invalid"},
 	}
 
-	actualUSDEConfig := config.GetConfigManagerInstance().GetUSDEConfig()
-	assert.Equal(t, expectedUSDEConfig, *actualUSDEConfig)
+	actualUSDEConfig, err := config.GetConfigManagerInstance().GetUSDEConfig()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedUSDEConfig, actualUSDEConfig)
 
 	err = clientSet.CoreV1().ConfigMaps("default").Delete(ctx, configMap.Name, metav1.DeleteOptions{})
 	assert.NoError(t, err)
 
 	time.Sleep(5 * time.Second)
 
-	actualUSDEConfig = config.GetConfigManagerInstance().GetUSDEConfig()
-	assert.Equal(t, config.USDEConfig{}, *actualUSDEConfig)
+	actualUSDEConfig, err = config.GetConfigManagerInstance().GetUSDEConfig()
+	assert.NoError(t, err)
+	assert.Equal(t, config.USDEConfig{}, actualUSDEConfig)
 }
