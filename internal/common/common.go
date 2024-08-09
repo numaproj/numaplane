@@ -30,7 +30,7 @@ const (
 	// LabelValueNumaflowControllerDefinitions is the label value used to identify the Numaplane ConfigMap for the Numaflow Controller definitions
 	LabelValueNumaflowControllerDefinitions = "numaflow-controller-definitions"
 
-	// LabelValueNumaflowControllerDefinitions is the label value used to identify the Numaplane ConfigMap for the Numaflow Controller definitions
+	// LabelValueUSDEConfig is the label value used to identify the USDE ConfigMap
 	LabelValueUSDEConfig = "usde-config"
 
 	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline
