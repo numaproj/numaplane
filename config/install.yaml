@@ -1058,8 +1058,6 @@ metadata:
 ---
 apiVersion: v1
 data:
-  isbServiceSpecExcludedPaths: |
-    - "invalid"
   pipelineSpecExcludedPaths: |
     - "lifecycle"
     - "limits"

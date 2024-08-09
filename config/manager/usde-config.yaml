@@ -9,5 +9,3 @@ data:
     - "lifecycle"
     - "limits"
     - "watermark"
-  isbServiceSpecExcludedPaths: |
-    - "invalid"
