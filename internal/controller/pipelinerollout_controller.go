@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,6 +61,19 @@ const (
 
 var pipelineROReconciler *PipelineRolloutReconciler
 
+// PipelineSpec keep track of minimum number of fields we need to know about
+type PipelineSpec struct {
+	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
+	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
+}
+
+type lifecycle struct {
+	// DesiredPhase used to bring the pipeline from current phase to desired phase
+	// +kubebuilder:default=Running
+	// +optional
+	DesiredPhase string `json:"desiredPhase,omitempty"`
+}
+
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
 	client     client.Client
@@ -74,7 +88,8 @@ type PipelineRolloutReconciler struct {
 	shutdownWorkerWaitGroup *sync.WaitGroup
 	// customMetrics is used to generate the custom metrics for the Pipeline
 	customMetrics *metrics.CustomMetrics
-	recorder      record.EventRecorder
+	// the recorder is used to record events
+	recorder record.EventRecorder
 }
 
 func NewPipelineRolloutReconciler(
@@ -144,9 +159,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
-			numaLogger.Error(err, "Unable to get PipelineRollout")
-			r.recorder.Eventf(pipelineRollout, "Warning", "GetPipelineRolloutFailed", "Failed to get PipelineRollout: %v", err)
+			r.ErrorHandler(pipelineRollout, err, "GetPipelineRolloutFailed", "Failed to get PipelineRollout")
 			return ctrl.Result{}, err
 		}
 	}
@@ -159,11 +172,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	requeue, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
-		r.recorder.Eventf(pipelineRollout, "Warning", "ReconcileFailed", "Failed to reconcile PipelineRollout: %v", err)
+		r.ErrorHandler(pipelineRollout, err, "ReconcileFailed", "Failed to reconcile PipelineRollout")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
-			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
+			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -173,11 +185,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout)
 	if err != nil {
-		r.recorder.Eventf(pipelineRollout, "Warning", "ProcessPipelineStatusFailed", "Failed to process Pipeline Status: %v", err)
+		r.ErrorHandler(pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
-			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
+			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -188,13 +199,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		pipelineRolloutStatus := pipelineRollout.Status
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
-			numaLogger.Error(err, "Error Updating PipelineRollout", "PipelineRollout", pipelineRollout)
-			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateFailed", "Failed to update PipelineRollout: %v", err)
-			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+			r.ErrorHandler(pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
-				r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
+				r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -207,8 +215,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
-			r.recorder.Eventf(pipelineRollout, "Warning", "UpdateStatusFailed", "Failed to update PipelineRollout status: %v", statusUpdateErr)
+			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -418,13 +425,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	if common.DataLossPrevention { // feature flag
-		err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
-		if err != nil {
+		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
 			return err
 		}
 	} else {
-		err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
-		if err != nil {
+		if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 			return err
 		}
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -458,8 +463,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 		return nil
 	}
 
-	err = r.setPipelineLifecycle(ctx, *shouldBePaused, existingPipelineDef)
-	if err != nil {
+	if err = r.setPipelineLifecycle(ctx, *shouldBePaused, existingPipelineDef); err != nil {
 		return err
 	}
 
@@ -468,8 +472,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 		if !*shouldBePaused || (*shouldBePaused && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
-			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
-			if err != nil {
+			if err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -481,10 +484,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 // return whether to pause, not to pause, or otherwise unknown
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	var err error
 
 	var newPipelineSpec PipelineSpec
-	if err = json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 	var existingPipelineSpec PipelineSpec
@@ -794,20 +796,8 @@ func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
-func updatePipelineSpec(
-	ctx context.Context,
-	restConfig *rest.Config,
-	obj *kubernetes.GenericObject,
-) error {
-	numaLogger := logger.FromContext(ctx)
-
-	err := kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
-	if err != nil {
-		numaLogger.Errorf(err, "failed to apply Pipeline: %v", err)
-		return err
-	}
-
-	return nil
+func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kubernetes.GenericObject) error {
+	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
 func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
@@ -848,21 +838,11 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
-	numaLogger := logger.FromContext(ctx)
-
 	pipelineRollout.Status.MarkFailed(err.Error())
-
-	statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-	if statusUpdateErr != nil {
-		numaLogger.Error(statusUpdateErr, "Error updating PipelineRollout status", "namespace", pipelineRollout.Namespace, "name", pipelineRollout.Name)
-	}
-
-	return statusUpdateErr
-
+	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
 func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
-
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
@@ -881,7 +861,6 @@ func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}, nil
-
 }
 
 func getISBSvcName(pipeline PipelineSpec) string {
@@ -904,15 +883,7 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 	return "True", ""
 }
 
-// keep track of the minimum number of fields we need to know about
-type PipelineSpec struct {
-	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
-	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
-}
-
-type lifecycle struct {
-	// DesiredPhase used to bring the pipeline from current phase to desired phase
-	// +kubebuilder:default=Running
-	// +optional
-	DesiredPhase string `json:"desiredPhase,omitempty"`
+func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
+	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
