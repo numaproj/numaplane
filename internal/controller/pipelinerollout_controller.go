@@ -455,7 +455,16 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 	if pipelineNeedsToUpdate {
 		if !*shouldBePaused || (*shouldBePaused && isPipelinePaused(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
-			err = updatePipelineSpec(ctx, r.restConfig, newPipelineDef)
+			// make sure lifecycle is left set to "Paused" in the new spec
+			unstruc, err := kubernetes.ObjectToUnstructured(newPipelineDef)
+			if err != nil {
+				return err
+			}
+			err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
+			if err != nil {
+				return err
+			}
+			err = kubernetes.UpdateUnstructuredCR(ctx, r.restConfig, unstruc, common.PipelineGVR, pipelineRollout.Namespace, pipelineRollout.Name)
 			if err != nil {
 				return err
 			}
@@ -550,7 +559,7 @@ func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *
 }
 
 // make sure our Pipeline's Lifecycle is what we need it to be
-func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, paused bool, existingPipelineDef *kubernetes.GenericObject) error {
+func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *kubernetes.GenericObject) error {
 	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
@@ -558,12 +567,12 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
 
-	if paused && !lifeCycleIsPaused {
+	if pause && !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
 		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
 			return err
 		}
-	} else if !paused && lifeCycleIsPaused {
+	} else if !pause && lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
 
 		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
