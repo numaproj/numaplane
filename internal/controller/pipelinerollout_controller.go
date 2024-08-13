@@ -606,15 +606,6 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	return controllerRequestsPause || isbsvcRequestsPause, true, nil
 }
 
-func setPipelineHealthStatus(pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout, pipelineObservedGeneration int64) {
-
-	if pipelineObservedGenerationCurrent(pipeline.Generation, pipelineObservedGeneration) {
-		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
-	} else {
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", fmt.Sprintf("Mismatch between Pipeline Generation %d and ObservedGeneration %d", pipeline.Generation, pipelineObservedGeneration), pipelineRollout.Generation)
-	}
-}
-
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	return generation <= observedGeneration
 }
@@ -646,28 +637,45 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
+	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+
+	return nil
+}
+
+func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
+
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	pipelineChildResourceStatus, pipelineChildResourceReason := getPipelineChildResourceHealth(pipelineStatus.Conditions)
 
-	if pipelineChildResourceReason == "Progressing" {
+	if pipelineChildResourceReason == "Progressing" || !pipelineObservedGenerationCurrent(pipeline.Generation, pipelineStatus.ObservedGeneration) {
 		pipelineRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Pipeline Progressing", pipelineRollout.Generation)
-	} else if pipelinePhase == numaflowv1.PipelinePhaseFailed || pipelineChildResourceStatus == "False" {
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed", pipelineRollout.Generation)
+	} else if pipelinePhase == numaflowv1.PipelinePhaseFailed {
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Phase=Failed", pipelineRollout.Generation)
+	} else if pipelineChildResourceStatus == "False" {
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineFailed", "Pipeline Failed, Pipeline Child Resource(s) Unhealthy", pipelineRollout.Generation)
 	} else if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
+		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Pausing - health unknown", pipelineRollout.Generation)
+	} else if pipelinePhase == numaflowv1.PipelinePhaseDeleting {
+		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
+	} else if pipelinePhase == numaflowv1.PipelinePhaseUnknown || pipelineChildResourceStatus == "Unknown" {
+		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
+	} else {
+		pipelineRollout.Status.MarkChildResourcesHealthy(pipelineRollout.Generation)
+	}
+
+}
+
+func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
+
+	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
-		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
-	} else if pipelinePhase == numaflowv1.PipelinePhaseUnknown || pipelineChildResourceStatus == "Unknown" {
-		pipelineRollout.Status.MarkChildResourcesHealthUnknown("PipelineUnknown", "Pipeline Phase Unknown", pipelineRollout.Generation)
-	} else if pipelinePhase == numaflowv1.PipelinePhaseDeleting {
-		pipelineRollout.Status.MarkChildResourcesUnhealthy("PipelineDeleting", "Pipeline Deleting", pipelineRollout.Generation)
 	} else {
-		setPipelineHealthStatus(existingPipelineDef, pipelineRollout, pipelineStatus.ObservedGeneration)
-		pipelineRollout.Status.MarkPipelineUnpaused(pipelineDef.Generation)
+		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
-
-	return nil
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
