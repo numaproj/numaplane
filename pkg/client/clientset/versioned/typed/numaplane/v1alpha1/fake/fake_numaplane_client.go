@@ -31,6 +31,10 @@ func (c *FakeNumaplaneV1alpha1) ISBServiceRollouts(namespace string) v1alpha1.IS
 	return &FakeISBServiceRollouts{c, namespace}
 }
 
+func (c *FakeNumaplaneV1alpha1) MonoVertexRollouts(namespace string) v1alpha1.MonoVertexRolloutInterface {
+	return &FakeMonoVertexRollouts{c, namespace}
+}
+
 func (c *FakeNumaplaneV1alpha1) NumaflowControllerRollouts(namespace string) v1alpha1.NumaflowControllerRolloutInterface {
 	return &FakeNumaflowControllerRollouts{c, namespace}
 }
