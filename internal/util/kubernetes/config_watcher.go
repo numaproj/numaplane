@@ -114,7 +114,7 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 			return fmt.Errorf("error unmarshalling USDE ISBServiceSpecExcludedPaths: %v", err)
 		}
 
-		config.GetConfigManagerInstance().UpdateUSDEConfig(&usdeConfig)
+		config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
 	} else if event.Type == watch.Deleted {
 		config.GetConfigManagerInstance().UnsetUSDEConfig()
 	}

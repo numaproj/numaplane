@@ -20,7 +20,7 @@ type ConfigManager struct {
 	numaflowControllerDefMgr NumaflowControllerDefinitionsManager
 
 	// USDE Config
-	usdeConfig     *USDEConfig
+	usdeConfig     USDEConfig
 	usdeConfigLock *sync.RWMutex
 }
 
@@ -47,7 +47,7 @@ func GetConfigManagerInstance() *ConfigManager {
 				rolloutConfig: map[string]string{},
 				lock:          new(sync.RWMutex),
 			},
-			usdeConfig:     &USDEConfig{},
+			usdeConfig:     USDEConfig{},
 			usdeConfigLock: new(sync.RWMutex),
 		}
 	})
@@ -171,7 +171,7 @@ func (cm *ConfigManager) loadGlobalConfig(
 	return nil
 }
 
-func CloneWithSerialization[T NumaflowControllerDefinitionConfig | GlobalConfig | USDEConfig](orig *T) (*T, error) {
+func CloneWithSerialization[T NumaflowControllerDefinitionConfig | GlobalConfig](orig *T) (*T, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
 	cm.callbacks = append(cm.callbacks, f)
 }
 
-func (cm *ConfigManager) UpdateUSDEConfig(config *USDEConfig) {
+func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
 	cm.usdeConfigLock.Lock()
 	defer cm.usdeConfigLock.Unlock()
 
@@ -202,17 +202,12 @@ func (cm *ConfigManager) UnsetUSDEConfig() {
 	cm.usdeConfigLock.Lock()
 	defer cm.usdeConfigLock.Unlock()
 
-	cm.usdeConfig = &USDEConfig{}
+	cm.usdeConfig = USDEConfig{}
 }
 
-func (cm *ConfigManager) GetUSDEConfig() (USDEConfig, error) {
+func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
 	cm.usdeConfigLock.Lock()
 	defer cm.usdeConfigLock.Unlock()
 
-	usdeConfig, err := CloneWithSerialization(cm.usdeConfig)
-	if err != nil {
-		return USDEConfig{}, err
-	}
-
-	return *usdeConfig, nil
+	return cm.usdeConfig
 }
