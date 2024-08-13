@@ -24,10 +24,14 @@ const (
 	// LabelKeyNumaplaneInstance Resource metadata labels (keys and values) used for tracking
 	LabelKeyNumaplaneInstance = "numaplane.numaproj.io/tracking-id"
 
-	// LabelKeyNumaplaneControllerConfig is the label key used to identify the configmap for the controller definitions
+	// LabelKeyNumaplaneControllerConfig is the label key used to identify additional Numaplane ConfigMaps (ex: Numaflow Controller definitions, USDE, etc.)
 	LabelKeyNumaplaneControllerConfig = "numaplane.numaproj.io/config"
-	// LabelValueNumaplaneControllerConfig is the label value used to identify the configmap for the controller definitions
-	LabelValueNumaplaneControllerConfig = "numaflow-controller-definitions"
+
+	// LabelValueNumaflowControllerDefinitions is the label value used to identify the Numaplane ConfigMap for the Numaflow Controller definitions
+	LabelValueNumaflowControllerDefinitions = "numaflow-controller-definitions"
+
+	// LabelValueUSDEConfig is the label value used to identify the USDE ConfigMap
+	LabelValueUSDEConfig = "usde-config"
 
 	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline
 	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
