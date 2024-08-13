@@ -171,6 +171,7 @@ func CreateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully created resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Verbosef("successfully created resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
@@ -216,6 +217,7 @@ func UpdateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Verbosef("successfully updated resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
