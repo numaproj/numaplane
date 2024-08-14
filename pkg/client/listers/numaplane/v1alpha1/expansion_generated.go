@@ -25,6 +25,14 @@ type ISBServiceRolloutListerExpansion interface{}
 // ISBServiceRolloutNamespaceLister.
 type ISBServiceRolloutNamespaceListerExpansion interface{}
 
+// MonoVertexRolloutListerExpansion allows custom methods to be added to
+// MonoVertexRolloutLister.
+type MonoVertexRolloutListerExpansion interface{}
+
+// MonoVertexRolloutNamespaceListerExpansion allows custom methods to be added to
+// MonoVertexRolloutNamespaceLister.
+type MonoVertexRolloutNamespaceListerExpansion interface{}
+
 // NumaflowControllerRolloutListerExpansion allows custom methods to be added to
 // NumaflowControllerRolloutLister.
 type NumaflowControllerRolloutListerExpansion interface{}
