@@ -958,6 +958,13 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1054,6 +1061,19 @@ data:
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config
+  namespace: numaplane-system
+---
+apiVersion: v1
+data:
+  pipelineSpecExcludedPaths: |
+    - "lifecycle"
+    - "limits"
+    - "watermark"
+kind: ConfigMap
+metadata:
+  labels:
+    numaplane.numaproj.io/config: usde-config
+  name: numaplane-controller-usde-config
   namespace: numaplane-system
 ---
 apiVersion: apps/v1

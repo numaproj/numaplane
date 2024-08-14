@@ -28,6 +28,7 @@ import (
 type NumaplaneV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ISBServiceRolloutsGetter
+	MonoVertexRolloutsGetter
 	NumaflowControllerRolloutsGetter
 	PipelineRolloutsGetter
 }
@@ -39,6 +40,10 @@ type NumaplaneV1alpha1Client struct {
 
 func (c *NumaplaneV1alpha1Client) ISBServiceRollouts(namespace string) ISBServiceRolloutInterface {
 	return newISBServiceRollouts(c, namespace)
+}
+
+func (c *NumaplaneV1alpha1Client) MonoVertexRollouts(namespace string) MonoVertexRolloutInterface {
+	return newMonoVertexRollouts(c, namespace)
 }
 
 func (c *NumaplaneV1alpha1Client) NumaflowControllerRollouts(namespace string) NumaflowControllerRolloutInterface {

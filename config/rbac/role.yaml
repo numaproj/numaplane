@@ -46,3 +46,10 @@ rules:
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - 'create'
+      - 'patch'

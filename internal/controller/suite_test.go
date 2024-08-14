@@ -137,16 +137,12 @@ var _ = BeforeSuite(func() {
 
 	customMetrics = metrics.RegisterCustomMetrics()
 
-	err = NewPipelineRolloutReconciler(
-		k8sManager.GetClient(),
-		k8sManager.GetScheme(),
-		cfg, customMetrics).SetupWithManager(k8sManager)
+	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = NewISBServiceRolloutReconciler(
-		k8sManager.GetClient(),
-		k8sManager.GetScheme(),
-		cfg, customMetrics).SetupWithManager(k8sManager)
+	err = NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+		k8sManager.GetEventRecorderFor(apiv1.RolloutISBSvc)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg, customMetrics)
@@ -158,10 +154,10 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
 
-	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(),
-		k8sManager.GetScheme(), cfg, kubernetes.NewKubectl(), customMetrics)
+	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
+		cfg, kubernetes.NewKubectl(), customMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowController))
 	Expect(err).ToNot(HaveOccurred())
 	err = numaflowControllerReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())

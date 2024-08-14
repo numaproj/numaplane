@@ -19,6 +19,8 @@ package v1alpha1
 
 type ISBServiceRolloutExpansion interface{}
 
+type MonoVertexRolloutExpansion interface{}
+
 type NumaflowControllerRolloutExpansion interface{}
 
 type PipelineRolloutExpansion interface{}

@@ -17,12 +17,21 @@ type ConfigManager struct {
 	// if the configmap changes, these callbacks will be called
 	callbacks []func(config GlobalConfig)
 
-	controllerDefMgr ControllerDefinitionsManager
+	numaflowControllerDefMgr NumaflowControllerDefinitionsManager
+
+	// USDE Config
+	usdeConfig     USDEConfig
+	usdeConfigLock *sync.RWMutex
 }
 
-type ControllerDefinitionsManager struct {
+type NumaflowControllerDefinitionsManager struct {
 	rolloutConfig map[string]string
 	lock          *sync.RWMutex
+}
+
+type USDEConfig struct {
+	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
+	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
 }
 
 var instance *ConfigManager
@@ -34,17 +43,19 @@ func GetConfigManagerInstance() *ConfigManager {
 		instance = &ConfigManager{
 			config: &GlobalConfig{},
 			lock:   new(sync.RWMutex),
-			controllerDefMgr: ControllerDefinitionsManager{
+			numaflowControllerDefMgr: NumaflowControllerDefinitionsManager{
 				rolloutConfig: map[string]string{},
 				lock:          new(sync.RWMutex),
 			},
+			usdeConfig:     USDEConfig{},
+			usdeConfigLock: new(sync.RWMutex),
 		}
 	})
 	return instance
 }
 
-func (*ConfigManager) GetControllerDefinitionsMgr() *ControllerDefinitionsManager {
-	return &instance.controllerDefMgr
+func (*ConfigManager) GetControllerDefinitionsMgr() *NumaflowControllerDefinitionsManager {
+	return &instance.numaflowControllerDefMgr
 }
 
 // GlobalConfig is the configuration for the controllers, it is
@@ -74,7 +85,7 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *ControllerDefinitionsManager) UpdateControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -84,7 +95,7 @@ func (cm *ControllerDefinitionsManager) UpdateControllerDefinitionConfig(config 
 	}
 }
 
-func (cm *ControllerDefinitionsManager) RemoveControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -93,7 +104,7 @@ func (cm *ControllerDefinitionsManager) RemoveControllerDefinitionConfig(config 
 	}
 }
 
-func (cm *ControllerDefinitionsManager) GetControllerDefinitionsConfig() map[string]string {
+func (cm *NumaflowControllerDefinitionsManager) GetNumaflowControllerDefinitionsConfig() map[string]string {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
@@ -178,4 +189,25 @@ func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
 	defer cm.lock.Unlock()
 
 	cm.callbacks = append(cm.callbacks, f)
+}
+
+func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
+	cm.usdeConfigLock.Lock()
+	defer cm.usdeConfigLock.Unlock()
+
+	cm.usdeConfig = config
+}
+
+func (cm *ConfigManager) UnsetUSDEConfig() {
+	cm.usdeConfigLock.Lock()
+	defer cm.usdeConfigLock.Unlock()
+
+	cm.usdeConfig = USDEConfig{}
+}
+
+func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
+	cm.usdeConfigLock.Lock()
+	defer cm.usdeConfigLock.Unlock()
+
+	return cm.usdeConfig
 }

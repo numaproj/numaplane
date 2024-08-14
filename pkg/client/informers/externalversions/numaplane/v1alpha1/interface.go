@@ -25,6 +25,8 @@ import (
 type Interface interface {
 	// ISBServiceRollouts returns a ISBServiceRolloutInformer.
 	ISBServiceRollouts() ISBServiceRolloutInformer
+	// MonoVertexRollouts returns a MonoVertexRolloutInformer.
+	MonoVertexRollouts() MonoVertexRolloutInformer
 	// NumaflowControllerRollouts returns a NumaflowControllerRolloutInformer.
 	NumaflowControllerRollouts() NumaflowControllerRolloutInformer
 	// PipelineRollouts returns a PipelineRolloutInformer.
@@ -45,6 +47,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // ISBServiceRollouts returns a ISBServiceRolloutInformer.
 func (v *version) ISBServiceRollouts() ISBServiceRolloutInformer {
 	return &iSBServiceRolloutInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// MonoVertexRollouts returns a MonoVertexRolloutInformer.
+func (v *version) MonoVertexRollouts() MonoVertexRolloutInformer {
+	return &monoVertexRolloutInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // NumaflowControllerRollouts returns a NumaflowControllerRolloutInformer.
