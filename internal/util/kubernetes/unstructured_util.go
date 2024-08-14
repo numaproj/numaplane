@@ -27,6 +27,10 @@ type GenericObject struct {
 	Status runtime.RawExtension `json:"status,omitempty"`
 }
 
+func (obj *GenericObject) DeepCopyObject() runtime.Object {
+	return obj.DeepCopy()
+}
+
 type GenericStatus struct {
 	Phase              string             `json:"phase,omitempty"`
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
