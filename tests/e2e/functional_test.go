@@ -371,7 +371,8 @@ func snapshotCluster(testName string) {
 	podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{})
 	if podList != nil {
 		for _, pod := range podList.Items {
-			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
+			fmt.Printf("Pod: %q, %q, Reason:%q\n", pod.Name, pod.Status.Phase, pod.Status.Reason)
+
 		}
 	}
 }
@@ -529,13 +530,6 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 		return false
 
 	}).WithTimeout(testTimeout).Should(BeTrue())
-
-	podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	for _, pod := range podsList.Items {
-		if pod.Status.Phase != "Running" {
-			fmt.Printf("Pod %q: Phase=%q, Reason=%q\n", pod.Name, pod.Status.Phase, pod.Status.Reason)
-		}
-	}
 
 }
 
