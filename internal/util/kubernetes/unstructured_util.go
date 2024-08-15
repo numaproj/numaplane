@@ -56,6 +56,7 @@ func GetUnstructuredCR(
 	object *GenericObject,
 	pluralName string,
 ) (*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx)
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
@@ -66,7 +67,11 @@ func GetUnstructuredCR(
 		return nil, err
 	}
 
-	return client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	unstruc, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	if unstruc != nil {
+		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, unstruc.Object)
+	}
+	return unstruc, err
 }
 
 func ListUnstructuredCR(
@@ -175,6 +180,7 @@ func CreateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully created resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Verbosef("successfully created resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
@@ -220,6 +226,7 @@ func UpdateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Verbosef("successfully updated resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
