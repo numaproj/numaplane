@@ -531,9 +531,12 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 	}).WithTimeout(testTimeout).Should(BeTrue())
 
 	podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if len(podsList.Items) < numPods {
-		fmt.Printf("\ndebug info: len(podsList)=%d, podsList=%+v\n\n", len(podsList.Items), podsList.Items)
+	for _, pod := range podsList.Items {
+		if pod.Status.Phase != "Running" {
+			fmt.Printf("Pod %q: Phase=%q, Reason=%q\n", pod.Name, pod.Status.Phase, pod.Status.Reason)
+		}
 	}
+
 }
 
 func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
