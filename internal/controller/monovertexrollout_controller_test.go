@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -42,7 +42,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 	ctx := context.Background()
 
 	monoVertexSpec := numaflowv1.MonoVertexSpec{
-		Replicas: pointer.Int32(1),
+		Replicas: ptr.To(int32(1)),
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
@@ -135,7 +135,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentMonoVertexRollout)).ToNot(HaveOccurred())
 
 			newMonoVertexSpec := numaflowv1.MonoVertexSpec{
-				Replicas: pointer.Int32(1),
+				Replicas: ptr.To(int32(1)),
 				Source: &numaflowv1.Source{
 					UDSource: &numaflowv1.UDSource{
 						Container: &numaflowv1.Container{
