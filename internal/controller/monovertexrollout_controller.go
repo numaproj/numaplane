@@ -85,12 +85,10 @@ func NewMonoVertexRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
-	// syncStartTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("monovertexrollout-reconciler").WithValues("monovertexrollout", req.NamespacedName)
 
 	// update the context with this Logger
 	ctx = logger.WithLogger(ctx, numaLogger)
-	// r.customMetrics.MonoVerticesSynced.WithLabelValues().Inc()
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, monoVertexRollout); err != nil {
@@ -194,6 +192,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	} else {
 		// merge and update
+		// TODO: for monoVertex, we can directly apply changes
 		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
 		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 		if err != nil {
@@ -344,7 +343,6 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 }
 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
-	// r.customMetrics.MonoVerticesSyncFailed.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
