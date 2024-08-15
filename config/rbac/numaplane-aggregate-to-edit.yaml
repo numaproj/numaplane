@@ -11,6 +11,7 @@ rules:
     - pipelinerollouts
     - isbservicerollouts
     - numaflowcontrollerrollouts
+    - monovertexrollouts
     verbs:
     - create
     - delete
@@ -25,5 +26,6 @@ rules:
     - pipelinerollouts/status
     - isbservicerollouts/status
     - numaflowcontrollerrollouts/status
+    - monovertexrollouts/status
     verbs:
     - get

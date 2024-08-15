@@ -920,6 +920,56 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: numaplane
+  name: monovertexrollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: monovertexrollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
   name: numaflowcontrollerrollout-editor-role
 rules:
 - apiGroups:
@@ -977,6 +1027,7 @@ rules:
   - pipelinerollouts
   - isbservicerollouts
   - numaflowcontrollerrollouts
+  - monovertexrollouts
   verbs:
   - create
   - delete
@@ -991,6 +1042,7 @@ rules:
   - pipelinerollouts/status
   - isbservicerollouts/status
   - numaflowcontrollerrollouts/status
+  - monovertexrollouts/status
   verbs:
   - get
 ---
@@ -1007,6 +1059,7 @@ rules:
   - pipelinerollouts
   - isbservicerollouts
   - numaflowcontrollerrollouts
+  - monovertexrollouts
   verbs:
   - create
   - delete
@@ -1021,6 +1074,7 @@ rules:
   - pipelinerollouts/status
   - isbservicerollouts/status
   - numaflowcontrollerrollouts/status
+  - monovertexrollouts/status
   verbs:
   - get
 ---
@@ -1037,6 +1091,7 @@ rules:
   - pipelinerollouts
   - isbservicerollouts
   - numaflowcontrollerrollouts
+  - monovertexrollouts
   verbs:
   - get
   - list
@@ -1047,6 +1102,7 @@ rules:
   - pipelinerollouts/status
   - isbservicerollouts/status
   - numaflowcontrollerrollouts/status
+  - monovertexrollouts/status
   verbs:
   - get
 ---
