@@ -202,6 +202,7 @@ ifeq ($(NUMAFLOW_CRDS), 0)
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/isbsvcs.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/pipelines.yaml
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/vertices.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/full/numaflow.numaproj.io_monovertices.yaml
 endif
 
 
