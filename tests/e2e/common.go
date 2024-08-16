@@ -3,14 +3,17 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
+	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	clientgo "k8s.io/client-go/kubernetes"
@@ -57,6 +60,20 @@ func snapshotCluster(testName string) {
 			if pod.Status.Phase != v1.PodRunning {
 				fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
 				fmt.Printf(" Conditions:\n   %+v\n", pod.Status.Conditions)
+				// if there's an unitialized container, print its logs
+				unitializedContainer := false
+				for _, condition := range pod.Status.Conditions {
+					if condition.Reason == "ContainersNotInitialized" {
+						unitializedContainer = true
+						break
+					}
+				}
+				if unitializedContainer {
+					for _, initContainer := range pod.Spec.InitContainers {
+						printPodLogs(kubeClient, Namespace, pod.Name, initContainer.Name)
+					}
+				}
+
 			}
 
 		}
@@ -87,4 +104,16 @@ func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.Generic
 	var status kubernetes.GenericStatus
 	err := util.StructToStruct(&statusMap, &status)
 	return status, err
+}
+
+func printPodLogs(client clientgo.Interface, namespace, podName, containerName string) {
+	podLogOptions := &apiv1.PodLogOptions{Container: containerName}
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, podLogOptions).Stream(ctx)
+	if err == nil {
+		fmt.Printf("Error getting Pod logs: namespace=%q, pod=%q, container=%q\n", namespace, podName, containerName)
+		return
+	}
+	defer stream.Close()
+	logBytes, _ := io.ReadAll(stream)
+	fmt.Printf("Printing Log for namespace=%q, pod=%q, container=%q:\n%s\n", namespace, podName, containerName, string(logBytes))
 }
