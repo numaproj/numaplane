@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,7 +29,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
-	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -41,24 +39,6 @@ func TestE2E(t *testing.T) {
 
 	RunSpecs(t, "E2E Suite")
 }
-
-var (
-	dynamicClient dynamic.DynamicClient
-	testEnv       *envtest.Environment
-	ctx           context.Context
-	cancel        context.CancelFunc
-	suiteTimeout  = 5 * time.Minute
-	testTimeout   = 2 * time.Minute
-
-	pipelineRolloutClient           planepkg.PipelineRolloutInterface
-	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
-	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
-	kubeClient                      kubernetes.Interface
-)
-
-const (
-	Namespace = "numaplane-system"
-)
 
 var _ = BeforeSuite(func() {
 
