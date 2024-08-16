@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -48,7 +49,15 @@ func snapshotCluster(testName string) {
 	podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{})
 	if podList != nil {
 		for _, pod := range podList.Items {
-			fmt.Printf("Pod: %q, %q, Reason:%q\n", pod.Name, pod.Status.Phase, pod.Status.Reason)
+			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
+		}
+		fmt.Println("***** Pods not in Running state:")
+		// print more details about Pods not in Running state:
+		for _, pod := range podList.Items {
+			if pod.Status.Phase != v1.PodRunning {
+				fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
+				fmt.Printf(" Conditions:\n   %+v\n", pod.Status.Conditions)
+			}
 
 		}
 	}
