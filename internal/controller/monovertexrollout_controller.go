@@ -27,7 +27,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -192,16 +191,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	} else {
 		// merge and update
-		// TODO: for monoVertex, we can directly apply changes
+		// we directly apply changes as there is no need for draining MonoVertex
 		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
 		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-	}
-
-	if err = r.applyPodDisruptionBudget(ctx, monoVertexRollout); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for MonoVertexRollout %s, err: %v", monoVertexRollout.Name, err)
 	}
 
 	// process status
@@ -229,35 +224,6 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-// Apply pod disruption budget for MonoVertex
-func (r *MonoVertexRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {
-	pdb := kubernetes.NewPodDisruptionBudget(monoVertexRollout.Name, monoVertexRollout.Namespace, 1,
-		[]metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
-	)
-
-	// Create the pdb only if it doesn't exist
-	existingPDB := &policyv1.PodDisruptionBudget{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: pdb.Name, Namespace: pdb.Namespace}, existingPDB); err != nil {
-		if apierrors.IsNotFound(err) {
-			if err = r.client.Create(ctx, pdb); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
-		// Update the pdb if needed
-		if existingPDB.Spec.MaxUnavailable != pdb.Spec.MaxUnavailable {
-			existingPDB.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
-			if err := r.client.Update(ctx, existingPDB); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil

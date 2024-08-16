@@ -22,7 +22,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -115,17 +114,6 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 		It("Should have the MonoVertexRollout.Status.Phase as Deployed and ObservedGeneration matching Generation", func() {
 			verifyStatusPhase(ctx, apiv1.MonoVertexRolloutGroupVersionKind, namespace, monoVertexRolloutName, apiv1.PhaseDeployed)
-		})
-
-		It("Should have created a PodDisruptionBudget for MonoVertex", func() {
-			monoVertexPDB := &policyv1.PodDisruptionBudget{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, monoVertexPDB)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Verifying the context of the MonoVertex spec")
-			Expect(monoVertexPDB.Spec.MaxUnavailable.IntVal).Should(Equal(int32(1)))
 		})
 
 		It("Should update the MonoVertexRollout and MonoVertex", func() {
