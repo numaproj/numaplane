@@ -197,14 +197,6 @@ envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
-numaflow-crd:
-ifeq ($(NUMAFLOW_CRDS), 0)
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/isbsvcs.yaml
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/pipelines.yaml
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/numaproj/helm-charts/main/charts/numaflow/crds/vertices.yaml
-endif
-
-
 # release - targets only available on release branch
 ifneq ($(findstring release-,$(GIT_BRANCH)),)
 
