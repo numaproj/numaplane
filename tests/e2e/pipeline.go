@@ -107,17 +107,17 @@ func updatePipelineRolloutInK8S(name string, f func(apiv1.PipelineRollout) (apiv
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func updatePipelineSpecInK8S(pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
+func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 
-		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 		retrievedPipeline := unstruct
 
 		// modify Pipeline Spec to verify it gets auto-healed
 		err = updatePipelineSpec(retrievedPipeline, f)
 		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
+		_, err = dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())

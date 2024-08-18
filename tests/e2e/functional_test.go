@@ -151,7 +151,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Updating Pipeline directly")
 
 		// update child Pipeline
-		updatePipelineSpecInK8S(pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
+		updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
 			rpu := int64(10)
 			pipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
 			return pipelineSpec, nil
