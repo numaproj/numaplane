@@ -83,6 +83,7 @@ var _ = BeforeSuite(func() {
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
+		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/full/numaflow.numaproj.io_monovertices.yaml",
 	}
 	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
 	for _, crdURL := range crdsURLs {
@@ -143,6 +144,10 @@ var _ = BeforeSuite(func() {
 
 	err = NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutISBSvc)).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertex)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	stateCache := sync.NewLiveStateCache(cfg, customMetrics)

@@ -1,0 +1,27 @@
+# permissions for end users to edit monovertexrolouts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: numaplane
+    app.kubernetes.io/managed-by: kustomize
+  name: monovertexrollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts/status
+  verbs:
+  - get

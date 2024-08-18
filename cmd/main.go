@@ -189,6 +189,18 @@ func main() {
 		numaLogger.Fatal(err, "Unable to set up ISBServiceRollout controller")
 	}
 
+	monoVertexRolloutReconciler := controller.NewMonoVertexRolloutReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		newRawConfig,
+		customMetrics,
+		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertex),
+	)
+
+	if err = monoVertexRolloutReconciler.SetupWithManager(mgr); err != nil {
+		numaLogger.Fatal(err, "Unable to set up MonoVertexRollout controller")
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
