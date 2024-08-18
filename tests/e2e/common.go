@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	apiv1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,29 +52,6 @@ func snapshotCluster(testName string) {
 	if podList != nil {
 		for _, pod := range podList.Items {
 			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
-		}
-		fmt.Println("***** Pods not in Running state:")
-		// print more details about Pods not in Running state:
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
-				fmt.Printf(" Conditions:\n   %+v\n", pod.Status.Conditions)
-				// if there's an unitialized container, print its logs
-				unitializedContainer := false
-				for _, condition := range pod.Status.Conditions {
-					if condition.Reason == "ContainersNotInitialized" {
-						unitializedContainer = true
-						break
-					}
-				}
-				if unitializedContainer {
-					for _, initContainer := range pod.Spec.InitContainers {
-						printPodLogs(kubeClient, Namespace, pod.Name, initContainer.Name)
-					}
-				}
-
-			}
-
 		}
 	}
 }
