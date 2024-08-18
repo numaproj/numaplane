@@ -183,7 +183,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// update the PipelineRollout
-		updatePipelineRolloutInK8S(pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			rollout.Spec.Pipeline.Spec.Raw = rawSpec
 			return rollout, nil
 		})

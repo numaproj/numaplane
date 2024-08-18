@@ -89,7 +89,7 @@ func getGVRForPipeline() schema.GroupVersionResource {
 	}
 }
 
-func updatePipelineRolloutInK8S(name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
+func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
 	document("updating PipelineRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
