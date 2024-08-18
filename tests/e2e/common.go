@@ -3,14 +3,12 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -82,6 +80,8 @@ func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.Generic
 	return status, err
 }
 
+// commenting out to please Lint, but leaving here because it could be useful later
+/*
 func printPodLogs(client clientgo.Interface, namespace, podName, containerName string) {
 	podLogOptions := &apiv1.PodLogOptions{Container: containerName}
 	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, podLogOptions).Stream(ctx)
@@ -92,4 +92,4 @@ func printPodLogs(client clientgo.Interface, namespace, podName, containerName s
 	defer stream.Close()
 	logBytes, _ := io.ReadAll(stream)
 	fmt.Printf("Printing Log for namespace=%q, pod=%q, container=%q:\n%s\n", namespace, podName, containerName, string(logBytes))
-}
+}*/
