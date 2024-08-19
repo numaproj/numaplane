@@ -156,6 +156,15 @@ jobs:
           GOPATH: /home/runner/go
         run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
 
+      - name: Create second cluster
+        run: |
+          export PATH=$PATH:/usr/local/bin
+          k3d cluster create e2e-data-loss-prevention
+          k3d kubeconfig get e2e-data-loss-prevention > ~/.kube/config
+          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
+          echo 'Waiting for the cluster to be ready...'
+          until kubectl cluster-info; do sleep 1; done
+
       - name: Install Numaplane with dataLossPrevention=true
         env:
           GOPATH: /home/runner/go
