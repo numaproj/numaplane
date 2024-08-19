@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -114,6 +115,13 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 		It("Should have the MonoVertexRollout.Status.Phase as Deployed and ObservedGeneration matching Generation", func() {
 			verifyStatusPhase(ctx, apiv1.MonoVertexRolloutGroupVersionKind, namespace, monoVertexRolloutName, apiv1.PhaseDeployed)
+		})
+
+		It("Should have the metrics updated", func() {
+			By("Verifying the MonoVertex metrics")
+			Expect(testutil.ToFloat64(customMetrics.MonoVerticesRunning.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.MonoVerticesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.MonoVerticesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the MonoVertexRollout and MonoVertex", func() {
