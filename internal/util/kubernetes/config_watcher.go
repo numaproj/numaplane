@@ -69,6 +69,10 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 			if err := handleUSDEConfigMapEvent(configMap, event); err != nil {
 				numaLogger.Error(err, "error while handling event on USDE ConfigMap")
 			}
+		case common.LabelValueNamespaceConfig:
+			if err := handleNamespaceConfigMapEvent(configMap, event); err != nil {
+				numaLogger.WithValues("configMap", configMap).Error(err, "error while handling event on namespace-level ConfigMap")
+			}
 		default:
 			numaLogger.Errorf(err, "the ConfigMap named '%s' is not supported", configMap.Name)
 		}
@@ -106,7 +110,6 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 		err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
-
 		}
 
 		err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecExcludedPaths"]), &usdeConfig.ISBServiceSpecExcludedPaths)
@@ -117,6 +120,30 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 		config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
 	} else if event.Type == watch.Deleted {
 		config.GetConfigManagerInstance().UnsetUSDEConfig()
+	}
+
+	return nil
+}
+
+func handleNamespaceConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
+	if event.Type == watch.Added || event.Type == watch.Modified {
+		if configMap == nil || configMap.Data == nil {
+			return fmt.Errorf("no ConfigMap or data field available")
+		}
+
+		// TODO: either just get the strategy from ConfigMap and apply it to USDE config
+		// OR
+		// create a separate namespace config struct to hold namespace-level config parameters for future needs
+		strategy := ""
+		// TODO: consider moving "strategy" to a const
+		err := yaml.Unmarshal([]byte(configMap.Data["strategy"]), &strategy)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling USDE strategy: %v", err)
+		}
+
+		// config.GetConfigManagerInstance().UpdateUSDEConfigStrategy(strategy)
+	} else if event.Type == watch.Deleted {
+		// config.GetConfigManagerInstance().UnsetUSDEConfigStrategy()
 	}
 
 	return nil
