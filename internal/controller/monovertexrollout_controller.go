@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
@@ -84,10 +85,12 @@ func NewMonoVertexRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
+	syncStartTime := time.Now()
 	numaLogger := logger.GetBaseLogger().WithName("monovertexrollout-reconciler").WithValues("monovertexrollout", req.NamespacedName)
 
 	// update the context with this Logger
 	ctx = logger.WithLogger(ctx, numaLogger)
+	r.customMetrics.MonoVerticesSynced.WithLabelValues().Inc()
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, monoVertexRollout); err != nil {
@@ -104,7 +107,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	monoVertexRollout.Status.Init(monoVertexRollout.Generation)
 
-	result, err := r.reconcile(ctx, monoVertexRollout)
+	result, err := r.reconcile(ctx, monoVertexRollout, syncStartTime)
 	if err != nil {
 		r.ErrorHandler(monoVertexRollout, err, "ReconcileFailed", "Failed to reconcile MonoVertexRollout")
 		statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err)
@@ -139,14 +142,17 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
+	// generate metrics for MonoVertex
+	r.customMetrics.IncMonoVertexMetrics(monoVertexRollout.Name, monoVertexRollout.Namespace)
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeNormal, "ReconciliationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
 	return result, nil
 }
 
-func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (ctrl.Result, error) {
+func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, syncStartTime time.Time) (ctrl.Result, error) {
 
+	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
 	// remove finalizers if monoVertexRollout is being deleted
@@ -155,6 +161,9 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if controllerutil.ContainsFinalizer(monoVertexRollout, finalizerName) {
 			controllerutil.RemoveFinalizer(monoVertexRollout, finalizerName)
 		}
+		// generate metrics for MonoVertex deletion
+		r.customMetrics.DecMonoVertexMetrics(monoVertexRollout.Name, monoVertexRollout.Namespace)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
 		return ctrl.Result{}, nil
 	}
 
@@ -186,6 +195,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			}
 
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 		} else {
 			return ctrl.Result{}, fmt.Errorf("error getting MonoVertex: %v", err)
 		}
@@ -197,6 +207,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
 	// process status
