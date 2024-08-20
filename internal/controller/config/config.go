@@ -8,6 +8,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 
+	"github.com/numaproj/numaplane/internal/usde"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -39,7 +40,7 @@ type USDEConfig struct {
 }
 
 type NamespaceConfig struct {
-	UpgradeStrategy string `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
+	UpgradeStrategy usde.USDEStrategy `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
 }
 
 var instance *ConfigManager

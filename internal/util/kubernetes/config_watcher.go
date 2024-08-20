@@ -26,18 +26,18 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	namespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	numaplaneNamespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return fmt.Errorf("failed to read namespace: %w", err)
 	}
 
-	go watchConfigMaps(ctx, client, string(namespace))
+	go watchConfigMaps(ctx, client, string(numaplaneNamespace))
 
 	return nil
 }
 
 // watchConfigMaps watches for ConfigMaps continuously and updates the in-memory config objects based on the ConfigMaps data
-func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace string) {
+func watchConfigMaps(ctx context.Context, client kubernetes.Interface, numaplaneNamespace string) {
 	numaLogger := logger.FromContext(ctx)
 
 	watcher, err := client.CoreV1().ConfigMaps("").Watch(ctx, metav1.ListOptions{
@@ -68,7 +68,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 
 		case common.LabelValueNumaflowControllerDefinitions:
 			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
-			if configMap.Namespace != namespace {
+			if configMap.Namespace != numaplaneNamespace {
 				break
 			}
 
@@ -76,7 +76,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 
 		case common.LabelValueUSDEConfig:
 			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
-			if configMap.Namespace != namespace {
+			if configMap.Namespace != numaplaneNamespace {
 				break
 			}
 
@@ -86,7 +86,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 
 		case common.LabelValueNamespaceConfig:
 			// Only handle this kind of ConfigMap if it is NOT in the Numaplane namespace
-			if configMap.Namespace == namespace {
+			if configMap.Namespace == numaplaneNamespace {
 				break
 			}
 
