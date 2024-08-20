@@ -97,7 +97,7 @@ codegen: manifests controller-gen
 ## Generate pkg/client directory
 	./hack/update-codegen.sh
 	rm -rf ./vendor
-#	go mod tidy
+	go mod tidy
 ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." 
 
