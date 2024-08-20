@@ -33,7 +33,7 @@ const (
 	// LabelValueUSDEConfig is the label value used to identify the USDE ConfigMap
 	LabelValueUSDEConfig = "usde-config"
 
-	// LabelValueNamespaceConfig is the label value used to identify the namespace-level ConfigMap
+	// LabelValueNamespaceConfig is the label value used to identify the user's namespace-level ConfigMap
 	LabelValueNamespaceConfig = "namespace-level-config"
 
 	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline

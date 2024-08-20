@@ -24,7 +24,7 @@ type ConfigManager struct {
 	usdeConfig     USDEConfig
 	usdeConfigLock *sync.RWMutex
 
-	// Namespace-level Config
+	// User Namespace-level Config
 	namespaceConfigMap     map[string]NamespaceConfig
 	namespaceConfigMapLock *sync.RWMutex
 }
