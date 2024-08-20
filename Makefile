@@ -89,7 +89,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd paths="pkg/apis/..." output:crd:artifacts:config=config/crd/bases
 	$(KUBECTL) kustomize config/default > config/install.yaml
 
 .PHONY: codegen
@@ -99,7 +99,7 @@ codegen: manifests controller-gen
 	rm -rf ./vendor
 	go mod tidy
 ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." 
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="pkg/apis/..." 
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

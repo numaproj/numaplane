@@ -8,14 +8,10 @@ source $(dirname $0)/library.sh
 header "running codegen"
 
 ensure_vendor
-make_fake_paths
 
-export GOPATH="${FAKE_GOPATH}"
 export GO111MODULE="off"
 
-cd "${FAKE_REPOPATH}"
-
-CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${FAKE_REPOPATH}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
+CODEGEN_PKG=${CODEGEN_PKG:-$(ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
 chmod +x ${CODEGEN_PKG}/*.sh
 
