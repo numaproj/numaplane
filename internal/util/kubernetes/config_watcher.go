@@ -33,17 +33,6 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 
 	go watchConfigMaps(ctx, client, string(namespace))
 
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get namespaces list: %v", err)
-	}
-
-	for _, ns := range namespaces.Items {
-		if ns.Name != string(namespace) {
-			go watchConfigMaps(ctx, client, ns.Name)
-		}
-	}
-
 	return nil
 }
 
@@ -51,7 +40,7 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace string) {
 	numaLogger := logger.FromContext(ctx)
 
-	watcher, err := client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{
+	watcher, err := client.CoreV1().ConfigMaps("").Watch(ctx, metav1.ListOptions{
 		LabelSelector: common.LabelKeyNumaplaneControllerConfig,
 	})
 	if err != nil {
@@ -62,7 +51,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 	for {
 		event, ok := <-watcher.ResultChan()
 		if !ok {
-			watcher, err = client.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{
+			watcher, err = client.CoreV1().ConfigMaps("").Watch(ctx, metav1.ListOptions{
 				LabelSelector: common.LabelKeyNumaplaneControllerConfig,
 			})
 			numaLogger.Error(err, "watcher channel closed, restarting watcher")
@@ -78,18 +67,30 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 		switch labelVal {
 
 		case common.LabelValueNumaflowControllerDefinitions:
-			// TODO: only do this if the ConfigMap is in the numaplane-system namespace
+			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
+			if configMap.Namespace != namespace {
+				break
+			}
+
 			handleNumaflowControllerDefinitionsConfigMapEvent(ctx, configMap, event)
 
 		case common.LabelValueUSDEConfig:
-			// TODO: only do this if the ConfigMap is in the numaplane-system namespace
+			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
+			if configMap.Namespace != namespace {
+				break
+			}
+
 			if err := handleUSDEConfigMapEvent(configMap, event); err != nil {
 				numaLogger.Error(err, "error while handling event on USDE ConfigMap")
 			}
 
 		case common.LabelValueNamespaceConfig:
-			// TODO: only do this if the ConfigMap is NOT in the numaplane-system namespace
-			if err := handleNamespaceConfigMapEvent(namespace, configMap, event); err != nil {
+			// Only handle this kind of ConfigMap if it is NOT in the Numaplane namespace
+			if configMap.Namespace == namespace {
+				break
+			}
+
+			if err := handleNamespaceConfigMapEvent(configMap, event); err != nil {
 				numaLogger.WithValues("configMap", configMap).Error(err, "error while handling event on namespace-level ConfigMap")
 			}
 
@@ -146,10 +147,10 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 	return nil
 }
 
-func handleNamespaceConfigMapEvent(namespace string, configMap *corev1.ConfigMap, event watch.Event) error {
+func handleNamespaceConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
 	if event.Type == watch.Added || event.Type == watch.Modified {
 		if configMap == nil || configMap.Data == nil {
-			return fmt.Errorf("no ConfigMap or data field available for Namespace-level Config (namespace: %s)", namespace)
+			return fmt.Errorf("no ConfigMap or data field available for Namespace-level ConfigMap")
 		}
 
 		namespaceConfig := config.NamespaceConfig{}
@@ -158,9 +159,9 @@ func handleNamespaceConfigMapEvent(namespace string, configMap *corev1.ConfigMap
 			return fmt.Errorf("error converting Namespace-level ConfigMap: %v", err)
 		}
 
-		config.GetConfigManagerInstance().UpdateNamespaceConfig(namespace, namespaceConfig)
+		config.GetConfigManagerInstance().UpdateNamespaceConfig(configMap.Namespace, namespaceConfig)
 	} else if event.Type == watch.Deleted {
-		config.GetConfigManagerInstance().UnsetNamespaceConfig(namespace)
+		config.GetConfigManagerInstance().UnsetNamespaceConfig(configMap.Namespace)
 	}
 
 	return nil
