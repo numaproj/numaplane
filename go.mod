@@ -9,7 +9,7 @@ require (
 	github.com/argoproj/gitops-engine v0.7.1-0.20240718175351-6b2984ebc470
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-logr/logr v1.4.1
-	github.com/numaproj/numaflow v1.3.0-rc1
+	github.com/numaproj/numaflow v1.3.0
 	github.com/onsi/ginkgo/v2 v2.14.0
 	github.com/onsi/gomega v1.30.0
 	github.com/rs/zerolog v1.29.0
