@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
@@ -30,6 +32,17 @@ func StartConfigMapWatcher(ctx context.Context, config *rest.Config) error {
 	}
 
 	go watchConfigMaps(ctx, client, string(namespace))
+
+	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get namespaces list: %v", err)
+	}
+
+	for _, ns := range namespaces.Items {
+		if ns.Name != string(namespace) {
+			go watchConfigMaps(ctx, client, ns.Name)
+		}
+	}
 
 	return nil
 }
@@ -63,18 +76,26 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, namespace
 
 		labelVal := configMap.Labels[common.LabelKeyNumaplaneControllerConfig]
 		switch labelVal {
+
 		case common.LabelValueNumaflowControllerDefinitions:
+			// TODO: only do this if the ConfigMap is in the numaplane-system namespace
 			handleNumaflowControllerDefinitionsConfigMapEvent(ctx, configMap, event)
+
 		case common.LabelValueUSDEConfig:
+			// TODO: only do this if the ConfigMap is in the numaplane-system namespace
 			if err := handleUSDEConfigMapEvent(configMap, event); err != nil {
 				numaLogger.Error(err, "error while handling event on USDE ConfigMap")
 			}
+
 		case common.LabelValueNamespaceConfig:
-			if err := handleNamespaceConfigMapEvent(configMap, event); err != nil {
+			// TODO: only do this if the ConfigMap is NOT in the numaplane-system namespace
+			if err := handleNamespaceConfigMapEvent(namespace, configMap, event); err != nil {
 				numaLogger.WithValues("configMap", configMap).Error(err, "error while handling event on namespace-level ConfigMap")
 			}
+
 		default:
 			numaLogger.Errorf(err, "the ConfigMap named '%s' is not supported", configMap.Name)
+
 		}
 	}
 }
@@ -101,11 +122,11 @@ func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, conf
 
 func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
 	if event.Type == watch.Added || event.Type == watch.Modified {
-		usdeConfig := config.USDEConfig{}
-
 		if configMap == nil || configMap.Data == nil {
-			return fmt.Errorf("no ConfigMap or data field available")
+			return errors.New("no ConfigMap or data field available for USDE Config")
 		}
+
+		usdeConfig := config.USDEConfig{}
 
 		err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
 		if err != nil {
@@ -125,25 +146,21 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 	return nil
 }
 
-func handleNamespaceConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) error {
+func handleNamespaceConfigMapEvent(namespace string, configMap *corev1.ConfigMap, event watch.Event) error {
 	if event.Type == watch.Added || event.Type == watch.Modified {
 		if configMap == nil || configMap.Data == nil {
-			return fmt.Errorf("no ConfigMap or data field available")
+			return fmt.Errorf("no ConfigMap or data field available for Namespace-level Config (namespace: %s)", namespace)
 		}
 
-		// TODO: either just get the strategy from ConfigMap and apply it to USDE config
-		// OR
-		// create a separate namespace config struct to hold namespace-level config parameters for future needs
-		strategy := ""
-		// TODO: consider moving "strategy" to a const
-		err := yaml.Unmarshal([]byte(configMap.Data["strategy"]), &strategy)
+		namespaceConfig := config.NamespaceConfig{}
+		err := util.StructToStruct(configMap.Data, &namespaceConfig)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE strategy: %v", err)
+			return fmt.Errorf("error converting Namespace-level ConfigMap: %v", err)
 		}
 
-		// config.GetConfigManagerInstance().UpdateUSDEConfigStrategy(strategy)
+		config.GetConfigManagerInstance().UpdateNamespaceConfig(namespace, namespaceConfig)
 	} else if event.Type == watch.Deleted {
-		// config.GetConfigManagerInstance().UnsetUSDEConfigStrategy()
+		config.GetConfigManagerInstance().UnsetNamespaceConfig(namespace)
 	}
 
 	return nil
