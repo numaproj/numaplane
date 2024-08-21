@@ -11,6 +11,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -51,17 +52,38 @@ func verifyMonoVertexSpec(namespace, name string, f func(numaflowv1.MonoVertexSp
 func verifyMonoVertexReady(namespace, monoVertexName string) {
 
 	document("Verifying that the MonoVertex exists")
-	Eventually(func() error {
-		_, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
-		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
+	verifyMonoVertexStatus(namespace, monoVertexName,
+		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus kubernetes.GenericStatus) bool {
+			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
+		})
 
 	vertexLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex")
 	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex-daemon")
 
 	document("Verifying that the MonoVertex is ready")
-	verifyPodsRunning(namespace, 2, vertexLabelSelector)
+	verifyPodsRunning(namespace, 1, vertexLabelSelector)
 	verifyPodsRunning(namespace, 1, daemonLabelSelector)
+
+}
+
+func verifyMonoVertexStatus(namespace, monoVertexName string, f func(numaflowv1.MonoVertexSpec, kubernetes.GenericStatus) bool) {
+
+	document("verifying MonoVertexStatus")
+	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
+	var retrievedMonoVertexStatus kubernetes.GenericStatus
+	Eventually(func() bool {
+		unstruct, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		if retrievedMonoVertexSpec, err = getMonoVertexSpec(unstruct); err != nil {
+			return false
+		}
+		if retrievedMonoVertexStatus, err = getNumaflowResourceStatus(unstruct); err != nil {
+			return false
+		}
+		return f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
+	}).WithTimeout(testTimeout).Should(BeTrue())
 
 }
 
