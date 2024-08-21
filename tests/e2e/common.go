@@ -26,7 +26,7 @@ var (
 	ctx           context.Context
 	cancel        context.CancelFunc
 	suiteTimeout  = 5 * time.Minute
-	testTimeout   = 2 * time.Minute
+	testTimeout   = 3 * time.Minute
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface

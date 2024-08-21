@@ -65,7 +65,7 @@ func verifyMonoVertexReady(namespace, monoVertexName string) {
 
 }
 
-func updateMonoVertexRolloutInK8S(namespace, name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
+func updateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
 
 	document("updating MonoVertexRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
