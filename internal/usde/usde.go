@@ -1,39 +1,49 @@
 package usde
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
+
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
+
+type UpgradeStrategy = int
 
 const (
-	progressiveStrategyID = "progressive"
-	ppndStrategyID        = "pause-and-drain"
+	UpgradeStrategyNoOp UpgradeStrategy = iota
+	UpgradeStrategyApply
+	UpgradeStrategyPPND
+	UpgradeStrategyProgressive
 )
 
-type USDEStrategy string
+func GetUpgradeStrategy(newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
+	// TTODO:
+	// 0. get usde config from config module
+	// 1. separate each spec from args into 2 specs: one with apply fields and one without (total of 4 objects)
+	// 2. compare specs without the apply fields
+	// 		2a. if there are no differences:
+	// 				2a1. compare the specs with the apply fields
+	// 						- if no differences, return NoOp
+	//						- if differences, return Apply strategy
+	// 		2b. if there are differences,
+	//				2b1. look at user preferred strategy
+	// 						- if PPND, return ppnd
+	//						- otherwise, return progressive
 
-func (s *USDEStrategy) UnmarshalJSON(data []byte) (err error) {
-	// Trim spaces and check length
-	dataStrNoSpaces := strings.TrimSpace(string(data[:]))
-	if len(dataStrNoSpaces) == 0 {
-		return fmt.Errorf("empty strategy (allowed values are: %s or %s)", progressiveStrategyID, ppndStrategyID)
+	// Get USDE Config
+	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
+
+	// Get apply paths based on the spec type (Pipeline, ISBS)
+	applyPaths := []string{}
+	if newSpec.GroupVersionKind() == apiv1.PipelineRolloutGroupVersionKind {
+		applyPaths = usdeConfig.PipelineSpecExcludedPaths
+	} else if newSpec.GroupVersionKind() == apiv1.ISBServiceRolloutGroupVersionKind {
+		applyPaths = usdeConfig.ISBServiceSpecExcludedPaths
 	}
 
-	// Remove the double quotes around the string
-	strategyStr := string(data[1 : len(data)-1])
+	fmt.Println(applyPaths)
 
-	// Make sure the string is one of the possible strategy values
-	if strategyStr != progressiveStrategyID && strategyStr != ppndStrategyID {
-		return fmt.Errorf("invalid strategy %s (allowed values are: %s or %s)", string(data[:]), progressiveStrategyID, ppndStrategyID)
-	}
-
-	var usdeStrategyStr string
-	if err := json.Unmarshal(data, &usdeStrategyStr); err != nil {
-		return err
-	}
-
-	*s = USDEStrategy(usdeStrategyStr)
-
-	return nil
+	return 0, nil
 }

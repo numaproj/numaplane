@@ -8,7 +8,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 
-	"github.com/numaproj/numaplane/internal/usde"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -34,13 +33,8 @@ type NumaflowControllerDefinitionsManager struct {
 	lock          *sync.RWMutex
 }
 
-type USDEConfig struct {
-	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
-	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
-}
-
 type NamespaceConfig struct {
-	UpgradeStrategy usde.USDEStrategy `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
+	UpgradeStrategy USDEUserStrategy `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
 }
 
 var instance *ConfigManager
@@ -200,27 +194,6 @@ func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
 	defer cm.lock.Unlock()
 
 	cm.callbacks = append(cm.callbacks, f)
-}
-
-func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
-
-	cm.usdeConfig = config
-}
-
-func (cm *ConfigManager) UnsetUSDEConfig() {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
-
-	cm.usdeConfig = USDEConfig{}
-}
-
-func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
-
-	return cm.usdeConfig
 }
 
 func (cm *ConfigManager) UpdateNamespaceConfig(namespace string, config NamespaceConfig) {
