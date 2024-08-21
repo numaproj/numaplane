@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: example-namespace
+  labels:
+    numaplane.numaproj.io/config: namespace-level-config
+data:
+  # upgradeStrategy can be either "progressive" or "pause-and-drain"
+  upgradeStrategy: "progressive"
