@@ -267,6 +267,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
+		// TODO: update this controller image when Numaflow v1.3.1 is released
+		//       versions prior to v1.3.0 do not contain the MonoVertex CRD and could lead to issues in future tests
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
 		})
