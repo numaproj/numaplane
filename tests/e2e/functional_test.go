@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -254,27 +255,27 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	// It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 
-	// 	// new NumaflowController spec
-	// 	updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-	// 		Controller: apiv1.Controller{Version: "0.0.6"},
-	// 	}
+		// new NumaflowController spec
+		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: "0.0.6"},
+		}
 
-	// 	updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
-	// 		rollout.Spec = updatedNumaflowControllerSpec
-	// 		return rollout, nil
-	// 	})
+		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+			rollout.Spec = updatedNumaflowControllerSpec
+			return rollout, nil
+		})
 
-	// 	verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-	// 		return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
-	// 	})
+		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
+		})
 
-	// 	verifyNumaflowControllerReady(Namespace)
+		verifyNumaflowControllerReady(Namespace)
 
-	// 	verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
-	// })
+	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
 
