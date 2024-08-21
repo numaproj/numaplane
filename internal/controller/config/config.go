@@ -8,6 +8,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 
+	"github.com/numaproj/numaplane/internal/usde"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -22,6 +23,10 @@ type ConfigManager struct {
 	// USDE Config
 	usdeConfig     USDEConfig
 	usdeConfigLock *sync.RWMutex
+
+	// User Namespace-level Config
+	namespaceConfigMap     map[string]NamespaceConfig
+	namespaceConfigMapLock *sync.RWMutex
 }
 
 type NumaflowControllerDefinitionsManager struct {
@@ -32,6 +37,10 @@ type NumaflowControllerDefinitionsManager struct {
 type USDEConfig struct {
 	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
 	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
+}
+
+type NamespaceConfig struct {
+	UpgradeStrategy usde.USDEStrategy `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
 }
 
 var instance *ConfigManager
@@ -47,8 +56,10 @@ func GetConfigManagerInstance() *ConfigManager {
 				rolloutConfig: map[string]string{},
 				lock:          new(sync.RWMutex),
 			},
-			usdeConfig:     USDEConfig{},
-			usdeConfigLock: new(sync.RWMutex),
+			usdeConfig:             USDEConfig{},
+			usdeConfigLock:         new(sync.RWMutex),
+			namespaceConfigMap:     make(map[string]NamespaceConfig),
+			namespaceConfigMapLock: new(sync.RWMutex),
 		}
 	})
 	return instance
@@ -210,4 +221,25 @@ func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
 	defer cm.usdeConfigLock.Unlock()
 
 	return cm.usdeConfig
+}
+
+func (cm *ConfigManager) UpdateNamespaceConfig(namespace string, config NamespaceConfig) {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
+
+	cm.namespaceConfigMap[namespace] = config
+}
+
+func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
+
+	delete(cm.namespaceConfigMap, namespace)
+}
+
+func (cm *ConfigManager) GetNamespaceConfig(namespace string) NamespaceConfig {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
+
+	return cm.namespaceConfigMap[namespace]
 }
