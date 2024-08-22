@@ -51,7 +51,7 @@ func verifyMonoVertexSpec(namespace, name string, f func(numaflowv1.MonoVertexSp
 
 func verifyMonoVertexReady(namespace, monoVertexName string) {
 
-	document("Verifying that the MonoVertex exists")
+	document("Verifying that the MonoVertex is running")
 	verifyMonoVertexStatus(namespace, monoVertexName,
 		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus kubernetes.GenericStatus) bool {
 			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
