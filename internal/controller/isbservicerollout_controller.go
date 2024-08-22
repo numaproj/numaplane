@@ -294,7 +294,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	} else {
+	} else if isbServiceNeedsUpdating {
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
