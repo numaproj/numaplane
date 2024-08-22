@@ -428,7 +428,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
 			return err
 		}
-	} else {
+	} else if pipelineNeedsToUpdate {
 		if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 			return err
 		}
