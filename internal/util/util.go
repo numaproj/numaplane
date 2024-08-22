@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"strings"
 )
 
 func StructToStruct(src any, dest any) error {
@@ -79,4 +80,172 @@ func removeNullValuesFromJSONMap(m map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+// TODO: fix, cleanup, improve errors, and test everything below this line
+
+func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]any, map[string]any, error) {
+	var objAsMap map[string]any
+	if err := json.Unmarshal(obj, &objAsMap); err != nil {
+		return nil, nil, err
+	}
+
+	onlyPaths := make(map[string]any)
+	withoutPaths, err := clone(objAsMap)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, path := range paths {
+		pathTokens := strings.Split(path, pathSeparator)
+
+		if _, err := extractPath(onlyPaths, withoutPaths, pathTokens); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	cleanUp(onlyPaths)
+	cleanUp(withoutPaths)
+
+	return onlyPaths, withoutPaths, nil
+}
+
+func clone(obj map[string]any) (map[string]any, error) {
+	var clone map[string]any
+
+	if err := StructToStruct(obj, &clone); err != nil {
+		return nil, err
+	}
+
+	return clone, nil
+}
+
+func cleanUp(obj map[string]any) {
+	for key, val := range obj {
+		switch typedVal := val.(type) {
+		case map[string]any:
+			cleanUp(typedVal)
+
+			if len(typedVal) == 0 {
+				delete(obj, key)
+			}
+
+		case []any:
+			for i := 0; i < len(typedVal); i++ {
+				if elemMap, ok := typedVal[i].(map[string]any); ok {
+					cleanUp(elemMap)
+
+					if len(elemMap) == 0 {
+						typedVal = append(typedVal[:i], typedVal[i+1:]...)
+						i--
+					}
+				} else if typedVal[i] == nil {
+					typedVal = append(typedVal[:i], typedVal[i+1:]...)
+					i--
+				}
+			}
+
+			if len(typedVal) == 0 {
+				delete(obj, key)
+			} else {
+				obj[key] = typedVal
+			}
+
+		case nil:
+			delete(obj, key)
+
+		}
+	}
+}
+
+func extractPath(currDest, currSrc map[string]any, pathTokens []string) (bool, error) {
+	if len(pathTokens) == 0 {
+		return false, nil
+	}
+
+	key := pathTokens[0]
+
+	val, exists := currSrc[key]
+	if !exists {
+		return true, nil
+	}
+
+	switch nextSrc := val.(type) {
+	case map[string]any:
+		if _, exists := currDest[key]; !exists {
+			currDest[key] = make(map[string]any)
+		}
+
+		if len(pathTokens) == 1 {
+			currDest[key] = nextSrc
+			delete(currSrc, key)
+			// TODO: should we do this?
+			// if len(currSrc) == 0 {
+			// 	return true, nil
+			// }
+			return false, nil
+		}
+
+		canDeleteParent, err := extractPath(currDest[key].(map[string]any), nextSrc, pathTokens[1:])
+		if err != nil {
+			return false, err
+		}
+
+		// delete parent recursively if empty
+		if canDeleteParent {
+			delete(currSrc, key)
+
+			if len(currSrc) == 0 {
+				return true, nil
+			}
+		}
+
+	case []any:
+		if _, exists := currDest[key]; !exists {
+			currDest[key] = make([]any, len(nextSrc))
+		}
+
+		for i := range nextSrc {
+			switch nextSrcElem := nextSrc[i].(type) {
+			case map[string]any:
+				nextDestArr := currDest[key].([]any)
+				if nextDestArr[i] == nil {
+					nextDestArr[i] = make(map[string]any)
+				}
+
+				if len(pathTokens) == 1 {
+					nextDestArr[i] = nextSrcElem
+					// TODO: should we do this?
+					// delete(currSrc, key)
+					// if len(currSrc) == 0 {
+					// 	return true, nil
+					// }
+					return false, nil
+				}
+
+				_, err := extractPath(nextDestArr[i].(map[string]any), nextSrcElem, pathTokens[1:])
+				if err != nil {
+					return false, err
+				}
+
+			case []any:
+				// TODO: implement for completenes, but it should not be necessary in this context
+
+			default:
+				currDest[key] = nextSrc
+				return false, nil
+			}
+		}
+
+	default:
+		currDest[key] = val
+		delete(currSrc, key)
+
+		// If empty, let previous caller know that the parent can be deleted
+		if len(currSrc) == 0 {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

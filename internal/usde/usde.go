@@ -1,49 +1,64 @@
 package usde
 
 import (
-	"fmt"
+	"reflect"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 )
 
 type UpgradeStrategy = int
 
 const (
-	UpgradeStrategyNoOp UpgradeStrategy = iota
+	UpgradeStrategyError UpgradeStrategy = iota - 1
+	UpgradeStrategyNoOp
 	UpgradeStrategyApply
 	UpgradeStrategyPPND
 	UpgradeStrategyProgressive
 )
 
 func GetUpgradeStrategy(newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
-	// TTODO:
-	// 0. get usde config from config module
-	// 1. separate each spec from args into 2 specs: one with apply fields and one without (total of 4 objects)
-	// 2. compare specs without the apply fields
-	// 		2a. if there are no differences:
-	// 				2a1. compare the specs with the apply fields
-	// 						- if no differences, return NoOp
-	//						- if differences, return Apply strategy
-	// 		2b. if there are differences,
-	//				2b1. look at user preferred strategy
-	// 						- if PPND, return ppnd
-	//						- otherwise, return progressive
-
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
 	// Get apply paths based on the spec type (Pipeline, ISBS)
 	applyPaths := []string{}
-	if newSpec.GroupVersionKind() == apiv1.PipelineRolloutGroupVersionKind {
+	if reflect.DeepEqual(newSpec.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
 		applyPaths = usdeConfig.PipelineSpecExcludedPaths
-	} else if newSpec.GroupVersionKind() == apiv1.ISBServiceRolloutGroupVersionKind {
+	} else if reflect.DeepEqual(newSpec.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
 		applyPaths = usdeConfig.ISBServiceSpecExcludedPaths
 	}
 
-	fmt.Println(applyPaths)
+	// Split newSpec
+	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, ".")
+	if err != nil {
+		return UpgradeStrategyError, err
+	}
 
-	return 0, nil
+	// Split existingSpec
+	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, ".")
+	if err != nil {
+		return UpgradeStrategyError, err
+	}
+
+	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
+	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
+		userUpgradeStrategy := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace).UpgradeStrategy
+		if userUpgradeStrategy == config.PPNDStrategyID {
+			return UpgradeStrategyPPND, nil
+		}
+
+		return UpgradeStrategyProgressive, nil
+	}
+
+	// Compare specs with the apply fields
+	if !reflect.DeepEqual(newSpecOnlyApplyPaths, existingSpecOnlyApplyPaths) {
+		return UpgradeStrategyApply, nil
+	}
+
+	// Return NoOp if no differences were found between the new and existing specs
+	return UpgradeStrategyNoOp, nil
 }
