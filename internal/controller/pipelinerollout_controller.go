@@ -410,9 +410,9 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	// TTODO:
-	// usde.GetUpgradeStrategy(newPipelineDef, existingPipelineDef) => do-nothing, direct-apply, ppnd?
-	// based on function returned value, perform appropriate operations below and/or pass the value around
+	// TODO: based on function returned value, perform appropriate operations below and/or pass the value around
+	// strategy, err := usde.GetUpgradeStrategy(newPipelineDef, existingPipelineDef)
+	// (remember to apply this also to ISBSvc)
 	// INSTEAD OF:
 	// Does pipeline spec need to be updated?
 	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
