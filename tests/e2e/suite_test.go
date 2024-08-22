@@ -68,6 +68,10 @@ var _ = BeforeSuite(func() {
 	Expect(pipelineRolloutClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
+	monoVertexRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().MonoVertexRollouts(Namespace)
+	Expect(monoVertexRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
 	isbServiceRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().ISBServiceRollouts(Namespace)
 	Expect(isbServiceRolloutClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
