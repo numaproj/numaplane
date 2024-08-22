@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	progressiveStrategyID = "progressive"
-	ppndStrategyID        = "pause-and-drain"
+	ProgressiveStrategyID = "progressive"
+	PPNDStrategyID        = "pause-and-drain"
 )
 
 type USDEUserStrategy string
@@ -43,15 +43,15 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 	// Trim spaces and check length
 	dataStrNoSpaces := strings.TrimSpace(string(data[:]))
 	if len(dataStrNoSpaces) == 0 {
-		return fmt.Errorf("empty strategy (allowed values are: %s or %s)", progressiveStrategyID, ppndStrategyID)
+		return fmt.Errorf("empty strategy (allowed values are: %s or %s)", ProgressiveStrategyID, PPNDStrategyID)
 	}
 
 	// Remove the double quotes around the string
 	strategyStr := string(data[1 : len(data)-1])
 
 	// Make sure the string is one of the possible strategy values
-	if strategyStr != progressiveStrategyID && strategyStr != ppndStrategyID {
-		return fmt.Errorf("invalid strategy %s (allowed values are: %s or %s)", string(data[:]), progressiveStrategyID, ppndStrategyID)
+	if strategyStr != ProgressiveStrategyID && strategyStr != PPNDStrategyID {
+		return fmt.Errorf("invalid strategy %s (allowed values are: %s or %s)", string(data[:]), ProgressiveStrategyID, PPNDStrategyID)
 	}
 
 	var usdeUserStrategyStr string
