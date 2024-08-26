@@ -84,14 +84,22 @@ func removeNullValuesFromJSONMap(m map[string]interface{}) bool {
 
 // TODO: fix, cleanup, improve errors, and test everything below this line
 
+// SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
+// One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
 func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]any, map[string]any, error) {
 	var objAsMap map[string]any
 	if err := json.Unmarshal(obj, &objAsMap); err != nil {
 		return nil, nil, err
 	}
 
-	onlyPaths := make(map[string]any)
-	withoutPaths, err := clone(objAsMap)
+	return SplitMap(objAsMap, paths, pathSeparator)
+}
+
+// SplitMap returns 2 maps from a given map and a slice of paths.
+// One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
+func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
+	onlyPaths = make(map[string]any)
+	withoutPaths, err = clone(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,17 +107,18 @@ func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]a
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
-		if _, err := extractPath(onlyPaths, withoutPaths, pathTokens); err != nil {
+		if err := extractPath(withoutPaths, onlyPaths, pathTokens); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	cleanUp(onlyPaths)
-	cleanUp(withoutPaths)
+	cleanup(onlyPaths)
+	cleanup(withoutPaths)
 
 	return onlyPaths, withoutPaths, nil
 }
 
+// clone returns a clone of the given map
 func clone(obj map[string]any) (map[string]any, error) {
 	var clone map[string]any
 
@@ -120,11 +129,12 @@ func clone(obj map[string]any) (map[string]any, error) {
 	return clone, nil
 }
 
-func cleanUp(obj map[string]any) {
+// cleanup removes nil values, empty maps, and empty arrays from the given object
+func cleanup(obj map[string]any) {
 	for key, val := range obj {
 		switch typedVal := val.(type) {
 		case map[string]any:
-			cleanUp(typedVal)
+			cleanup(typedVal)
 
 			if len(typedVal) == 0 {
 				delete(obj, key)
@@ -133,7 +143,7 @@ func cleanUp(obj map[string]any) {
 		case []any:
 			for i := 0; i < len(typedVal); i++ {
 				if elemMap, ok := typedVal[i].(map[string]any); ok {
-					cleanUp(elemMap)
+					cleanup(elemMap)
 
 					if len(elemMap) == 0 {
 						typedVal = append(typedVal[:i], typedVal[i+1:]...)
@@ -158,94 +168,89 @@ func cleanUp(obj map[string]any) {
 	}
 }
 
-func extractPath(currDest, currSrc map[string]any, pathTokens []string) (bool, error) {
+// mergeMaps recursively merge the right map into the left map without replacing any key that already exists in the left map
+func mergeMaps(left, right map[string]any) map[string]any {
+	for key, rightVal := range right {
+		if leftVal, present := left[key]; present {
+			left[key] = mergeMaps(leftVal.(map[string]any), rightVal.(map[string]any))
+		} else {
+			left[key] = rightVal
+		}
+	}
+	return left
+}
+
+// extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
+func extractPath(src, dst map[string]any, pathTokens []string) error {
+	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
-		return false, nil
+		return nil
 	}
 
 	key := pathTokens[0]
 
-	val, exists := currSrc[key]
+	srcVal, exists := src[key]
 	if !exists {
-		return true, nil
+		return nil
 	}
 
-	switch nextSrc := val.(type) {
+	// Last path token sets the value or merges maps
+	if len(pathTokens) == 1 {
+		switch dst[key].(type) {
+		case map[string]any:
+			mergeMaps(dst[key].(map[string]any), src[key].(map[string]any))
+		default:
+			dst[key] = src[key]
+		}
+
+		delete(src, key)
+		return nil
+	}
+
+	switch nextSrc := srcVal.(type) {
 	case map[string]any:
-		if _, exists := currDest[key]; !exists {
-			currDest[key] = make(map[string]any)
+		if _, exists := dst[key]; !exists {
+			dst[key] = make(map[string]any)
 		}
 
-		if len(pathTokens) == 1 {
-			currDest[key] = nextSrc
-			delete(currSrc, key)
-			// TODO: should we do this?
-			// if len(currSrc) == 0 {
-			// 	return true, nil
-			// }
-			return false, nil
-		}
-
-		canDeleteParent, err := extractPath(currDest[key].(map[string]any), nextSrc, pathTokens[1:])
+		err := extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:])
 		if err != nil {
-			return false, err
-		}
-
-		// delete parent recursively if empty
-		if canDeleteParent {
-			delete(currSrc, key)
-
-			if len(currSrc) == 0 {
-				return true, nil
-			}
+			return err
 		}
 
 	case []any:
-		if _, exists := currDest[key]; !exists {
-			currDest[key] = make([]any, len(nextSrc))
+		if _, exists := dst[key]; !exists {
+			dst[key] = make([]any, len(nextSrc))
 		}
 
+		// Loop throught each slice element to extract paths inside slice of objects
 		for i := range nextSrc {
 			switch nextSrcElem := nextSrc[i].(type) {
 			case map[string]any:
-				nextDestArr := currDest[key].([]any)
+				nextDestArr := dst[key].([]any)
 				if nextDestArr[i] == nil {
 					nextDestArr[i] = make(map[string]any)
 				}
 
-				if len(pathTokens) == 1 {
-					nextDestArr[i] = nextSrcElem
-					// TODO: should we do this?
-					// delete(currSrc, key)
-					// if len(currSrc) == 0 {
-					// 	return true, nil
-					// }
-					return false, nil
-				}
-
-				_, err := extractPath(nextDestArr[i].(map[string]any), nextSrcElem, pathTokens[1:])
+				err := extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:])
 				if err != nil {
-					return false, err
+					return err
 				}
 
 			case []any:
-				// TODO: implement for completenes, but it should not be necessary in this context
+				// TODO: this should not be necessary in this context (not many array of arrays in k8s yaml definitions),
+				// but implement it for completeness (low priority)
 
 			default:
-				currDest[key] = nextSrc
-				return false, nil
+				dst[key] = nextSrc
+				return nil
 			}
 		}
 
 	default:
-		currDest[key] = val
-		delete(currSrc, key)
-
-		// If empty, let previous caller know that the parent can be deleted
-		if len(currSrc) == 0 {
-			return true, nil
-		}
+		dst[key] = srcVal
+		delete(src, key)
 	}
 
-	return false, nil
+	return nil
 }
