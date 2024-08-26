@@ -394,6 +394,11 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline := existingPipeline.DeepCopy()
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
+
+	existingU, _ := kubernetes.ObjectToUnstructured(existingPipeline)
+	newU, _ := kubernetes.ObjectToUnstructured(newPipeline)
+	resultU, _ := kubernetes.ObjectToUnstructured(resultPipeline)
+	fmt.Printf("deletethis: mergePipeline(): existingPipeline=%+v, newPipeline=%+v, resultPipeline=%+v\n", existingU.Object, newU, resultU)
 	return resultPipeline
 }
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
@@ -503,6 +508,10 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
+	var status kubernetes.GenericStatus
+	if err := json.Unmarshal(existingPipelineDef.Status.Raw, &status); err != nil {
+		return nil, fmt.Errorf("failed to convert existing Pipeline status %q into GenericStatus type, err=%v", string(existingPipelineDef.Status.Raw), err)
+	}
 
 	// is the Pipeline currently being reconciled?
 	pipelineUpdating, err := pipelineIsUpdating(pipelineRollout, newPipelineDef, existingPipelineDef)
@@ -540,7 +549,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
+	shouldBePaused := ((pipelineUpdateRequiresPause || externalPauseRequest) && !unpausible) || specBasedPause
 	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
 		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
 

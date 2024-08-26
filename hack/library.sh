@@ -29,7 +29,7 @@ function warning() {
 
 function make_fake_paths() {
   FAKE_GOPATH="$(mktemp -d)"
-  trap 'rm -rf ${FAKE_GOPATH}' EXIT
+  trap 'sudo rm -rf ${FAKE_GOPATH}' EXIT
   FAKE_REPOPATH="${FAKE_GOPATH}/src/github.com/numaproj/numaplane"
   mkdir -p "$(dirname "${FAKE_REPOPATH}")" && ln -s "${REPO_ROOT}" "${FAKE_REPOPATH}"
 }
