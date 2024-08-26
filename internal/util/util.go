@@ -29,13 +29,14 @@ func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}
 	bNoNulls := make(map[string]interface{})
 	maps.Copy(bNoNulls, b)
 
-	removeNullValuesFromMap(aNoNulls)
-	removeNullValuesFromMap(bNoNulls)
+	removeNullValuesFromJSONMap(aNoNulls)
+	removeNullValuesFromJSONMap(bNoNulls)
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
 // recursively remove any nulls, empty strings, empty maps, and empty arrays from the map
-func removeNullValuesFromMap(m map[string]interface{}) bool {
+// the types that we look for are the ones that json.Unmarshal() uses
+func removeNullValuesFromJSONMap(m map[string]interface{}) bool {
 
 	for k, v := range m {
 		if v == nil {
@@ -44,22 +45,7 @@ func removeNullValuesFromMap(m map[string]interface{}) bool {
 			if stringValue == "" {
 				delete(m, k)
 			}
-		} else if intValue, ok := v.(int); ok {
-			if intValue == 0 {
-				delete(m, k)
-			}
-		} else if intValue, ok := v.(int32); ok {
-			if intValue == 0 {
-				delete(m, k)
-			}
-		} else if intValue, ok := v.(int64); ok {
-			if intValue == 0 {
-				delete(m, k)
-			}
-		} else if floatValue, ok := v.(float32); ok {
-			if floatValue == 0 {
-				delete(m, k)
-			}
+			// scalar numbers seem to use float64:
 		} else if floatValue, ok := v.(float64); ok {
 			if floatValue == 0 {
 				delete(m, k)
@@ -69,7 +55,7 @@ func removeNullValuesFromMap(m map[string]interface{}) bool {
 				delete(m, k)
 			}
 		} else if nestedMap, ok := v.(map[string]interface{}); ok {
-			removeNullValuesFromMap(nestedMap)
+			removeNullValuesFromJSONMap(nestedMap)
 			if len(nestedMap) == 0 {
 				delete(m, k)
 			}
@@ -77,7 +63,7 @@ func removeNullValuesFromMap(m map[string]interface{}) bool {
 			allMapsEmpty := true
 			for _, sliceElem := range nestedSlice {
 				if asMap, ok := sliceElem.(map[string]interface{}); ok {
-					removeNullValuesFromMap(asMap)
+					removeNullValuesFromJSONMap(asMap)
 					if len(asMap) != 0 {
 						allMapsEmpty = false
 					}
