@@ -2,7 +2,6 @@ package util
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -43,7 +42,10 @@ var inputJson string = `
 		"nestedMapDelete":
 		{
 			"innerMapDelete": {}
-		}
+		},
+		"stringKeyWithEmptyValue": "",
+		"intKeyWithZeroValue": 0,
+		"boolKeyWithZeroValue": false
 	}
 
 }
@@ -75,9 +77,7 @@ var outputJson string = `
 func Test_removeNullValuesFromMap(t *testing.T) {
 	inputMap := make(map[string]interface{})
 	_ = json.Unmarshal([]byte(inputJson), &inputMap)
-	fmt.Printf("before removing nulls: %v", inputMap)
-	removeNullValuesFromMap(inputMap)
-	fmt.Printf("after removing nulls: %v", inputMap)
+	removeNullValuesFromJSONMap(inputMap)
 
 	outputMap := make(map[string]interface{})
 	_ = json.Unmarshal([]byte(outputJson), &outputMap)
