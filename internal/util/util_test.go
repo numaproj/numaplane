@@ -44,7 +44,9 @@ var inputJson string = `
 		{
 			"innerMapDelete": {}
 		},
-		"keyWithEmptyValue": ""
+		"stringKeyWithEmptyValue": "",
+		"intKeyWithZeroValue": 0,
+		"boolKeyWithZeroValue": false
 	}
 
 }

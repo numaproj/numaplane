@@ -44,6 +44,30 @@ func removeNullValuesFromMap(m map[string]interface{}) bool {
 			if stringValue == "" {
 				delete(m, k)
 			}
+		} else if intValue, ok := v.(int); ok {
+			if intValue == 0 {
+				delete(m, k)
+			}
+		} else if intValue, ok := v.(int32); ok {
+			if intValue == 0 {
+				delete(m, k)
+			}
+		} else if intValue, ok := v.(int64); ok {
+			if intValue == 0 {
+				delete(m, k)
+			}
+		} else if floatValue, ok := v.(float32); ok {
+			if floatValue == 0 {
+				delete(m, k)
+			}
+		} else if floatValue, ok := v.(float64); ok {
+			if floatValue == 0 {
+				delete(m, k)
+			}
+		} else if boolValue, ok := v.(bool); ok {
+			if !boolValue {
+				delete(m, k)
+			}
 		} else if nestedMap, ok := v.(map[string]interface{}); ok {
 			removeNullValuesFromMap(nestedMap)
 			if len(nestedMap) == 0 {
