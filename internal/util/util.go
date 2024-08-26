@@ -34,8 +34,9 @@ func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
-// recursively remove any nulls, empty strings, empty maps, and empty arrays from the map
-// the types that we look for are the ones that json.Unmarshal() uses
+// recursively remove any zero values from the map including null references, empty strings, numbers that are zero,
+// empty maps, and empty arrays from the map
+// (the types that we look for are the ones that json.Unmarshal() uses)
 func removeNullValuesFromJSONMap(m map[string]interface{}) bool {
 
 	for k, v := range m {
