@@ -43,7 +43,8 @@ var inputJson string = `
 		"nestedMapDelete":
 		{
 			"innerMapDelete": {}
-		}
+		},
+		"keyWithEmptyValue": ""
 	}
 
 }
