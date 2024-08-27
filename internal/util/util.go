@@ -301,59 +301,6 @@ func cleanup(obj map[string]any) {
 	}
 }
 
-// // sliceToInterfaceSlice converts a typed slice into a slice of any type
-// func sliceToInterfaceSlice(slice any) ([]any, error) {
-// 	s := reflect.ValueOf(slice)
-// 	if s.Kind() != reflect.Slice {
-// 		return nil, errors.New("not a slice type")
-// 	}
-
-// 	newSlice := make([]any, s.Len())
-// 	for i := 0; i < s.Len(); i++ {
-// 		newSlice[i] = s.Index(i).Interface()
-// 	}
-
-// 	return newSlice, nil
-// }
-
-// mergeMaps recursively merge the right map into the left map without replacing any key that already exists in the left map
-func mergeMaps(a, b map[string]any) error {
-	for key, bVal := range b {
-		if aVal, ok := a[key]; ok {
-			if reflect.TypeOf(aVal).Kind() == reflect.Map && reflect.TypeOf(bVal).Kind() == reflect.Map {
-				valAMap := aVal.(map[string]any)
-				valBMap := bVal.(map[string]any)
-
-				err := mergeMaps(valAMap, valBMap)
-				if err != nil {
-					return err
-				}
-
-				// } else if reflect.TypeOf(aVal).Kind() == reflect.Slice && reflect.TypeOf(bVal).Kind() == reflect.Slice {
-				// 	valASlice, err := sliceToInterfaceSlice(aVal)
-				// 	if err != nil {
-				// 		return err
-				// 	}
-
-				// 	valBSlice, err := sliceToInterfaceSlice(bVal)
-				// 	if err != nil {
-				// 		return err
-				// 	}
-
-				// 	// Slice b is appended to slice a (duplicates and sub-values/maps are not considered for merging)
-				// 	a[key] = append(valASlice, valBSlice...)
-			} else {
-				// Overwrite the primitive type or any other type in a with value from b
-				a[key] = bVal
-			}
-		} else {
-			a[key] = bVal
-		}
-	}
-
-	return nil
-}
-
 // extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
 func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
@@ -370,19 +317,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 
 	// Last path token sets the value or merges maps
 	if len(pathTokens) == 1 {
-		// switch dst[key].(type) {
-		// case map[string]any:
-		// 	// TTODO: why is this necessary???
-		// 	err := mergeMaps(dst[key].(map[string]any), src[key].(map[string]any))
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// default:
-		// 	dst[key] = src[key]
-		// }
-
 		dst[key] = src[key]
-
 		delete(src, key)
 		return nil
 	}
