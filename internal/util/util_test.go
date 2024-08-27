@@ -298,12 +298,11 @@ func Test_removeNullValuesFromMap(t *testing.T) {
 	}
 }
 
-// JSON Splitter logic tests below this line
-// TODO: add more tests, cleanup, change as needed
+// START of JSON Splitter logic tests
 
 const pathSeparator = "."
 
-var jsonObj = []byte(`{
+var jsonObjSimple = []byte(`{
 	"map": {
 		"field": {
 			"inner": 123,
@@ -315,7 +314,7 @@ var jsonObj = []byte(`{
 	}
 }`)
 
-var jsonObjCompl = []byte(`{
+var jsonObjComplex = []byte(`{
 	"address": {
 		"city": "New York",
 		"country": "USA",
@@ -347,178 +346,156 @@ var jsonObjCompl = []byte(`{
 	]
 }`)
 
-func Test_SplitObject_1(t *testing.T) {
+func compactJSON(t *testing.T, jsonObj []byte) *bytes.Buffer {
+	compactedObj := new(bytes.Buffer)
+	if err := json.Compact(compactedObj, jsonObj); err != nil {
+		assert.NoError(t, err)
+	}
+
+	return compactedObj
+}
+
+func mapToBytesBuffer(t *testing.T, obj map[string]any) *bytes.Buffer {
+	raw, err := json.Marshal(obj)
+	assert.NoError(t, err)
+
+	return compactJSON(t, raw)
+}
+
+func Test_SplitObject_Simple_EmptyPathsSlice(t *testing.T) {
+	paths := []string{}
+
+	expectedOnlyPaths := compactJSON(t, []byte(`{}`))
+
+	expectedWithoutPaths := compactJSON(t, jsonObjSimple)
+
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
+	assert.NoError(t, err)
+
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
+}
+
+func Test_SplitObject_Simple_NilPathsSlice(t *testing.T) {
+	var paths []string
+
+	expectedOnlyPaths := compactJSON(t, []byte(`{}`))
+
+	expectedWithoutPaths := compactJSON(t, jsonObjSimple)
+
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
+	assert.NoError(t, err)
+
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
+}
+
+func Test_SplitObject_Simple_SinglePath_Level3(t *testing.T) {
 	paths := []string{"map.field.inner"}
 
-	expectedOnlyPaths := []byte(`{
+	expectedOnlyPaths := compactJSON(t, []byte(`{
 		"map": {
 			"field": {
 				"inner": 123
 			}
 		}
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	expectedWithoutPaths := []byte(`{
+	expectedWithoutPaths := compactJSON(t, []byte(`{
 		"map": {
 			"field": {
-				"inner2": 456
+				"inner2": "inner2val"
 			},
 			"field2": {
 				"x": 324
 			}
 		}
-	}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObj, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
-func Test_SplitObject_2(t *testing.T) {
+func Test_SplitObject_Simple_SinglePath_Level2(t *testing.T) {
 	paths := []string{"map.field"}
 
-	expectedOnlyPaths := []byte(`{
+	expectedOnlyPaths := compactJSON(t, []byte(`{
 		"map": {
 			"field": {
 				"inner": 123,
-				"inner2": 456
+				"inner2": "inner2val"
 			}
 		}
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	expectedWithoutPaths := []byte(`{
+	expectedWithoutPaths := compactJSON(t, []byte(`{
 		"map": {
 			"field2": {
 				"x": 324
 			}
 		}
-	}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObj, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
-func Test_SplitObject_3(t *testing.T) {
+func Test_SplitObject_Simple_SinglePath_Level1(t *testing.T) {
 	paths := []string{"map"}
 
-	expectedOnlyPaths := []byte(`{
-		"map": {
-			"field": {
-				"inner": 123,
-				"inner2": 456
-			},
-			"field2": {
-				"x": 324
-			}
-		}
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	expectedOnlyPaths := compactJSON(t, jsonObjSimple)
 
-	expectedWithoutPaths := []byte(`{}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	expectedWithoutPaths := compactJSON(t, []byte(`{}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObj, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
-func Test_SplitObject_4(t *testing.T) {
-	paths := []string{"map", "map.field"}
-
-	expectedOnlyPaths := []byte(`{
-		"map": {
-			"field": {
-				"inner": 123,
-				"inner2": 456
-			},
-			"field2": {
-				"x": 324
-			}
-		}
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
-
-	expectedWithoutPaths := []byte(`{}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
-
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObj, paths, pathSeparator)
-	assert.NoError(t, err)
-
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
-}
-
-func Test_SplitObject_5(t *testing.T) {
+func Test_SplitObject_Simple_MultiplePaths_ShouldMerge(t *testing.T) {
 	paths := []string{"map.field.inner2", "map"}
 
-	expectedOnlyPaths := []byte(`{
-		"map": {
-			"field": {
-				"inner": 123,
-				"inner2": 456
-			},
-			"field2": {
-				"x": 324
-			}
-		}
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	expectedOnlyPaths := compactJSON(t, jsonObjSimple)
 
-	expectedWithoutPaths := []byte(`{}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	expectedWithoutPaths := compactJSON(t, []byte(`{}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObj, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
-func Test_SplitObject_6(t *testing.T) {
+func Test_SplitObject_Complex_MultiplePaths_Level1(t *testing.T) {
 	paths := []string{"name", "age", "address"}
 
-	expectedOnlyPaths := []byte(`{
+	expectedOnlyPaths := compactJSON(t, []byte(`{
 		"address": {
 			"city": "New York",
 			"country": "USA",
@@ -532,13 +509,9 @@ func Test_SplitObject_6(t *testing.T) {
 		},
 		"age": 30,
 		"name": "John"
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	expectedWithoutPaths := []byte(`{
+	expectedWithoutPaths := compactJSON(t, []byte(`{
 		"arrArrObjs": [[
 			{"p": 3, "t": 1},
 			{"q": 4, "s": 2}
@@ -551,26 +524,25 @@ func Test_SplitObject_6(t *testing.T) {
 		"projects": [
 			{"name": "Project2", "other": [{"x": "x2"}, {"y": "y2"}], "status": "completed", "vals": [1,2,3]},
 			{"name": "Project3", "other": [{"y": "y3"}]},
-			{"name": "Project3", "other": [{"z": "z4"}]},
+			{"name": "Project4", "other": [{"z": "z4"}]},
 			{"name": "Project1",  "other": [{"x": "x1"}, {"w": "w1", "y": "y1"}, {"t": "t1"}, {"z": "z1"}],"status": "in progress", "vals": [4,5,6,7]}
 		]
-	}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObjCompl, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjComplex, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
-func Test_SplitObject_7(t *testing.T) {
+func Test_SplitObject_Complex_MultiplePaths_LevelN(t *testing.T) {
 	paths := []string{"name", "address.city", "address.postal.something", "projects.status", "projects.other.y", "address.postal.region", "projects.vals", "projects.name"}
 
-	expectedOnlyPaths := []byte(`{
+	expectedOnlyPaths := compactJSON(t, []byte(`{
 		"address": {
 			"city": "New York",
 			"postal": {
@@ -584,16 +556,12 @@ func Test_SplitObject_7(t *testing.T) {
 		"projects": [
 			{"name": "Project2", "other": [{"y": "y2"}], "status": "completed", "vals": [1,2,3]},
 			{"name": "Project3", "other": [{"y": "y3"}]},
-			{"name": "Project3"},
+			{"name": "Project4"},
 			{"name": "Project1", "other": [{"y": "y1"}], "status": "in progress", "vals": [4,5,6,7]}
 		]
-	}`)
-	expectedOnlyPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedOnlyPathsClean, expectedOnlyPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	expectedWithoutPaths := []byte(`{
+	expectedWithoutPaths := compactJSON(t, []byte(`{
 		"address": {
 			"country": "USA",
 			"postal": {
@@ -615,15 +583,16 @@ func Test_SplitObject_7(t *testing.T) {
 			{"other": [{"z": "z4"}]},
 			{"other": [{"x": "x1"}, {"w": "w1"}, {"t": "t1"}, {"z": "z1"}]}
 		]
-	}`)
-	expectedWithoutPathsClean := new(bytes.Buffer)
-	if err := json.Compact(expectedWithoutPathsClean, expectedWithoutPaths); err != nil {
-		assert.NoError(t, err)
-	}
+	}`))
 
-	actualOnlyPaths, actualWithoutPaths, err := SplitObject(jsonObjCompl, paths, pathSeparator)
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjComplex, paths, pathSeparator)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedOnlyPathsClean, actualOnlyPaths)
-	assert.Equal(t, expectedWithoutPathsClean, actualWithoutPaths)
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
+
+// END of JSON Splitter logic tests
