@@ -1,7 +1,10 @@
 package usde
 
 import (
+<<<<<<< HEAD
 	"context"
+=======
+>>>>>>> c61c5f4 (initial usde unit tests (WIP))
 	"encoding/json"
 	"testing"
 	"time"
