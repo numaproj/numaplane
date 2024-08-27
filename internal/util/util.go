@@ -206,8 +206,6 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 	return nil
 }
 
-// TODO: fix, cleanup, improve errors, and test everything below this line
-
 // SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
 func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]any, map[string]any, error) {
@@ -238,9 +236,7 @@ func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPat
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
-		if err := extractPath(withoutPaths, onlyPaths, pathTokens); err != nil {
-			return nil, nil, err
-		}
+		extractPath(withoutPaths, onlyPaths, pathTokens)
 	}
 
 	cleanup(onlyPaths)
@@ -312,17 +308,17 @@ func mergeMaps(left, right map[string]any) map[string]any {
 }
 
 // extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
-func extractPath(src, dst map[string]any, pathTokens []string) error {
+func extractPath(src, dst map[string]any, pathTokens []string) {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
-		return nil
+		return
 	}
 
 	key := pathTokens[0]
 
 	srcVal, exists := src[key]
 	if !exists {
-		return nil
+		return
 	}
 
 	// Last path token sets the value or merges maps
@@ -335,7 +331,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 		}
 
 		delete(src, key)
-		return nil
+		return
 	}
 
 	switch nextSrc := srcVal.(type) {
@@ -344,10 +340,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 			dst[key] = make(map[string]any)
 		}
 
-		err := extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:])
-		if err != nil {
-			return err
-		}
+		extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:])
 
 	case []any:
 		if _, exists := dst[key]; !exists {
@@ -363,10 +356,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 					nextDestArr[i] = make(map[string]any)
 				}
 
-				err := extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:])
-				if err != nil {
-					return err
-				}
+				extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:])
 
 			case []any:
 				// TODO: this should not be necessary in this context (not many array of arrays in k8s yaml definitions),
@@ -374,7 +364,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 
 			default:
 				dst[key] = nextSrc
-				return nil
+				return
 			}
 		}
 
@@ -382,6 +372,4 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 		dst[key] = srcVal
 		delete(src, key)
 	}
-
-	return nil
 }
