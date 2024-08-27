@@ -104,6 +104,13 @@ func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPat
 		return nil, nil, err
 	}
 
+	// In case there are no paths, return an empty map and the original map.
+	// This is in place so that this logic can be bypassed at runtime by providing
+	// an empty slice of paths.
+	if len(paths) == 0 {
+		return onlyPaths, withoutPaths, nil
+	}
+
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
