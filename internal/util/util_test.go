@@ -262,12 +262,46 @@ func Test_SplitObject_Simple_SinglePath_Level1(t *testing.T) {
 	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
 }
 
+// TTODO: rename this cause there is no more "merging"
 func Test_SplitObject_Simple_MultiplePaths_ShouldMerge(t *testing.T) {
-	paths := []string{"map.field.inner2", "map"}
+	// TTODO: maybe do not allow users to do this or start from the right first by sorting the array???
+	paths := []string{"map.field.inner2", "map", "map.field"}
 
 	expectedOnlyPaths := compactJSON(t, jsonObjSimple)
 
 	expectedWithoutPaths := compactJSON(t, []byte(`{}`))
+
+	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
+	assert.NoError(t, err)
+
+	actualOnlyPaths := mapToBytesBuffer(t, actualOnlyPathsAsMap)
+	actualWithoutPaths := mapToBytesBuffer(t, actualWithoutPathsAsMap)
+
+	assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
+	assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
+}
+
+// TTODO: do this
+func Test_SplitObject_Simple_MultiplePaths_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX(t *testing.T) {
+	// TTODO: maybe do not allow users to do this or start from the right first by sorting the array???
+	paths := []string{"map.field.inner2", "map.field"}
+
+	expectedOnlyPaths := compactJSON(t, []byte(`{
+		"map": {
+			"field": {
+				"inner": 123,
+				"inner2": "inner2val"
+			}
+		}
+	}`))
+
+	expectedWithoutPaths := compactJSON(t, []byte(`{
+		"map": {
+			"field2": {
+				"x": 324
+			}
+		}
+	}`))
 
 	actualOnlyPathsAsMap, actualWithoutPathsAsMap, err := SplitObject(jsonObjSimple, paths, pathSeparator)
 	assert.NoError(t, err)
@@ -383,3 +417,65 @@ func Test_SplitObject_Complex_MultiplePaths_LevelN(t *testing.T) {
 }
 
 // END of JSON Splitter logic tests
+
+func Test_mergeMaps(t *testing.T) {
+	// TTODO: use below way to do tests above
+	tests := []struct {
+		name     string
+		left     map[string]any
+		right    map[string]any
+		expected map[string]any
+	}{
+		{
+			name:     "both empty",
+			left:     map[string]any{},
+			right:    map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name:     "right empty",
+			left:     map[string]any{"a": 1, "b": 2},
+			right:    map[string]any{},
+			expected: map[string]any{"a": 1, "b": 2},
+		},
+		{
+			name:     "left empty",
+			left:     map[string]any{},
+			right:    map[string]any{"a": 1, "b": 2},
+			expected: map[string]any{"a": 1, "b": 2},
+		},
+		{
+			name:     "no overlap",
+			left:     map[string]any{"a": 1},
+			right:    map[string]any{"b": 2},
+			expected: map[string]any{"a": 1, "b": 2},
+		},
+		{
+			name:     "with overlap",
+			left:     map[string]any{"a": 1},
+			right:    map[string]any{"a": 2, "b": 3},
+			expected: map[string]any{"a": 2, "b": 3},
+		},
+		{
+			name:     "nested maps",
+			left:     map[string]any{"a": map[string]any{"c": 1}, "b": 2},
+			right:    map[string]any{"a": map[string]any{"c": 2, "d": 3}},
+			expected: map[string]any{"a": map[string]any{"c": 2, "d": 3}, "b": 2},
+		},
+		{
+			name:  "with arrays",
+			left:  map[string]any{"a": map[string]any{"c": 1}, "b": 2, "arr": []any{1, 2, 3}},
+			right: map[string]any{"a": map[string]any{"c": 2, "d": 3}, "arr": []any{3, 4, 5}},
+			// expected: map[string]any{"a": map[string]any{"c": 2, "d": 3}, "b": 2, "arr": []any{1, 2, 3, 3, 4, 5}},
+			expected: map[string]any{"a": map[string]any{"c": 2, "d": 3}, "b": 2, "arr": []any{3, 4, 5}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := mergeMaps(tc.left, tc.right)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.left, tc.expected)
+		})
+	}
+}

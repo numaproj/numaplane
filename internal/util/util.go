@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -109,10 +110,16 @@ func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPat
 		return onlyPaths, withoutPaths, nil
 	}
 
+	// Sort the paths slice before using it to avoid maps merging in case the slice were to
+	// include deeply nested fields and then the higher level fields (ex: []string{"map.field.inner2", "map"})
+	sort.Strings(paths)
+
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
-		extractPath(withoutPaths, onlyPaths, pathTokens)
+		if err := extractPath(withoutPaths, onlyPaths, pathTokens); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	cleanup(onlyPaths)
@@ -171,43 +178,90 @@ func cleanup(obj map[string]any) {
 	}
 }
 
+// // sliceToInterfaceSlice converts a typed slice into a slice of any type
+// func sliceToInterfaceSlice(slice any) ([]any, error) {
+// 	s := reflect.ValueOf(slice)
+// 	if s.Kind() != reflect.Slice {
+// 		return nil, errors.New("not a slice type")
+// 	}
+
+// 	newSlice := make([]any, s.Len())
+// 	for i := 0; i < s.Len(); i++ {
+// 		newSlice[i] = s.Index(i).Interface()
+// 	}
+
+// 	return newSlice, nil
+// }
+
 // mergeMaps recursively merge the right map into the left map without replacing any key that already exists in the left map
-func mergeMaps(left, right map[string]any) map[string]any {
-	for key, rightVal := range right {
-		if leftVal, present := left[key]; present {
-			left[key] = mergeMaps(leftVal.(map[string]any), rightVal.(map[string]any))
+func mergeMaps(a, b map[string]any) error {
+	for key, bVal := range b {
+		if aVal, ok := a[key]; ok {
+			if reflect.TypeOf(aVal).Kind() == reflect.Map && reflect.TypeOf(bVal).Kind() == reflect.Map {
+				valAMap := aVal.(map[string]any)
+				valBMap := bVal.(map[string]any)
+
+				err := mergeMaps(valAMap, valBMap)
+				if err != nil {
+					return err
+				}
+
+				// } else if reflect.TypeOf(aVal).Kind() == reflect.Slice && reflect.TypeOf(bVal).Kind() == reflect.Slice {
+				// 	valASlice, err := sliceToInterfaceSlice(aVal)
+				// 	if err != nil {
+				// 		return err
+				// 	}
+
+				// 	valBSlice, err := sliceToInterfaceSlice(bVal)
+				// 	if err != nil {
+				// 		return err
+				// 	}
+
+				// 	// Slice b is appended to slice a (duplicates and sub-values/maps are not considered for merging)
+				// 	a[key] = append(valASlice, valBSlice...)
+			} else {
+				// Overwrite the primitive type or any other type in a with value from b
+				a[key] = bVal
+			}
 		} else {
-			left[key] = rightVal
+			a[key] = bVal
 		}
 	}
-	return left
+
+	return nil
 }
 
 // extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
-func extractPath(src, dst map[string]any, pathTokens []string) {
+func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
-		return
+		return nil
 	}
 
 	key := pathTokens[0]
 
 	srcVal, exists := src[key]
 	if !exists {
-		return
+		return nil
 	}
 
 	// Last path token sets the value or merges maps
 	if len(pathTokens) == 1 {
-		switch dst[key].(type) {
-		case map[string]any:
-			mergeMaps(dst[key].(map[string]any), src[key].(map[string]any))
-		default:
-			dst[key] = src[key]
-		}
+		// switch dst[key].(type) {
+		// case map[string]any:
+		// 	// TTODO: why is this necessary???
+		// 	err := mergeMaps(dst[key].(map[string]any), src[key].(map[string]any))
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// default:
+		// 	dst[key] = src[key]
+		// }
+
+		dst[key] = src[key]
 
 		delete(src, key)
-		return
+		return nil
 	}
 
 	switch nextSrc := srcVal.(type) {
@@ -216,7 +270,9 @@ func extractPath(src, dst map[string]any, pathTokens []string) {
 			dst[key] = make(map[string]any)
 		}
 
-		extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:])
+		if err := extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:]); err != nil {
+			return err
+		}
 
 	case []any:
 		if _, exists := dst[key]; !exists {
@@ -232,7 +288,9 @@ func extractPath(src, dst map[string]any, pathTokens []string) {
 					nextDestArr[i] = make(map[string]any)
 				}
 
-				extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:])
+				if err := extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:]); err != nil {
+					return err
+				}
 
 			case []any:
 				// TODO: this should not be necessary in this context (not many array of arrays in k8s yaml definitions),
@@ -240,7 +298,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) {
 
 			default:
 				dst[key] = nextSrc
-				return
+				return nil
 			}
 		}
 
@@ -248,4 +306,6 @@ func extractPath(src, dst map[string]any, pathTokens []string) {
 		dst[key] = srcVal
 		delete(src, key)
 	}
+
+	return nil
 }
