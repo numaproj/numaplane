@@ -284,3 +284,42 @@ func Test_SplitMap(t *testing.T) {
 		})
 	}
 }
+
+func Test_cleanup(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    msa
+		expected msa
+	}{
+		{
+			name:     "nested map with empty map",
+			input:    msa{"foo": msa{"bar": msa{}, "baz": "qux"}, "hello": "world"},
+			expected: msa{"foo": msa{"baz": "qux"}, "hello": "world"},
+		},
+		{
+			name:     "array with nil elements",
+			input:    msa{"foo": []any{nil, "bar", nil, "baz"}, "hello": "world"},
+			expected: msa{"foo": []any{"bar", "baz"}, "hello": "world"},
+		},
+		{
+			name:     "array with empty element map",
+			input:    msa{"foo": []any{"bar", msa{}, "baz", nil}, "hello": "world"},
+			expected: msa{"foo": []any{"bar", "baz"}, "hello": "world"},
+		},
+		{
+			name:     "map with nil value",
+			input:    msa{"foo": nil, "bar": "baz"},
+			expected: msa{"bar": "baz"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cleanup(tc.input)
+
+			if !reflect.DeepEqual(tc.expected, tc.input) {
+				t.Errorf("\nexpected:\t%+v\nactual:\t%+v", tc.expected, tc.input)
+			}
+		})
+	}
+}
