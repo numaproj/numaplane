@@ -21,12 +21,12 @@ chmod +x ${CODEGEN_PKG}/*.sh
 
 
 subheader "running codegen"
-bash -x ${CODEGEN_PKG}/generate-groups.sh "deepcopy" \
+bash -x ${CODEGEN_PKG}/kube_codegen.sh "deepcopy" \
   github.com/numaproj/numaplane/pkg/client github.com/numaproj/numaplane/pkg/apis \
   "numaplane:v1alpha1" \
   --go-header-file hack/boilerplate.go.txt
 
-bash -x ${CODEGEN_PKG}/generate-groups.sh "client,informer,lister" \
+bash -x ${CODEGEN_PKG}/kube_codegen.sh "client,informer,lister" \
   github.com/numaproj/numaplane/pkg/client github.com/numaproj/numaplane/pkg/apis \
   "numaplane:v1alpha1" \
   --go-header-file hack/boilerplate.go.txt
