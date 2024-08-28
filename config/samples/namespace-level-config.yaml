@@ -6,5 +6,6 @@ metadata:
   labels:
     numaplane.numaproj.io/config: namespace-level-config
 data:
+  # TODO-PROGRESSIVE: before the PROGRESSIVE strategy is implemented, users will only be able to choose "pause-and-drain". Afterwards, "progressive" should also be an option. Remove this comment line after implementing PROGRESSIVE strategy.
   # upgradeStrategy can be either "progressive" or "pause-and-drain"
-  upgradeStrategy: "progressive"
+  upgradeStrategy: "pause-and-drain"

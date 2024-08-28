@@ -412,12 +412,12 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	upgradeStrategy, err := usde.GetUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef)
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return err
 	}
 
-	numaLogger.WithValues("upgradeStrategy", upgradeStrategy.String()).Info("upgrade strategy calculated")
+	numaLogger.WithValues("upgradeStrategy", upgradeStrategy.String()).Info("derived upgrade strategy")
 
 	pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
 
@@ -526,11 +526,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// Here we look for whether we are trying to update Pipeline, or whether we are already processing an update which required us to pause
 	var pipelineUpdateRequiresPause bool
 	if pipelineNeedsToUpdate || pipelineUpdating {
-		// TODO: since the Progressive strategy has not been implemented yet, pause the pipeline if the strategy is either PPND or Progressive.
-		// Once the Progressive strategy has been implemented, replace this line with the one below it
-		pipelineUpdateRequiresPause = upgradeStrategy == usde.UpgradeStrategyPPND || upgradeStrategy == usde.UpgradeStrategyProgressive
-		// TODO: replace above with:
-		// pipelineUpdateRequiresPause = upgradeStrategy == usde.UpgradeStrategyPPND
+		pipelineUpdateRequiresPause = upgradeStrategy == usde.UpgradeStrategyPPND
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
