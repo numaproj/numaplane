@@ -498,7 +498,7 @@ func Test_SplitMap(t *testing.T) {
 	}
 }
 
-func Test_cleanup(t *testing.T) {
+func Test_removeNullValuesFromMap(t *testing.T) {
 	testCases := []struct {
 		name     string
 		input    msa
@@ -529,11 +529,56 @@ func Test_cleanup(t *testing.T) {
 			input:    msa{"foo": "", "bar": "baz", "bool": false, "number": 0.0, "boolt": true, "num": 123},
 			expected: msa{"bar": "baz", "boolt": true, "num": 123},
 		},
+		{
+			name: "complex map with many cases",
+			input: msa{
+				"mapKey": msa{
+					"empty":         nil,
+					"scalarInt":     5,
+					"scalarString":  "blah",
+					"emptyMap":      msa{},
+					"emptyArray":    []any{},
+					"nonEmptyArray": []any{"a", "b"},
+					"arrayOfEmptyMaps": []any{
+						msa{"emptyMap1": msa{}},
+						msa{"emptyMap2": msa{}},
+					},
+					"arrayOfEmptyAndNonEmptyMaps": []any{
+						msa{"emptyMap1": msa{}},
+						msa{"emptyMap2": msa{}},
+						msa{"nonEmptyMap": msa{"x": 123}},
+					},
+					"nestedMapKeep": msa{
+						"innerMapKeep":   msa{"a": "b"},
+						"innerMapDelete": msa{},
+					},
+					"nestedMapDelete": msa{
+						"innerMapDelete": msa{},
+					},
+					"stringKeyWithEmptyValue": "",
+					"intKeyWithZeroValue":     0,
+					"boolKeyWithZeroValue":    false,
+				},
+			},
+			expected: msa{
+				"mapKey": msa{
+					"scalarInt":     5,
+					"scalarString":  "blah",
+					"nonEmptyArray": []any{"a", "b"},
+					"arrayOfEmptyAndNonEmptyMaps": []any{
+						msa{"nonEmptyMap": msa{"x": 123}},
+					},
+					"nestedMapKeep": msa{
+						"innerMapKeep": msa{"a": "b"},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			cleanup(tc.input)
+			removeNullValuesFromMap(tc.input)
 
 			if !reflect.DeepEqual(tc.expected, tc.input) {
 				t.Errorf("\nexpected:\t%+v\nactual:\t%+v", tc.expected, tc.input)

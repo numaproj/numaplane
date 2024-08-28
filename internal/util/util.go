@@ -34,7 +34,6 @@ func CompareMapsIgnoringNulls(a map[string]any, b map[string]any) bool {
 
 	removeNullValuesFromMap(aNoNulls)
 	removeNullValuesFromMap(bNoNulls)
-
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
@@ -219,9 +218,9 @@ func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]a
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
+func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
-	withoutPaths, err = clone(obj)
+	withoutPaths, err = cloneMap(m)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -245,63 +244,24 @@ func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPat
 		}
 	}
 
-	cleanup(onlyPaths)
-	cleanup(withoutPaths)
+	removeNullValuesFromMap(onlyPaths)
+	removeNullValuesFromMap(withoutPaths)
 
 	return onlyPaths, withoutPaths, nil
 }
 
-// clone returns a clone of the given map
-func clone(obj map[string]any) (map[string]any, error) {
+// cloneMap returns a clone of the given map
+func cloneMap(m map[string]any) (map[string]any, error) {
 	var clone map[string]any
 
-	if err := StructToStruct(obj, &clone); err != nil {
+	if err := StructToStruct(m, &clone); err != nil {
 		return nil, err
 	}
 
 	return clone, nil
 }
 
-// cleanup removes nil values, empty maps, and empty arrays from the given object
-func cleanup(obj map[string]any) {
-	for key, val := range obj {
-		switch typedVal := val.(type) {
-		case map[string]any:
-			cleanup(typedVal)
-
-			if len(typedVal) == 0 {
-				delete(obj, key)
-			}
-
-		case []any:
-			for i := 0; i < len(typedVal); i++ {
-				if elemMap, ok := typedVal[i].(map[string]any); ok {
-					cleanup(elemMap)
-
-					if len(elemMap) == 0 {
-						typedVal = append(typedVal[:i], typedVal[i+1:]...)
-						i--
-					}
-				} else if typedVal[i] == nil {
-					typedVal = append(typedVal[:i], typedVal[i+1:]...)
-					i--
-				}
-			}
-
-			if len(typedVal) == 0 {
-				delete(obj, key)
-			} else {
-				obj[key] = typedVal
-			}
-
-		case nil:
-			delete(obj, key)
-
-		}
-	}
-}
-
-// extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
+// extractPath extracts a path from the source map into the destination map based on a slice of token representing the path
 func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
