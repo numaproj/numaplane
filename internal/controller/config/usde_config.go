@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ProgressiveStrategyID = "progressive"
-	PPNDStrategyID        = "pause-and-drain"
+	// ProgressiveStrategyID = "progressive" // TODO-PROGRESSIVE: enable this
+	PPNDStrategyID = "pause-and-drain"
 )
 
 type USDEUserStrategy string
@@ -43,16 +43,22 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 	// Trim spaces and check length
 	dataStrNoSpaces := strings.TrimSpace(string(data[:]))
 	if len(dataStrNoSpaces) == 0 {
-		return fmt.Errorf("empty strategy (allowed values are: %s or %s)", ProgressiveStrategyID, PPNDStrategyID)
+		return fmt.Errorf("empty strategy (allowed value is: %s)", PPNDStrategyID)
+		// TODO-PROGRESSIVE: replace line above for line below
+		// return fmt.Errorf("empty strategy (allowed values are: %s or %s)", ProgressiveStrategyID, PPNDStrategyID)
 	}
 
 	// Remove the double quotes around the string
 	strategyStr := string(data[1 : len(data)-1])
 
 	// Make sure the string is one of the possible strategy values
-	if strategyStr != ProgressiveStrategyID && strategyStr != PPNDStrategyID {
-		return fmt.Errorf("invalid strategy %s (allowed values are: %s or %s)", string(data[:]), ProgressiveStrategyID, PPNDStrategyID)
+	if strategyStr != PPNDStrategyID {
+		return fmt.Errorf("invalid strategy %s (allowed value is: %s)", string(data[:]), PPNDStrategyID)
 	}
+	// TODO-PROGRESSIVE: replace if-statement above for if-statement below
+	// if strategyStr != ProgressiveStrategyID && strategyStr != PPNDStrategyID {
+	// 	return fmt.Errorf("invalid strategy %s (allowed values are: %s or %s)", string(data[:]), ProgressiveStrategyID, PPNDStrategyID)
+	// }
 
 	var usdeUserStrategyStr string
 	if err := json.Unmarshal(data, &usdeUserStrategyStr); err != nil {

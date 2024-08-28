@@ -122,7 +122,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				PipelineSpecExcludedPaths: []string{},
 			},
 			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyProgressive,
+			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field (changed)",
@@ -160,7 +160,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyProgressive,
+			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with empty user strategy)",
@@ -174,7 +174,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: ""},
-			expectedStrategy: UpgradeStrategyProgressive,
+			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with invalid user strategy)",
@@ -188,7 +188,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: "invalid"},
-			expectedStrategy: UpgradeStrategyProgressive,
+			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with valid user strategy)",
@@ -243,7 +243,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			strategy, err := GetUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec)
+			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})

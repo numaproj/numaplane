@@ -311,6 +311,11 @@ func Test_cleanup(t *testing.T) {
 			input:    msa{"foo": nil, "bar": "baz"},
 			expected: msa{"bar": "baz"},
 		},
+		{
+			name:     "map with empty string, false boolean, and 0 numeric value",
+			input:    msa{"foo": "", "bar": "baz", "bool": false, "number": 0.0, "boolt": true, "num": 123},
+			expected: msa{"bar": "baz", "boolt": true, "num": 123},
+		},
 	}
 
 	for _, tc := range testCases {

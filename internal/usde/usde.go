@@ -41,7 +41,9 @@ func (us UpgradeStrategy) String() string {
 	return "Invalid"
 }
 
-func GetUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
+// DeriveUpgradeStrategy calculates the upgrade strategy to use during the
+// resource reconciliation process based on configuration and user preference (see design doc for details)
+func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// Get USDE Config
@@ -55,7 +57,7 @@ func GetUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, 
 		applyPaths = usdeConfig.ISBServiceSpecExcludedPaths
 	}
 
-	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started calculating upgrade strategy")
+	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started deriving upgrade strategy")
 
 	// Split newSpec
 	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, ".")
@@ -83,7 +85,8 @@ func GetUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, 
 			return UpgradeStrategyPPND, nil
 		}
 
-		return UpgradeStrategyProgressive, nil
+		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+		return UpgradeStrategyPPND, nil
 	}
 
 	// Compare specs with the apply fields
