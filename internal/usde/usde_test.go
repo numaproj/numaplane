@@ -1,6 +1,7 @@
 package usde
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -85,6 +86,8 @@ func makePipelineDefinition(pipelineSpec numaflowv1.PipelineSpec) kubernetes.Gen
 }
 
 func Test_GetUpgradeStrategy(t *testing.T) {
+	ctx := context.Background()
+
 	configManager := config.GetConfigManagerInstance()
 
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
@@ -226,7 +229,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			strategy, err := GetUpgradeStrategy(&tc.newSpec, &tc.existingSpec)
+			strategy, err := GetUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})
