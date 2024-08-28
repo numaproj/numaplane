@@ -9,13 +9,14 @@ import (
 	"strings"
 )
 
-func StructToStruct(src any, dest any) error {
+// StructToStruct converts a struct type (src) into another (dst)
+func StructToStruct(src any, dst any) error {
 	jsonBytes, err := json.Marshal(src)
 	if err != nil {
 		return err
 	}
 
-	err = json.Unmarshal(jsonBytes, dest)
+	err = json.Unmarshal(jsonBytes, dst)
 	if err != nil {
 		return fmt.Errorf("failed to convert json %s: err=%s", string(jsonBytes), err)
 	}
@@ -23,64 +24,62 @@ func StructToStruct(src any, dest any) error {
 	return nil
 }
 
-// compare 2 maps for equality, ignoring any null values, empty maps, and empty arrays
-func CompareMapsIgnoringNulls(a map[string]interface{}, b map[string]interface{}) bool {
-	aNoNulls := make(map[string]interface{})
+// CompareMapsIgnoringNulls compares 2 maps for equality, ignoring any null values, empty maps, empty arrays, zero numerical values, and empty strings
+func CompareMapsIgnoringNulls(a map[string]any, b map[string]any) bool {
+	aNoNulls := make(map[string]any)
 	maps.Copy(aNoNulls, a)
 
-	bNoNulls := make(map[string]interface{})
+	bNoNulls := make(map[string]any)
 	maps.Copy(bNoNulls, b)
 
-	removeNullValuesFromJSONMap(aNoNulls)
-	removeNullValuesFromJSONMap(bNoNulls)
+	removeNullValuesFromMap(aNoNulls)
+	removeNullValuesFromMap(bNoNulls)
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
-// recursively remove any zero values from the map including null references, empty strings, numbers that are zero,
-// empty maps, and empty arrays from the map
-// (the types that we look for are the ones that json.Unmarshal() uses)
-func removeNullValuesFromJSONMap(m map[string]interface{}) bool {
+// removeNullValuesFromMap recursively removes any zero values from the map including:
+// null references, empty strings, numbers that are zero, empty maps, and empty arrays
+func removeNullValuesFromMap(m map[string]any) {
+	for key, val := range m {
+		switch typedVal := val.(type) {
+		case map[string]any:
+			removeNullValuesFromMap(typedVal)
 
-	for k, v := range m {
-		if v == nil {
-			delete(m, k)
-		} else if stringValue, ok := v.(string); ok {
-			if stringValue == "" {
-				delete(m, k)
+			if len(typedVal) == 0 {
+				delete(m, key)
 			}
-			// scalar numbers seem to use float64:
-		} else if floatValue, ok := v.(float64); ok {
-			if floatValue == 0 {
-				delete(m, k)
-			}
-		} else if boolValue, ok := v.(bool); ok {
-			if !boolValue {
-				delete(m, k)
-			}
-		} else if nestedMap, ok := v.(map[string]interface{}); ok {
-			removeNullValuesFromJSONMap(nestedMap)
-			if len(nestedMap) == 0 {
-				delete(m, k)
-			}
-		} else if nestedSlice, ok := v.([]interface{}); ok {
-			allMapsEmpty := true
-			for _, sliceElem := range nestedSlice {
-				if asMap, ok := sliceElem.(map[string]interface{}); ok {
-					removeNullValuesFromJSONMap(asMap)
-					if len(asMap) != 0 {
-						allMapsEmpty = false
+
+		case []any:
+			for i := 0; i < len(typedVal); i++ {
+				if elemMap, ok := typedVal[i].(map[string]any); ok {
+					removeNullValuesFromMap(elemMap)
+
+					if len(elemMap) == 0 {
+						typedVal = append(typedVal[:i], typedVal[i+1:]...)
+						i--
 					}
-				} else {
-					allMapsEmpty = false
+				} else if typedVal[i] == nil {
+					typedVal = append(typedVal[:i], typedVal[i+1:]...)
+					i--
 				}
 			}
-			if allMapsEmpty {
-				delete(m, k)
+
+			if len(typedVal) == 0 {
+				delete(m, key)
+			} else {
+				m[key] = typedVal
+			}
+
+		case nil:
+			delete(m, key)
+
+		default:
+			if reflect.ValueOf(typedVal).IsZero() {
+				delete(m, key)
 			}
 
 		}
 	}
-	return false
 }
 
 // SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
@@ -96,9 +95,9 @@ func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]a
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
+func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
-	withoutPaths, err = clone(obj)
+	withoutPaths, err = cloneMap(m)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -122,63 +121,24 @@ func SplitMap(obj map[string]any, paths []string, pathSeparator string) (onlyPat
 		}
 	}
 
-	cleanup(onlyPaths)
-	cleanup(withoutPaths)
+	removeNullValuesFromMap(onlyPaths)
+	removeNullValuesFromMap(withoutPaths)
 
 	return onlyPaths, withoutPaths, nil
 }
 
-// clone returns a clone of the given map
-func clone(obj map[string]any) (map[string]any, error) {
+// cloneMap returns a clone of the given map
+func cloneMap(m map[string]any) (map[string]any, error) {
 	var clone map[string]any
 
-	if err := StructToStruct(obj, &clone); err != nil {
+	if err := StructToStruct(m, &clone); err != nil {
 		return nil, err
 	}
 
 	return clone, nil
 }
 
-// cleanup removes nil values, empty maps, and empty arrays from the given object
-func cleanup(obj map[string]any) {
-	for key, val := range obj {
-		switch typedVal := val.(type) {
-		case map[string]any:
-			cleanup(typedVal)
-
-			if len(typedVal) == 0 {
-				delete(obj, key)
-			}
-
-		case []any:
-			for i := 0; i < len(typedVal); i++ {
-				if elemMap, ok := typedVal[i].(map[string]any); ok {
-					cleanup(elemMap)
-
-					if len(elemMap) == 0 {
-						typedVal = append(typedVal[:i], typedVal[i+1:]...)
-						i--
-					}
-				} else if typedVal[i] == nil {
-					typedVal = append(typedVal[:i], typedVal[i+1:]...)
-					i--
-				}
-			}
-
-			if len(typedVal) == 0 {
-				delete(obj, key)
-			} else {
-				obj[key] = typedVal
-			}
-
-		case nil:
-			delete(obj, key)
-
-		}
-	}
-}
-
-// extractPath extracts a path from the source map into the destination path based on a slice of token representing the path
+// extractPath extracts a path from the source map into the destination map based on a slice of token representing the path
 func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
