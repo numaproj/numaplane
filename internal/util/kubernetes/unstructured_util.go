@@ -358,20 +358,6 @@ func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	return m, err
 }
 
-func CompareSpecs(a *GenericObject, b *GenericObject) (bool, error) {
-	aAsMap := make(map[string]interface{})
-	bAsMap := make(map[string]interface{})
-	err := json.Unmarshal(a.Spec.Raw, &aAsMap)
-	if err != nil {
-		return false, err
-	}
-	err = json.Unmarshal(b.Spec.Raw, &bAsMap)
-	if err != nil {
-		return false, err
-	}
-	return util.CompareMapsIgnoringNulls(aAsMap, bAsMap), nil
-}
-
 func (obj *GenericObject) DeepCopy() *GenericObject {
 	result := &GenericObject{}
 	result.TypeMeta.Kind = obj.TypeMeta.Kind
