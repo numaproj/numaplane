@@ -430,6 +430,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	if common.DataLossPrevention { // feature flag
+		// TODO-PROGRESSIVE: instead of passing the upgradeStrategy to check later if it is PPND,
+		// we should have a switch statement to use one of the following strategies: APPLY, PPND, or PROGRESSIVE
 		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate, upgradeStrategy); err != nil {
 			return err
 		}
@@ -663,7 +665,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
-	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+	r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
 
 	return nil
 }
@@ -691,8 +693,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 
 }
 
-func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
-
+func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 
 	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
@@ -758,57 +759,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
-}
-
-// pipelineSpecEqual() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle field from comparison, as well as any nulls to test for equality
-	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
-	if err != nil {
-		return false, err
-	}
-	pipelineWithoutLifecycleB, err := pipelineWithoutLifecycle(b)
-	if err != nil {
-		return false, err
-	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
-
-	//TODO: revisit this - why is reflect.DeepEqual sometimes sufficient?
-	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
-}
-
-// remove 'lifecycle' key/value pair from Pipeline spec
-func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
-	unstruc, err := kubernetes.ObjectToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-	_, found, err := unstructured.NestedString(unstruc.Object, "spec", "lifecycle", "desiredPhase")
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		unstrucNew := unstruc.DeepCopy()
-		specMapAsInterface, found := unstrucNew.Object["spec"]
-		if found {
-			specMap, ok := specMapAsInterface.(map[string]interface{})
-			if ok {
-				lifecycleMapAsInterface, found := specMap["lifecycle"]
-				if found {
-					lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
-					if ok {
-						delete(lifecycleMap, "desiredPhase")
-						specMap["lifecycle"] = lifecycleMap
-						return specMap, nil
-					}
-				}
-			}
-
-			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
-		}
-	}
-	return unstruc.Object["spec"].(map[string]interface{}), nil
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
