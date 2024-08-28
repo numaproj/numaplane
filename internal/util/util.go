@@ -34,6 +34,7 @@ func CompareMapsIgnoringNulls(a map[string]any, b map[string]any) bool {
 
 	removeNullValuesFromMap(aNoNulls)
 	removeNullValuesFromMap(bNoNulls)
+
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
