@@ -111,6 +111,20 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 			expectedStrategy: UpgradeStrategyNoOp,
 		},
 		{
+			name:    "empty pipeline spec excluded paths and change interStepBufferServiceName field",
+			newSpec: pipelineDefn,
+			existingSpec: func() kubernetes.GenericObject {
+				newPipelineSpec := defaultPipelineSpec.DeepCopy()
+				newPipelineSpec.InterStepBufferServiceName = "changed-isbsvc"
+				return makePipelineDefinition(*newPipelineSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				PipelineSpecExcludedPaths: []string{},
+			},
+			namespaceConfig:  config.NamespaceConfig{},
+			expectedStrategy: UpgradeStrategyProgressive,
+		},
+		{
 			name:    "only exclude interStepBufferServiceName field (changed)",
 			newSpec: pipelineDefn,
 			existingSpec: func() kubernetes.GenericObject {
