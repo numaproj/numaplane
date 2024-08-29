@@ -399,6 +399,7 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 }
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+
 	numaLogger := logger.FromContext(ctx)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
@@ -498,7 +499,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 }
 
 // return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
@@ -523,6 +526,10 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 	numaLogger.Debugf("pipelineNeedsToUpdate: %t, pipelineUpdating: %t", pipelineNeedsToUpdate, pipelineUpdating)
 
+	// If there is a need to update, does it require a pause?
+	// Here we look for whether we are trying to update Pipeline, or whether we are already processing an update which required us to pause
+	pipelineUpdateRequiresPause := pipelineNeedsToUpdate || pipelineUpdating
+
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
@@ -536,9 +543,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := externalPauseRequest || specBasedPause
-	numaLogger.Debugf("shouldBePaused=%t, externalPauseRequest=%t, specBasedPause=%t",
-		shouldBePaused, externalPauseRequest, specBasedPause)
+	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
 
 	return &shouldBePaused, nil
 }

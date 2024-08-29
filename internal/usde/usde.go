@@ -12,8 +12,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 )
 
-// TODO: add debug and info statements throughout the new USDE code
-
 type UpgradeStrategy int
 
 const (
