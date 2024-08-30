@@ -708,20 +708,23 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
-		timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
-		r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipeline.Name).Set(timeElapsed.Seconds())
+		r.updatePauseMetric(pipelineRollout)
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
 		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
 		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
 		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
-			timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
-			r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipeline.Name).Set(timeElapsed.Seconds())
+			r.updatePauseMetric(pipelineRollout)
 		}
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
 
+}
+
+func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout) {
+	timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Name).Set(timeElapsed.Seconds())
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
