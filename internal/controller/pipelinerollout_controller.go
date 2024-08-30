@@ -59,7 +59,10 @@ const (
 	numWorkers                = 16 // can consider making configurable
 )
 
-var pipelineROReconciler *PipelineRolloutReconciler
+var (
+	pipelineROReconciler *PipelineRolloutReconciler
+	initTime             time.Time
+)
 
 // PipelineSpec keep track of minimum number of fields we need to know about
 type PipelineSpec struct {
@@ -697,13 +700,26 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+
 	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
+		if pipelineRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseBeginTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
+			pipelineRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
+		timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+		r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipeline.Name).Set(timeElapsed.Seconds())
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
+		// beginTime has to be set for EndTime to be set
+		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+			timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+			r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipeline.Name).Set(timeElapsed.Seconds())
+		}
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
+
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
