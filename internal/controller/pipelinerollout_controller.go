@@ -702,6 +702,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 
 	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
+		// if BeginTime hasn't been set yet, we must have just started pausing - set it
 		if pipelineRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseBeginTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
