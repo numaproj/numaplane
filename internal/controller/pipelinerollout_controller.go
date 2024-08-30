@@ -712,7 +712,8 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipeline.Name).Set(timeElapsed.Seconds())
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
-		// beginTime has to be set for EndTime to be set
+		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
+		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
 		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
