@@ -76,3 +76,7 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
 }
+
+func (status *PipelineRolloutStatus) SetInProgressUpgradeStrategy(upgradeStrategy string) {
+	status.InProgressUpgradeStrategy = upgradeStrategy
+}

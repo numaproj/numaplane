@@ -243,7 +243,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec)
+			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, "") // TODO: write test cases with various values for inProgressUpgradeStrategy argument instead of empty string
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})

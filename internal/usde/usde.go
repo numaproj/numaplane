@@ -41,8 +41,17 @@ func (us UpgradeStrategy) String() string {
 
 // DeriveUpgradeStrategy calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details)
-func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
+func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, inProgressUpgradeStrategy string) (UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	if inProgressUpgradeStrategy == UpgradeStrategyPPND.String() {
+		return UpgradeStrategyPPND, nil
+	}
+
+	if inProgressUpgradeStrategy == UpgradeStrategyProgressive.String() {
+		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+		return UpgradeStrategyPPND, nil
+	}
 
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
