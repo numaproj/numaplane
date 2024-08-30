@@ -243,7 +243,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec)
+			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, nil) // TODO: add some tests cases to test comparisonExcludedPaths instead of passing nil
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})

@@ -271,7 +271,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		return false, err
 	}
 
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newISBServiceDef, existingISBServiceDef)
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newISBServiceDef, existingISBServiceDef, nil)
 	if err != nil {
 		return false, err
 	}
@@ -293,7 +293,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
-	if common.DataLossPrevention && upgradeStrategy == usde.UpgradeStrategyPPND {
+	if common.DataLossPrevention { // TODO: should this check be here? `&& upgradeStrategy == usde.UpgradeStrategyPPND`
 		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)

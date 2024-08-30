@@ -29,7 +29,7 @@ func (us UpgradeStrategy) String() string {
 	case UpgradeStrategyNoOp:
 		return "NoOp"
 	case UpgradeStrategyApply:
-		return "DirectApply"
+		return "Apply"
 	case UpgradeStrategyPPND:
 		return "PipelinePauseAndDrain"
 	case UpgradeStrategyProgressive:
@@ -41,7 +41,7 @@ func (us UpgradeStrategy) String() string {
 
 // DeriveUpgradeStrategy calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details)
-func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (UpgradeStrategy, error) {
+func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, comparisonExcludedPaths []string) (UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// Get USDE Config
@@ -58,26 +58,36 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started deriving upgrade strategy")
 
 	// Split newSpec
-	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, ".")
+	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, comparisonExcludedPaths, ".")
 	if err != nil {
 		return UpgradeStrategyError, err
 	}
 
-	numaLogger.WithValues("newSpecOnlyApplyPaths", newSpecOnlyApplyPaths, "newSpecWithoutApplyPaths", newSpecWithoutApplyPaths).Debug("split new spec")
+	numaLogger.WithValues(
+		"newSpecOnlyApplyPaths", newSpecOnlyApplyPaths,
+		"newSpecWithoutApplyPaths", newSpecWithoutApplyPaths,
+	).Debug("split new spec")
 
 	// Split existingSpec
-	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, ".")
+	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, comparisonExcludedPaths, ".")
 	if err != nil {
 		return UpgradeStrategyError, err
 	}
 
-	numaLogger.WithValues("existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths, "existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths).Debug("split existing spec")
+	numaLogger.WithValues(
+		"existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths,
+		"existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths,
+	).Debug("split existing spec")
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
 		userUpgradeStrategy := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace).UpgradeStrategy
 
-		numaLogger.WithValues("userUpgradeStrategy", userUpgradeStrategy).Debug("the specs without the 'apply' paths are different")
+		numaLogger.WithValues(
+			"userUpgradeStrategy", userUpgradeStrategy,
+			"newSpecWithoutApplyPaths", newSpecWithoutApplyPaths,
+			"existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths,
+		).Debug("the specs without the 'apply' paths are different")
 
 		if userUpgradeStrategy == config.PPNDStrategyID {
 			return UpgradeStrategyPPND, nil
@@ -89,7 +99,11 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	// Compare specs with the apply fields
 	if !reflect.DeepEqual(newSpecOnlyApplyPaths, existingSpecOnlyApplyPaths) {
-		numaLogger.Debug("the specs with only the 'apply' paths are different")
+		numaLogger.WithValues(
+			"newSpecOnlyApplyPaths", newSpecOnlyApplyPaths,
+			"existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths,
+		).Debug("the specs with only the 'apply' paths are different")
+
 		return UpgradeStrategyApply, nil
 	}
 

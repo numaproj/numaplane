@@ -85,18 +85,18 @@ func removeNullValuesFromMap(m map[string]any) {
 
 // SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-func SplitObject(obj []byte, paths []string, pathSeparator string) (map[string]any, map[string]any, error) {
+func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparator string) (map[string]any, map[string]any, error) {
 	var objAsMap map[string]any
 	if err := json.Unmarshal(obj, &objAsMap); err != nil {
 		return nil, nil, err
 	}
 
-	return SplitMap(objAsMap, paths, pathSeparator)
+	return SplitMap(objAsMap, paths, excludedPaths, pathSeparator)
 }
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
+func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
 	withoutPaths, err = cloneMap(m)
 	if err != nil {
@@ -110,18 +110,27 @@ func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths
 		return onlyPaths, withoutPaths, nil
 	}
 
-	// Sort the paths slice before using it to avoid maps merging in case the slice were to
+	// Sort the paths slices before using it to avoid maps merging in case the slice were to
 	// include deeply nested fields and then the higher level fields (ex: []string{"map.field.inner2", "map"})
 	sort.Strings(paths)
+	sort.Strings(excludedPaths)
 
+	// Split by paths
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
-		if err := extractPath(withoutPaths, onlyPaths, pathTokens); err != nil {
-			return nil, nil, err
-		}
+		extractPath(withoutPaths, onlyPaths, pathTokens)
 	}
 
+	// Remove the excluded paths from the 2 output maps
+	for _, path := range excludedPaths {
+		pathTokens := strings.Split(path, pathSeparator)
+
+		removePath(onlyPaths, pathTokens)
+		removePath(withoutPaths, pathTokens)
+	}
+
+	// Remove null and zero values, empty maps, empty strings, etc. from the 2 output maps
 	removeNullValuesFromMap(onlyPaths)
 	removeNullValuesFromMap(withoutPaths)
 
@@ -140,24 +149,24 @@ func cloneMap(m map[string]any) (map[string]any, error) {
 }
 
 // extractPath extracts a path from the source map into the destination map based on a slice of token representing the path
-func extractPath(src, dst map[string]any, pathTokens []string) error {
+func extractPath(src, dst map[string]any, pathTokens []string) {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
-		return nil
+		return
 	}
 
 	key := pathTokens[0]
 
-	srcVal, exists := src[key]
-	if !exists {
-		return nil
+	srcVal, srcExists := src[key]
+	if !srcExists {
+		return
 	}
 
 	// Last path token sets the value or merges maps
 	if len(pathTokens) == 1 {
 		dst[key] = src[key]
 		delete(src, key)
-		return nil
+		return
 	}
 
 	switch nextSrc := srcVal.(type) {
@@ -166,9 +175,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 			dst[key] = make(map[string]any)
 		}
 
-		if err := extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:]); err != nil {
-			return err
-		}
+		extractPath(nextSrc, dst[key].(map[string]any), pathTokens[1:])
 
 	case []any:
 		if _, exists := dst[key]; !exists {
@@ -184,9 +191,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 					nextDestArr[i] = make(map[string]any)
 				}
 
-				if err := extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:]); err != nil {
-					return err
-				}
+				extractPath(nextSrcElem, nextDestArr[i].(map[string]any), pathTokens[1:])
 
 			case []any:
 				// TODO: this should not be necessary in this context (not many array of arrays in k8s yaml definitions),
@@ -194,7 +199,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 
 			default:
 				dst[key] = nextSrc
-				return nil
+				return
 			}
 		}
 
@@ -202,6 +207,43 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 		dst[key] = srcVal
 		delete(src, key)
 	}
+}
 
-	return nil
+// removePath removes a path (given as a slice of strings) from the given map
+func removePath(m map[string]any, pathTokens []string) {
+	curr := m
+	for i, key := range pathTokens {
+		if i == len(pathTokens)-1 {
+			delete(curr, key)
+		} else {
+			v, ok := curr[key]
+			if !ok {
+				return // Key not found in the map
+			}
+
+			switch vTyped := v.(type) {
+			case map[string]any:
+				curr = vTyped
+
+			case []any:
+				for j := range vTyped {
+					switch vTypedElem := vTyped[j].(type) {
+					case map[string]any:
+						removePath(vTypedElem, pathTokens[i+1:])
+
+					case []any:
+						// TODO: this should not be necessary in this context (not many array of arrays in k8s yaml definitions),
+						// but implement it for completeness (low priority)
+
+					default:
+						return
+					}
+				}
+
+			default:
+				return
+			}
+
+		}
+	}
 }

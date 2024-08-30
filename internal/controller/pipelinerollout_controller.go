@@ -402,22 +402,23 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	numaLogger := logger.FromContext(ctx)
 
-	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
 
-	var existingPipelineSpec PipelineSpec
-	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
-		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
-	}
-
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef)
+	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, comparisonExcludedPaths)
 	if err != nil {
 		return err
 	}
 
 	numaLogger.WithValues("upgradeStrategy", upgradeStrategy.String()).Info("derived upgrade strategy")
 
-	pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
+	var newPipelineSpec PipelineSpec
+	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	}
+	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
+
+	pipelineNeedsToUpdate := (upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError) || specBasedPause
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
@@ -430,9 +431,9 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
-	if common.DataLossPrevention && upgradeStrategy == usde.UpgradeStrategyPPND {
+	if common.DataLossPrevention { // TODO: should this check be here? `&& upgradeStrategy == usde.UpgradeStrategyPPND`
 		// TODO-PROGRESSIVE: implement a switch statement to use one of the following strategies: APPLY, PPND, or PROGRESSIVE based on the upgradeStrategy previously derived
-		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
+		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, newPipelineSpec, pipelineNeedsToUpdate, specBasedPause); err != nil {
 			return err
 		}
 	} else if pipelineNeedsToUpdate {
@@ -458,11 +459,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 //
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) error {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate bool, specBasedPause bool) error {
 
 	numaLogger := logger.FromContext(ctx)
 
-	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
+	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, newPipelineSpec, pipelineNeedsToUpdate, specBasedPause)
 	if err != nil {
 		return err
 	}
@@ -500,14 +501,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 
 // return whether to pause, not to pause, or otherwise unknown
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate bool, specBasedPause bool) (*bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
-	}
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
@@ -539,9 +536,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 		numaLogger.Debugf("incomplete pause request information")
 		return nil, nil
 	}
-
-	// check to see if the PipelineRollout spec itself says to Pause
-	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
 	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
 	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
