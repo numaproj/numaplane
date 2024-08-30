@@ -39,6 +39,15 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 		return UpgradeStrategyPPND, nil, nil
 	}
 
+	if inProgressUpgradeStrategy == UpgradeStrategyPPND.String() {
+		return UpgradeStrategyPPND, nil
+	}
+
+	if inProgressUpgradeStrategy == UpgradeStrategyProgressive.String() {
+		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+		return UpgradeStrategyPPND, nil
+	}
+
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 

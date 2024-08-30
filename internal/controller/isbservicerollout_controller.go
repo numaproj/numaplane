@@ -265,12 +265,14 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-	isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, existingISBServiceDef)
+	isbServiceIsReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBServiceDef)
 	if err != nil {
 		return false, err
 	}
+	isbServiceIsUpdating := !isbServiceIsReconciled
 
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newISBServiceDef, existingISBServiceDef)
+	// TODO: DeriveUpgradeStrategy(..., inProgressUpgradeStrategy?)
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newISBServiceDef, existingISBServiceDef, "")
 	if err != nil {
 		return false, err
 	}
@@ -300,13 +302,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	} else if isbServiceNeedsUpdating {
-		// update ISBService
-		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
-		if err != nil {
-			return false, err
-		}
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	} else if upgradeStrategy == usde.UpgradeStrategyProgressive {
+		// TODO-PROGRESSIVE: implement
+		numaLogger.Warn("PROGRESSIVE strategy coming soon")
 	}
 
 	return false, nil
@@ -337,18 +335,6 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 
 func (r *ISBServiceRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
 	return GetPauseModule().getISBServiceKey(rolloutNamespace, rolloutName)
-}
-
-// return:
-// - whether it's in the process of being updated
-// - error if any
-func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, existingISBSVCDef *kubernetes.GenericObject) (bool, error) {
-	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
-	if err != nil {
-		return false, err
-	}
-
-	return !isbServiceReconciled, nil
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
