@@ -412,7 +412,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	upgradeStrategy, err := usde.GetUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef)
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.InProgressUpgradeStrategy)
 	if err != nil {
 		return err
 	}
@@ -429,22 +429,28 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
-	if common.DataLossPrevention && upgradeStrategy == usde.UpgradeStrategyPPND {
-		// TODO-PROGRESSIVE: implement a switch statement to use one of the following strategies: APPLY, PPND, or PROGRESSIVE based on the upgradeStrategy previously derived
-		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
-			return err
-		}
-	} else if pipelineNeedsToUpdate {
+	if !common.DataLossPrevention || upgradeStrategy == usde.UpgradeStrategyApply {
 		if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 			return err
 		}
+
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+	} else if upgradeStrategy == usde.UpgradeStrategyPPND {
+		pipelineRollout.Status.SetInProgressUpgradeStrategy(usde.UpgradeStrategyPPND.String())
+		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
+			return err
+		}
+	} else if upgradeStrategy == usde.UpgradeStrategyProgressive {
+		// TODO-PROGRESSIVE: implement
+		numaLogger.Warn("PROGRESSIVE strategy coming soon")
+		pipelineRollout.Status.SetInProgressUpgradeStrategy(usde.UpgradeStrategyProgressive.String())
 	}
 
 	// generate update metrics only if we actually updated the Pipeline
 	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
+
 	return nil
 }
 
@@ -536,9 +542,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := externalPauseRequest || specBasedPause
-	numaLogger.Debugf("shouldBePaused=%t, externalPauseRequest=%t, specBasedPause=%t",
-		shouldBePaused, externalPauseRequest, specBasedPause)
+	shouldBePaused := pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause)
 
 	return &shouldBePaused, nil
 }
