@@ -316,10 +316,6 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 }
 
 func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
-	/*isbServiceRollout := &apiv1.ISBServiceRollout{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, isbServiceRollout); err != nil {
-		return err
-	}*/
 
 	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
