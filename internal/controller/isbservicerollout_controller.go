@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -285,7 +284,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	}
 
 	if common.DataLossPrevention {
-		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -316,11 +315,13 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
-	isbServiceRollout := &apiv1.ISBServiceRollout{}
+func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+	/*isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, isbServiceRollout); err != nil {
 		return err
-	}
+	}*/
+
+	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
 	if paused {
 		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)

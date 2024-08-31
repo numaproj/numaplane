@@ -278,7 +278,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout.Namespace, controllerRollout.Name, r, controllerDeploymentNeedsUpdating,
+		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
@@ -697,16 +697,13 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 	return nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
-	rollout := &apiv1.NumaflowControllerRollout{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, rollout); err != nil {
-		return err
-	}
+func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
 	if paused {
-		rollout.Status.MarkPausingPipelines(rollout.Generation)
+		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
 	} else {
-		rollout.Status.MarkUnpausingPipelines(rollout.Generation)
+		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
 	}
 
 	return nil
