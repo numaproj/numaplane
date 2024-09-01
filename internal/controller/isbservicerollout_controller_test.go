@@ -19,6 +19,10 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,17 +32,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	numaplaneversioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
+)
+
+var (
+	defaultNamespace         = "default"
+	defaultISBSvcRolloutName = "isbservicerollout-test"
 )
 
 var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
-	const (
-		namespace             = "default"
-		isbServiceRolloutName = "isbservicerollout-test"
-	)
-
 	ctx := context.Background()
 
 	isbsSpec := numaflowv1.InterStepBufferServiceSpec{
@@ -56,8 +66,8 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      isbServiceRolloutName,
+			Namespace: defaultNamespace,
+			Name:      defaultISBSvcRolloutName,
 		},
 		Spec: apiv1.ISBServiceRolloutSpec{
 			InterStepBufferService: apiv1.InterStepBufferService{
@@ -68,7 +78,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 		},
 	}
 
-	resourceLookupKey := types.NamespacedName{Name: isbServiceRolloutName, Namespace: namespace}
+	resourceLookupKey := types.NamespacedName{Name: defaultISBSvcRolloutName, Namespace: defaultNamespace}
 
 	Context("When applying a ISBServiceRollout spec", func() {
 		It("Should create the ISBServiceRollout if it does not exist", func() {
@@ -99,7 +109,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 		})
 
 		It("Should have the ISBServiceRollout Status Phase as Deployed and ObservedGeneration matching Generation", func() {
-			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, defaultNamespace, defaultISBSvcRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should have created an PodDisruptionBudget for ISB ", func() {
@@ -170,12 +180,12 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			}, timeout, interval).Should(Equal(newIsbsSpec))
 
 			By("Verifying that the ISBServiceRollout Status Phase is Deployed and ObservedGeneration matches Generation")
-			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, namespace, isbServiceRolloutName, apiv1.PhaseDeployed)
+			verifyStatusPhase(ctx, apiv1.ISBServiceRolloutGroupVersionKind, defaultNamespace, defaultISBSvcRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should auto heal the InterStepBufferService with the ISBServiceRollout pipeline spec when the InterStepBufferService spec is changed", func() {
 			By("updating the InterStepBufferService and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, namespace, isbServiceRolloutName, "spec.jetstream.version", "1.2.3.4.5")
+			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, defaultNamespace, defaultISBSvcRolloutName, "spec.jetstream.version", "1.2.3.4.5")
 		})
 
 		It("Should delete the ISBServiceRollout and InterStepBufferService", func() {
@@ -242,3 +252,85 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 // Outputs:
 // 1. expected Conditions
 // 2. new ISBSvc spec
+
+func Test_reconcile(t *testing.T) {
+	restConfig, err := kubernetes.K8sRestConfig()
+	assert.Nil(t, err)
+
+	err = numaflowv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
+	err = apiv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
+
+	numaflowClientSet := numaflowversioned.NewForConfigOrDie(restConfig)
+	numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
+	numaplaneClient, err := client.New(restConfig, client.Options{}) //todo: actually, if we have this, do we need numaplaneClientSet?
+	assert.Nil(t, err)
+
+	// Make sure "dataLossPrevention" feature flag is turned on
+	//configManager := config.GetConfigManagerInstance()
+	// todo: make sure this works when called from root level too
+	//err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath("./testdata/"), config.WithConfigFileName("config"))
+	//assert.NoError(t, err)
+	common.DataLossPrevention = true
+
+	numaLogger := logger.GetBaseLogger()
+	numaLogger.LogLevel = logger.DebugLevel // TODO: why isn't this working?
+	logger.SetBaseLogger(numaLogger)
+	ctx := logger.WithLogger(context.Background(), numaLogger)
+
+	r := &ISBServiceRolloutReconciler{
+		client:     numaplaneClient,
+		scheme:     scheme.Scheme,
+		restConfig: restConfig,
+	}
+
+	testCases := []struct {
+		name                  string
+		newISBSvcSpec         numaflowv1.InterStepBufferServiceSpec
+		existingISBSvcDef     numaflowv1.InterStepBufferService
+		existingPipelinePhase apiv1.Phase
+		expectedConditionsSet map[apiv1.ConditionType]bool // the Conditions, as well as whether they're set to true or false
+		resultISBSvcSpec      numaflowv1.InterStepBufferServiceSpec
+	}{}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// create ISBServiceRollout definition
+
+			// create the actual ISBSvc in Kubernetes
+
+			// create a Pipeline of the given phase in Kubernetes
+
+			// call reconcile()
+
+			// check results
+
+			// delete ISBSvc and Pipeline in Kubernetes
+
+		})
+	}
+}
+
+func createDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBufferServiceSpec {
+	isbsSpec := numaflowv1.InterStepBufferServiceSpec{
+		Redis: &numaflowv1.RedisBufferService{},
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version:     jetstreamVersion,
+			Persistence: nil,
+		},
+	}
+}
+
+func createDefaultISBService(jetstreamVersion string, conditions map[apiv1.ConditionType]bool) numaflowv1.InterStepBufferService {
+	return numaflowv1.InterStepBufferService{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "InterStepBufferService",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "isbservicerollout-test",
+			Namespace: "default",
+		},
+	}
+}
