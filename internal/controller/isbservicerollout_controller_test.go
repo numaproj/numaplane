@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,12 +40,11 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	numaplaneversioned "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 )
 
 var (
-	defaultNamespace         = "default"
 	defaultISBSvcRolloutName = "isbservicerollout-test"
 )
 
@@ -240,10 +240,11 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 // test reconcile
 // each test passes in a current version of the ISBSvc and a new ISBServiceRollout spec
-// 1. spec differs from current, pipelines not paused - want to see that we're pausing pipelines (i.e. Condition) and memory verification and we don't update ISBService
-// 2. spec differs from current, pipelines all paused - verify we're still pausing pipelines, but we update the spec
-// 2. spec not different but ISBService is still reconciling - want to see that we're still pausing pipelines (i.e. Condition) and memory verification
-// 3. spec not different and ISBService no longer reconciling - want to see that we've resumed pipelines
+// 1. new spec - shouldn't be pausing pipelines - verify we update ISBService
+// 2. spec differs from current, pipelines not paused - want to see that we're pausing pipelines (i.e. Condition) and memory verification and we don't update ISBService
+// 3. spec differs from current, pipelines all paused - verify we're still pausing pipelines, but we update the spec
+// 4. spec not different but ISBService is still reconciling - want to see that we're still pausing pipelines (i.e. Condition) and memory verification
+// 5. spec not different and ISBService no longer reconciling - want to see that we've resumed pipelines
 
 // Inputs for each test:
 // 1. current ISBSvc (spec + status for whether it's progressing)
@@ -263,7 +264,7 @@ func Test_reconcile(t *testing.T) {
 	assert.Nil(t, err)
 
 	numaflowClientSet := numaflowversioned.NewForConfigOrDie(restConfig)
-	numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
+	//numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
 	numaplaneClient, err := client.New(restConfig, client.Options{}) //todo: actually, if we have this, do we need numaplaneClientSet?
 	assert.Nil(t, err)
 
@@ -279,41 +280,80 @@ func Test_reconcile(t *testing.T) {
 	logger.SetBaseLogger(numaLogger)
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
+	metrics := metrics.RegisterCustomMetrics()
+
 	r := &ISBServiceRolloutReconciler{
-		client:     numaplaneClient,
-		scheme:     scheme.Scheme,
-		restConfig: restConfig,
+		client:        numaplaneClient,
+		scheme:        scheme.Scheme,
+		restConfig:    restConfig,
+		customMetrics: metrics,
 	}
 
 	testCases := []struct {
 		name                  string
 		newISBSvcSpec         numaflowv1.InterStepBufferServiceSpec
-		existingISBSvcDef     numaflowv1.InterStepBufferService
-		existingPipelinePhase apiv1.Phase
-		expectedConditionsSet map[apiv1.ConditionType]bool // the Conditions, as well as whether they're set to true or false
+		existingISBSvcDef     *numaflowv1.InterStepBufferService
+		existingPipelinePhase numaflowv1.PipelinePhase
+		expectedConditionsSet map[apiv1.ConditionType]metav1.ConditionStatus // the Conditions, as well as whether they're set to true or false
 		resultISBSvcSpec      numaflowv1.InterStepBufferServiceSpec
-	}{}
+	}{
+		{
+			name:                  "new ISBService",
+			newISBSvcSpec:         createDefaultISBServiceSpec("2.10.3"),
+			existingISBSvcDef:     nil,
+			existingPipelinePhase: numaflowv1.PipelinePhaseRunning,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+		},
+	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// create ISBServiceRollout definition
 
-			// create the actual ISBSvc in Kubernetes
+			// first delete ISBSvc and Pipeline in case they already exist, in Kubernetes
+			numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
+			numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+
+			// create ISBServiceRollout definition
+			rollout := createISBServiceRollout(tc.newISBSvcSpec)
+
+			// create the actual already-existing ISBSvc in Kubernetes
+			if tc.existingISBSvcDef != nil {
+				_, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Create(ctx, tc.existingISBSvcDef, metav1.CreateOptions{})
+				assert.NoError(t, err)
+			}
 
 			// create a Pipeline of the given phase in Kubernetes
+			_, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, createDefaultPipelineOfPhase(tc.existingPipelinePhase), metav1.CreateOptions{})
+			assert.NoError(t, err)
 
 			// call reconcile()
+			_, err = r.reconcile(ctx, rollout, time.Now())
+			assert.NoError(t, err)
 
-			// check results
+			////// check results:
+			// Phase:
+			assert.Equal(t, apiv1.PhaseDeployed, rollout.Status.Phase)
 
-			// delete ISBSvc and Pipeline in Kubernetes
+			// Conditions:
+			for conditionType, conditionStatus := range tc.expectedConditionsSet {
+				found := false
+				for _, condition := range rollout.Status.Conditions {
+					if condition.Type == string(conditionType) && condition.Status == conditionStatus {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found)
+			}
 
 		})
 	}
 }
 
 func createDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBufferServiceSpec {
-	isbsSpec := numaflowv1.InterStepBufferServiceSpec{
+	return numaflowv1.InterStepBufferServiceSpec{
 		Redis: &numaflowv1.RedisBufferService{},
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version:     jetstreamVersion,
@@ -322,15 +362,57 @@ func createDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBu
 	}
 }
 
-func createDefaultISBService(jetstreamVersion string, conditions map[apiv1.ConditionType]bool) numaflowv1.InterStepBufferService {
-	return numaflowv1.InterStepBufferService{
+func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPhase, conditions []metav1.Condition) *numaflowv1.InterStepBufferService {
+	return &numaflowv1.InterStepBufferService{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "InterStepBufferService",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "isbservicerollout-test",
-			Namespace: "default",
+			Name:      defaultISBSvcRolloutName,
+			Namespace: defaultNamespace,
+		},
+		Spec: createDefaultISBServiceSpec(jetstreamVersion),
+		Status: numaflowv1.InterStepBufferServiceStatus{
+			Phase: phase,
+			Status: numaflowv1.Status{
+				Conditions: conditions,
+			},
+		},
+	}
+}
+
+func createISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
+	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
+	return &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         defaultNamespace,
+			Name:              defaultISBSvcRolloutName,
+			UID:               "some-uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+		},
+		Spec: apiv1.ISBServiceRolloutSpec{
+			InterStepBufferService: apiv1.InterStepBufferService{
+				Spec: runtime.RawExtension{
+					Raw: isbsSpecRaw,
+				},
+			},
+		},
+	}
+}
+
+func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
+	return &numaflowv1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pipelinerollout-test",
+			Namespace: defaultNamespace,
+		},
+		Spec: numaflowv1.PipelineSpec{
+			InterStepBufferServiceName: defaultISBSvcRolloutName,
+		},
+		Status: numaflowv1.PipelineStatus{
+			Phase: phase,
 		},
 	}
 }
