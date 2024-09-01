@@ -227,3 +227,18 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 		})
 	})
 })
+
+// test reconcile
+// each test passes in a current version of the ISBSvc and a new ISBServiceRollout spec
+// 1. spec differs from current, pipelines not paused - want to see that we're pausing pipelines (i.e. Condition) and memory verification and we don't update ISBService
+// 2. spec differs from current, pipelines all paused - verify we're still pausing pipelines, but we update the spec
+// 2. spec not different but ISBService is still reconciling - want to see that we're still pausing pipelines (i.e. Condition) and memory verification
+// 3. spec not different and ISBService no longer reconciling - want to see that we've resumed pipelines
+
+// Inputs for each test:
+// 1. current ISBSvc (spec + status for whether it's progressing)
+// 2. ISBServiceRollout spec
+// 3. existing Pipelines (or just their phase)
+// Outputs:
+// 1. expected Conditions
+// 2. new ISBSvc spec
