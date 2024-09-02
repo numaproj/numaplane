@@ -269,10 +269,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 		// set the Status appropriately to "Pending" or "Deployed"
 		// if controllerDeploymentNeedsUpdating - this means there's a mismatch between the desired NumaflowControllerRollout version and actual
-		// if there's a generation mismatch - this means we haven't even observed the current generation
-		// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-		// we may match the second case and not the first if we need to update something other than Numaflow Controller version
-		if controllerDeploymentNeedsUpdating || controllerRollout.Status.ObservedGeneration < controllerRollout.Generation {
+		// Note that this will be reset to "Deployed" later on if a deployment occurs
+		if controllerDeploymentNeedsUpdating {
 			controllerRollout.Status.MarkPending()
 		} else {
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)

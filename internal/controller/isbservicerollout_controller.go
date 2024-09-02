@@ -274,10 +274,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
-	// if there's a generation mismatch - this means we haven't even observed the current generation
-	// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-	// we may match the second case and not the first if we need to update something other than ISBService spec
-	if isbServiceNeedsUpdating || isbServiceRollout.Status.ObservedGeneration < isbServiceRollout.Generation {
+	// Note that this will be reset to "Deployed" later on if a deployment occurs
+	if isbServiceNeedsUpdating {
 		isbServiceRollout.Status.MarkPending()
 	} else {
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
