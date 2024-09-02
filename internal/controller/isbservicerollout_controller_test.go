@@ -34,10 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -281,13 +283,17 @@ func Test_reconcile_PPND(t *testing.T) {
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
 	metrics := metrics.RegisterCustomMetrics()
+	recorder := record.NewFakeRecorder(64)
 
 	r := &ISBServiceRolloutReconciler{
 		client:        numaplaneClient,
 		scheme:        scheme.Scheme,
 		restConfig:    restConfig,
 		customMetrics: metrics,
+		recorder:      recorder,
 	}
+
+	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
 		name                  string
@@ -295,7 +301,8 @@ func Test_reconcile_PPND(t *testing.T) {
 		existingISBSvcDef     *numaflowv1.InterStepBufferService
 		existingPipelinePhase numaflowv1.PipelinePhase
 		expectedRolloutPhase  apiv1.Phase
-		expectedConditionsSet map[apiv1.ConditionType]metav1.ConditionStatus // the Conditions, as well as whether they're set to true or false
+		// the Conditions we expect, as well as whether they're set to true or false (note that some other Conditions may still be set from before)
+		expectedConditionsSet map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedISBSvcSpec    numaflowv1.InterStepBufferServiceSpec
 	}{
 		{
@@ -315,13 +322,19 @@ func Test_reconcile_PPND(t *testing.T) {
 			existingISBSvcDef:     createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, []metav1.Condition{}),
 			existingPipelinePhase: numaflowv1.PipelinePhaseRunning,
 			expectedRolloutPhase:  apiv1.PhasePending,
-			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{},
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{}, // some Conditions may be set from before, but in any case nothing new to verify
+			expectedISBSvcSpec:    createDefaultISBServiceSpec("2.10.3"),
+		},
+		{
+			name:                  "existing ISBService - new spec - pipelines not paused",
+			newISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:     createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, []metav1.Condition{}),
+			existingPipelinePhase: numaflowv1.PipelinePhaseRunning,
+			expectedRolloutPhase:  apiv1.PhasePending,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{apiv1.ConditionPausingPipelines: metav1.ConditionTrue},
 			expectedISBSvcSpec:    createDefaultISBServiceSpec("2.10.3"),
 		},
 		/*{
-			name: "existing ISBService - new spec - pipelines not paused",
-		},
-		{
 			name: "existing ISBService - new spec - pipelines paused",
 		},
 		{
@@ -339,32 +352,53 @@ func Test_reconcile_PPND(t *testing.T) {
 			numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
 			numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
 
+			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, isbsvcList.Items, 0)
+			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, pipelineList.Items, 0)
+
 			// create ISBServiceRollout definition
 			rollout := createISBServiceRollout(tc.newISBSvcSpec)
 
-			// create the actual already-existing ISBSvc in Kubernetes
+			// create the already-existing ISBSvc in Kubernetes
 			if tc.existingISBSvcDef != nil {
-				_, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Create(ctx, tc.existingISBSvcDef, metav1.CreateOptions{})
+				// this updates everything but the Status subresource
+				isbsvc, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Create(ctx, tc.existingISBSvcDef, metav1.CreateOptions{})
 				assert.NoError(t, err)
+				isbsvc.Status = tc.existingISBSvcDef.Status
+				numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).UpdateStatus(ctx, isbsvc, metav1.UpdateOptions{})
 			}
 
-			// create a Pipeline of the given phase in Kubernetes
-			_, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, createDefaultPipelineOfPhase(tc.existingPipelinePhase), metav1.CreateOptions{})
+			// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
+			newPipeline := createDefaultPipelineOfPhase(tc.existingPipelinePhase)
+			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, newPipeline, metav1.CreateOptions{})
 			assert.NoError(t, err)
+			pipeline.Status = newPipeline.Status
+
+			// updating the Status subresource is a separate operation
+			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+			//verifyPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
+			//assert.NoError(t, err)
+			//fmt.Printf("Created pipeline: %+v\n", verifyPipeline)
 
 			// call reconcile()
 			_, err = r.reconcile(ctx, rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
-			// Phase:
+			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
-			// Generation:
-			isbsvc, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Get(ctx, defaultISBSvcRolloutName, metav1.GetOptions{})
+			// Check isbsvc
+			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Get(ctx, defaultISBSvcRolloutName, metav1.GetOptions{})
+			//resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
 			assert.NoError(t, err)
-			assert.NotNil(t, isbsvc)
-			//assert.Equal(t, 1, isbsvc.Generation == tc.expectedISBSvcGeneration)
-			assert.Equal(t, isbsvc.Spec, tc.expectedISBSvcSpec)
+			assert.NotNil(t, resultISBSVC)
+			//fmt.Printf("deletethis: pipeline.Status.Phase=%+v\n", resultPipeline.Status.Phase)
+			//assert.Equal(t, 1, resultISBSVC.Generation == tc.expectedISBSvcGeneration)
+			assert.Equal(t, resultISBSVC.Spec, tc.expectedISBSvcSpec)
 
 			// Conditions:
 			for conditionType, conditionStatus := range tc.expectedConditionsSet {
@@ -438,8 +472,12 @@ func createISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *
 func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
 	return &numaflowv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pipelinerollout-test",
-			Namespace: defaultNamespace,
+			Name:              "pipelinerollout-test",
+			Namespace:         defaultNamespace,
+			UID:               "some-uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+			Labels:            map[string]string{"numaplane.numaproj.io/isbsvc-name": "isbservicerollout-test"},
 		},
 		Spec: numaflowv1.PipelineSpec{
 			InterStepBufferServiceName: defaultISBSvcRolloutName,
