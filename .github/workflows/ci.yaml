@@ -91,22 +91,6 @@ jobs:
       - name: Get dependencies
         run: go mod download
 
-      # this may or may not be needed, depending on if we want to use a real cluster in the tests
-      - name: Install k3d
-        run: |
-          curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
-          echo 'k3d installed'
-          k3d --version
-
-      - name: Create a cluster
-        run: |
-          export PATH=$PATH:/usr/local/bin
-          k3d cluster create e2e
-          k3d kubeconfig get e2e > ~/.kube/config
-          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
-          echo 'Waiting for the cluster to be ready...'
-          until kubectl cluster-info; do sleep 1; done
-
       - name: Test
         run: make test
 
