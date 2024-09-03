@@ -42,7 +42,7 @@ func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/full/numaflow.numaproj.io_monovertices.yaml",
 	}
-	externalCRDsDir := crdDirectory + "external"
+	externalCRDsDir := crdDirectory + "/external"
 	for _, crdURL := range crdsURLs {
 		downloadCRDToPath(crdURL, externalCRDsDir)
 	}

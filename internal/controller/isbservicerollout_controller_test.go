@@ -300,7 +300,8 @@ func Test_reconcile_PPND(t *testing.T) {
 	//numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
 	numaplaneClient, err := client.New(restConfig, client.Options{})
 	k8sClientSet, err := k8sclientgo.NewForConfig(restConfig)
-	assert.Nil(t, err)*/
+	assert.Nil(t, err)
+	*/
 
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := prepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -411,12 +412,9 @@ func Test_reconcile_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete ISBSvc and Pipeline in case they already exist, in Kubernetes
-			err = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
-			assert.NoError(t, err)
-			err = k8sClientSet.AppsV1().StatefulSets(defaultNamespace).Delete(ctx, deriveISBSvcStatefulSetName(defaultISBSvcRolloutName), metav1.DeleteOptions{})
-			assert.NoError(t, err)
-			err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
-			assert.NoError(t, err)
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
+			_ = k8sClientSet.AppsV1().StatefulSets(defaultNamespace).Delete(ctx, deriveISBSvcStatefulSetName(defaultISBSvcRolloutName), metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -534,9 +532,11 @@ func createDefaultISBStatefulSet(fullyReconciled bool) *appsv1.StatefulSet {
 	var status appsv1.StatefulSetStatus
 	if fullyReconciled {
 		status.ObservedGeneration = 2
+		status.Replicas = 3
 		status.UpdatedReplicas = 3
 	} else {
 		status.ObservedGeneration = 1
+		status.Replicas = 3
 	}
 	replicas := int32(3)
 	labels := map[string]string{
