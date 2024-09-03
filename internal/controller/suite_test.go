@@ -136,7 +136,9 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	customMetrics = metrics.RegisterCustomMetrics()
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
 
 	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)

@@ -324,14 +324,18 @@ func Test_reconcile_PPND(t *testing.T) {
 	logger.SetBaseLogger(numaLogger)
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
-	metrics := metrics.RegisterCustomMetrics()
+	// useful if running this function by itself
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
+
 	recorder := record.NewFakeRecorder(64)
 
 	r := &ISBServiceRolloutReconciler{
 		client:        numaplaneClient,
 		scheme:        scheme.Scheme,
 		restConfig:    restConfig,
-		customMetrics: metrics,
+		customMetrics: customMetrics,
 		recorder:      recorder,
 	}
 
