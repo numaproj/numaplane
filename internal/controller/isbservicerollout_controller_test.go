@@ -20,15 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-
 	"github.com/stretchr/testify/assert"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -40,12 +35,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	k8sclientgo "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -264,10 +257,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 // 2. new ISBSvc spec
 
 func Test_reconcile_PPND(t *testing.T) {
-	//restConfig, err := kubernetes.K8sRestConfig()
-	//assert.Nil(t, err)
-
-	RegisterFailHandler(Fail)
+	/*RegisterFailHandler(Fail)
 	// Download Numaflow CRDs
 	crdsURLs := []string{
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
@@ -310,6 +300,9 @@ func Test_reconcile_PPND(t *testing.T) {
 	//numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
 	numaplaneClient, err := client.New(restConfig, client.Options{})
 	k8sClientSet, err := k8sclientgo.NewForConfig(restConfig)
+	assert.Nil(t, err)*/
+
+	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := prepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	// Make sure "dataLossPrevention" feature flag is turned on
@@ -418,9 +411,12 @@ func Test_reconcile_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete ISBSvc and Pipeline in case they already exist, in Kubernetes
-			numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
-			k8sClientSet.AppsV1().StatefulSets(defaultNamespace).Delete(ctx, deriveISBSvcStatefulSetName(defaultISBSvcRolloutName), metav1.DeleteOptions{})
-			numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+			err = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
+			assert.NoError(t, err)
+			err = k8sClientSet.AppsV1().StatefulSets(defaultNamespace).Delete(ctx, deriveISBSvcStatefulSetName(defaultISBSvcRolloutName), metav1.DeleteOptions{})
+			assert.NoError(t, err)
+			err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+			assert.NoError(t, err)
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -445,7 +441,8 @@ func Test_reconcile_PPND(t *testing.T) {
 				assert.NoError(t, err)
 				// update Status subresource
 				isbsvc.Status = tc.existingISBSvcDef.Status
-				numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).UpdateStatus(ctx, isbsvc, metav1.UpdateOptions{})
+				_, err = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).UpdateStatus(ctx, isbsvc, metav1.UpdateOptions{})
+				assert.NoError(t, err)
 			}
 
 			// create the already-existing StatefulSet in Kubernetes
@@ -454,7 +451,8 @@ func Test_reconcile_PPND(t *testing.T) {
 				assert.NoError(t, err)
 				// update Status subresource
 				ss.Status = tc.existingStatefulSetDef.Status
-				k8sClientSet.AppsV1().StatefulSets(defaultNamespace).UpdateStatus(ctx, ss, metav1.UpdateOptions{})
+				_, err = k8sClientSet.AppsV1().StatefulSets(defaultNamespace).UpdateStatus(ctx, ss, metav1.UpdateOptions{})
+				assert.NoError(t, err)
 			}
 
 			// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
