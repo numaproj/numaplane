@@ -18,18 +18,14 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/util/logger"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -78,61 +74,8 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	_, _, _, _, err := prepareK8SEnvironment()
+	cfg, _, _, _, err := prepareK8SEnvironment()
 	Expect(err).NotTo(HaveOccurred())
-
-	// Download Numaflow CRDs
-	crdsURLs := []string{
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/full/numaflow.numaproj.io_monovertices.yaml",
-	}
-	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
-	for _, crdURL := range crdsURLs {
-		downloadCRD(crdURL, externalCRDsDir)
-	}
-
-	By("bootstrapping test environment")
-	// TODO: IDEA: could set useExistingCluster via an env var to be able to reuse some tests cases in e2e tests
-	// by setting this variable in CI for unit tests and e2e tests appropriately.
-	useExistingCluster := false
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
-		ErrorIfCRDPathMissing: true,
-
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
-
-		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
-		// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
-		UseExistingCluster: &useExistingCluster,
-	}
-
-	numaLogger := logger.New().WithName("controller-manager")
-
-	numaLogger.SetLevel(4) // change to 3 for "info" level
-	logger.SetBaseLogger(numaLogger)
-
-	common.DataLossPrevention = false
-
-	// cfg is defined in this file globally.
-	/*cfg, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
-
-	err = numaflowv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = apiv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	*/
-	//+kubebuilder:scaffold:scheme
 
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
@@ -273,7 +216,7 @@ func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespa
 
 	currentResource := unstructured.Unstructured{}
 	currentResource.SetGroupVersionKind(gvk)
-	Consistently(func() (bool, error) {
+	Eventually(func() (bool, error) {
 		err := k8sClient.Get(ctx, lookupKey, &currentResource)
 		if err != nil {
 			return false, err
@@ -304,5 +247,5 @@ func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespa
 		}
 
 		return apiv1.Phase(phase) == desiredPhase && observedGeneration == generation, nil
-	}, duration, interval).Should(BeTrue())
+	}, timeout, interval).Should(BeTrue())
 }
