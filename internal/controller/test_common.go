@@ -105,31 +105,11 @@ func findCRDDirectory() (string, error) {
 		endIndex := occurrence[1]
 		possibleCRDDirectory := path[0:endIndex] + crdSubdirectory
 		_, err := os.Stat(possibleCRDDirectory)
-		fmt.Printf("deletethis: testing %q\n", possibleCRDDirectory)
 		if err == nil {
 			return possibleCRDDirectory, nil
 		}
 	}
 	return "", fmt.Errorf("no occurrence of %q found in any higher level directory from current working directory %q", crdSubdirectory, path)
-
-	/*remainingPath := path
-	previouslyViewedPath := ""
-
-	// look in our current directory for instances of "numaplane" in the path and try each
-	for {
-		numaplaneRootDirectoryIndex := strings.Index(remainingPath, "/numaplane/")
-		if numaplaneRootDirectoryIndex < 0 {
-			return "", fmt.Errorf("directory %q not found", crdSubdirectory)
-		}
-		pathUpToRoot := previouslyViewedPath + remainingPath[0:numaplaneRootDirectoryIndex]
-		crdDirectory := pathUpToRoot + crdSubdirectory
-		_, err := os.Stat(crdDirectory)
-		if err != nil {
-			return crdDirectory, nil
-		}
-		remainingPath = remainingPath[numaplaneRootDirectoryIndex+len("/numaplane/"):]
-		previouslyViewedPath = previouslyViewedPath + remainingPath[0:numaplaneRootDirectoryIndex+len("/numaplane/")]
-	}*/
 }
 
 func downloadCRDToPath(url string, downloadDir string) error {
