@@ -45,7 +45,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -78,6 +77,9 @@ func TestControllers(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	_, _, _, _, err := prepareK8SEnvironment()
+	Expect(err).NotTo(HaveOccurred())
 
 	// Download Numaflow CRDs
 	crdsURLs := []string{
@@ -119,9 +121,8 @@ var _ = BeforeSuite(func() {
 
 	common.DataLossPrevention = false
 
-	var err error
 	// cfg is defined in this file globally.
-	cfg, err = testEnv.Start()
+	/*cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
@@ -130,7 +131,7 @@ var _ = BeforeSuite(func() {
 
 	err = apiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
-
+	*/
 	//+kubebuilder:scaffold:scheme
 
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
