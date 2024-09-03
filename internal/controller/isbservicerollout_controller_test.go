@@ -41,7 +41,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -257,66 +256,14 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 // 2. new ISBSvc spec
 
 func Test_reconcile_PPND(t *testing.T) {
-	/*RegisterFailHandler(Fail)
-	// Download Numaflow CRDs
-	crdsURLs := []string{
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
-		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/full/numaflow.numaproj.io_monovertices.yaml",
-	}
-	externalCRDsDir = filepath.Join("..", "..", "config", "crd", "external")
-	for _, crdURL := range crdsURLs {
-		downloadCRD(crdURL, externalCRDsDir)
-	}
-
-	useExistingCluster := false
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), externalCRDsDir},
-		ErrorIfCRDPathMissing: true,
-
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
-
-		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
-		// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
-		UseExistingCluster: &useExistingCluster,
-	}
-
-	restConfig, err := testEnv.Start()
-	assert.Nil(t, err)
-
-	err = numaflowv1.AddToScheme(scheme.Scheme)
-	assert.Nil(t, err)
-	err = apiv1.AddToScheme(scheme.Scheme)
-	assert.Nil(t, err)
-
-	numaflowClientSet := numaflowversioned.NewForConfigOrDie(restConfig)
-	//numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
-	numaplaneClient, err := client.New(restConfig, client.Options{})
-	k8sClientSet, err := k8sclientgo.NewForConfig(restConfig)
-	assert.Nil(t, err)
-	*/
 
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := prepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	// Make sure "dataLossPrevention" feature flag is turned on
-	//configManager := config.GetConfigManagerInstance()
-	// todo: make sure this works when called from root level too
-	//err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath("./testdata/"), config.WithConfigFileName("config"))
-	//assert.NoError(t, err)
 	common.DataLossPrevention = true
 
-	numaLogger := logger.GetBaseLogger()
-	numaLogger.LogLevel = logger.DebugLevel // TODO: why isn't this working?
-	logger.SetBaseLogger(numaLogger)
-	ctx := logger.WithLogger(context.Background(), numaLogger)
+	ctx := context.Background()
 
 	// useful if running this function by itself
 	if customMetrics == nil {
@@ -342,7 +289,7 @@ func Test_reconcile_PPND(t *testing.T) {
 		existingStatefulSetDef *appsv1.StatefulSet
 		existingPipelinePhase  numaflowv1.PipelinePhase
 		expectedRolloutPhase   apiv1.Phase
-		// the Conditions we expect, as well as whether they're set to true or false (note that some other Conditions may still be set from before)
+		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedConditionsSet map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedISBSvcSpec    numaflowv1.InterStepBufferServiceSpec
 	}{
@@ -471,9 +418,6 @@ func Test_reconcile_PPND(t *testing.T) {
 			// updating the Status subresource is a separate operation
 			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
 			assert.NoError(t, err)
-			//verifyPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
-			//assert.NoError(t, err)
-			//fmt.Printf("Created pipeline: %+v\n", verifyPipeline)
 
 			// call reconcile()
 			_, err = r.reconcile(ctx, rollout, time.Now())
@@ -484,11 +428,8 @@ func Test_reconcile_PPND(t *testing.T) {
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			// Check isbsvc
 			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Get(ctx, defaultISBSvcRolloutName, metav1.GetOptions{})
-			//resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultISBSVC)
-			//fmt.Printf("deletethis: pipeline.Status.Phase=%+v\n", resultPipeline.Status.Phase)
-			//assert.Equal(t, 1, resultISBSVC.Generation == tc.expectedISBSvcGeneration)
 			assert.Equal(t, tc.expectedISBSvcSpec, resultISBSVC.Spec)
 
 			// Conditions:
