@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -115,6 +116,8 @@ var _ = BeforeSuite(func() {
 
 	numaLogger.SetLevel(4) // change to 3 for "info" level
 	logger.SetBaseLogger(numaLogger)
+
+	common.DataLossPrevention = false
 
 	var err error
 	// cfg is defined in this file globally.
