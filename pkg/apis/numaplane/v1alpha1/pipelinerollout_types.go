@@ -38,7 +38,8 @@ type Pipeline struct {
 
 // PipelineRolloutStatus defines the observed state of PipelineRollout
 type PipelineRolloutStatus struct {
-	Status `json:",inline"`
+	Status      `json:",inline"`
+	PauseStatus `json:"pauseStatus,omitempty"`
 }
 
 // +genclient

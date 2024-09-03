@@ -737,6 +737,19 @@ spec:
                   when setting the current Phase
                 format: int64
                 type: integer
+              pauseStatus:
+                description: PauseStatus is a common structure used to communicate
+                  how long Pipelines are paused.
+                properties:
+                  lastPauseBeginTime:
+                    description: The begin time for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPauseEndTime:
+                    description: The end time for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                type: object
               phase:
                 description: Phase indicates the current phase of the resource.
                 enum:
