@@ -388,6 +388,15 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .spec.replicas
+      name: Desired
+      type: string
+    - jsonPath: .status.replicas
+      name: Current
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -854,6 +863,9 @@ spec:
       type: string
     - jsonPath: .status.replicas
       name: Current
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -1403,7 +1415,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: quay.io/numaproj/numaplane-controller:latest
+        image: quay.io/numaproj/numaplane-controller:v0.5.0
         livenessProbe:
           httpGet:
             path: /healthz
