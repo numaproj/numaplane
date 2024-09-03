@@ -70,6 +70,15 @@ type Status struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
+// PauseStatus is a common structure used to communicate how long Pipelines are paused.
+type PauseStatus struct {
+	// The begin time for the last pause of the Pipeline.
+	LastPauseBeginTime metav1.Time `json:"lastPauseBeginTime,omitempty"`
+
+	// The end time for the last pause of the Pipeline.
+	LastPauseEndTime metav1.Time `json:"lastPauseEndTime,omitempty"`
+}
+
 func (status *Status) SetPhase(phase Phase, msg string) {
 	status.Phase = phase
 	status.Message = msg
