@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
-	"strings"
 
 	k8sclientgo "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -27,14 +27,11 @@ var (
 func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
 	// download Numaflow CRDs to a temporary location
 
-	path, _ := os.Getwd()
-	// TODO: make this work even if your current directory has multiple directories in the path named 'numaplane'
-	numaplaneRootDirectoryIndex := strings.Index(path, "/numaplane/")
-	if numaplaneRootDirectoryIndex < 0 {
-		panic("current directory %q doesn't include /numaplane/")
+	// find Numaplane root directory
+	crdDirectory, err := findCRDDirectory()
+	if err != nil {
+		return
 	}
-	pathUpToRoot := path[0:numaplaneRootDirectoryIndex]
-	crdDirectory := pathUpToRoot + "/numaplane/config/crd"
 
 	crdsURLs := []string{
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
@@ -44,7 +41,10 @@ func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 	}
 	externalCRDsDir := crdDirectory + "/external"
 	for _, crdURL := range crdsURLs {
-		downloadCRDToPath(crdURL, externalCRDsDir)
+		err = downloadCRDToPath(crdURL, externalCRDsDir)
+		if err != nil {
+			return
+		}
 	}
 
 	useExistingCluster := false
@@ -90,6 +90,46 @@ func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 	}
 	k8sClientSet, err = k8sclientgo.NewForConfig(restConfig)
 	return
+}
+
+func findCRDDirectory() (string, error) {
+	crdSubdirectory := "/config/crd"
+	path, _ := os.Getwd()
+
+	r := regexp.MustCompile(`/numaplane/`)
+	matches := r.FindAllStringIndex(path, -1) // this returns a set of slices, where each slice represents the first and last index of the "/numaplane/" string
+	if matches == nil {
+		return "", fmt.Errorf("no occurrences of '/numaplane/' found in path %q", path)
+	}
+	for _, occurrence := range matches {
+		endIndex := occurrence[1]
+		possibleCRDDirectory := path[0:endIndex] + crdSubdirectory
+		_, err := os.Stat(possibleCRDDirectory)
+		fmt.Printf("deletethis: testing %q\n", possibleCRDDirectory)
+		if err == nil {
+			return possibleCRDDirectory, nil
+		}
+	}
+	return "", fmt.Errorf("no occurrence of %q found in any higher level directory from current working directory %q", crdSubdirectory, path)
+
+	/*remainingPath := path
+	previouslyViewedPath := ""
+
+	// look in our current directory for instances of "numaplane" in the path and try each
+	for {
+		numaplaneRootDirectoryIndex := strings.Index(remainingPath, "/numaplane/")
+		if numaplaneRootDirectoryIndex < 0 {
+			return "", fmt.Errorf("directory %q not found", crdSubdirectory)
+		}
+		pathUpToRoot := previouslyViewedPath + remainingPath[0:numaplaneRootDirectoryIndex]
+		crdDirectory := pathUpToRoot + crdSubdirectory
+		_, err := os.Stat(crdDirectory)
+		if err != nil {
+			return crdDirectory, nil
+		}
+		remainingPath = remainingPath[numaplaneRootDirectoryIndex+len("/numaplane/"):]
+		previouslyViewedPath = previouslyViewedPath + remainingPath[0:numaplaneRootDirectoryIndex+len("/numaplane/")]
+	}*/
 }
 
 func downloadCRDToPath(url string, downloadDir string) error {
