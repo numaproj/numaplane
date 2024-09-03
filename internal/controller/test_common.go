@@ -96,10 +96,10 @@ func findCRDDirectory() (string, error) {
 	crdSubdirectory := "/config/crd"
 	path, _ := os.Getwd()
 
-	r := regexp.MustCompile(`/numaplane/`)
+	r := regexp.MustCompile(`/numaplane`)
 	matches := r.FindAllStringIndex(path, -1) // this returns a set of slices, where each slice represents the first and last index of the "/numaplane/" string
 	if matches == nil {
-		return "", fmt.Errorf("no occurrences of '/numaplane/' found in path %q", path)
+		return "", fmt.Errorf("no occurrences of '/numaplane' found in path %q", path)
 	}
 	for _, occurrence := range matches {
 		endIndex := occurrence[1]
