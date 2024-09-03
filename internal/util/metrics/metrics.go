@@ -55,6 +55,8 @@ type CustomMetrics struct {
 	KubeResourceCache *prometheus.GaugeVec
 	// ClusterCacheError count the total number of cluster cache errors
 	ClusterCacheError *prometheus.CounterVec
+	// PipelinePausedSeconds counts the total time a Pipeline was paused.
+	PipelinePausedSeconds *prometheus.GaugeVec
 }
 
 const (
@@ -63,6 +65,7 @@ const (
 	LabelType       = "type"
 	LabelPhase      = "phase"
 	LabelK8SVersion = "K8SVersion"
+	LabelName       = "name"
 )
 
 var (
@@ -77,6 +80,13 @@ var (
 		Help:        "Number of Numaflow pipelines running",
 		ConstLabels: defaultLabels,
 	}, []string{})
+
+	// pipelinePausedSeconds Check the total time a pipeline was paused
+	pipelinePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_pipeline_paused_seconds",
+		Help:        "Duration a pipeline was paused for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName})
 
 	// pipelinesSynced Check the total number of pipeline synced
 	pipelinesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -211,7 +221,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
 		monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
 		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
-		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError)
+		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError, pipelinePausedSeconds)
 
 	return &CustomMetrics{
 		PipelinesRunning:                          pipelinesRunning,
@@ -237,6 +247,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		KubeResourceMonitored:                     kubeResourceCacheMonitored,
 		KubeResourceCache:                         kubeResourceCache,
 		ClusterCacheError:                         clusterCacheError,
+		PipelinePausedSeconds:                     pipelinePausedSeconds,
 	}
 }
 
