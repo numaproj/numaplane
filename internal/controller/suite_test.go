@@ -139,6 +139,7 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
+	// other tests may call this, but it fails if called more than once
 	if customMetrics == nil {
 		customMetrics = metrics.RegisterCustomMetrics()
 	}

@@ -25,9 +25,13 @@ var (
 )
 
 func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
-	// download Numaflow CRDs to a temporary location
 
-	// find Numaplane root directory
+	// Set up a test Kubernetes environment which includes both our Numaplane and Numaflow CRDs
+
+	// Numaplane CRDs can be found in our repository
+	// Numaflow CRDs must be downloaded
+
+	// find Numaplane CRD directory
 	crdDirectory, err := findCRDDirectory()
 	if err != nil {
 		return

@@ -251,7 +251,11 @@ func Test_reconcile_PPND(t *testing.T) {
 
 	ctx := context.Background()
 
-	customMetrics = metrics.RegisterCustomMetrics()
+	// other tests may call this, but it fails if called more than once
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
+
 	recorder := record.NewFakeRecorder(64)
 
 	r := &ISBServiceRolloutReconciler{
@@ -414,7 +418,7 @@ func Test_reconcile_PPND(t *testing.T) {
 			assert.NotNil(t, resultISBSVC)
 			assert.Equal(t, tc.expectedISBSvcSpec, resultISBSVC.Spec)
 
-			// Conditions:
+			// Check Conditions:
 			for conditionType, conditionStatus := range tc.expectedConditionsSet {
 				found := false
 				for _, condition := range rollout.Status.Conditions {
@@ -457,9 +461,6 @@ func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      defaultISBSvcRolloutName,
 			Namespace: defaultNamespace,
-			//UID:               "some-uid",
-			//CreationTimestamp: metav1.NewTime(time.Now()),
-			//Generation:        2,
 		},
 		Spec:   createDefaultISBServiceSpec(jetstreamVersion),
 		Status: status,
@@ -489,10 +490,7 @@ func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deriveISBSvcStatefulSetName(defaultISBSvcRolloutName),
 			Namespace: defaultNamespace,
-			//UID:               "some-uid",
-			//CreationTimestamp: metav1.NewTime(time.Now()),
-			//Generation:        2,
-			Labels: labels,
+			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
