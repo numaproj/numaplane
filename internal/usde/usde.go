@@ -12,43 +12,28 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 )
 
-type UpgradeStrategy int
+type UpgradeStrategy string
 
 const (
-	UpgradeStrategyError UpgradeStrategy = iota - 1
-	UpgradeStrategyNoOp
-	UpgradeStrategyApply
-	UpgradeStrategyPPND
-	UpgradeStrategyProgressive
+	UpgradeStrategyError       = ""
+	UpgradeStrategyNoOp        = "NoOp"
+	UpgradeStrategyApply       = "DirectApply"
+	UpgradeStrategyPPND        = "PipelinePauseAndDrain"
+	UpgradeStrategyProgressive = "Progressive"
 )
-
-func (us UpgradeStrategy) String() string {
-	switch us {
-	case UpgradeStrategyError:
-		return "Error"
-	case UpgradeStrategyNoOp:
-		return "NoOp"
-	case UpgradeStrategyApply:
-		return "DirectApply"
-	case UpgradeStrategyPPND:
-		return "PipelinePauseAndDrain"
-	case UpgradeStrategyProgressive:
-		return "Progressive"
-	}
-
-	return "Invalid"
-}
 
 // DeriveUpgradeStrategy calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details)
-func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, inProgressUpgradeStrategy string) (UpgradeStrategy, error) {
+func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject,
+	inProgressUpgradeStrategy string, overrideToPPND, overrideToProgressive *bool) (UpgradeStrategy, error) {
+
 	numaLogger := logger.FromContext(ctx)
 
-	if inProgressUpgradeStrategy == UpgradeStrategyPPND.String() {
+	if inProgressUpgradeStrategy == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
 		return UpgradeStrategyPPND, nil
 	}
 
-	if inProgressUpgradeStrategy == UpgradeStrategyProgressive.String() {
+	if inProgressUpgradeStrategy == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		return UpgradeStrategyPPND, nil
 	}
