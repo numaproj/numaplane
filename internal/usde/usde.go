@@ -39,11 +39,11 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 		return UpgradeStrategyPPND, nil, nil
 	}
 
-	if inProgressUpgradeStrategy == UpgradeStrategyPPND.String() {
+	if inProgressUpgradeStrategy == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
 		return UpgradeStrategyPPND, nil
 	}
 
-	if inProgressUpgradeStrategy == UpgradeStrategyProgressive.String() {
+	if inProgressUpgradeStrategy == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		return UpgradeStrategyPPND, nil
 	}

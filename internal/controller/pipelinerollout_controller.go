@@ -408,19 +408,28 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
 
-	var existingPipelineSpec PipelineSpec
-	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
-		return fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
+	var newPipelineSpec PipelineSpec
+	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.InProgressUpgradeStrategy)
+	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
 		return err
 	}
 
-	numaLogger.WithValues("upgradeStrategy", upgradeStrategy.String()).Info("derived upgrade strategy")
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &externalPauseRequest, nil)
+	if err != nil {
+		return err
+	}
+	numaLogger.WithValues("upgradeStrategy", upgradeStrategy).Info("derived upgrade strategy")
 
-	pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
+	// pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
+	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	if err != nil {
+		return err
+	}
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
@@ -430,21 +439,27 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
-	if !common.DataLossPrevention || upgradeStrategy == usde.UpgradeStrategyApply {
+	if upgradeStrategy == usde.UpgradeStrategyProgressive {
+		pipelineRollout.Status.SetUpgradeInProgress(usde.UpgradeStrategyProgressive)
+
+		// TODO-PROGRESSIVE: implement
+		numaLogger.Warn("PROGRESSIVE strategy coming soon")
+	} else if upgradeStrategy == usde.UpgradeStrategyPPND {
+		pipelineRollout.Status.SetUpgradeInProgress(usde.UpgradeStrategyPPND)
+
+		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef,
+			newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown); err != nil {
+
+			return err
+		}
+	} else if !common.DataLossPrevention || upgradeStrategy == usde.UpgradeStrategyApply {
 		if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 			return err
 		}
 
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-	} else if upgradeStrategy == usde.UpgradeStrategyPPND {
-		pipelineRollout.Status.SetInProgressUpgradeStrategy(usde.UpgradeStrategyPPND.String())
-		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
-			return err
-		}
-	} else if upgradeStrategy == usde.UpgradeStrategyProgressive {
-		// TODO-PROGRESSIVE: implement
-		numaLogger.Warn("PROGRESSIVE strategy coming soon")
-		pipelineRollout.Status.SetInProgressUpgradeStrategy(usde.UpgradeStrategyProgressive.String())
+	} else if upgradeStrategy == usde.UpgradeStrategyNoOp {
+		pipelineRollout.Status.ClearUpgradeInProgress()
 	}
 
 	// generate update metrics only if we actually updated the Pipeline
@@ -464,16 +479,18 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 //
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) error {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown bool) error {
 
 	numaLogger := logger.FromContext(ctx)
 
-	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
+	if !pauseRequestsKnown {
+		numaLogger.Debugf("incomplete pause request information")
+		return nil
+	}
+
+	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest)
 	if err != nil {
 		return err
-	}
-	if shouldBePaused == nil { // not enough information to know
-		return nil
 	}
 
 	if err = r.setPipelineLifecycle(ctx, *shouldBePaused, existingPipelineDef); err != nil {
@@ -499,6 +516,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+
 		}
 	}
 	return nil
@@ -506,14 +524,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 
 // return whether to pause, not to pause, or otherwise unknown
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate, externalPauseRequest bool) (*bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
-	}
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
@@ -530,18 +544,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	existingPipelinePauseDesired := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
 	pipelineUpdating = pipelineUpdating && existingPipelinePauseDesired
 
-	numaLogger.Debugf("pipelineNeedsToUpdate: %t, pipelineUpdating: %t", pipelineNeedsToUpdate, pipelineUpdating)
-
-	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
-	if err != nil {
-		return nil, err
-	}
-	if !pauseRequestsKnown {
-		numaLogger.Debugf("incomplete pause request information")
-		return nil, nil
-	}
-
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
@@ -550,6 +552,65 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause)
 
 	return &shouldBePaused, nil
+}
+
+func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+	// Does pipeline spec need to be updated?
+	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
+	if err != nil {
+		return false, err
+	}
+	return !pipelineSpecsEqual, nil
+}
+
+func pipelineSpecEqual(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove lifecycle field from comparison, as well as any nulls to test for equality
+	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
+	if err != nil {
+		return false, err
+	}
+	pipelineWithoutLifecycleB, err := pipelineWithoutLifecycle(b)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
+
+	//TODO: revisit this - why is reflect.DeepEqual sometimes sufficient?
+	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+}
+
+// remove 'lifecycle' key/value pair from Pipeline spec
+func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
+	unstruc, err := kubernetes.ObjectToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	_, found, err := unstructured.NestedString(unstruc.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		unstrucNew := unstruc.DeepCopy()
+		specMapAsInterface, found := unstrucNew.Object["spec"]
+		if found {
+			specMap, ok := specMapAsInterface.(map[string]interface{})
+			if ok {
+				lifecycleMapAsInterface, found := specMap["lifecycle"]
+				if found {
+					lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
+					if ok {
+						delete(lifecycleMap, "desiredPhase")
+						specMap["lifecycle"] = lifecycleMap
+						return specMap, nil
+					}
+				}
+			}
+
+			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
+		}
+	}
+	return unstruc.Object["spec"].(map[string]interface{}), nil
 }
 
 // return true if Pipeline (or its children) is still in the process of being reconciled

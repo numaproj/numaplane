@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -42,7 +43,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -265,21 +265,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-	isbServiceIsReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBServiceDef)
+	isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, err
 	}
-	isbServiceIsUpdating := !isbServiceIsReconciled
-
-	// TODO: DeriveUpgradeStrategy(..., inProgressUpgradeStrategy?)
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newISBServiceDef, existingISBServiceDef, "")
-	if err != nil {
-		return false, err
-	}
-
-	numaLogger.WithValues("upgradeStrategy", upgradeStrategy.String()).Info("derived upgrade strategy")
-
-	isbServiceNeedsUpdating := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
 
 	numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
 
@@ -302,12 +291,43 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	} else if upgradeStrategy == usde.UpgradeStrategyProgressive {
-		// TODO-PROGRESSIVE: implement
-		numaLogger.Warn("PROGRESSIVE strategy coming soon")
+	} else if isbServiceNeedsUpdating {
+		// update ISBService
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+		if err != nil {
+			return false, err
+		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
 	return false, nil
+}
+
+// return:
+// - whether ISBService needs to update
+// - whether it's in the process of being updated
+// - error if any
+func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+
+	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
+	if err != nil {
+		return false, false, err
+	}
+
+	existingSpecAsMap := make(map[string]interface{})
+	err = json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
+	if err != nil {
+		return false, false, err
+	}
+	newSpecAsMap := make(map[string]interface{})
+	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
+	if err != nil {
+		return false, false, err
+	}
+	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
+	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
+
+	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *kubernetes.GenericObject) error {
