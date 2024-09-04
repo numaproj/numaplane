@@ -269,16 +269,14 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 		// set the Status appropriately to "Pending" or "Deployed"
 		// if controllerDeploymentNeedsUpdating - this means there's a mismatch between the desired NumaflowControllerRollout version and actual
-		// if there's a generation mismatch - this means we haven't even observed the current generation
-		// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-		// we may match the second case and not the first if we need to update something other than Numaflow Controller version
-		if controllerDeploymentNeedsUpdating || controllerRollout.Status.ObservedGeneration < controllerRollout.Generation {
+		// Note that this will be reset to "Deployed" later on if a deployment occurs
+		if controllerDeploymentNeedsUpdating {
 			controllerRollout.Status.MarkPending()
 		} else {
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout.Namespace, controllerRollout.Name, r, controllerDeploymentNeedsUpdating,
+		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
@@ -697,16 +695,13 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 	return nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
-	rollout := &apiv1.NumaflowControllerRollout{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, rollout); err != nil {
-		return err
-	}
+func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
 	if paused {
-		rollout.Status.MarkPausingPipelines(rollout.Generation)
+		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
 	} else {
-		rollout.Status.MarkUnpausingPipelines(rollout.Generation)
+		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
 	}
 
 	return nil

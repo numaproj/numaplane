@@ -418,10 +418,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
-	// if there's a generation mismatch - this means we haven't even observed the current generation
-	// we may match the first case and not the second when we've observed the generation change but we're pausing
-	// we may match the second case and not the first if we need to update something other than Pipeline spec
-	if pipelineNeedsToUpdate || pipelineRollout.Status.ObservedGeneration < pipelineRollout.Generation {
+	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
 	} else {
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)

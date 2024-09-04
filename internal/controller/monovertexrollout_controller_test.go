@@ -162,7 +162,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 			Expect(k8sClient.Update(ctx, currentMonoVertexRollout)).ToNot(HaveOccurred())
 
-			By("Verifying the context of the MonoVertexRollout")
+			By("Verifying the content of the MonoVertexRollout")
 			Eventually(func() (numaflowv1.MonoVertexSpec, error) {
 				updatedResource := &apiv1.MonoVertexRollout{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
