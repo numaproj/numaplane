@@ -400,6 +400,7 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
 	return resultPipeline
 }
+
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 
@@ -419,7 +420,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		return err
 	}
 
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &externalPauseRequest, nil)
+	// If the in-progress upgrade strategy is PPND and there are external pause requests (from NumaflowController and/or ISBService),
+	// then override strategy to continue to use PPND even if there are no PipelineRollout spec change
+	overrideToPPND := pipelineRollout.Status.UpgradeInProgress == usde.UpgradeStrategyPPND && externalPauseRequest
+
+	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &overrideToPPND, nil)
 	if err != nil {
 		return err
 	}
@@ -516,9 +521,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-
+			pipelineRollout.Status.ClearUpgradeInProgress()
 		}
 	}
+
 	return nil
 }
 
