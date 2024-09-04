@@ -41,11 +41,11 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+var (
+	defaultPipelineRolloutName = "pipelinerollout-test"
+)
+
 var _ = Describe("PipelineRollout Controller", Ordered, func() {
-	const (
-		namespace           = "default"
-		pipelineRolloutName = "pipelinerollout-test"
-	)
 
 	ctx := context.Background()
 
@@ -100,8 +100,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 	pipelineRollout := &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      pipelineRolloutName,
+			Namespace: defaultNamespace,
+			Name:      defaultPipelineRolloutName,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Pipeline: apiv1.Pipeline{
@@ -112,7 +112,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		},
 	}
 
-	resourceLookupKey := types.NamespacedName{Name: pipelineRolloutName, Namespace: namespace}
+	resourceLookupKey := types.NamespacedName{Name: defaultPipelineRolloutName, Namespace: defaultNamespace}
 
 	Context("When applying a PipelineRollout spec", func() {
 		It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
@@ -143,7 +143,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 
 		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)
 		})
 
 		It("Should have the metrics updated", func() {
@@ -202,13 +202,13 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			}, timeout, interval).Should(Equal("Paused"))
 
 			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, pipelineRolloutName, apiv1.PhaseDeployed)*/
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)*/
 
 		})
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
 			By("updating the Numaflow Pipeline and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, namespace, pipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
+			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
@@ -264,14 +264,14 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		It("Should be automatically failed", func() {
 			Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace,
+					Namespace: defaultNamespace,
 					Name:      "my-pipeline",
 				},
 				Spec: pipelineSpec,
 			})).Should(Succeed())
 			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace,
+					Namespace: defaultNamespace,
 					Name:      "my-pipeline",
 				},
 				Spec: apiv1.PipelineRolloutSpec{
@@ -283,7 +283,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				},
 			})).Should(Succeed())
 			time.Sleep(5 * time.Second)
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, namespace, "my-pipeline", apiv1.PhaseFailed)
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
 		})
 	})
 
