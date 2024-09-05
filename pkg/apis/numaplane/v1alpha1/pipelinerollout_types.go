@@ -40,6 +40,9 @@ type Pipeline struct {
 type PipelineRolloutStatus struct {
 	Status      `json:",inline"`
 	PauseStatus `json:"pauseStatus,omitempty"`
+
+	// UpgradeInProgress indicates the upgrade strategy currently beign used and affecting the resource state or empty if no upgrade is in progress
+	UpgradeInProgress string `json:"upgradeInProgress,omitempty"`
 }
 
 // +genclient
@@ -47,6 +50,7 @@ type PipelineRolloutStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
+// +kubebuilder:printcolumn:name="Upgrade In Progress",type="string",JSONPath=".status.upgradeInProgress",description="The upgrade strategy currently prosessing the PipelineRollout. No upgrade in progress if empty"
 // PipelineRollout is the Schema for the pipelinerollouts API
 type PipelineRollout struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -75,4 +79,12 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
+}
+
+func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy string) {
+	status.UpgradeInProgress = upgradeStrategy
+}
+
+func (status *PipelineRolloutStatus) ClearUpgradeInProgress() {
+	status.UpgradeInProgress = ""
 }

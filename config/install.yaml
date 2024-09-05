@@ -618,6 +618,11 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: The upgrade strategy currently prosessing the PipelineRollout.
+        No upgrade in progress if empty
+      jsonPath: .status.upgradeInProgress
+      name: Upgrade In Progress
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -757,6 +762,11 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
+                type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  beign used and affecting the resource state or empty if no upgrade
+                  is in progress
                 type: string
             type: object
         required:
