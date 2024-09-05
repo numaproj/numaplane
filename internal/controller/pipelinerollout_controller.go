@@ -60,10 +60,7 @@ const (
 	numWorkers                = 16 // can consider making configurable
 )
 
-var (
-	pipelineROReconciler *PipelineRolloutReconciler
-	initTime             time.Time
-)
+var pipelineROReconciler *PipelineRolloutReconciler
 
 // PipelineSpec keep track of minimum number of fields we need to know about
 type PipelineSpec struct {
@@ -400,12 +397,16 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
 	return resultPipeline
 }
+
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+
 	numaLogger := logger.FromContext(ctx)
 
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
+
+	// TODO: the upgrade strategy calculation and related logic should be skipped if common.DataLossPrevention is set to true
 
 	var newPipelineSpec PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
@@ -420,7 +421,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// If the in-progress upgrade strategy is PPND and there are external pause requests (from NumaflowController and/or ISBService),
 	// then override the strategy decision to continue to use PPND even if there are no PipelineRollout spec change
-	overrideToPPND := pipelineRollout.Status.UpgradeInProgress == usde.UpgradeStrategyPPND && externalPauseRequest
+	overrideToPPND := pipelineRollout.Status.UpgradeInProgress == string(usde.UpgradeStrategyPPND) && externalPauseRequest
 
 	// Derive the upgrade strategy and a boolean indicating if the specs were compared and if different
 	upgradeStrategy, specsDiffer, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &overrideToPPND, nil)
@@ -444,15 +445,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	if upgradeStrategy == usde.UpgradeStrategyProgressive {
-		pipelineRollout.Status.SetUpgradeInProgress(usde.UpgradeStrategyProgressive)
+		pipelineRollout.Status.SetUpgradeInProgress(string(usde.UpgradeStrategyProgressive))
 
 		// TODO-PROGRESSIVE: implement
 		numaLogger.Warn("PROGRESSIVE strategy coming soon")
 	} else if upgradeStrategy == usde.UpgradeStrategyPPND {
-		pipelineRollout.Status.SetUpgradeInProgress(usde.UpgradeStrategyPPND)
+		pipelineRollout.Status.SetUpgradeInProgress(string(usde.UpgradeStrategyPPND))
 
 		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef,
-			newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown); err != nil {
+			newPipelineSpec, externalPauseRequest, pauseRequestsKnown); err != nil {
 
 			return err
 		}
@@ -483,13 +484,18 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 //
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown bool) error {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, externalPauseRequest, pauseRequestsKnown bool) error {
 
 	numaLogger := logger.FromContext(ctx)
 
 	if !pauseRequestsKnown {
 		numaLogger.Debugf("incomplete pause request information")
 		return nil
+	}
+
+	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	if err != nil {
+		return err
 	}
 
 	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest)
@@ -520,9 +526,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-
+			pipelineRollout.Status.ClearUpgradeInProgress()
 		}
 	}
+
 	return nil
 }
 
@@ -757,31 +764,13 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 
 func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
-
 	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
-		// if BeginTime hasn't been set yet, we must have just started pausing - set it
-		if pipelineRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseBeginTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
-			pipelineRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
-		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
-		r.updatePauseMetric(pipelineRollout)
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
-		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
-		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
-		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
-			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
-			r.updatePauseMetric(pipelineRollout)
-		}
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
-
-}
-
-func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout) {
-	timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
-	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Name).Set(timeElapsed.Seconds())
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
