@@ -40,12 +40,12 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	}
 
 	if inProgressUpgradeStrategy == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
-		return UpgradeStrategyPPND, nil
+		return UpgradeStrategyPPND, nil, nil
 	}
 
 	if inProgressUpgradeStrategy == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		return UpgradeStrategyPPND, nil
+		return UpgradeStrategyPPND, nil, nil
 	}
 
 	// Get USDE Config
