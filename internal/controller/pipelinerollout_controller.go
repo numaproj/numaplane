@@ -418,21 +418,26 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		return err
 	}
 
-	upgradeStrategy, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &externalPauseRequest, nil)
-	if err != nil {
-		return err
-	}
-	numaLogger.WithValues("upgradeStrategy", upgradeStrategy).Info("derived upgrade strategy")
+	// If the in-progress upgrade strategy is PPND and there are external pause requests (from NumaflowController and/or ISBService),
+	// then override the strategy decision to continue to use PPND even if there are no PipelineRollout spec change
+	overrideToPPND := pipelineRollout.Status.UpgradeInProgress == usde.UpgradeStrategyPPND && externalPauseRequest
 
-	// pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
-	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	// Derive the upgrade strategy and a boolean indicating if the specs were compared and if different
+	upgradeStrategy, specsDiffer, err := usde.DeriveUpgradeStrategy(ctx, newPipelineDef, existingPipelineDef, pipelineRollout.Status.UpgradeInProgress, &overrideToPPND, nil)
 	if err != nil {
 		return err
 	}
+	numaLogger.WithValues(
+		"upgradeStrategy", upgradeStrategy,
+		"specsDiffer", specsDiffer,
+	).Info("derived upgrade strategy")
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
-	if pipelineNeedsToUpdate {
+	// if there's a generation mismatch - this means we haven't even observed the current generation
+	// we may match the first case and not the second when we've observed the generation change but we're pausing
+	// we may match the second case and not the first if we need to update something other than Pipeline spec
+	if (specsDiffer != nil && *specsDiffer) || pipelineRollout.Status.ObservedGeneration < pipelineRollout.Generation {
 		pipelineRollout.Status.MarkPending()
 	} else {
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -462,7 +467,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	// generate update metrics only if we actually updated the Pipeline
-	if pipelineNeedsToUpdate {
+	if specsDiffer != nil && *specsDiffer {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
