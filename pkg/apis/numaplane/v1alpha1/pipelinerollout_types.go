@@ -40,6 +40,9 @@ type Pipeline struct {
 type PipelineRolloutStatus struct {
 	Status      `json:",inline"`
 	PauseStatus `json:"pauseStatus,omitempty"`
+
+	// UpgradeInProgress indicates the upgrade strategy currently beign used and affecting the resource state or empty if no upgrade is in progress
+	UpgradeInProgress string `json:"upgradeInProgress,omitempty"`
 }
 
 // +genclient

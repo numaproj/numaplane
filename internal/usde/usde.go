@@ -16,10 +16,10 @@ type UpgradeStrategy string
 
 const (
 	UpgradeStrategyError       UpgradeStrategy = ""
-	UpgradeStrategyNoOp                        = "NoOp"
-	UpgradeStrategyApply                       = "DirectApply"
-	UpgradeStrategyPPND                        = "PipelinePauseAndDrain"
-	UpgradeStrategyProgressive                 = "Progressive"
+	UpgradeStrategyNoOp        UpgradeStrategy = "NoOp"
+	UpgradeStrategyApply       UpgradeStrategy = "DirectApply"
+	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
+	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
 
 // DeriveUpgradeStrategy calculates the upgrade strategy to use during the
@@ -30,11 +30,11 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	numaLogger := logger.FromContext(ctx)
 
-	if inProgressUpgradeStrategy == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
+	if UpgradeStrategy(inProgressUpgradeStrategy) == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
 		return UpgradeStrategyPPND, nil, nil
 	}
 
-	if inProgressUpgradeStrategy == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
+	if UpgradeStrategy(inProgressUpgradeStrategy) == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
 		return UpgradeStrategyPPND, nil, nil
 	}
