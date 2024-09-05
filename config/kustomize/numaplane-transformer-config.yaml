@@ -1,382 +1,458 @@
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/images.go
 images:
-- path: spec/pipeline/spec/vertices/sidecars/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/udf/container/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/udsink/container/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/transformer/container/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/udsource/container/image
-  kind: PipelineRollout
-- path: spec/pipeline/spec/sideInputs/container/image
-  kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sidecars/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/udf/container/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/udsink/container/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/transformer/container/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/udsource/container/image
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/sideInputs/container/image
+    kind: PipelineRollout
+  - path: spec/monoVertex/spec/source/udsource/container/image
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/transformer/container/image
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/udsink/container/image
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/fallback/udsink/container/image
+    kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/namereference.go
 nameReference:
-- kind: ConfigMap
-  version: v1
-  fieldSpecs:
-  - path: spec/pipeline/spec/vertices/volumes/configMap/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/volumes/projected/sources/configMap/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainers/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sidecars/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/udf/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/udsource/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/sideInputs/container/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/configMapRef/name
-    kind: PipelineRollout
-  - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/configMapRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/configMapRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/configMapKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/configMapRef/name
-    kind: ISBServiceRollout
-- kind: Secret
-  version: v1
-  fieldSpecs:
-  - path: spec/pipeline/spec/vertices/volumes/secret/secretName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/volumes/projected/sources/secret/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/initContainers/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sidecars/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/udf/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/source/udousrce/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/sideInputs/container/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/secretRef/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/vertices/imagePullSecrets/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/imagePullSecrets/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/imagePullSecrets/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/imagePullSecrets/name
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/imagePullSecrets/name
-    kind: PipelineRollout
-  - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/secretKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/secretRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/secretRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/secretKeyRef/name
-    kind: ISBServiceRollout
-  - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/secretRef/name
-    kind: ISBServiceRollout
-- kind: ServiceAccount
-  version: v1
-  fieldSpecs:
-  - path: spec/pipeline/spec/vertices/serviceAccountName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/serviceAccountName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/serviceAccountName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/serviceAccountName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/serviceAccountName
-    kind: PipelineRollout
-  - path: spec/interStepBufferService/spec/jetstream/serviceAccountName
-    kind: ISBServiceRollout
-- kind: PersistentVolumeClaim
-  version: v1
-  fieldSpecs:
-  - path: spec/pipeline/spec/vertices/volumes/persistentVolumeClaim/claimName
-    kind: PipelineRollout
-- kind: PriorityClass
-  version: v1
-  group: scheduling.k8s.io
-  fieldSpecs:
-  - path: spec/pipeline/spec/vertices/priorityClassName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/daemon/priorityClassName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/job/priorityClassName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/sideInputsManager/priorityClassName
-    kind: PipelineRollout
-  - path: spec/pipeline/spec/templates/vertex/priorityClassName
-    kind: PipelineRollout
-  - path: spec/interStepBufferService/spec/jetstream/priorityClassName
-    kind: ISBServiceRollout
+  - kind: ConfigMap
+    version: v1
+    fieldSpecs:
+      - path: spec/pipeline/spec/vertices/volumes/configMap/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/volumes/projected/sources/configMap/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainers/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sidecars/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/udf/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/udsource/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/sideInputs/container/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/configMapRef/name
+        kind: PipelineRollout
+      - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/configMapRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/configMapRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/configMapKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/configMapRef/name
+        kind: ISBServiceRollout
+      - path: spec/monoVertex/spec/source/transformer/container/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/transformer/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/udsource/container/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/udsource/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/udsink/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/valueFrom/configMapKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/fallback/udsink/container/envFrom/configMapRef/name
+        kind: MonoVertexRollout
+  - kind: Secret
+    version: v1
+    fieldSpecs:
+      - path: spec/pipeline/spec/vertices/volumes/secret/secretName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/volumes/projected/sources/secret/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/containerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainers/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/initContainers/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sidecars/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sidecars/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/udf/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/udf/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/udsink/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/transformer/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/transformer/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/udsource/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/source/udousrce/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/sideInputs/container/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/sideInputs/container/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/containerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/containerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/containerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/envFrom/secretRef/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/vertices/imagePullSecrets/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/imagePullSecrets/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/imagePullSecrets/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/imagePullSecrets/name
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/imagePullSecrets/name
+        kind: PipelineRollout
+      - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/valueFrom/secretKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/containerTemplate/envFrom/secretRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/envFrom/secretRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/valueFrom/secretKeyRef/name
+        kind: ISBServiceRollout
+      - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/envFrom/secretRef/name
+        kind: ISBServiceRollout
+      - path: spec/monoVertex/spec/source/transformer/container/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/transformer/container/envFrom/secretRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/udsource/container/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/source/udousrce/container/envFrom/secretRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/udsink/container/envFrom/secretRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/valueFrom/secretKeyRef/name
+        kind: MonoVertexRollout
+      - path: spec/monoVertex/spec/sink/fallback/udsink/container/envFrom/secretRef/name
+        kind: MonoVertexRollout
+  - kind: ServiceAccount
+    version: v1
+    fieldSpecs:
+      - path: spec/pipeline/spec/vertices/serviceAccountName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/serviceAccountName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/serviceAccountName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/serviceAccountName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/serviceAccountName
+        kind: PipelineRollout
+      - path: spec/interStepBufferService/spec/jetstream/serviceAccountName
+        kind: ISBServiceRollout
+      - path: spec/monoVertex/spec/serviceAccountName
+        kind: MonoVertexRollout
+  - kind: PersistentVolumeClaim
+    version: v1
+    fieldSpecs:
+      - path: spec/pipeline/spec/vertices/volumes/persistentVolumeClaim/claimName
+        kind: PipelineRollout
+  - kind: PriorityClass
+    version: v1
+    group: scheduling.k8s.io
+    fieldSpecs:
+      - path: spec/pipeline/spec/vertices/priorityClassName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/daemon/priorityClassName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/job/priorityClassName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/sideInputsManager/priorityClassName
+        kind: PipelineRollout
+      - path: spec/pipeline/spec/templates/vertex/priorityClassName
+        kind: PipelineRollout
+      - path: spec/interStepBufferService/spec/jetstream/priorityClassName
+        kind: ISBServiceRollout
+      - path: spec/monoVertex/spec/priorityClassName
+        kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/commonlabels.go
 commonLabels:
-- path: spec/pipeline/spec/vertices/metadata/labels
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/daemon/metadata/labels
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/job/metadata/labels
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/sideInputsManager/metadata/labels
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/vertex/metadata/labels
-  create: true
-  kind: PipelineRollout
-- path: spec/interStepBufferService/spec/jetstream/metadata/labels
-  create: true
-  kind: ISBServiceRollout
+  - path: spec/pipeline/spec/vertices/metadata/labels
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/daemon/metadata/labels
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/job/metadata/labels
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/sideInputsManager/metadata/labels
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/vertex/metadata/labels
+    create: true
+    kind: PipelineRollout
+  - path: spec/interStepBufferService/spec/jetstream/metadata/labels
+    create: true
+    kind: ISBServiceRollout
+  - path: spec/monoVertex/spec/metadata/labels
+    create: true
+    kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/commonannotations.go
 commonAnnotations:
-- path: spec/pipeline/spec/vertices/metadata/annotations
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/daemon/metadata/annotations
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/job/metadata/annotations
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/sideInputsManager/metadata/annotations
-  create: true
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/vertex/metadata/annotations
-  create: true
-  kind: PipelineRollout
-- path: spec/interStepBufferService/spec/jetstream/metadata/annotations
-  create: true
-  kind: ISBServiceRollout
+  - path: spec/pipeline/spec/vertices/metadata/annotations
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/daemon/metadata/annotations
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/job/metadata/annotations
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/sideInputsManager/metadata/annotations
+    create: true
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/vertex/metadata/annotations
+    create: true
+    kind: PipelineRollout
+  - path: spec/interStepBufferService/spec/jetstream/metadata/annotations
+    create: true
+    kind: ISBServiceRollout
+  - path: spec/monoVertex/spec/metadata/annotations
+    create: true
+    kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/varreference.go
 varReference:
-- path: spec/pipeline/spec/vertices/sidecars/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sidecars/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sidecars/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/udf/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/udf/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/udf/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/udsink/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/udsink/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/udsink/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/transformer/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/transformer/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/transformer/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/udsource/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/udsource/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/udsource/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/sideInputs/container/args
-  kind: PipelineRollout
-- path: spec/pipeline/spec/sideInputs/container/command
-  kind: PipelineRollout
-- path: spec/pipeline/spec/sideInputs/container/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/containerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/initContainerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/initContainers/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/daemon/containerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/job/containerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/vertex/containerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/value
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sidecars/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/udf/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/udsink/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/transformer/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/vertices/source/udsource/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/pipeline/spec/sideInputs/container/volumeMounts/mountPath
-  kind: PipelineRollout
-- path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/value
-  kind: ISBServiceRollout
-- path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/value
-  kind: ISBServiceRollout
-- path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/value
-  kind: ISBServiceRollout
+  - path: spec/pipeline/spec/vertices/sidecars/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sidecars/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sidecars/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/udf/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/udf/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/udf/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/udsink/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/udsink/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/udsink/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/transformer/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/transformer/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/transformer/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/udsource/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/udsource/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/udsource/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/sideInputs/container/args
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/sideInputs/container/command
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/sideInputs/container/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/containerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/initContainerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sideInputsContainerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/initContainers/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/daemon/containerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/daemon/initContainerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/job/containerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/sideInputsManager/containerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/sideInputsManager/initContainerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/vertex/containerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/templates/vertex/initContainerTemplate/env/value
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sidecars/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/udf/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/udsink/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/sink/fallback/udsink/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/transformer/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/vertices/source/udsource/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/pipeline/spec/sideInputs/container/volumeMounts/mountPath
+    kind: PipelineRollout
+  - path: spec/interStepBufferService/spec/jetstream/containerTemplate/env/value
+    kind: ISBServiceRollout
+  - path: spec/interStepBufferService/spec/jetstream/reloaderContainerTemplate/env/value
+    kind: ISBServiceRollout
+  - path: spec/interStepBufferService/spec/jetstream/metricsContainerTemplate/env/value
+    kind: ISBServiceRollout
+  - path: spec/monoVertex/spec/interStepBufferService/spec/source/transformer/container/args
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/transformer/container/command
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/transformer/container/env/value
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/udsource/container/args
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/udsource/container/command
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/source/udsource/container/env/value
+  - path: spec/monoVertex/spec/sink/udsink/container/args
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/udsink/container/command
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/udsink/container/env/value
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/fallback/udsink/container/args
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/fallback/udsink/container/command
+    kind: MonoVertexRollout
+  - path: spec/monoVertex/spec/sink/fallback/udsink/container/env/value
+    kind: MonoVertexRollout
 
 # https://github.com/kubernetes-sigs/kustomize/blob/master/api/internal/konfig/builtinpluginconsts/replicas.go
 replicas:
-- path: spec/interStepBufferService/spec/jetstream/replicas
-  create: true
-  kind: ISBServiceRollout
+  - path: spec/interStepBufferService/spec/jetstream/replicas
+    create: true
+    kind: ISBServiceRollout
+  - path: spec/monoVertex/spec/replicas
+    create: true
+    kind: MonoVertexRollout
