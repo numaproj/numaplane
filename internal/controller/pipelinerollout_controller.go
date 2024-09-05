@@ -430,11 +430,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 	numaLogger.WithValues("upgradeStrategy", upgradeStrategy).Info("derived upgrade strategy")
 
-	// pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp && upgradeStrategy != usde.UpgradeStrategyError
-	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
-	if err != nil {
-		return err
-	}
+	pipelineNeedsToUpdate := upgradeStrategy != usde.UpgradeStrategyNoOp
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
@@ -453,7 +449,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		pipelineRollout.Status.SetUpgradeInProgress(usde.UpgradeStrategyPPND)
 
 		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef,
-			newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown); err != nil {
+			newPipelineSpec, externalPauseRequest, pauseRequestsKnown); err != nil {
 
 			return err
 		}
@@ -484,13 +480,18 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 //
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, pipelineNeedsToUpdate, externalPauseRequest, pauseRequestsKnown bool) error {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, newPipelineSpec PipelineSpec, externalPauseRequest, pauseRequestsKnown bool) error {
 
 	numaLogger := logger.FromContext(ctx)
 
 	if !pauseRequestsKnown {
 		numaLogger.Debugf("incomplete pause request information")
 		return nil
+	}
+
+	pipelineNeedsToUpdate, err := pipelineNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	if err != nil {
+		return err
 	}
 
 	shouldBePaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, newPipelineSpec, pipelineNeedsToUpdate, externalPauseRequest)
