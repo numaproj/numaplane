@@ -303,33 +303,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	return false, nil
 }
 
-// return:
-// - whether ISBService needs to update
-// - whether it's in the process of being updated
-// - error if any
-func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
-
-	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
-	if err != nil {
-		return false, false, err
-	}
-
-	existingSpecAsMap := make(map[string]interface{})
-	err = json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
-	if err != nil {
-		return false, false, err
-	}
-	newSpecAsMap := make(map[string]interface{})
-	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
-	if err != nil {
-		return false, false, err
-	}
-	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
-	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
-
-	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
-}
-
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *kubernetes.GenericObject) error {
 	err := kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
 	if err != nil {
@@ -355,6 +328,33 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 
 func (r *ISBServiceRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
 	return GetPauseModule().getISBServiceKey(rolloutNamespace, rolloutName)
+}
+
+// return:
+// - whether ISBService needs to update
+// - whether it's in the process of being updated
+// - error if any
+func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+
+	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
+	if err != nil {
+		return false, false, err
+	}
+
+	existingSpecAsMap := make(map[string]interface{})
+	err = json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
+	if err != nil {
+		return false, false, err
+	}
+	newSpecAsMap := make(map[string]interface{})
+	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
+	if err != nil {
+		return false, false, err
+	}
+	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
+	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
+
+	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
