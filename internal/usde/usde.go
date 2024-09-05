@@ -72,7 +72,12 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		userUpgradeStrategy := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace).UpgradeStrategy
+		namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace)
+
+		var userUpgradeStrategy config.USDEUserStrategy = ""
+		if namespaceConfig != nil {
+			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+		}
 
 		numaLogger.WithValues("userUpgradeStrategy", userUpgradeStrategy).Debug("the specs without the 'apply' paths are different")
 

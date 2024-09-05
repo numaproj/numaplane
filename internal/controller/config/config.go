@@ -210,9 +210,14 @@ func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
 	delete(cm.namespaceConfigMap, namespace)
 }
 
-func (cm *ConfigManager) GetNamespaceConfig(namespace string) NamespaceConfig {
+func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 	cm.namespaceConfigMapLock.Lock()
 	defer cm.namespaceConfigMapLock.Unlock()
 
-	return cm.namespaceConfigMap[namespace]
+	nsConfigMap, exists := cm.namespaceConfigMap[namespace]
+	if !exists {
+		return nil
+	}
+
+	return &nsConfigMap
 }
