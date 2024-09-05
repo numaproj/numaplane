@@ -15,27 +15,28 @@ import (
 type UpgradeStrategy string
 
 const (
-	UpgradeStrategyError       = ""
-	UpgradeStrategyNoOp        = "NoOp"
-	UpgradeStrategyApply       = "DirectApply"
-	UpgradeStrategyPPND        = "PipelinePauseAndDrain"
-	UpgradeStrategyProgressive = "Progressive"
+	UpgradeStrategyError       UpgradeStrategy = ""
+	UpgradeStrategyNoOp                        = "NoOp"
+	UpgradeStrategyApply                       = "DirectApply"
+	UpgradeStrategyPPND                        = "PipelinePauseAndDrain"
+	UpgradeStrategyProgressive                 = "Progressive"
 )
 
 // DeriveUpgradeStrategy calculates the upgrade strategy to use during the
-// resource reconciliation process based on configuration and user preference (see design doc for details)
+// resource reconciliation process based on configuration and user preference (see design doc for details).
+// It returns the strategy to use and a boolean pointer indicating if the specs are different (if the specs were not compared, then nil will be returned).
 func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject,
-	inProgressUpgradeStrategy string, overrideToPPND, overrideToProgressive *bool) (UpgradeStrategy, error) {
+	inProgressUpgradeStrategy string, overrideToPPND, overrideToProgressive *bool) (UpgradeStrategy, *bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	if inProgressUpgradeStrategy == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
-		return UpgradeStrategyPPND, nil
+		return UpgradeStrategyPPND, nil, nil
 	}
 
 	if inProgressUpgradeStrategy == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		return UpgradeStrategyPPND, nil
+		return UpgradeStrategyPPND, nil, nil
 	}
 
 	// Get USDE Config
@@ -54,7 +55,7 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	// Split newSpec
 	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, ".")
 	if err != nil {
-		return UpgradeStrategyError, err
+		return UpgradeStrategyError, nil, err
 	}
 
 	numaLogger.WithValues("newSpecOnlyApplyPaths", newSpecOnlyApplyPaths, "newSpecWithoutApplyPaths", newSpecWithoutApplyPaths).Debug("split new spec")
@@ -62,10 +63,12 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	// Split existingSpec
 	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, ".")
 	if err != nil {
-		return UpgradeStrategyError, err
+		return UpgradeStrategyError, nil, err
 	}
 
 	numaLogger.WithValues("existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths, "existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths).Debug("split existing spec")
+
+	specsDiffer := true
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
@@ -74,21 +77,22 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 		numaLogger.WithValues("userUpgradeStrategy", userUpgradeStrategy).Debug("the specs without the 'apply' paths are different")
 
 		if userUpgradeStrategy == config.PPNDStrategyID {
-			return UpgradeStrategyPPND, nil
+			return UpgradeStrategyPPND, &specsDiffer, nil
 		}
 
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		return UpgradeStrategyPPND, nil
+		return UpgradeStrategyPPND, &specsDiffer, nil
 	}
 
 	// Compare specs with the apply fields
 	if !reflect.DeepEqual(newSpecOnlyApplyPaths, existingSpecOnlyApplyPaths) {
 		numaLogger.Debug("the specs with only the 'apply' paths are different")
-		return UpgradeStrategyApply, nil
+		return UpgradeStrategyApply, &specsDiffer, nil
 	}
 
 	numaLogger.Debug("the specs are equal, no update needed")
 
 	// Return NoOp if no differences were found between the new and existing specs
-	return UpgradeStrategyNoOp, nil
+	specsDiffer = false
+	return UpgradeStrategyNoOp, &specsDiffer, nil
 }

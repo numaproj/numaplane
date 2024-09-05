@@ -243,8 +243,9 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			// TODO: write test cases with various values for inProgressUpgradeStrategy and override arguments instead of empty string and nils
-			strategy, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, "", nil, nil)
+			// TODO: write test cases with various values for inProgressUpgradeStrategy and override arguments instead of empty string and nils.
+			// Also, include testing the boolean returned value specsDiffer
+			strategy, _, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, "", nil, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})
