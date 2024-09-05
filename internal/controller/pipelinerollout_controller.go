@@ -440,6 +440,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		pipelineRollout.Status.MarkPending()
 	} else {
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		pipelineRollout.Status.ClearUpgradeInProgress()
 	}
 
 	if upgradeStrategy == usde.UpgradeStrategyProgressive {
