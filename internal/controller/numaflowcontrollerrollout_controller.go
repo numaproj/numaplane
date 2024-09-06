@@ -165,7 +165,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// update our Status with the Deployment's Status
-	err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
+	err = r.processNumaflowControllerStatus(numaflowControllerRollout, deployment)
 	if err != nil {
 		r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "ProcessStatusFailed", "Failed to process numaflow controller status: %v", err.Error())
 		return ctrl.Result{}, err
@@ -684,7 +684,7 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 }
 
 // TODO: could pass in the values instead of recalculating them
-func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
 	healthy, conditionReason, conditionMsg := processDeploymentHealth(deployment)
 
 	if healthy {
