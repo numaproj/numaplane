@@ -57,9 +57,9 @@ type CustomMetrics struct {
 	ClusterCacheError *prometheus.CounterVec
 	// PipelinePausedSeconds counts the total time a Pipeline was paused.
 	PipelinePausedSeconds *prometheus.GaugeVec
-	// ISBServicePausedSeconds
+	// ISBServicePausedSeconds counts the total time an ISBService requested resources be paused.
 	ISBServicePausedSeconds *prometheus.GaugeVec
-	// NumaflowControllerPausedSeconds
+	// NumaflowControllerPausedSeconds counts the total time a Numaflow controller requested resources be paused.
 	NumaflowControllerPausedSeconds *prometheus.GaugeVec
 }
 
@@ -89,18 +89,6 @@ var (
 	pipelinePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipeline_paused_seconds",
 		Help:        "Duration a pipeline was paused for",
-		ConstLabels: defaultLabels,
-	}, []string{LabelName})
-
-	isbServicePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_isbservice_paused_seconds",
-		Help:        "Duration an ISBService paused resources for",
-		ConstLabels: defaultLabels,
-	}, []string{LabelName})
-
-	numaflowControllerPausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_controller_paused_seconds",
-		Help:        "Duration a Numaflow controller paused resources for",
 		ConstLabels: defaultLabels,
 	}, []string{LabelName})
 
@@ -145,6 +133,13 @@ var (
 		Help:        "The total number of ISB service sync failed",
 		ConstLabels: defaultLabels,
 	}, []string{})
+
+	// isbServicePausedSeconds Check the total time an ISBService requested resource to pause
+	isbServicePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_isbservice_paused_seconds",
+		Help:        "Duration an ISBService paused resources for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName})
 
 	// monoVerticesRunning is the gauge for the number of running monovertices.
 	monoVerticesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -194,6 +189,13 @@ var (
 		Help:        "The total number of kubectl execution for numaflow controller",
 		ConstLabels: defaultLabels,
 	}, []string{})
+
+	// numaflowControllerPausedSeconds Check the total time a Numaflow controller requested resources be paused
+	numaflowControllerPausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_paused_seconds",
+		Help:        "Duration a Numaflow controller paused resources for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName})
 
 	// reconciliationDuration is the histogram for the duration of pipeline, isb service and numaflow controller reconciliation.
 	reconciliationDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
