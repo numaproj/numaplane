@@ -318,12 +318,25 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
 	if paused {
+		if isbServiceRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseStatus.LastPauseEndTime.Time) {
+			isbServiceRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		}
+		r.updatePauseMetric(isbServiceRollout)
 		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)
 	} else {
+		if (isbServiceRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !isbServiceRollout.Status.PauseStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			isbServiceRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+			r.updatePauseMetric(isbServiceRollout)
+		}
 		isbServiceRollout.Status.MarkUnpausingPipelines(isbServiceRollout.Generation)
 	}
 
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) updatePauseMetric(isbServiceRollout *apiv1.ISBServiceRollout) {
+	timeElapsed := time.Since(isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	r.customMetrics.ISBServicePausedSeconds.WithLabelValues(isbServiceRollout.Name).Set(timeElapsed.Seconds())
 }
 
 func (r *ISBServiceRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {

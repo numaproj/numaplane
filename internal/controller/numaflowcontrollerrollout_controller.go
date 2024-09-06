@@ -33,6 +33,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -696,15 +697,29 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 }
 
 func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+
 	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
 	if paused {
+		if controllerRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !controllerRollout.Status.PauseStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseStatus.LastPauseEndTime.Time) {
+			controllerRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		}
+		r.updatePauseMetric(controllerRollout)
 		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
 	} else {
+		if (controllerRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !controllerRollout.Status.PauseStatus.LastPauseEndTime.After(controllerRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			controllerRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+			r.updatePauseMetric(controllerRollout)
+		}
 		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
 	}
 
 	return nil
+}
+
+func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(controllerRollout *apiv1.NumaflowControllerRollout) {
+	timeElapsed := time.Since(controllerRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	r.customMetrics.NumaflowControllerPausedSeconds.WithLabelValues(controllerRollout.Name).Set(timeElapsed.Seconds())
 }
 
 // SetupWithManager sets up the controller with the Manager.

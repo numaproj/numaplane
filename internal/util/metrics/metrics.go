@@ -57,6 +57,10 @@ type CustomMetrics struct {
 	ClusterCacheError *prometheus.CounterVec
 	// PipelinePausedSeconds counts the total time a Pipeline was paused.
 	PipelinePausedSeconds *prometheus.GaugeVec
+	// ISBServicePausedSeconds
+	ISBServicePausedSeconds *prometheus.GaugeVec
+	// NumaflowControllerPausedSeconds
+	NumaflowControllerPausedSeconds *prometheus.GaugeVec
 }
 
 const (
@@ -85,6 +89,18 @@ var (
 	pipelinePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipeline_paused_seconds",
 		Help:        "Duration a pipeline was paused for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName})
+
+	isbServicePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_isbservice_paused_seconds",
+		Help:        "Duration an ISBService paused resources for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName})
+
+	numaflowControllerPausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_paused_seconds",
+		Help:        "Duration a Numaflow controller paused resources for",
 		ConstLabels: defaultLabels,
 	}, []string{LabelName})
 
@@ -221,7 +237,8 @@ func RegisterCustomMetrics() *CustomMetrics {
 		isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
 		monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
 		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
-		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError, pipelinePausedSeconds)
+		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
+		pipelinePausedSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
 
 	return &CustomMetrics{
 		PipelinesRunning:                          pipelinesRunning,
@@ -248,6 +265,8 @@ func RegisterCustomMetrics() *CustomMetrics {
 		KubeResourceCache:                         kubeResourceCache,
 		ClusterCacheError:                         clusterCacheError,
 		PipelinePausedSeconds:                     pipelinePausedSeconds,
+		ISBServicePausedSeconds:                   isbServicePausedSeconds,
+		NumaflowControllerPausedSeconds:           numaflowControllerPausedSeconds,
 	}
 }
 
