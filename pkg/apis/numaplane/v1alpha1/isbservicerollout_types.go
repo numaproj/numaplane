@@ -36,7 +36,8 @@ type InterStepBufferService struct {
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
 type ISBServiceRolloutStatus struct {
-	Status `json:",inline"`
+	Status             `json:",inline"`
+	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
 }
 
 // +genclient
