@@ -49,7 +49,7 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 				return false, err
 			}
 			if allPaused {
-				numaLogger.Infof("confirmed all Pipelines have paused so %s can safely update", pauseRequester.getChildTypeString())
+				numaLogger.Infof("confirmed all Pipelines have paused (or can't pause) so %s can safely update", pauseRequester.getChildTypeString())
 				err = updateFunc()
 				if err != nil {
 					return false, err
