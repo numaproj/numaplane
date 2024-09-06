@@ -318,14 +318,14 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
 	if paused {
-		if isbServiceRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseStatus.LastPauseEndTime.Time) {
-			isbServiceRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		if isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
+			isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(isbServiceRollout)
 		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)
 	} else {
-		if (isbServiceRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !isbServiceRollout.Status.PauseStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
-			isbServiceRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+		if (isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
+			isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(isbServiceRollout)
 		}
 		isbServiceRollout.Status.MarkUnpausingPipelines(isbServiceRollout.Generation)
@@ -335,7 +335,7 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 }
 
 func (r *ISBServiceRolloutReconciler) updatePauseMetric(isbServiceRollout *apiv1.ISBServiceRollout) {
-	timeElapsed := time.Since(isbServiceRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	timeElapsed := time.Since(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time)
 	r.customMetrics.ISBServicePausedSeconds.WithLabelValues(isbServiceRollout.Name).Set(timeElapsed.Seconds())
 }
 

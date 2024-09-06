@@ -701,14 +701,14 @@ func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Cont
 	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
 	if paused {
-		if controllerRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !controllerRollout.Status.PauseStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseStatus.LastPauseEndTime.Time) {
-			controllerRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		if controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
+			controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(controllerRollout)
 		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
 	} else {
-		if (controllerRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !controllerRollout.Status.PauseStatus.LastPauseEndTime.After(controllerRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
-			controllerRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+		if (controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
+			controllerRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(controllerRollout)
 		}
 		controllerRollout.Status.MarkUnpausingPipelines(controllerRollout.Generation)
@@ -718,7 +718,7 @@ func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Cont
 }
 
 func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(controllerRollout *apiv1.NumaflowControllerRollout) {
-	timeElapsed := time.Since(controllerRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	timeElapsed := time.Since(controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time)
 	r.customMetrics.NumaflowControllerPausedSeconds.WithLabelValues(controllerRollout.Name).Set(timeElapsed.Seconds())
 }
 

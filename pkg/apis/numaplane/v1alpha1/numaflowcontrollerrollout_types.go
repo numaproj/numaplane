@@ -34,8 +34,8 @@ type NumaflowControllerRolloutSpec struct {
 
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
 type NumaflowControllerRolloutStatus struct {
-	Status      `json:",inline"`
-	PauseStatus `json:"pauseRequestStatus,omitempty"`
+	Status             `json:",inline"`
+	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
 }
 
 // +genclient
