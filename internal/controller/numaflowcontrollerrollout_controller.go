@@ -701,12 +701,15 @@ func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Cont
 	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
 	if paused {
+		// if BeginTime hasn't been set yet, we must have just started pausing - set it
 		if controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
 			controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(controllerRollout)
 		controllerRollout.Status.MarkPausingPipelines(controllerRollout.Generation)
 	} else {
+		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
+		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
 		if (controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
 			controllerRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(controllerRollout)

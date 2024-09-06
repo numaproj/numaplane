@@ -318,12 +318,15 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
 	if paused {
+		// if BeginTime hasn't been set yet, we must have just started pausing - set it
 		if isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
 			isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(isbServiceRollout)
 		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)
 	} else {
+		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
+		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
 		if (isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
 			isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(isbServiceRollout)
