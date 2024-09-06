@@ -6,6 +6,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PauseRequester interface manages the safe update of Rollouts by requesting Pipelines to pause
@@ -14,7 +15,7 @@ type PauseRequester interface {
 	getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error)
 
 	// mark this Rollout paused
-	markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error
+	markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error
 
 	// get the unique key corresponding to this Rollout
 	getRolloutKey(rolloutNamespace string, rolloutName string) string
@@ -27,15 +28,19 @@ type PauseRequester interface {
 // return:
 // - true if needs a requeue
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
-func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace string, rolloutName string, pauseRequester PauseRequester,
+func processChildObjectWithoutDataLoss(ctx context.Context, rollout client.Object, pauseRequester PauseRequester,
 	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	rolloutNamespace := rollout.GetNamespace()
+	rolloutName := rollout.GetName()
+
 	if resourceNeedsUpdating || resourceIsUpdating {
 		numaLogger.Infof("%s either needs to or is in the process of updating", pauseRequester.getChildTypeString())
 		// TODO: maybe only pause if the update requires pausing
 
 		// request pause if we haven't already
-		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rolloutNamespace, rolloutName, true)
+		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rollout, true)
 		if err != nil {
 			return false, err
 		}
@@ -63,7 +68,7 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 
 	} else {
 		// remove any pause requirement if necessary
-		_, err := requestPipelinesPause(ctx, pauseRequester, rolloutNamespace, rolloutName, false)
+		_, err := requestPipelinesPause(ctx, pauseRequester, rollout, false)
 		if err != nil {
 			return false, err
 		}
@@ -74,15 +79,15 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rolloutNamespace str
 
 // request that the Pipelines corresponding to this Rollout pause
 // return whether an update was made
-func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string, pause bool) (bool, error) {
+func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rollout client.Object, pause bool) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pm := GetPauseModule()
 
-	updated := pm.updatePauseRequest(pauseRequester.getRolloutKey(rolloutNamespace, rolloutName), pause)
+	updated := pm.updatePauseRequest(pauseRequester.getRolloutKey(rollout.GetNamespace(), rollout.GetName()), pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		numaLogger.Infof("updated pause request = %t", pause)
-		pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
+		pipelines, err := pauseRequester.getPipelineList(ctx, rollout.GetNamespace(), rollout.GetName())
 		if err != nil {
 			return false, err
 		}
@@ -91,7 +96,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		}
 	}
 
-	err := pauseRequester.markRolloutPaused(ctx, rolloutNamespace, rolloutName, pause)
+	err := pauseRequester.markRolloutPaused(ctx, rollout, pause)
 	return updated, err
 }
 

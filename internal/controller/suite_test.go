@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/numaproj/numaplane/internal/util/logger"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -45,9 +44,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -77,6 +78,9 @@ func TestControllers(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	//cfg, _, _, _, err := prepareK8SEnvironment()
+	//Expect(err).NotTo(HaveOccurred())
 
 	// Download Numaflow CRDs
 	crdsURLs := []string{
@@ -116,6 +120,8 @@ var _ = BeforeSuite(func() {
 	numaLogger.SetLevel(4) // change to 3 for "info" level
 	logger.SetBaseLogger(numaLogger)
 
+	common.DataLossPrevention = false
+
 	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
@@ -136,7 +142,10 @@ var _ = BeforeSuite(func() {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	customMetrics = metrics.RegisterCustomMetrics()
+	// other tests may call this, but it fails if called more than once
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
 
 	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)
@@ -266,7 +275,7 @@ func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespa
 
 	currentResource := unstructured.Unstructured{}
 	currentResource.SetGroupVersionKind(gvk)
-	Consistently(func() (bool, error) {
+	Eventually(func() (bool, error) {
 		err := k8sClient.Get(ctx, lookupKey, &currentResource)
 		if err != nil {
 			return false, err
@@ -297,5 +306,5 @@ func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespa
 		}
 
 		return apiv1.Phase(phase) == desiredPhase && observedGeneration == generation, nil
-	}, duration, interval).Should(BeTrue())
+	}, timeout, interval).Should(BeTrue())
 }

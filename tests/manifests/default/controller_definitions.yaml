@@ -1,103 +1,141 @@
 controllerDefinitions:
-- version: "1.3.0-rc1"
+- version: "1.3.0"
   fullSpec: |
-    apiVersion: apps/v1
-    kind: Deployment
+    apiVersion: v1
+    kind: ServiceAccount
     metadata:
-      name: numaflow-controller
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app.kubernetes.io/component: controller-manager
-          app.kubernetes.io/name: controller-manager
-          app.kubernetes.io/part-of: numaflow
-      template:
-        metadata:
-          labels:
-            app.kubernetes.io/component: controller-manager
-            app.kubernetes.io/name: controller-manager
-            app.kubernetes.io/part-of: numaflow
-        spec:
-          containers:
-            - args:
-                - controller
-              env:
-                - name: NUMAFLOW_IMAGE
-                  value: quay.io/numaproj/numaflow:v1.3.0-rc1
-                - name: NAMESPACE
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.namespace
-                - name: NUMAFLOW_CONTROLLER_NAMESPACED
-                  valueFrom:
-                    configMapKeyRef:
-                      key: namespaced
-                      name: numaflow-cmd-params-config
-                      optional: true
-                - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
-                  valueFrom:
-                    configMapKeyRef:
-                      key: managed.namespace
-                      name: numaflow-cmd-params-config
-                      optional: true
-                - name: NUMAFLOW_LEADER_ELECTION_DISABLED
-                  valueFrom:
-                    configMapKeyRef:
-                      key: controller.leader.election.disabled
-                      name: numaflow-cmd-params-config
-                      optional: true
-                - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
-                  valueFrom:
-                    configMapKeyRef:
-                      key: controller.leader.election.lease.duration
-                      name: numaflow-cmd-params-config
-                      optional: true
-                - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
-                  valueFrom:
-                    configMapKeyRef:
-                      key: controller.leader.election.lease.renew.deadline
-                      name: numaflow-cmd-params-config
-                      optional: true
-                - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
-                  valueFrom:
-                    configMapKeyRef:
-                      key: controller.leader.election.lease.renew.period
-                      name: numaflow-cmd-params-config
-                      optional: true
-              image: quay.io/numaproj/numaflow:v1.3.0-rc1
-              imagePullPolicy: Always
-              livenessProbe:
-                httpGet:
-                  path: /healthz
-                  port: 8081
-                initialDelaySeconds: 3
-                periodSeconds: 3
-              name: controller-manager
-              readinessProbe:
-                httpGet:
-                  path: /readyz
-                  port: 8081
-                initialDelaySeconds: 3
-                periodSeconds: 3
-              resources:
-                limits:
-                  cpu: 500m
-                  memory: 1024Mi
-                requests:
-                  cpu: 100m
-                  memory: 200Mi
-              volumeMounts:
-                - mountPath: /etc/numaflow
-                  name: controller-config-volume
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 9737
-          serviceAccountName: numaflow-sa
-          volumes:
-            - configMap:
-                name: numaflow-controller-config
-              name: controller-config-volume
+      name: numaflow-sa
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller-manager
+        app.kubernetes.io/name: numaflow-controller-manager
+        app.kubernetes.io/part-of: numaflow
+      name: numaflow-role
+    rules:
+    - apiGroups:
+      - numaflow.numaproj.io
+      resources:
+      - interstepbufferservices
+      - interstepbufferservices/finalizers
+      - interstepbufferservices/status
+      - pipelines
+      - pipelines/finalizers
+      - pipelines/status
+      - vertices
+      - vertices/finalizers
+      - vertices/status
+      - vertices/scale
+      - monovertices
+      - monovertices/finalizers
+      - monovertices/status
+      - monovertices/scale
+      verbs:
+      - create
+      - delete
+      - deletecollection
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - coordination.k8s.io
+      resources:
+      - leases
+      verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    - apiGroups:
+      - ""
+      resources:
+      - events
+      verbs:
+      - create
+      - patch
+    - apiGroups:
+      - ""
+      resources:
+      - pods
+      - pods/exec
+      - configmaps
+      - services
+      - persistentvolumeclaims
+      verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+    - apiGroups:
+      - ""
+      resources:
+      - secrets
+      verbs:
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - delete
+    - apiGroups:
+      - apps
+      resources:
+      - deployments
+      - statefulsets
+      verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+    - apiGroups:
+      - batch
+      resources:
+      - jobs
+      verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller-manager
+        app.kubernetes.io/name: numaflow-controller-manager
+        app.kubernetes.io/part-of: numaflow
+      name: numaflow-role-binding
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: numaflow-role
+    subjects:
+    - kind: ServiceAccount
+      name: numaflow-sa
+    ---
+    apiVersion: v1
+    data:
+      namespaced: "true"
+      server.disable.auth: "true"
+    kind: ConfigMap
+    metadata:
+      name: numaflow-cmd-params-config
     ---
     apiVersion: v1
     data:
@@ -189,7 +227,7 @@ controllerDefinitions:
                 replicas: 3
             versions:
             - version: latest
-              natsImage: nats:2.10.3
+              natsImage: nats:2.10.17
               metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
               configReloaderImage: natsio/nats-server-config-reloader:0.7.0
               startCommand: /nats-server
@@ -248,141 +286,115 @@ controllerDefinitions:
               metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
               configReloaderImage: natsio/nats-server-config-reloader:0.7.0
               startCommand: /nats-server
+            - version: 2.10.17
+              natsImage: nats:2.10.17
+              metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+              configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+              startCommand: /nats-server
     kind: ConfigMap
     metadata:
       name: numaflow-controller-config
     ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: Role
+    apiVersion: apps/v1
+    kind: Deployment
     metadata:
-      labels:
-        app.kubernetes.io/component: controller-manager
-        app.kubernetes.io/name: numaflow-controller-manager
-        app.kubernetes.io/part-of: numaflow
-      name: numaflow-role
-    rules:
-      - apiGroups:
-          - numaflow.numaproj.io
-        resources:
-          - interstepbufferservices
-          - interstepbufferservices/finalizers
-          - interstepbufferservices/status
-          - pipelines
-          - pipelines/finalizers
-          - pipelines/status
-          - vertices
-          - vertices/finalizers
-          - vertices/status
-          - vertices/scale
-        verbs:
-          - create
-          - delete
-          - deletecollection
-          - get
-          - list
-          - patch
-          - update
-          - watch
-      - apiGroups:
-          - coordination.k8s.io
-        resources:
-          - leases
-        verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-      - apiGroups:
-          - ""
-        resources:
-          - events
-        verbs:
-          - create
-          - patch
-      - apiGroups:
-          - ""
-        resources:
-          - pods
-          - pods/exec
-          - configmaps
-          - services
-          - persistentvolumeclaims
-        verbs:
-          - create
-          - get
-          - list
-          - watch
-          - update
-          - patch
-          - delete
-      - apiGroups:
-          - ""
-        resources:
-          - secrets
-        verbs:
-          - create
-          - get
-          - list
-          - update
-          - patch
-          - delete
-      - apiGroups:
-          - apps
-        resources:
-          - deployments
-          - statefulsets
-        verbs:
-          - create
-          - get
-          - list
-          - watch
-          - update
-          - patch
-          - delete
-      - apiGroups:
-          - batch
-        resources:
-          - jobs
-        verbs:
-          - create
-          - get
-          - list
-          - watch
-          - update
-          - patch
-          - delete
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: RoleBinding
-    metadata:
-      labels:
-        app.kubernetes.io/component: controller-manager
-        app.kubernetes.io/name: numaflow-controller-manager
-        app.kubernetes.io/part-of: numaflow
-      name: numaflow-role-binding
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: Role
-      name: numaflow-role
-    subjects:
-      - kind: ServiceAccount
-        name: numaflow-sa
-    ---
-    apiVersion: v1
-    kind: ServiceAccount
-    metadata:
-      name: numaflow-sa
-    ---
-    apiVersion: v1
-    data:
-      namespaced: "true"
-      server.disable.auth: "true"
-    kind: ConfigMap
-    metadata:
-      name: numaflow-cmd-params-config
+      name: numaflow-controller
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: controller-manager
+          app.kubernetes.io/name: controller-manager
+          app.kubernetes.io/part-of: numaflow
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: controller-manager
+            app.kubernetes.io/name: controller-manager
+            app.kubernetes.io/part-of: numaflow
+        spec:
+          containers:
+          - args:
+            - controller
+            env:
+            - name: NUMAFLOW_IMAGE
+              value: quay.io/numaproj/numaflow:v1.3.0
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NUMAFLOW_CONTROLLER_NAMESPACED
+              valueFrom:
+                configMapKeyRef:
+                  key: namespaced
+                  name: numaflow-cmd-params-config
+                  optional: true
+            - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  key: managed.namespace
+                  name: numaflow-cmd-params-config
+                  optional: true
+            - name: NUMAFLOW_LEADER_ELECTION_DISABLED
+              valueFrom:
+                configMapKeyRef:
+                  key: controller.leader.election.disabled
+                  name: numaflow-cmd-params-config
+                  optional: true
+            - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  key: controller.leader.election.lease.duration
+                  name: numaflow-cmd-params-config
+                  optional: true
+            - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
+              valueFrom:
+                configMapKeyRef:
+                  key: controller.leader.election.lease.renew.deadline
+                  name: numaflow-cmd-params-config
+                  optional: true
+            - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
+              valueFrom:
+                configMapKeyRef:
+                  key: controller.leader.election.lease.renew.period
+                  name: numaflow-cmd-params-config
+                  optional: true
+            image: quay.io/numaproj/numaflow:v1.3.0
+            imagePullPolicy: Always
+            livenessProbe:
+              httpGet:
+                path: /healthz
+                port: 8081
+              initialDelaySeconds: 3
+              periodSeconds: 3
+            name: controller-manager
+            ports:
+            - containerPort: 9090
+              name: metrics
+            readinessProbe:
+              httpGet:
+                path: /readyz
+                port: 8081
+              initialDelaySeconds: 3
+              periodSeconds: 3
+            resources:
+              limits:
+                cpu: 500m
+                memory: 1024Mi
+              requests:
+                cpu: 100m
+                memory: 200Mi
+            volumeMounts:
+            - mountPath: /etc/numaflow
+              name: controller-config-volume
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 9737
+          serviceAccountName: numaflow-sa
+          volumes:
+          - configMap:
+              name: numaflow-controller-config
+            name: controller-config-volume
 - version: "1.2.1"
   fullSpec: |
     apiVersion: apps/v1

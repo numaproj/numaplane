@@ -3,4 +3,5 @@ resources:
 - numaplane.numaproj.io_v1alpha1_pipelinerollout.yaml
 - numaplane.numaproj.io_v1alpha1_numaflowcontrollerrollout.yaml
 - numaplane.numaproj.io_v1alpha1_isbservicerollout.yaml
+- namespace-level-config.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

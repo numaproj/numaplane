@@ -59,7 +59,10 @@ const (
 	numWorkers                = 16 // can consider making configurable
 )
 
-var pipelineROReconciler *PipelineRolloutReconciler
+var (
+	pipelineROReconciler *PipelineRolloutReconciler
+	initTime             time.Time
+)
 
 // PipelineSpec keep track of minimum number of fields we need to know about
 type PipelineSpec struct {
@@ -420,10 +423,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if pipelineNeedsToUpdate - this means there's a mismatch between the desired Pipeline spec and actual Pipeline spec
-	// if there's a generation mismatch - this means we haven't even observed the current generation
-	// we may match the first case and not the second when we've observed the generation change but we're pausing
-	// we may match the second case and not the first if we need to update something other than Pipeline spec
-	if pipelineNeedsToUpdate || pipelineRollout.Status.ObservedGeneration < pipelineRollout.Generation {
+	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
 	} else {
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -433,7 +433,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if err = r.processExistingPipelineWithoutDataLoss(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate); err != nil {
 			return err
 		}
-	} else {
+	} else if pipelineNeedsToUpdate {
 		if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 			return err
 		}
@@ -706,13 +706,31 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+
 	if pipelinePhase == numaflowv1.PipelinePhasePaused || pipelinePhase == numaflowv1.PipelinePhasePausing {
+		// if BeginTime hasn't been set yet, we must have just started pausing - set it
+		if pipelineRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseBeginTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
+			pipelineRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
+		r.updatePauseMetric(pipelineRollout)
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
+		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
+		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
+		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+			r.updatePauseMetric(pipelineRollout)
+		}
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
+
+}
+
+func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout) {
+	timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
+	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Name).Set(timeElapsed.Seconds())
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {

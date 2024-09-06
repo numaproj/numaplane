@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -38,6 +39,7 @@ const (
 	isbServiceRolloutName     = "test-isbservice-rollout"
 	isbServiceStatefulSetName = "isbsvc-test-isbservice-rollout-js"
 	pipelineRolloutName       = "test-pipeline-rollout"
+	monoVertexRolloutName     = "test-monovertex-rollout"
 )
 
 var (
@@ -81,14 +83,42 @@ var (
 		},
 	}
 
+	monoVertexSpec = numaflowv1.MonoVertexSpec{
+		Replicas: ptr.To(int32(1)),
+		Source: &numaflowv1.Source{
+			UDSource: &numaflowv1.UDSource{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
+				},
+			},
+			UDTransformer: &numaflowv1.UDTransformer{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+				},
+			},
+		},
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				UDSink: &numaflowv1.UDSink{
+					Container: numaflowv1.Container{
+						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+					},
+				},
+			},
+		},
+	}
+
 	pipelinegvr   schema.GroupVersionResource
 	isbservicegvr schema.GroupVersionResource
+	monovertexgvr schema.GroupVersionResource
 )
 
 func init() {
 
 	pipelinegvr = getGVRForPipeline()
 	isbservicegvr = getGVRForISBService()
+	monovertexgvr = getGVRForMonoVertex()
+
 }
 
 var _ = Describe("Functional e2e", Serial, func() {
@@ -143,6 +173,27 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+
+	})
+
+	It("Should create the MonoVertexRollout if it does not exist", func() {
+
+		monoVertexRolloutSpec := createMonoVertexRolloutSpec(monoVertexRolloutName, Namespace)
+		_, err := monoVertexRolloutClient.Create(ctx, monoVertexRolloutSpec, metav1.CreateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		document("Verifying that the MonoVertexRollout was created")
+		Eventually(func() error {
+			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			return err
+		}).WithTimeout(testTimeout).Should(Succeed())
+
+		document("Verifying that the MonoVertex was created")
+		// verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		// 	return len(monoVertexSpec.Source) == 2
+		// })
+
+		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
 	})
 
@@ -216,6 +267,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
+		// TODO: update this controller image when Numaflow v1.3.1 is released
+		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
 		})
@@ -246,6 +299,27 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+
+	})
+
+	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
+
+		// new MonoVertex spec
+		updatedMonoVertexSpec := monoVertexSpec
+		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
+		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+
+		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
+		})
+
+		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
 	})
 
@@ -281,6 +355,40 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return true
 		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
 
+	})
+
+	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
+
+		document("Deleting MonoVertexRollout")
+
+		err := monoVertexRolloutClient.Delete(ctx, monoVertexRolloutName, metav1.DeleteOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		document("Verifying MonoVertexRollout deletion")
+
+		Eventually(func() bool {
+			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the MonoVertexRollout: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+
+		document("Verifying MonoVertex deletion")
+
+		Eventually(func() bool {
+			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					Fail("An unexpected error occurred when fetching the MonoVertex: " + err.Error())
+				}
+				return false
+			}
+			return true
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
 	})
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
@@ -392,7 +500,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.7"},
+			Controller: apiv1.Controller{Version: "1.3.0"},
 		},
 	}
 
@@ -425,4 +533,30 @@ func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollou
 
 	return isbServiceRollout
 
+}
+
+func createMonoVertexRolloutSpec(name, namespace string) *apiv1.MonoVertexRollout {
+
+	rawSpec, err := json.Marshal(monoVertexSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	monoVertexRollout := &apiv1.MonoVertexRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "MonoVertexRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.MonoVertexRolloutSpec{
+			MonoVertex: apiv1.MonoVertex{
+				Spec: runtime.RawExtension{
+					Raw: rawSpec,
+				},
+			},
+		},
+	}
+
+	return monoVertexRollout
 }

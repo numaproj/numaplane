@@ -22,6 +22,10 @@ type ConfigManager struct {
 	// USDE Config
 	usdeConfig     USDEConfig
 	usdeConfigLock *sync.RWMutex
+
+	// User Namespace-level Config
+	namespaceConfigMap     map[string]NamespaceConfig
+	namespaceConfigMapLock *sync.RWMutex
 }
 
 type NumaflowControllerDefinitionsManager struct {
@@ -29,9 +33,8 @@ type NumaflowControllerDefinitionsManager struct {
 	lock          *sync.RWMutex
 }
 
-type USDEConfig struct {
-	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
-	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
+type NamespaceConfig struct {
+	UpgradeStrategy USDEUserStrategy `json:"upgradeStrategy,omitempty" yaml:"upgradeStrategy,omitempty"`
 }
 
 var instance *ConfigManager
@@ -47,8 +50,10 @@ func GetConfigManagerInstance() *ConfigManager {
 				rolloutConfig: map[string]string{},
 				lock:          new(sync.RWMutex),
 			},
-			usdeConfig:     USDEConfig{},
-			usdeConfigLock: new(sync.RWMutex),
+			usdeConfig:             USDEConfig{},
+			usdeConfigLock:         new(sync.RWMutex),
+			namespaceConfigMap:     make(map[string]NamespaceConfig),
+			namespaceConfigMapLock: new(sync.RWMutex),
 		}
 	})
 	return instance
@@ -191,23 +196,28 @@ func (cm *ConfigManager) RegisterCallback(f func(config GlobalConfig)) {
 	cm.callbacks = append(cm.callbacks, f)
 }
 
-func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
+func (cm *ConfigManager) UpdateNamespaceConfig(namespace string, config NamespaceConfig) {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
 
-	cm.usdeConfig = config
+	cm.namespaceConfigMap[namespace] = config
 }
 
-func (cm *ConfigManager) UnsetUSDEConfig() {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
+func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
 
-	cm.usdeConfig = USDEConfig{}
+	delete(cm.namespaceConfigMap, namespace)
 }
 
-func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
-	cm.usdeConfigLock.Lock()
-	defer cm.usdeConfigLock.Unlock()
+func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
+	cm.namespaceConfigMapLock.Lock()
+	defer cm.namespaceConfigMapLock.Unlock()
 
-	return cm.usdeConfig
+	nsConfigMap, exists := cm.namespaceConfigMap[namespace]
+	if !exists {
+		return nil
+	}
+
+	return &nsConfigMap
 }

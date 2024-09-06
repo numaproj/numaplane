@@ -33,6 +33,9 @@ const (
 	// LabelValueUSDEConfig is the label value used to identify the USDE ConfigMap
 	LabelValueUSDEConfig = "usde-config"
 
+	// LabelValueNamespaceConfig is the label value used to identify the user's namespace-level ConfigMap
+	LabelValueNamespaceConfig = "namespace-level-config"
+
 	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline
 	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
 	LabelKeyISBServiceNameForPipeline = "numaplane.numaproj.io/isbsvc-name"

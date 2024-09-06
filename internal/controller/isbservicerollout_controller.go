@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -275,17 +274,15 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
-	// if there's a generation mismatch - this means we haven't even observed the current generation
-	// we may match the first case and not the second when we've observed the generation change but we're pausing pipelines
-	// we may match the second case and not the first if we need to update something other than ISBService spec
-	if isbServiceNeedsUpdating || isbServiceRollout.Status.ObservedGeneration < isbServiceRollout.Generation {
+	// Note that this will be reset to "Deployed" later on if a deployment occurs
+	if isbServiceNeedsUpdating {
 		isbServiceRollout.Status.MarkPending()
 	} else {
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
 	if common.DataLossPrevention {
-		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -294,7 +291,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	} else {
+	} else if isbServiceNeedsUpdating {
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
@@ -316,11 +313,9 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rolloutNamespace string, rolloutName string, paused bool) error {
-	isbServiceRollout := &apiv1.ISBServiceRollout{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: rolloutName}, isbServiceRollout); err != nil {
-		return err
-	}
+func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+
+	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
 	if paused {
 		isbServiceRollout.Status.MarkPausingPipelines(isbServiceRollout.Generation)
