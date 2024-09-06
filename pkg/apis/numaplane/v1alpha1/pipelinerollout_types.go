@@ -39,7 +39,7 @@ type Pipeline struct {
 // PipelineRolloutStatus defines the observed state of PipelineRollout
 type PipelineRolloutStatus struct {
 	Status      `json:",inline"`
-	PauseStatus `json:"pauseStatus,omitempty"`
+	PauseStatus PauseStatus `json:"pauseStatus,omitempty"`
 
 	// UpgradeInProgress indicates the upgrade strategy currently beign used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress string `json:"upgradeInProgress,omitempty"`
