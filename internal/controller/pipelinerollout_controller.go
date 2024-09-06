@@ -474,7 +474,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
-		if !*shouldBePaused || (*shouldBePaused && isPipelinePaused(ctx, existingPipelineDef)) {
+		if !*shouldBePaused || (*shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 			// make sure lifecycle is left set to "Paused" in the new spec
@@ -549,7 +549,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := ((pipelineUpdateRequiresPause || externalPauseRequest) && !unpausible) || specBasedPause
+	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
 	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
 		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
 
@@ -750,8 +750,9 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
+	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
 }
 
 // pipelineSpecEqual() tests for essential equality, with any irrelevant fields eliminated from the comparison

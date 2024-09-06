@@ -95,7 +95,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 	return updated, err
 }
 
-// check if all Pipelines corresponding to this Rollout have paused
+// check if all Pipelines corresponding to this Rollout have paused or are otherwise not pausible (contract with Numaflow is that this is Pipelines which are "Failed")
 func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
@@ -107,7 +107,7 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester Pause
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "Paused" && !unpausible {
+		if status.Phase != "Paused" && status.Phase != "Failed" {
 			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
 
 			return false, nil
