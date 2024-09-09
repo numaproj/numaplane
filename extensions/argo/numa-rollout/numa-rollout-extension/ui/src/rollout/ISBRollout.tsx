@@ -1,5 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { Node } from "../ArgoPropType";
+import React, { useContext, useMemo } from "react";
 import { RolloutComponentContext } from "./RolloutComponentWrapper";
 import { Box } from "@mui/material";
 import { SquareCheckIcon } from "../utils/SquareCheckIcon";
@@ -7,26 +6,7 @@ import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 import { ISB, ISB_KUBERNETES, POD } from "../utils/Constants";
 
 export const ISBRollout = () => {
-  const { props } = useContext(RolloutComponentContext);
-  const [kindToNodeMap, setKindToNodeMap] = useState<Map<string, Node[]>>(
-    new Map()
-  );
-
-  useEffect(() => {
-    const tempMap = new Map<string, Node[]>();
-
-    const tree = props?.tree;
-    const nodes = tree?.nodes ?? [];
-    for (const node of nodes) {
-      const kind = node?.kind;
-      if (kind) {
-        const tempNodes = tempMap.get(kind) ?? [];
-        tempNodes.push(node);
-        tempMap.set(kind, tempNodes);
-      }
-    }
-    setKindToNodeMap(tempMap);
-  }, [props?.tree]);
+  const { kindToNodeMap } = useContext(RolloutComponentContext);
 
   const isbPods = useMemo(() => {
     if (!kindToNodeMap || !kindToNodeMap.get(POD)) {

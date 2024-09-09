@@ -1,31 +1,11 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { Node } from "../ArgoPropType";
+import React, { useContext, useMemo } from "react";
 import { Box } from "@mui/material";
 import { RolloutComponentContext } from "./RolloutComponentWrapper";
 import { SquareCheckIcon } from "../utils/SquareCheckIcon";
 import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const ControllerRollout = () => {
-  const { props } = useContext(RolloutComponentContext);
-  const [kindToNodeMap, setKindToNodeMap] = useState<Map<string, Node[]>>(
-    new Map()
-  );
-
-  useEffect(() => {
-    const tempMap = new Map<string, Node[]>();
-
-    const tree = props?.tree;
-    const nodes = tree?.nodes;
-    for (const node of nodes ?? []) {
-      const kind = node?.kind;
-      if (kind) {
-        const tempNodes = tempMap.get(kind) ?? [];
-        tempNodes.push(node);
-        tempMap.set(kind, tempNodes);
-      }
-    }
-    setKindToNodeMap(tempMap);
-  }, [props?.tree]);
+  const { kindToNodeMap } = useContext(RolloutComponentContext);
 
   const controllerPods = useMemo(() => {
     const pods = kindToNodeMap?.get("Pod") ?? [];
