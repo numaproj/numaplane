@@ -32,19 +32,19 @@ func CompareMapsIgnoringNulls(a map[string]any, b map[string]any) bool {
 	bNoNulls := make(map[string]any)
 	maps.Copy(bNoNulls, b)
 
-	removeNullValuesFromMap(aNoNulls)
-	removeNullValuesFromMap(bNoNulls)
+	RemoveNullValuesFromMap(aNoNulls)
+	RemoveNullValuesFromMap(bNoNulls)
 
 	return reflect.DeepEqual(aNoNulls, bNoNulls)
 }
 
-// removeNullValuesFromMap recursively removes any zero values from the map including:
+// RemoveNullValuesFromMap recursively removes any zero values from the map including:
 // null references, empty strings, numbers that are zero, empty maps, and empty arrays
-func removeNullValuesFromMap(m map[string]any) {
+func RemoveNullValuesFromMap(m map[string]any) {
 	for key, val := range m {
 		switch typedVal := val.(type) {
 		case map[string]any:
-			removeNullValuesFromMap(typedVal)
+			RemoveNullValuesFromMap(typedVal)
 
 			if len(typedVal) == 0 {
 				delete(m, key)
@@ -53,7 +53,7 @@ func removeNullValuesFromMap(m map[string]any) {
 		case []any:
 			for i := 0; i < len(typedVal); i++ {
 				if elemMap, ok := typedVal[i].(map[string]any); ok {
-					removeNullValuesFromMap(elemMap)
+					RemoveNullValuesFromMap(elemMap)
 
 					if len(elemMap) == 0 {
 						typedVal = append(typedVal[:i], typedVal[i+1:]...)
@@ -122,8 +122,8 @@ func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths
 		}
 	}
 
-	removeNullValuesFromMap(onlyPaths)
-	removeNullValuesFromMap(withoutPaths)
+	RemoveNullValuesFromMap(onlyPaths)
+	RemoveNullValuesFromMap(withoutPaths)
 
 	return onlyPaths, withoutPaths, nil
 }

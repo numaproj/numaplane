@@ -1,4 +1,4 @@
-logLevel: 4
+logLevel: 5
 clusterName: "staging-usw2-k8s"
 syncTimeIntervalMs: 30000
 cascadeDeletion: false

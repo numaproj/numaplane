@@ -482,9 +482,11 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 			if err != nil {
 				return err
 			}
-			err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
+			//util.RemoveNullValuesFromMap(unstruc.Object["spec"].(map[string]interface{}))
+			//err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
+			err = TempSetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
 			if err != nil {
-				return err
+				return fmt.Errorf("error setting nested field spec.lifecycle.desiredPhase on new object %+v: %v", unstruc.Object, err)
 			}
 			err = kubernetes.UpdateUnstructuredCR(ctx, r.restConfig, unstruc, common.PipelineGVR, pipelineRollout.Namespace, pipelineRollout.Name)
 			if err != nil {
@@ -493,6 +495,34 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
 	}
+	return nil
+}
+
+func TempSetNestedField(obj map[string]interface{}, value interface{}, fields ...string) error {
+	return tempSetNestedFieldNoCopy(obj, runtime.DeepCopyJSONValue(value), fields...)
+}
+
+func tempSetNestedFieldNoCopy(obj map[string]interface{}, value interface{}, fields ...string) error {
+	m := obj
+
+	for _, field := range fields[:len(fields)-1] {
+		if val, ok := m[field]; ok {
+			if valMap, ok := val.(map[string]interface{}); ok {
+				m = valMap
+			} else if val == nil {
+				newVal := make(map[string]interface{})
+				m[field] = newVal
+				m = newVal
+			} else {
+				return fmt.Errorf("value cannot be set because %+v is not a map[string]interface{}", val)
+			}
+		} else {
+			newVal := make(map[string]interface{})
+			m[field] = newVal
+			m = newVal
+		}
+	}
+	m[fields[len(fields)-1]] = value
 	return nil
 }
 
@@ -549,9 +579,11 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
-	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
-		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
+	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
+
+	shouldBePaused := (pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause) && !unpausible
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
+		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause, unpausible)
 
 	return &shouldBePaused, nil
 }

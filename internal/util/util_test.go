@@ -289,7 +289,7 @@ func Test_removeNullValuesFromMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			removeNullValuesFromMap(tc.input)
+			RemoveNullValuesFromMap(tc.input)
 
 			if !reflect.DeepEqual(tc.expected, tc.input) {
 				t.Errorf("\nexpected:\t%+v\nactual:\t%+v", tc.expected, tc.input)

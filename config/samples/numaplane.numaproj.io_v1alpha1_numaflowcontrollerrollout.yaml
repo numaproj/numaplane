@@ -5,4 +5,4 @@ metadata:
   namespace: example-namespace
 spec:
   controller:
-    version: "1.3.0" #numaflow-1.3.0
+    version: "master-9-6-24"
