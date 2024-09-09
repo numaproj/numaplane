@@ -49,12 +49,12 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rollout client.Objec
 		if !pauseRequestUpdated && resourceNeedsUpdating {
 
 			// check if the pipelines are all paused
-			allPaused, err := areAllPipelinesPaused(ctx, pauseRequester, rolloutNamespace, rolloutName)
+			allPaused, err := areAllPipelinesPausedOrUnpausible(ctx, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
 				return false, err
 			}
 			if allPaused {
-				numaLogger.Infof("confirmed all Pipelines have paused so %s can safely update", pauseRequester.getChildTypeString())
+				numaLogger.Infof("confirmed all Pipelines have paused (or can't pause) so %s can safely update", pauseRequester.getChildTypeString())
 				err = updateFunc()
 				if err != nil {
 					return false, err
@@ -100,8 +100,8 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 	return updated, err
 }
 
-// check if all Pipelines corresponding to this Rollout have paused
-func areAllPipelinesPaused(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
+// check if all Pipelines corresponding to this Rollout have paused or are otherwise not pausible (contract with Numaflow is that this is Pipelines which are "Failed")
+func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
 	if err != nil {
@@ -112,8 +112,9 @@ func areAllPipelinesPaused(ctx context.Context, pauseRequester PauseRequester, r
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "Paused" {
+		if status.Phase != "Paused" && status.Phase != "Failed" {
 			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
+
 			return false, nil
 		}
 	}
