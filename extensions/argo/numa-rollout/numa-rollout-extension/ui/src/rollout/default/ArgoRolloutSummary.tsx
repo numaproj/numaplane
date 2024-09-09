@@ -1,5 +1,7 @@
 import React from "react";
 
+import "./ArgoSummary.css";
+
 interface ArgoRolloutSummaryProps {
   rolloutParams: {
     strategy: string;
@@ -18,7 +20,7 @@ export const ArgoRolloutSummary = ({
           <label>Strategy</label>
         </div>
         <div className="info-item--row__container">
-          <div className="info-item info-item--canary ">
+          <div className="info-item info-item--canary">
             <span style={{ marginRight: "5px" }}>
               <i className="fa fa-dove"></i>
             </span>
@@ -32,7 +34,7 @@ export const ArgoRolloutSummary = ({
             <label>Step</label>
           </div>
           <div className="info-item--row__container">
-            <div className="info-item ">
+            <div className="info-item">
               <span style={{ marginRight: "5px" }}>
                 <i className="fa fa-shoe-prints"></i>
               </span>
@@ -45,7 +47,7 @@ export const ArgoRolloutSummary = ({
             <label>Set Weight</label>
           </div>
           <div className="info-item--row__container">
-            <div className="info-item ">
+            <div className="info-item">
               <span style={{ marginRight: "5px" }}>
                 <i className="fa fa-balance-scale-right"></i>
               </span>
@@ -58,7 +60,7 @@ export const ArgoRolloutSummary = ({
             <label>Actual Weight</label>
           </div>
           <div className="info-item--row__container">
-            <div className="info-item ">
+            <div className="info-item">
               <span style={{ marginRight: "5px" }}>
                 <i className="fa fa-balance-scale"></i>
               </span>

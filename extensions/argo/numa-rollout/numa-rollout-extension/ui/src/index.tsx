@@ -47,6 +47,13 @@ export const component = Extension;
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
+    "numaplane.numaproj.io",
+    "MonoVertexRollout",
+    "Numarollout",
+    { icon: "fa fa-window-restore" }
+  );
+  window?.extensionsAPI?.registerResourceExtension(
+    component,
     "*",
     "Deployment",
     "Numarollout",
