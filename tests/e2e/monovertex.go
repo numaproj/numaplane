@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +45,7 @@ func verifyMonoVertexSpec(namespace, name string, f func(numaflowv1.MonoVertexSp
 			return false
 		}
 		return f(retrievedMonoVertexSpec)
-	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
 }
 
@@ -84,7 +83,7 @@ func verifyMonoVertexStatus(namespace, monoVertexName string, f func(numaflowv1.
 			return false
 		}
 		return f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
-	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
 }
 

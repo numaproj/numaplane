@@ -26,6 +26,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
@@ -45,7 +47,7 @@ var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout)
+	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout) // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
 
 	var err error
 	scheme := runtime.NewScheme()
@@ -56,13 +58,15 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	useExistingCluster := true
 
+	restConfig := config.GetConfigOrDie()
+
 	testEnv = &envtest.Environment{
-		UseExistingCluster: &useExistingCluster,
+		UseExistingCluster:       &useExistingCluster,
+		Config:                   restConfig,
+		AttachControlPlaneOutput: true,
 	}
 
 	cfg, err := testEnv.Start()
-	cfg.QPS = 10000
-	cfg.Burst = 1000
 	Expect(cfg).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 

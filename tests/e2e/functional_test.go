@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -138,7 +137,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		verifyNumaflowControllerReady(Namespace)
 	})
@@ -153,7 +152,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
@@ -169,7 +168,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -191,7 +190,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
 		// verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
@@ -300,24 +299,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
-
-		time.Sleep(90 * time.Second)
-
-		statefulSet, err := kubeClient.AppsV1().StatefulSets(Namespace).Get(ctx, fmt.Sprintf("isbsvc-%s-js", isbServiceRolloutName), metav1.GetOptions{})
-		fmt.Printf("err = %v, statefulSet: %+v\n", err, statefulSet)
-		if statefulSet == nil {
-			fmt.Println("statefulset nil")
-			By("statefulset nil")
-		} else if statefulSet.Status.ObservedGeneration != 2 {
-			fmt.Printf("statefulset observedGeneration=%d\n", statefulSet.Status.ObservedGeneration)
-			By(fmt.Sprintf("statefulset observedGeneration=%d\n", statefulSet.Status.ObservedGeneration))
-		} else if statefulSet.Status.UpdatedReplicas != int32(3) {
-			fmt.Printf("statefulset UpdatedReplicas=%d\n", statefulSet.Status.UpdatedReplicas)
-			By(fmt.Sprintf("statefulset UpdatedReplicas=%d\n", statefulSet.Status.UpdatedReplicas))
-		} else {
-			fmt.Println("statefulset passed all")
-			By("statefulset passed all")
-		}
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 

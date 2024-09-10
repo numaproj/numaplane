@@ -21,12 +21,13 @@ import (
 )
 
 var (
-	dynamicClient dynamic.DynamicClient
-	testEnv       *envtest.Environment
-	ctx           context.Context
-	cancel        context.CancelFunc
-	suiteTimeout  = 5 * time.Minute
-	testTimeout   = 2 * time.Minute
+	dynamicClient       dynamic.DynamicClient
+	testEnv             *envtest.Environment
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	suiteTimeout        = 30 * time.Minute
+	testTimeout         = 2 * time.Minute
+	testPollingInterval = 1 * time.Second
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
