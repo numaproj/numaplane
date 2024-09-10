@@ -189,9 +189,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}).WithTimeout(testTimeout).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
-		// verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-		// 	return len(monoVertexSpec.Source) == 2
-		// })
+		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+			return monoVertexSpec.Source != nil
+		})
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
