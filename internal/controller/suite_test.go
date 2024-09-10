@@ -228,8 +228,13 @@ func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfi
 }
 
 // verifyAutoHealing tests the auto healing feature
-func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, pathToValue string, newValue any) {
-	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
+func verifyAutoHealing(
+	ctx context.Context,
+	gvk schema.GroupVersionKind,
+	lookupKey types.NamespacedName,
+	pathToValue string,
+	newValue any,
+) {
 
 	// Get current resource
 	currentResource := unstructured.Unstructured{}

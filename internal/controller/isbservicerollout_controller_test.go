@@ -186,7 +186,8 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 		It("Should auto heal the InterStepBufferService with the ISBServiceRollout pipeline spec when the InterStepBufferService spec is changed", func() {
 			By("updating the InterStepBufferService and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, defaultNamespace, defaultISBSvcRolloutName, "spec.jetstream.version", "1.2.3.4.5")
+			lookupKey := types.NamespacedName{Name: defaultISBSvcRolloutName, Namespace: defaultNamespace}
+			verifyAutoHealing(ctx, numaflowv1.ISBGroupVersionKind, lookupKey, "spec.jetstream.version", "1.2.3.4.5")
 		})
 
 		It("Should delete the ISBServiceRollout and InterStepBufferService", func() {

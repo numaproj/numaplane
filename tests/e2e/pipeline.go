@@ -89,7 +89,7 @@ func getGVRForPipeline() schema.GroupVersionResource {
 	}
 }
 
-func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
+func updatePipelineRolloutInK8S(name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
 	document("updating PipelineRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
@@ -107,7 +107,12 @@ func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
+func updatePipelineSpecInK8S(
+	namespace string,
+	pipelineName string,
+	f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error),
+) *numaflowv1.PipelineSpec {
+	var updatedPipelineSpec *numaflowv1.PipelineSpec
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 
 		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
@@ -115,34 +120,38 @@ func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaf
 		retrievedPipeline := unstruct
 
 		// modify Pipeline Spec to verify it gets auto-healed
-		err = updatePipelineSpec(retrievedPipeline, f)
+		updatedPipelineSpec, err = updatePipelineSpec(retrievedPipeline, f)
 		Expect(err).ShouldNot(HaveOccurred())
 		_, err = dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
+	return updatedPipelineSpec
 }
 
 // Take a Pipeline Unstructured type and update the PipelineSpec in some way
-func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) error {
+func updatePipelineSpec(
+	u *unstructured.Unstructured,
+	f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error),
+) (*numaflowv1.PipelineSpec, error) {
 
 	// get PipelineSpec from unstructured object
 	specMap := u.Object["spec"]
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// update PipelineSpec
 	pipelineSpec, err = f(pipelineSpec)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var newMap map[string]interface{}
 	err = util.StructToStruct(&pipelineSpec, &newMap)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	u.Object["spec"] = newMap
-	return nil
+	return &pipelineSpec, nil
 }

@@ -182,7 +182,8 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 		It("Should auto heal the MonoVertex when the spec is directly changed", func() {
 			By("Updating the MonoVertex and verifying the changed field is the same")
-			verifyAutoHealing(ctx, numaflowv1.MonoVertexGroupVersionKind, namespace, monoVertexRolloutName, "spec.source.udsource.container.image", "wrong-image")
+			lookupKey := types.NamespacedName{Name: monoVertexRolloutName, Namespace: namespace}
+			verifyAutoHealing(ctx, numaflowv1.MonoVertexGroupVersionKind, lookupKey, "spec.source.udsource.container.image", "wrong-image")
 		})
 
 		It("Should delete the MonoVertexRollout and MonoVertex", func() {

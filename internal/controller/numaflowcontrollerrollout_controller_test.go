@@ -123,12 +123,14 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {
 			By("updating the Numaflow Controller Deployment and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, appsv1.SchemeGroupVersion.WithKind("Deployment"), namespace, "numaflow-controller", "spec.template.spec.serviceAccountName", "someothersaname")
+			lookupKey := types.NamespacedName{Name: "numaflow-controller", Namespace: namespace}
+			verifyAutoHealing(ctx, appsv1.SchemeGroupVersion.WithKind("Deployment"), lookupKey, "spec.template.spec.serviceAccountName", "someothersaname")
 		})
 
 		It("Should auto heal the numaflow-cmd-params-config ConfigMap with the spec based on the NumaflowControllerRollout version field value when the ConfigMap spec is changed", func() {
 			By("updating the numaflow-cmd-params-config ConfigMap and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, corev1.SchemeGroupVersion.WithKind("ConfigMap"), namespace, "numaflow-cmd-params-config", "data.namespaced", "false")
+			lookupKey := types.NamespacedName{Name: "numaflow-cmd-params-config", Namespace: namespace}
+			verifyAutoHealing(ctx, corev1.SchemeGroupVersion.WithKind("ConfigMap"), lookupKey, "data.namespaced", "false")
 		})
 
 		AfterAll(func() {

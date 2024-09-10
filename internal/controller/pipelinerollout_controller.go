@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"strings"
 	"sync"
@@ -32,9 +33,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
+	hashutil "k8s.io/kubernetes/pkg/util/hash"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -370,8 +373,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
-		pipelineRollout.Status.MarkFailed(fmt.Sprintf("Pipeline %s already exists in namespace", pipelineRollout.Name))
-		return false, nil
+		numaLogger.Debugf("PipelineRollout %s failed because Pipeline %s already exists in namespace", pipelineRollout.Name, existingPipelineDef.Name)
+		return false, fmt.Errorf("pipeline %s already exists in namespace", existingPipelineDef.Name)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
@@ -399,9 +402,14 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
 	return resultPipeline
 }
-func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 
+func (r *PipelineRolloutReconciler) processExistingPipeline(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	existingPipelineDef *kubernetes.GenericObject,
+	newPipelineDef *kubernetes.GenericObject,
+	syncStartTime time.Time,
+) error {
 	// Get the fields we need from both the Pipeline spec we have and the one we want
 	// TODO: consider having one struct which include our GenericObject plus our PipelineSpec so we can avoid multiple repeat conversions
 
@@ -836,20 +844,17 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
-func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
-	var pipelineSpec PipelineSpec
-	labelMapping := map[string]string{
-		common.LabelKeyISBServiceNameForPipeline: "default",
-	}
-	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
-	}
+func pipelineLabels(pipelineSpec *numaflowv1.PipelineSpec) (map[string]string, error) {
+	labelMapping := make(map[string]string)
 	if pipelineSpec.InterStepBufferServiceName != "" {
 		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
+	} else {
+		labelMapping[common.LabelKeyISBServiceNameForPipeline] = "default"
 	}
 
 	return labelMapping, nil
 }
+
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	rawSpec := runtime.RawExtension{}
 	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
@@ -879,7 +884,13 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
-	labels, err := pipelineLabels(pipelineRollout)
+	var pipelineSpec numaflowv1.PipelineSpec
+	err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert Pipeline spec %q into PipelineSpec type, err=%v", string(pipelineRollout.Spec.Pipeline.Spec.Raw), err)
+	}
+
+	labels, err := pipelineLabels(&pipelineSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -890,7 +901,7 @@ func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name,
+			Name:            GetPipelineName(pipelineRollout.Name, &pipelineSpec),
 			Namespace:       pipelineRollout.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
@@ -922,4 +933,15 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
+}
+
+// GetPipelineName returns the pipeline name determined by the name of the
+// pipeline rollout, and suffix with a hash value calculated from pipeline
+// spec. The hash will be safe encoded to avoid bad words.
+func GetPipelineName(pipelineRolloutName string, pipelineSpec *numaflowv1.PipelineSpec) string {
+	pipelineSpecHasher := fnv.New32a()
+	hashutil.DeepHashObject(pipelineSpecHasher, pipelineSpec)
+	hash := rand.SafeEncodeString(fmt.Sprint(pipelineSpecHasher.Sum32()))
+
+	return pipelineRolloutName + "-" + hash
 }

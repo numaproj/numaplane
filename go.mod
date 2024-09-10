@@ -28,6 +28,7 @@ require (
 	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1
 	github.com/prometheus/client_golang v1.18.0
 	gopkg.in/yaml.v2 v2.4.0
+	k8s.io/kubernetes v1.29.6
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 )
 
@@ -138,7 +139,6 @@ require (
 	k8s.io/kube-aggregator v0.29.6 // indirect
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
 	k8s.io/kubectl v0.29.6 // indirect
-	k8s.io/kubernetes v1.29.6 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.14.3-0.20230601165947-6ce0bf390ce3 // indirect
