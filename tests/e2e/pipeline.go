@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -31,7 +32,7 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 		}
 
 		return f(retrievedPipelineSpec)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
@@ -52,7 +53,7 @@ func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflow
 		}
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func verifyPipelineReady(namespace string, pipelineName string, numVertices int) {

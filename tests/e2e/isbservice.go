@@ -48,7 +48,7 @@ func verifyISBServiceSpec(namespace string, name string, f func(numaflowv1.Inter
 		}
 
 		return f(retrievedISBServiceSpec)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
@@ -56,14 +56,15 @@ func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
 	Eventually(func() error {
 		_, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
 		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
 
 	// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
+
 	document("Verifying that the StatefulSet exists and is ready")
 	Eventually(func() bool {
 		statefulSet, _ := kubeClient.AppsV1().StatefulSets(namespace).Get(ctx, fmt.Sprintf("isbsvc-%s-js", isbsvcName), metav1.GetOptions{})
 		return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == int32(nodeSize)
-	}).WithTimeout(5 * time.Minute).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(10 * time.Second).Should(BeTrue())
 
 	document("Verifying that the StatefulSet Pods are in Running phase")
 	Eventually(func() bool {
@@ -77,7 +78,7 @@ func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
 			}
 		}
 		return podsInRunning == nodeSize
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error)) {

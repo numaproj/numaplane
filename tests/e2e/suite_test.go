@@ -61,6 +61,8 @@ var _ = BeforeSuite(func() {
 	}
 
 	cfg, err := testEnv.Start()
+	cfg.QPS = 10000
+	cfg.Burst = 1000
 	Expect(cfg).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 

@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"time"
+
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,7 +25,7 @@ func verifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployme
 			return false
 		}
 		return f(*deployment)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func verifyNumaflowControllerReady(namespace string) {
@@ -31,7 +33,7 @@ func verifyNumaflowControllerReady(namespace string) {
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(Succeed())
 
 	document("Verifying that the Numaflow ControllerRollout is ready")
 	Eventually(func() bool {
@@ -45,7 +47,7 @@ func verifyNumaflowControllerReady(namespace string) {
 		}
 		return childResourcesHealthyCondition.Status == metav1.ConditionTrue
 
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(testTimeout).WithPolling(1 * time.Second).Should(BeTrue())
 }
 
 func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error)) {
