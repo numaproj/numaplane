@@ -25,7 +25,7 @@ var (
 	testEnv             *envtest.Environment
 	ctx                 context.Context
 	cancel              context.CancelFunc
-	suiteTimeout        = 30 * time.Minute
+	suiteTimeout        = 30 * time.Minute // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
 	testTimeout         = 2 * time.Minute
 	testPollingInterval = 1 * time.Second
 

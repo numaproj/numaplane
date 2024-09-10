@@ -48,7 +48,7 @@ var (
 		Duration: time.Second,
 	}
 	numVertices         = int32(1)
-	zeroReplicaSleepSec = uint32(15)
+	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to address it
 	pipelineSpec        = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
