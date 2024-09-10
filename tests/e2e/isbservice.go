@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -62,7 +63,7 @@ func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
 	Eventually(func() bool {
 		statefulSet, _ := kubeClient.AppsV1().StatefulSets(namespace).Get(ctx, fmt.Sprintf("isbsvc-%s-js", isbsvcName), metav1.GetOptions{})
 		return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == int32(nodeSize)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(5 * time.Minute).Should(BeTrue())
 
 	document("Verifying that the StatefulSet Pods are in Running phase")
 	Eventually(func() bool {
