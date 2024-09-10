@@ -47,6 +47,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	one          = int32(1)
 	pipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
@@ -58,6 +59,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
+				Scale: numaflowv1.Scale{Min: &one, Max: &one},
 			},
 			{
 				Name: "out",
@@ -66,6 +68,7 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
+				Scale: numaflowv1.Scale{Min: &one, Max: &one},
 			},
 		},
 		Edges: []numaflowv1.Edge{
@@ -259,7 +262,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.6"},
+			Controller: apiv1.Controller{Version: "0.0.11"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -270,7 +273,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.11"
 		})
 
 		verifyNumaflowControllerReady(Namespace)
@@ -375,7 +378,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
 
 		document("Verifying MonoVertex deletion")
 
@@ -500,7 +503,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.3.0"},
+			Controller: apiv1.Controller{Version: "0.0.10"},
 		},
 	}
 
