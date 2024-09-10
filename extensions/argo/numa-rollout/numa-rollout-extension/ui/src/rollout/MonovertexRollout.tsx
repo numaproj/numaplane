@@ -4,16 +4,16 @@ import { Box } from "@mui/material";
 import { SquareCheckIcon } from "../utils/SquareCheckIcon";
 import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
-export const PipelineRollout = () => {
+export const MonovertexRollout = () => {
   const { props, kindToNodeMap } = useContext(RolloutComponentContext);
 
   return (
     <Box>
       <Box>
-        {kindToNodeMap.get("Pipeline")?.map((node) => {
+        {kindToNodeMap.get("MonoVertexRollout")?.map((node) => {
           return (
             <Box key={node?.name}>
-              <Box>Pipeline Name: {node?.name}</Box>
+              <Box>Monovertex Rollout Name: {node?.name}</Box>
               <Box
                 sx={{
                   display: "flex",
@@ -27,7 +27,7 @@ export const PipelineRollout = () => {
                   marginBottom: "-3px",
                 }}
               >
-                Pipeline Status:{" "}
+                Monovertex Status:{" "}
                 {props?.resource?.status?.conditions?.[0].type ===
                 "ChildResourcesHealthy" ? (
                   <SquareCheckIcon tooltipTitle={node?.name} />

@@ -1,6 +1,6 @@
-import React, { createContext, useCallback } from "react";
+import React, { createContext, useCallback, useEffect, useState } from "react";
 import { Box } from "@mui/material";
-import { ArgoPropType, History } from "../ArgoPropType";
+import { ArgoPropType, History, Node } from "../ArgoPropType";
 import { ISBRollout } from "./ISBRollout";
 import { ControllerRollout } from "./ControllerRollout";
 import { PipelineRollout } from "./PipelineRollout";
@@ -8,30 +8,59 @@ import { ArgoRolloutComponent } from "./default/ArgoRolloutComponent";
 import {
   INTUIT_DOMAIN,
   ISB_SERVICE_ROLLOUT,
+  MONOVERTEX_ROLLOUT,
   NUMAFLOW_CONTROLLER_ROLLOUT,
   PIPELINE_ROLLOUT,
 } from "../utils/Constants";
+import { MonovertexRollout } from "./MonovertexRollout";
 
 export interface RolloutContextData {
   props: ArgoPropType;
+  kindToNodeMap: Map<string, Node[]>;
 }
 export const RolloutComponentContext = createContext<RolloutContextData>({
   props: {} as any,
+  kindToNodeMap: new Map(),
 });
 
 export const RolloutComponentWrapper = (props: ArgoPropType) => {
+  const [kindToNodeMap, setKindToNodeMap] = useState<Map<string, Node[]>>(
+    new Map()
+  );
   const currentNodeKind = props?.resource?.kind;
 
   // Check if the current rollout is hosted inside Intuit
   const isIntuitRollout = window.location.href.indexOf(INTUIT_DOMAIN) >= 0;
+  props.application.status.history = props.application.status.history.sort(
+    (a, b) => {
+      const dateA = new Date(a.deployedAt);
+      const dateB = new Date(b.deployedAt);
+      return dateB.getTime() - dateA.getTime();
+    }
+  );
   const getRevisionURL = useCallback((revision: History) => {
     return `${props?.application?.spec?.source?.repoURL}/commit/${revision?.revision}`.replace(
       ".git",
       ""
     );
   }, []);
+  useEffect(() => {
+    const tempMap = new Map<string, Node[]>();
+
+    const tree = props?.tree;
+    const nodes = tree?.nodes;
+    for (const node of nodes ?? []) {
+      const kind = node?.kind;
+      if (kind) {
+        const tempNodes = tempMap.get(kind) ?? [];
+        tempNodes.push(node);
+        tempMap.set(kind, tempNodes);
+      }
+    }
+    setKindToNodeMap(tempMap);
+  }, [props?.tree]);
   return (
-    <RolloutComponentContext.Provider value={{ props }}>
+    <RolloutComponentContext.Provider value={{ props, kindToNodeMap }}>
       {isIntuitRollout && (
         <Box
           sx={{
@@ -109,6 +138,11 @@ export const RolloutComponentWrapper = (props: ArgoPropType) => {
                     {index === 0 && currentNodeKind === PIPELINE_ROLLOUT && (
                       <Box sx={{ marginTop: "1rem" }}>
                         <PipelineRollout />
+                      </Box>
+                    )}
+                    {index === 0 && currentNodeKind === MONOVERTEX_ROLLOUT && (
+                      <Box sx={{ marginTop: "1rem" }}>
+                        <MonovertexRollout />
                       </Box>
                     )}
                   </Box>

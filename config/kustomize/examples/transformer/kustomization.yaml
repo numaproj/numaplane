@@ -9,6 +9,7 @@ namePrefix: my-
 resources:
 - my-pipelinerollout.yaml
 - my-isbservicerollout.yaml
+- my-monovertexrollout.yaml
 
 configMapGenerator:
 - name: my-cm

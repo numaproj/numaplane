@@ -8,6 +8,8 @@ import {
   ISB_KUBERNETES,
   ISB_SERVICE_ROLLOUT,
   KUBERNETES_APP,
+  MONO_VERTEX,
+  MONOVERTEX_ROLLOUT,
   NUMAFLOW_CONTROLLER_ROLLOUT,
   PIPELINE_ROLLOUT,
   POD,
@@ -45,6 +47,13 @@ export const ArgoRolloutContainers = () => {
           (pod) =>
             pod?.networkingInfo?.labels &&
             pod.networkingInfo.labels[KUBERNETES_APP] === VERTEX
+        );
+        break;
+      case MONOVERTEX_ROLLOUT:
+        filteredPods = allPods?.filter(
+          (pod) =>
+            pod?.networkingInfo?.labels &&
+            pod.networkingInfo.labels[KUBERNETES_APP] === MONO_VERTEX
         );
         break;
       default:
