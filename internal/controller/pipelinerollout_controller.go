@@ -505,7 +505,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// is the Pipeline currently being reconciled?
-	pipelineUpdating, err := pipelineIsUpdating(pipelineRollout, newPipelineDef, existingPipelineDef)
+	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +559,7 @@ func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.Gener
 }
 
 // return true if Pipeline (or its children) is still in the process of being reconciled
-func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, err
@@ -569,10 +569,16 @@ func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *
 		return true, nil
 	}
 
-	// note if Pipeline's children are still being updated
-	_, pipelineChildResourceReason := getPipelineChildResourceHealth(pipelineRollout.Status.Conditions)
+	/*progressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
+		return c.Reason == "Progressing"
+	})*/
 
-	return pipelineChildResourceReason == "Progressing", nil
+	// note if Pipeline's children are still being updated
+	unhealthyOrProgressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
+		return c.Status == metav1.ConditionFalse
+	})
+
+	return unhealthyOrProgressing, nil
 
 }
 
@@ -920,6 +926,15 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 		}
 	}
 	return "True", ""
+}
+
+func checkChildResources(conditions []metav1.Condition, f func(metav1.Condition) bool) (bool, metav1.Condition) {
+	for _, cond := range conditions {
+		if f(cond) {
+			return true, cond
+		}
+	}
+	return false, metav1.Condition{}
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
