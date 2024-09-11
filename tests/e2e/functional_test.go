@@ -131,9 +131,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying that the NumaflowControllerRollout was created")
 		Eventually(func() error {
-			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			_, err = numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
+
+		document("Verifying that the NumaflowControllerRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		verifyNumaflowControllerReady(Namespace)
 	})
@@ -149,6 +155,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}).WithTimeout(testTimeout).Should(Succeed())
+
+		document("Verifying that the ISBServiceRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
@@ -172,6 +184,17 @@ var _ = Describe("Functional e2e", Serial, func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
+		document("Verifying that the PipelineRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
+
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionFalse))
+
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
@@ -192,6 +215,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
+
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
@@ -238,6 +266,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 			rollout.Spec.Pipeline.Spec.Raw = rawSpec
 			return rollout, nil
 		})
+
+		// TODO: check that when pipeline is being updated, it is being paused
+		//       could set envVar to signify dataLossPrevention is on
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRollouName, metav1.GetOptions{})
+		//
+		// return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		// }).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		// wait for update to reconcile
 		time.Sleep(5 * time.Second)
