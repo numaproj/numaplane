@@ -45,7 +45,7 @@ func verifyMonoVertexSpec(namespace, name string, f func(numaflowv1.MonoVertexSp
 			return false
 		}
 		return f(retrievedMonoVertexSpec)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
 }
 
@@ -83,7 +83,7 @@ func verifyMonoVertexStatus(namespace, monoVertexName string, f func(numaflowv1.
 			return false
 		}
 		return f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
 }
 
