@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"time"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -198,12 +198,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
-
 		document("Updating Pipeline directly")
 
 		// update child Pipeline
 		pipelineName := controller.GetPipelineName(pipelineRolloutName, &pipelineSpec)
-		updatedPipelineSpec := updatePipelineSpecInK8S(Namespace, pipelineName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
+		updatePipelineSpecInK8S(Namespace, pipelineName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
 			rpu := int64(10)
 			pipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
 			return pipelineSpec, nil
@@ -214,9 +213,39 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// get updated Pipeline again to compare spec
 		document("Verifying self-healing")
-		pipelineName = controller.GetPipelineName(pipelineRolloutName, updatedPipelineSpec)
 		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
+		})
+
+		verifyPipelineReady(Namespace, pipelineName, 2)
+	})
+
+	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
+
+		document("Updating Pipeline spec in PipelineRollout")
+
+		// new Pipeline spec
+		updatedPipelineSpec := pipelineSpec
+		rpu := int64(10)
+		updatedPipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
+
+		rawSpec, err := json.Marshal(updatedPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// update the PipelineRollout
+		updatePipelineRolloutInK8S(pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+
+		// wait for update to reconcile
+		time.Sleep(5 * time.Second)
+
+		document("Verifying Pipeline got updated")
+
+		pipelineName := controller.GetPipelineName(pipelineRolloutName, &updatedPipelineSpec)
+		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
 		})
 
 		verifyPipelineReady(Namespace, pipelineName, 2)
@@ -268,42 +297,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		pipelineName := controller.GetPipelineName(pipelineRolloutName, &pipelineSpec)
-		verifyPipelineReady(Namespace, pipelineName, 2)
-
-	})
-
-	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
-
-		document("Updating Pipeline spec in PipelineRollout")
-
-		// new Pipeline spec
-		updatedPipelineSpec := pipelineSpec
-		rpu := int64(10)
-		updatedPipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
-
-		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// update the PipelineRollout
-		updatePipelineRolloutInK8S(pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			rollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return rollout, nil
-		})
-
-		// wait for update to reconcile
-		time.Sleep(5 * time.Second)
-
-		document("Verifying Pipeline got updated")
-
-		// get Pipeline to check that spec has been updated to correct spec
-		updatedPipelineSpecRunning := updatedPipelineSpec
-		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
-
-		pipelineName := controller.GetPipelineName(pipelineRolloutName, &updatedPipelineSpec)
-		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
-		})
-
 		verifyPipelineReady(Namespace, pipelineName, 2)
 
 	})
