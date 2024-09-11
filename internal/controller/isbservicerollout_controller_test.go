@@ -325,6 +325,18 @@ func Test_reconcile_PPND(t *testing.T) {
 			expectedISBSvcSpec: createDefaultISBServiceSpec("2.10.11"),
 		},
 		{
+			name:                   "existing ISBService - new spec - pipelines failed",
+			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
+			existingPipelinePhase:  numaflowv1.PipelinePhaseFailed,
+			expectedRolloutPhase:   apiv1.PhaseDeployed,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+			expectedISBSvcSpec: createDefaultISBServiceSpec("2.10.11"),
+		},
+		{
 			name:                   "existing ISBService - spec already updated - isbsvc reconciling",
 			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
 			existingISBSvcDef:      createDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, false),
