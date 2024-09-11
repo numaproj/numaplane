@@ -48,7 +48,7 @@ func processChildObjectWithoutDataLoss(ctx context.Context, rollout client.Objec
 		// Don't do this yet if we just made a request - it's too soon for anything to have happened
 		if !pauseRequestUpdated && resourceNeedsUpdating {
 
-			// check if the pipelines are all paused
+			// check if the pipelines are all paused (or can't be paused)
 			allPaused, err := areAllPipelinesPausedOrUnpausible(ctx, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
 				return false, err
