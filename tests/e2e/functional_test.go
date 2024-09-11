@@ -287,6 +287,17 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
 		})
 
+		document("Verifying that the PipelineRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
+
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionFalse))
+
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
@@ -308,6 +319,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
 		})
+
+		document("Verifying that the NumaflowControllerRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		verifyNumaflowControllerReady(Namespace)
 
@@ -332,6 +349,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
 
+		document("Verifying that the ISBServiceRollout conditions are as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
+
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
@@ -354,6 +377,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
 		})
+
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		}).WithTimeout(testTimeout).Should(Equal(metav1.ConditionTrue))
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
