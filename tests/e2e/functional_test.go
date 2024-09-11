@@ -47,7 +47,9 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	pipelineSpec = numaflowv1.PipelineSpec{
+	numVertices         = int32(1)
+	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
+	pipelineSpec        = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -58,6 +60,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -66,6 +69,7 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
@@ -133,7 +137,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		verifyNumaflowControllerReady(Namespace)
 	})
@@ -148,7 +152,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
@@ -164,7 +168,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -186,7 +190,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Eventually(func() error {
 			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 			return err
-		}).WithTimeout(testTimeout).Should(Succeed())
+		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
@@ -259,7 +263,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.6"},
+			Controller: apiv1.Controller{Version: "0.0.13"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -270,7 +274,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.6"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.13"
 		})
 
 		verifyNumaflowControllerReady(Namespace)
@@ -340,7 +344,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 		document("Verifying Pipeline deletion")
 
@@ -353,7 +357,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
 
 	})
 
@@ -375,7 +379,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
 
 		document("Verifying MonoVertex deletion")
 
@@ -388,7 +392,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
 	})
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
@@ -409,7 +413,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 		document("Verifying ISBService deletion")
 
@@ -422,7 +426,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
 
 	})
 
@@ -442,7 +446,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 		document("Verifying Numaflow Controller deletion")
 
@@ -455,7 +459,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 
 	})
 
@@ -500,7 +504,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.3.0"},
+			Controller: apiv1.Controller{Version: "0.0.12"},
 		},
 	}
 
