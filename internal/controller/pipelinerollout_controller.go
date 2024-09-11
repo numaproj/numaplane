@@ -477,6 +477,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 			if err != nil {
 				return err
 			}
+			// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
 			err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
 			if err != nil {
 				return err
@@ -517,16 +518,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 	numaLogger.Debugf("pipelineNeedsToUpdate: %t, pipelineUpdating: %t", pipelineNeedsToUpdate, pipelineUpdating)
 
-	// If there is a need to update, does it require a pause?
-	// Here we look for whether we are trying to update Pipeline, or whether we are already processing an update which required us to pause
-	var pipelineUpdateRequiresPause bool
-	if pipelineNeedsToUpdate || pipelineUpdating {
-		pipelineUpdateRequiresPause, err = needsPausing(existingPipelineDef, newPipelineDef)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
@@ -542,9 +533,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
 
-	shouldBePaused := (pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause, unpausible)
+	shouldBePaused := (pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause) && !unpausible
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
+		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
 
 	return &shouldBePaused, nil
 }
@@ -819,11 +810,6 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interfa
 		}
 	}
 	return unstruc.Object["spec"].(map[string]interface{}), nil
-}
-
-// TODO: detect engine determines when Pipeline spec change requires pausing
-func needsPausing(_ *kubernetes.GenericObject, _ *kubernetes.GenericObject) (bool, error) {
-	return true, nil
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
