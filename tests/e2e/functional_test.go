@@ -145,10 +145,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+		// TODO: add test when dataLossPrevention envVar is added
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
 
 		verifyNumaflowControllerReady(Namespace)
 	})
@@ -171,10 +172,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
@@ -340,10 +341,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
 
 		verifyNumaflowControllerReady(Namespace)
 
@@ -374,10 +375,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
