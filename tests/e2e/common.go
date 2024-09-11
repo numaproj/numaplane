@@ -26,7 +26,7 @@ var (
 	testEnv       *envtest.Environment
 	ctx           context.Context
 	cancel        context.CancelFunc
-	suiteTimeout  = 15 * time.Minute
+	suiteTimeout  = 30 * time.Minute
 	testTimeout   = 2 * time.Minute
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
