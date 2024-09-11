@@ -575,7 +575,8 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 	// note if Pipeline's children are still being updated
 	unhealthyOrProgressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
-		return c.Status == metav1.ConditionFalse
+		// TODO: if we simply always set to "Progressing", we don't need the second case
+		return c.Reason == "Progressing" || c.Reason == "GetDaemonServiceFailed" //return c.Status == metav1.ConditionFalse
 	})
 
 	return unhealthyOrProgressing, nil
