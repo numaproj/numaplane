@@ -148,7 +148,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the PipelineRollout metric")
-			Expect(testutil.ToFloat64(customMetrics.PipelinesRunning.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.PipelinesRunning.WithLabelValues(defaultNamespace))).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.PipelinesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
 			Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})

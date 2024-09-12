@@ -119,7 +119,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the MonoVertex metrics")
-			Expect(testutil.ToFloat64(customMetrics.MonoVerticesRunning.WithLabelValues())).Should(Equal(float64(1)))
+			Expect(testutil.ToFloat64(customMetrics.MonoVerticesRunning.WithLabelValues(namespace))).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.MonoVerticesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
 			Expect(testutil.ToFloat64(customMetrics.MonoVerticesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
