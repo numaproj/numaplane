@@ -291,26 +291,6 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, mono
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {
-	/*rawSpec := runtime.RawExtension{}
-	err := util.StructToStruct(&monoVertexRollout.Spec, &rawSpec)
-	if err != nil {
-		return fmt.Errorf("unable to convert MonoVertexRollout Spec to GenericObject Spec: %v", err)
-	}
-
-	rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&monoVertexRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert MonoVertexRollout Status to GenericObject Status: %v", err)
-	}
-
-	obj := kubernetes.GenericObject{
-		TypeMeta:   monoVertexRollout.TypeMeta,
-		ObjectMeta: monoVertexRollout.ObjectMeta,
-		Spec:       rawSpec,
-		Status:     rawStatus,
-	}
-
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "monovertexrollouts")*/
 	return r.client.Status().Update(ctx, monoVertexRollout)
 }
 

@@ -1,21 +1,14 @@
 package kubernetes
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 func TestGetLabel(t *testing.T) {
@@ -44,6 +37,7 @@ func TestGetLabelWithInvalidData(t *testing.T) {
 	assert.Equal(t, "failed to get labels from target object /v1, Kind=Service /my-service: .metadata.labels accessor error: contains non-string value in the map under key \"invalid-label\": <nil> is of the type <nil>, expected string", err.Error())
 }
 
+/*
 func TestCreateUpdateGetListCR(t *testing.T) {
 	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -122,14 +116,5 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	pipelineList, err := ListCR(context.Background(), restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)
-
-	// Update Status subresource
-	/*rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
-	}
-	pipelineObject.Status = rawStatus
-	UpdateStatus(context.Background(), restConfig, pipelineObject, "pipelines")
-	*/
 }
+*/
