@@ -145,9 +145,6 @@ var _ = BeforeSuite(func() {
 	// other tests may call this, but it fails if called more than once
 	if customMetrics == nil {
 		customMetrics = metrics.RegisterCustomMetrics()
-		logThis := fmt.Sprintf("customMetrics=%p, %+v", customMetrics, customMetrics)
-		By(logThis)
-		fmt.Println(logThis)
 	}
 
 	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,

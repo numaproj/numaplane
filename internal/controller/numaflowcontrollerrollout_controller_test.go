@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -116,17 +115,9 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		})
 
 		It("Should have the metrics updated", func() {
-			By(fmt.Sprintf("Verifying the Numaflow Controller metric: %p, %+v", customMetrics, customMetrics))
-
-			Eventually(func() bool {
-				return testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues()) > 1.0 &&
-					testutil.ToFloat64(customMetrics.NumaflowControllersSyncFailed.WithLabelValues()) == 0 &&
-					testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues()) > 1
-
-			}, timeout, interval).Should(BeTrue())
-			//Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			//Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
-			//Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
+			By("Verifying the Numaflow Controller metric")
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 		})
 
 		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {

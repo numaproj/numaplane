@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -279,9 +278,6 @@ func (m *CustomMetrics) IncPipelinesRunningMetrics(name, namespace string) {
 	defer pipelineLock.Unlock()
 	m.PipelineCounterMap[name+"_"+namespace] = struct{}{}
 	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
-	fmt.Printf("deletethis: incremented PipelinesRunning to %d, CustomMetrics=%p, %+v\n", len(m.PipelineCounterMap), m, m)
-	fmt.Printf("deletethis: incremented PipelinesRunning: customMetrics=%p, customMetrics=%+v, customMetrics.PipelinesRunning=%+v, customMetrics.PipelinesRunning.WithLabelValues()=%+v", m, m,
-		m.PipelinesRunning, m.PipelinesRunning.WithLabelValues())
 }
 
 // DecPipelineMetrics decrements the pipeline counter
@@ -290,7 +286,6 @@ func (m *CustomMetrics) DecPipelineMetrics(name, namespace string) {
 	defer pipelineLock.Unlock()
 	delete(m.PipelineCounterMap, name+"_"+namespace)
 	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
-	fmt.Printf("deletethis: decremented PipelinesRunning to %d\n", len(m.PipelineCounterMap))
 }
 
 // IncISBServiceMetrics increments the ISBService counter if it doesn't already know about the ISBService
@@ -299,7 +294,6 @@ func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
 	defer isbServiceLock.Unlock()
 	m.ISBServiceCounterMap[name+"_"+namespace] = struct{}{}
 	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
-	fmt.Printf("deletethis: incremented ISBServicesRunning to %d\n", len(m.ISBServiceCounterMap))
 }
 
 // DecISBServiceMetrics decrements the ISBService counter
@@ -308,7 +302,6 @@ func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
 	defer isbServiceLock.Unlock()
 	delete(m.ISBServiceCounterMap, name+"_"+namespace)
 	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
-	fmt.Printf("deletethis: decremented ISBServicesRunning to %d\n", len(m.ISBServiceCounterMap))
 }
 
 // IncMonoVertexMetrics increments the MonoVertex counter if it doesn't already know about the MonoVertex
@@ -339,8 +332,6 @@ func (m *CustomMetrics) IncNumaflowControllerMetrics(name, namespace, version st
 	m.NumaflowControllerVersionCounter[version][name+"_"+namespace] = struct{}{}
 	for key, value := range m.NumaflowControllerVersionCounter {
 		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
-
-		fmt.Printf("deletethis: incremented NumaflowControllerRunning{%s} to %d, CustomMetrics=%p, %+v\n", key, len(value), m, m)
 	}
 }
 
@@ -351,6 +342,5 @@ func (m *CustomMetrics) DecNumaflowControllerMetrics(name, namespace, version st
 	delete(m.NumaflowControllerVersionCounter[version], name+"_"+namespace)
 	for key, value := range m.NumaflowControllerVersionCounter {
 		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
-		fmt.Printf("deletethis: decremented NumaflowControllerRunning{%s} to %d, CustomMetrics=%p, %+v\n", key, len(value), m, m)
 	}
 }
