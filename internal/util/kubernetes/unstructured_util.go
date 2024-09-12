@@ -235,7 +235,7 @@ func UpdateUnstructuredCR(
 	if err != nil {
 		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	} else {
-		unstruc = result
+		*unstruc = *result
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
