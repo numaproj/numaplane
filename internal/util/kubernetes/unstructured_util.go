@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -273,63 +272,6 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	}
 
 	return &genericObject, err
-}
-
-// Update the Status for the object in Kubernetes and update the object to use the result Status (i.e. goal is to have the right resourceVersion)
-func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
-	numaLogger := logger.FromContext(ctx)
-
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	gvr, err := getGroupVersionResource(object, pluralName)
-	if err != nil {
-		return err
-	}
-	numaLogger.Debugf("will update status subresource for resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
-
-	// Rationale for commenting this out:
-	// If we get a conflict, it means that the Status we were starting from in this reconciliation was old.
-	// If the new Status is derived from the old Status, then that would've been an invalid state.
-	//err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
-	if err != nil {
-		// NOTE: report the error as-is and do not check for resource existence for retry purposes
-		return err
-	}
-
-	resource.Object["status"] = object.Status
-
-	result, err := client.Resource(gvr).Namespace(object.Namespace).UpdateStatus(ctx, resource, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
-	// update our original object with the new Status (so it will have latest resourceVersion)
-	resultStatus, found := result.Object["status"]
-	if !found {
-		numaLogger.Errorf(errors.New("failed to get status from result of UpdateStatus"),
-			"Unexpected: updated status for resource %s/%s of type %+v, but result.Object %+v contains no 'status' field", object.Namespace, object.Name, gvr, result.Object)
-		// not sure if there's some way this could happen, will keep the original value for the object if it does
-		return nil
-	}
-	resultMap, ok := resultStatus.(map[string]interface{})
-	if !ok {
-		numaLogger.Errorf(errors.New("unexpected type for result of UpdateStatus"),
-			"Unexpected: updated status for resource %s/%s of type %+v, but result.Object 'status' field is not map[string]interface{}: %+v", object.Namespace, object.Name, gvr, resultStatus)
-		// not sure if there's some way this could happen, will keep the original value for the object if it does
-		return nil
-	}
-	object.Status.Raw, err = json.Marshal(&resultMap)
-	if err != nil {
-		numaLogger.Errorf(err, fmt.Sprintf("Failed to unmarshal json result of UpdateStatus for resource %s/%s of type %+v: %+v", object.Namespace, object.Name, gvr, resultMap))
-		// not sure if there's some way this could happen, will keep the original value for the object if it does
-		return nil
-	}
-
-	return nil
 }
 
 func getGroupVersionResource(object *GenericObject, pluralName string) (schema.GroupVersionResource, error) {

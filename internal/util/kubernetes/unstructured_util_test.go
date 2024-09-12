@@ -75,6 +75,8 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	assert.Nil(t, err)
 
+	namespace := "default"
+
 	pipelineObject := &GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
@@ -82,7 +84,7 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-pipeline",
-			Namespace: "default",
+			Namespace: namespace,
 		},
 		Spec: runtime.RawExtension{
 			Raw: pipelineSpecRaw,
@@ -116,4 +118,18 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	version3 := pipelineObject.ResourceVersion
 	assert.NotEqual(t, version2, version3)
 
+	// List resource
+	pipelineList, err := ListCR(context.Background(), restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	assert.Nil(t, err)
+	assert.Len(t, pipelineList, 1)
+
+	// Update Status subresource
+	/*rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
+	}
+	pipelineObject.Status = rawStatus
+	UpdateStatus(context.Background(), restConfig, pipelineObject, "pipelines")
+	*/
 }

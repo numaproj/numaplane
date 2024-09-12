@@ -22,7 +22,6 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -292,7 +291,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, mono
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {
-	rawSpec := runtime.RawExtension{}
+	/*rawSpec := runtime.RawExtension{}
 	err := util.StructToStruct(&monoVertexRollout.Spec, &rawSpec)
 	if err != nil {
 		return fmt.Errorf("unable to convert MonoVertexRollout Spec to GenericObject Spec: %v", err)
@@ -311,7 +310,8 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.
 		Status:     rawStatus,
 	}
 
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "monovertexrollouts")
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "monovertexrollouts")*/
+	return r.client.Status().Update(ctx, monoVertexRollout)
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, err error) error {
