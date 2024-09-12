@@ -17,6 +17,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 )
 
@@ -73,6 +74,15 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 	}).WithTimeout(testTimeout).Should(BeTrue())
 
+}
+
+func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) metav1.ConditionStatus {
+	for _, cond := range conditions {
+		if cond.Type == string(conditionType) {
+			return cond.Status
+		}
+	}
+	return metav1.ConditionUnknown
 }
 
 func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
