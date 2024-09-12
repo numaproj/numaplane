@@ -320,6 +320,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 }
 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
+	r.customMetrics.MonoVerticesSyncFailed.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
