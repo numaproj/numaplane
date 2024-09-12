@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -184,6 +185,7 @@ func CreateUnstructuredCR(
 	return nil
 }
 
+// update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateCR(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -201,9 +203,18 @@ func UpdateCR(
 		return err
 	}
 
-	return UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name)
+	if err = UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name); err != nil {
+		return err
+	}
+	result, err := UnstructuredToObject(unstruc)
+	if err != nil {
+		return err
+	}
+	*object = *result
+	return nil
 }
 
+// update the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateUnstructuredCR(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -220,9 +231,11 @@ func UpdateUnstructuredCR(
 		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	_, err = client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
+	result, err := client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	} else {
+		unstruc = result
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
@@ -262,7 +275,10 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	return &genericObject, err
 }
 
+// Update the Status for the object in Kubernetes and update the object to use the result Status (i.e. goal is to have the right resourceVersion)
 func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+	numaLogger := logger.FromContext(ctx)
+
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create dynamic client: %v", err)
@@ -272,34 +288,48 @@ func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericO
 	if err != nil {
 		return err
 	}
+	numaLogger.Debugf("will update status subresource for resource %s/%s of type %+v", object.Namespace, object.Name, gvr)
 
 	// Rationale for commenting this out:
 	// If we get a conflict, it means that the Status we were starting from in this reconciliation was old.
 	// If the new Status is derived from the old Status, then that would've been an invalid state.
-	// TODO: since the primary motivation for this retry logic was to avoid errors showing up in the log, we may be
-	// able to instead conditionally log a warning vs an error for that in the caller
 	//err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
 	if err != nil {
-		// NOTE: report the error as-is and do not check for resource existance for retry purposes
+		// NOTE: report the error as-is and do not check for resource existence for retry purposes
 		return err
 	}
 
 	resource.Object["status"] = object.Status
 
-	_, err = client.Resource(gvr).Namespace(object.Namespace).UpdateStatus(ctx, resource, metav1.UpdateOptions{})
+	result, err := client.Resource(gvr).Namespace(object.Namespace).UpdateStatus(ctx, resource, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
 
+	// update our original object with the new Status (so it will have latest resourceVersion)
+	resultStatus, found := result.Object["status"]
+	if !found {
+		numaLogger.Errorf(errors.New("failed to get status from result of UpdateStatus"),
+			"Unexpected: updated status for resource %s/%s of type %+v, but result.Object %+v contains no 'status' field", object.Namespace, object.Name, gvr, result.Object)
+		// not sure if there's some way this could happen, will keep the original value for the object if it does
+		return nil
+	}
+	resultMap, ok := resultStatus.(map[string]interface{})
+	if !ok {
+		numaLogger.Errorf(errors.New("unexpected type for result of UpdateStatus"),
+			"Unexpected: updated status for resource %s/%s of type %+v, but result.Object 'status' field is not map[string]interface{}: %+v", object.Namespace, object.Name, gvr, resultStatus)
+		// not sure if there's some way this could happen, will keep the original value for the object if it does
+		return nil
+	}
+	object.Status.Raw, err = json.Marshal(&resultMap)
+	if err != nil {
+		numaLogger.Errorf(err, fmt.Sprintf("Failed to unmarshal json result of UpdateStatus for resource %s/%s of type %+v: %+v", object.Namespace, object.Name, gvr, resultMap))
+		// not sure if there's some way this could happen, will keep the original value for the object if it does
+		return nil
+	}
+
 	return nil
-	//})
-
-	// TODO: we may want to also implement retry.OnError() to retry in case of errors while updating the status.
-	// We should consider to add extra failover logic to avoid this function to not be able to update
-	// the status of the resource and return error.
-
-	//return err
 }
 
 func getGroupVersionResource(object *GenericObject, pluralName string) (schema.GroupVersionResource, error) {
