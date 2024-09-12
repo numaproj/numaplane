@@ -370,8 +370,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
-		numaLogger.Debugf("PipelineRollout %s failed because Pipeline %s already exists in namespace", pipelineRollout.Name, existingPipelineDef.Name)
-		return false, fmt.Errorf("pipeline %s already exists in namespace", existingPipelineDef.Name)
+		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
+		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
+		return false, fmt.Errorf(errStr)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
