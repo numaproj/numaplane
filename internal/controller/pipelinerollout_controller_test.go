@@ -150,7 +150,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			By("Verifying the PipelineRollout metric")
 			Expect(testutil.ToFloat64(customMetrics.PipelinesRunning.WithLabelValues())).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.PipelinesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {

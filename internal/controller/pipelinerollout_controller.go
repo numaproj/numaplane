@@ -858,26 +858,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	return labelMapping, nil
 }
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
-	rawSpec := runtime.RawExtension{}
-	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Spec to GenericObject Spec: %v", err)
-	}
-
-	rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
-	}
-
-	obj := kubernetes.GenericObject{
-		TypeMeta:   pipelineRollout.TypeMeta,
-		ObjectMeta: pipelineRollout.ObjectMeta,
-		Spec:       rawSpec,
-		Status:     rawStatus,
-	}
-
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "pipelinerollouts")
+	return r.client.Status().Update(ctx, pipelineRollout)
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
