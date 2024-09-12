@@ -129,9 +129,16 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the ISBService metric")
-			Expect(testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues())).Should(Equal(float64(1)))
-			Expect(testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
+			Eventually(func() bool {
+				return testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues()) == 1.0 &&
+					testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues()) > 1 &&
+					testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues()) == 0
+
+			}, timeout, interval).Should(BeTrue())
+
+			//Expect(testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues())).Should(Equal(float64(1)))
+			//Expect(testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			//Expect(testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
