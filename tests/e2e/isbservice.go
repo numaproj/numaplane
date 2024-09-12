@@ -50,6 +50,31 @@ func verifyISBServiceSpec(namespace string, name string, f func(numaflowv1.Inter
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
+func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
+	document("Verifying that the ISBServiceRollout is ready")
+
+	Eventually(func() bool {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		return rollout.Status.Phase == apiv1.PhaseDeployed
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	// Eventually(func() metav1.ConditionStatus {
+	// 	rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+	// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+	// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+
+}
+
 func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
 	document("Verifying that the ISBService exists")
 	Eventually(func() error {
