@@ -274,6 +274,46 @@ func UnstructuredToObject(u *unstructured.Unstructured) (*GenericObject, error) 
 	return &genericObject, err
 }
 
+func UpdateStatus(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) error {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	// Rationale for commenting this out:
+	// If we get a conflict, it means that the Status we were starting from in this reconciliation was old.
+	// If the new Status is derived from the old Status, then that would've been an invalid state.
+	// TODO: since the primary motivation for this retry logic was to avoid errors showing up in the log, we may be
+	// able to instead conditionally log a warning vs an error for that in the caller
+	//err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	resource, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	if err != nil {
+		// NOTE: report the error as-is and do not check for resource existance for retry purposes
+		return err
+	}
+
+	resource.Object["status"] = object.Status
+
+	_, err = client.Resource(gvr).Namespace(object.Namespace).UpdateStatus(ctx, resource, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+	//})
+
+	// TODO: we may want to also implement retry.OnError() to retry in case of errors while updating the status.
+	// We should consider to add extra failover logic to avoid this function to not be able to update
+	// the status of the resource and return error.
+
+	//return err
+}
+
 func getGroupVersionResource(object *GenericObject, pluralName string) (schema.GroupVersionResource, error) {
 	group, version, err := parseApiVersion(object.APIVersion)
 	if err != nil {
