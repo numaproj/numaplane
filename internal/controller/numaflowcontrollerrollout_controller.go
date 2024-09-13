@@ -53,6 +53,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -789,7 +790,26 @@ func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructur
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) error {
-	return r.client.Status().Update(ctx, controllerRollout)
+	rawSpec := runtime.RawExtension{}
+	err := util.StructToStruct(&controllerRollout.Spec, &rawSpec)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Spec to GenericObject Spec: %v", err)
+	}
+
+	rawStatus := runtime.RawExtension{}
+	err = util.StructToStruct(&controllerRollout.Status, &rawStatus)
+	if err != nil {
+		return fmt.Errorf("unable to convert NumaflowControllerRollout Status to GenericObject Status: %v", err)
+	}
+
+	obj := kubernetes.GenericObject{
+		TypeMeta:   controllerRollout.TypeMeta,
+		ObjectMeta: controllerRollout.ObjectMeta,
+		Spec:       rawSpec,
+		Status:     rawStatus,
+	}
+
+	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "numaflowcontrollerrollouts")
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
