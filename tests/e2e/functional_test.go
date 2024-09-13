@@ -296,7 +296,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			Eventually(func() metav1.ConditionStatus {
 				rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-			}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+			}, testTimeout).Should(Equal(metav1.ConditionTrue))
 		}
 
 		// wait for update to reconcile
@@ -334,7 +334,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			Eventually(func() metav1.ConditionStatus {
 				rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+			}, testTimeout).Should(Equal(metav1.ConditionTrue))
 		}
 
 		// TODO: update this controller image when Numaflow v1.3.1 is released
@@ -369,7 +369,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			Eventually(func() metav1.ConditionStatus {
 				rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+			}, testTimeout).Should(Equal(metav1.ConditionTrue))
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
