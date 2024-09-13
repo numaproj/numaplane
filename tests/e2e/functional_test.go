@@ -80,6 +80,50 @@ var (
 		},
 	}
 
+	updatedPipelineSpec = numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: isbServiceRolloutName,
+		Vertices: []numaflowv1.AbstractVertex{
+			{
+				Name: "in",
+				Source: &numaflowv1.Source{
+					Generator: &numaflowv1.GeneratorSource{
+						RPU:      &pipelineSpecSourceRPU,
+						Duration: &pipelineSpecSourceDuration,
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+			{
+				Name: "cat",
+				UDF: &numaflowv1.UDF{
+					Builtin: &numaflowv1.Function{
+						Name: "cat",
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+			{
+				Name: "out",
+				Sink: &numaflowv1.Sink{
+					AbstractSink: numaflowv1.AbstractSink{
+						Log: &numaflowv1.Log{},
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+		},
+		Edges: []numaflowv1.Edge{
+			{
+				From: "in",
+				To:   "cat",
+			},
+			{
+				From: "cat",
+				To:   "out",
+			},
+		},
+	}
+
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
@@ -291,12 +335,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
 		document("Updating Pipeline spec in PipelineRollout")
-
-		// new Pipeline spec
-		updatedPipelineSpec := pipelineSpec
-		rpu := int64(10)
-		updatedPipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
-
 		rawSpec, err := json.Marshal(updatedPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -323,7 +361,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		updatedPipelineSpecRunning := updatedPipelineSpec
 		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
+			return len(retrievedPipelineSpec.Vertices) == 3
 		})
 
 		document("Verifying that the PipelineRollout conditions are as expected")
@@ -342,7 +380,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 
