@@ -66,3 +66,8 @@ type ISBServiceRolloutList struct {
 func init() {
 	SchemeBuilder.Register(&ISBServiceRollout{}, &ISBServiceRolloutList{})
 }
+
+// IsHealthy indicates whether the InterStepBufferService rollout is healthy or not
+func (isb *ISBServiceRolloutStatus) IsHealthy() bool {
+	return isb.Phase == PhaseDeployed
+}
