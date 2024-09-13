@@ -79,7 +79,7 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	//cfg, _, _, _, err := commontest.PrepareK8SEnvironment()
+	//cfg, _, _, _, err := prepareK8SEnvironment()
 	//Expect(err).NotTo(HaveOccurred())
 
 	// Download Numaflow CRDs

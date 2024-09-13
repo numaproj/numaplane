@@ -42,13 +42,10 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/metrics"
-
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 var (
-	defaultNamespace         = "default"
 	defaultISBSvcRolloutName = "isbservicerollout-test"
 )
 
@@ -131,6 +128,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			By("Verifying the ISBService metric")
 			Expect(testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues())).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
@@ -245,7 +243,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 func Test_reconcile_PPND(t *testing.T) {
 
-	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := prepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	// Make sure "dataLossPrevention" feature flag is turned on

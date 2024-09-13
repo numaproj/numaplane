@@ -20,7 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
+var (
+	defaultNamespace = "default"
+)
+
+func prepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
 
 	// Set up a test Kubernetes environment which includes both our Numaplane and Numaflow CRDs
 
@@ -28,11 +32,10 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 	// Numaflow CRDs must be downloaded
 
 	// find Numaplane CRD directory
-	rootDirectory, err := findRootDirectory()
+	crdDirectory, err := findCRDDirectory()
 	if err != nil {
 		return
 	}
-	crdDirectory := rootDirectory + "/config/crd"
 
 	crdsURLs := []string{
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_interstepbufferservices.yaml",
@@ -58,7 +61,7 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
 		// Note that you must have the required binaries setup under the bin directory to perform
 		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join(rootDirectory, "bin", "k8s",
+		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
 			fmt.Sprintf("1.28.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 
 		// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
@@ -93,8 +96,7 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 	return
 }
 
-func findRootDirectory() (string, error) {
-	// we know we should see "/numaplane/config/crd" - look for that in order to find the "numaplane" root
+func findCRDDirectory() (string, error) {
 	crdSubdirectory := "/config/crd"
 	path, _ := os.Getwd()
 
@@ -108,7 +110,7 @@ func findRootDirectory() (string, error) {
 		possibleCRDDirectory := path[0:endIndex] + crdSubdirectory
 		_, err := os.Stat(possibleCRDDirectory)
 		if err == nil {
-			return path[0:endIndex], nil
+			return possibleCRDDirectory, nil
 		}
 	}
 	return "", fmt.Errorf("no occurrence of %q found in any higher level directory from current working directory %q", crdSubdirectory, path)
