@@ -153,7 +153,35 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			By("Verifying the PipelineRollout metric")
 			Expect(testutil.ToFloat64(customMetrics.PipelinesRunning.WithLabelValues())).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.PipelinesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
+		})
+
+		Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
+			It("Should be automatically failed", func() {
+				Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: defaultNamespace,
+						Name:      "my-pipeline",
+					},
+					Spec: pipelineSpec,
+				})).Should(Succeed())
+				Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: defaultNamespace,
+						Name:      "my-pipeline",
+					},
+					Spec: apiv1.PipelineRolloutSpec{
+						Pipeline: apiv1.Pipeline{
+							Spec: runtime.RawExtension{
+								Raw: pipelineSpecRaw,
+							},
+						},
+					},
+				})).Should(Succeed())
+				time.Sleep(5 * time.Second)
+				verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
+
+				Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(BeNumerically(">", 1))
+			})
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
@@ -194,18 +222,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			/*By("Verifying the Numaflow Pipeline lifecycle desiredPhase is 'Paused'")
-			Eventually(func() (string, error) {
-				updatedChildResource := &numaflowv1.Pipeline{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
-				if err != nil {
-					return "", err
-				}
-				return string(updatedChildResource.Spec.Lifecycle.DesiredPhase), nil
-			}, timeout, interval).Should(Equal("Paused"))
-
 			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)*/
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)
 
 		})
 
@@ -233,16 +251,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
 			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
-
-			// TODO: use this on real cluster for e2e tests
-			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
-			// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
-			// Could also reuse the env var used to set useExistingCluster to skip or perform the deletion based on CI settings.
-			// Eventually(func() bool {
-			// 	deletedChildResource := &numaflowv1.Pipeline{}
-			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
-			// 	return errors.IsNotFound(err)
-			// }, timeout, interval).Should(BeTrue())
 		})
 	})
 
@@ -260,33 +268,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				ObjectMeta: pipelineRollout.ObjectMeta,
 				Spec:       apiv1.PipelineRolloutSpec{},
 			})).ShouldNot(Succeed())
-		})
-	})
-
-	Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
-		It("Should be automatically failed", func() {
-			Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: defaultNamespace,
-					Name:      "my-pipeline",
-				},
-				Spec: pipelineSpec,
-			})).Should(Succeed())
-			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: defaultNamespace,
-					Name:      "my-pipeline",
-				},
-				Spec: apiv1.PipelineRolloutSpec{
-					Pipeline: apiv1.Pipeline{
-						Spec: runtime.RawExtension{
-							Raw: pipelineSpecRaw,
-						},
-					},
-				},
-			})).Should(Succeed())
-			time.Sleep(5 * time.Second)
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
 		})
 	})
 

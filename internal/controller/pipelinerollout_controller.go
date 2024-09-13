@@ -370,8 +370,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
-		pipelineRollout.Status.MarkFailed(fmt.Sprintf("Pipeline %s already exists in namespace", pipelineRollout.Name))
-		return false, nil
+		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
+		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
+		return false, fmt.Errorf(errStr)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
@@ -860,26 +861,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	return labelMapping, nil
 }
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
-	rawSpec := runtime.RawExtension{}
-	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Spec to GenericObject Spec: %v", err)
-	}
-
-	rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
-	}
-
-	obj := kubernetes.GenericObject{
-		TypeMeta:   pipelineRollout.TypeMeta,
-		ObjectMeta: pipelineRollout.ObjectMeta,
-		Spec:       rawSpec,
-		Status:     rawStatus,
-	}
-
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "pipelinerollouts")
+	return r.client.Status().Update(ctx, pipelineRollout)
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {

@@ -540,26 +540,7 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
-	rawSpec := runtime.RawExtension{}
-	err := util.StructToStruct(&isbServiceRollout.Spec, &rawSpec)
-	if err != nil {
-		return fmt.Errorf("unable to convert ISBServiceRollout Spec to GenericObject Spec: %v", err)
-	}
-
-	rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&isbServiceRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert ISBServiceRollout Status to GenericObject Status: %v", err)
-	}
-
-	obj := kubernetes.GenericObject{
-		TypeMeta:   isbServiceRollout.TypeMeta,
-		ObjectMeta: isbServiceRollout.ObjectMeta,
-		Spec:       rawSpec,
-		Status:     rawStatus,
-	}
-
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "isbservicerollouts")
+	return r.client.Status().Update(ctx, isbServiceRollout)
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {
