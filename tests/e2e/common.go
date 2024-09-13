@@ -17,16 +17,18 @@ import (
 
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 )
 
 var (
-	dynamicClient dynamic.DynamicClient
-	testEnv       *envtest.Environment
-	ctx           context.Context
-	cancel        context.CancelFunc
-	suiteTimeout  = 5 * time.Minute
-	testTimeout   = 2 * time.Minute
+	dynamicClient       dynamic.DynamicClient
+	testEnv             *envtest.Environment
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	suiteTimeout        = 30 * time.Minute // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
+	testTimeout         = 2 * time.Minute
+	testPollingInterval = 1 * time.Second
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
@@ -72,6 +74,15 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 	}).WithTimeout(testTimeout).Should(BeTrue())
 
+}
+
+func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) metav1.ConditionStatus {
+	for _, cond := range conditions {
+		if cond.Type == string(conditionType) {
+			return cond.Status
+		}
+	}
+	return metav1.ConditionUnknown
 }
 
 func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {

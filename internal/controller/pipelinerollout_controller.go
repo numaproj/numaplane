@@ -370,8 +370,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// Object already exists
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
-		pipelineRollout.Status.MarkFailed(fmt.Sprintf("Pipeline %s already exists in namespace", pipelineRollout.Name))
-		return false, nil
+		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
+		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
+		return false, fmt.Errorf(errStr)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
@@ -469,7 +470,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithoutDataLoss(ctx c
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
-		if !*shouldBePaused || (*shouldBePaused && isPipelinePaused(ctx, existingPipelineDef)) {
+		if !*shouldBePaused || (*shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 			// make sure lifecycle is left set to "Paused" in the new spec
@@ -505,7 +506,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// is the Pipeline currently being reconciled?
-	pipelineUpdating, err := pipelineIsUpdating(pipelineRollout, newPipelineDef, existingPipelineDef)
+	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return nil, err
 	}
@@ -540,9 +541,11 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	shouldBePaused := pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause
-	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t",
-		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause)
+	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
+
+	shouldBePaused := (pipelineUpdateRequiresPause || externalPauseRequest || specBasedPause) && !unpausible
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiresPause=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
+		shouldBePaused, pipelineUpdateRequiresPause, externalPauseRequest, specBasedPause, unpausible)
 
 	return &shouldBePaused, nil
 }
@@ -557,7 +560,7 @@ func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.Gener
 }
 
 // return true if Pipeline (or its children) is still in the process of being reconciled
-func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, err
@@ -568,9 +571,13 @@ func pipelineIsUpdating(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *
 	}
 
 	// note if Pipeline's children are still being updated
-	_, pipelineChildResourceReason := getPipelineChildResourceHealth(pipelineRollout.Status.Conditions)
+	unhealthyOrProgressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
+		// TODO: once we have "inProgressStrategy" we can just look for c.Status == metav1.ConditionFalse while inProgressStrategy==PPND
+		// https://github.com/numaproj/numaplane/issues/239
+		return c.Reason == "Progressing" || c.Reason == "GetDaemonServiceFailed" //return c.Status == metav1.ConditionFalse
+	})
 
-	return pipelineChildResourceReason == "Progressing", nil
+	return unhealthyOrProgressing, nil
 
 }
 
@@ -759,8 +766,9 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func isPipelinePaused(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
+	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
 }
 
 // pipelineSpecEqual() tests for essential equality, with any irrelevant fields eliminated from the comparison
@@ -851,26 +859,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	return labelMapping, nil
 }
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
-	rawSpec := runtime.RawExtension{}
-	err := util.StructToStruct(&pipelineRollout.Spec, &rawSpec)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Spec to GenericObject Spec: %v", err)
-	}
-
-	rawStatus := runtime.RawExtension{}
-	err = util.StructToStruct(&pipelineRollout.Status, &rawStatus)
-	if err != nil {
-		return fmt.Errorf("unable to convert PipelineRollout Status to GenericObject Status: %v", err)
-	}
-
-	obj := kubernetes.GenericObject{
-		TypeMeta:   pipelineRollout.TypeMeta,
-		ObjectMeta: pipelineRollout.ObjectMeta,
-		Spec:       rawSpec,
-		Status:     rawStatus,
-	}
-
-	return kubernetes.UpdateStatus(ctx, r.restConfig, &obj, "pipelinerollouts")
+	return r.client.Status().Update(ctx, pipelineRollout)
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
@@ -917,6 +906,15 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 		}
 	}
 	return "True", ""
+}
+
+func checkChildResources(conditions []metav1.Condition, f func(metav1.Condition) bool) (bool, metav1.Condition) {
+	for _, cond := range conditions {
+		if f(cond) {
+			return true, cond
+		}
+	}
+	return false, metav1.Condition{}
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {

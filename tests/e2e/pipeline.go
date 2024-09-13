@@ -31,7 +31,7 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 		}
 
 		return f(retrievedPipelineSpec)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
 func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
@@ -52,7 +52,31 @@ func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflow
 		}
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+}
+
+func verifyPipelineRolloutReady(pipelineRolloutName string) {
+	document("Verifying that the PipelineRollout is ready")
+
+	Eventually(func() bool {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return rollout.Status.Phase == apiv1.PhaseDeployed
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
 }
 
 func verifyPipelineReady(namespace string, pipelineName string, numVertices int) {
