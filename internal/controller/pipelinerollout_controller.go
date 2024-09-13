@@ -856,6 +856,8 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
 	}
 
+	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
+
 	return labelMapping, nil
 }
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
