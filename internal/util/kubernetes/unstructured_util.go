@@ -210,6 +210,7 @@ func UpdateCR(
 		return err
 	}
 	*object = *result
+
 	return nil
 }
 
