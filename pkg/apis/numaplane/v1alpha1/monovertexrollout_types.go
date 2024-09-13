@@ -63,7 +63,7 @@ func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
 }
 
-// IsHealthy indicates whether the InterStepBufferService is healthy or not
+// IsHealthy indicates whether the MonoVertexRollout is healthy.
 func (mv *MonoVertexRolloutStatus) IsHealthy() bool {
 	if mv.Phase != PhaseDeployed {
 		return false
