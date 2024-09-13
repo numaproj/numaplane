@@ -77,6 +77,7 @@ func verifyPipelineRolloutReady(pipelineRolloutName string) {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+
 }
 
 func verifyPipelineReady(namespace string, pipelineName string, numVertices int) {
