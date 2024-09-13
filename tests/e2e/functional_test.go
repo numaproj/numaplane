@@ -139,6 +139,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
+		verifyNumaflowControllerRolloutReady()
+
 		verifyNumaflowControllerReady(Namespace)
 	})
 
@@ -153,6 +155,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
+
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
@@ -176,6 +180,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
+		verifyPipelineRolloutReady(pipelineRolloutName)
+
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
@@ -196,6 +202,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
+
+		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
@@ -243,6 +251,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
+		// TODO: check that when pipeline is being updated, it is being paused
+		//       could set envVar to signify dataLossPrevention is on
+		// Eventually(func() metav1.ConditionStatus {
+		// 	rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRollouName, metav1.GetOptions{})
+		//
+		// return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
 		// wait for update to reconcile
 		time.Sleep(5 * time.Second)
 
@@ -254,6 +270,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
 		})
+
+		verifyPipelineRolloutReady(pipelineRolloutName)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
@@ -276,6 +294,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.13"
 		})
+
+		verifyNumaflowControllerRolloutReady()
 
 		verifyNumaflowControllerReady(Namespace)
 
@@ -300,6 +320,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
 
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
+
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
@@ -322,6 +344,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
 		})
+
+		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
