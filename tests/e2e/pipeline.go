@@ -36,7 +36,7 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 
 func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
 
-	document("verifying PipelineStatus")
+	// document("verifying PipelineStatus")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus kubernetes.GenericStatus
 	Eventually(func() bool {
@@ -52,7 +52,7 @@ func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflow
 		}
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, testTimeout).Should(BeTrue())
 }
 
 func verifyPipelineRolloutReady(pipelineRolloutName string) {
