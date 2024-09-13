@@ -331,10 +331,16 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that Pipelines are being paused by checking rollout condition")
-			Eventually(func() metav1.ConditionStatus {
-				rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			}, testTimeout).Should(Equal(metav1.ConditionTrue))
+			Eventually(func() bool {
+				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
 		}
 
 		// TODO: update this controller image when Numaflow v1.3.1 is released
@@ -366,10 +372,16 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that Pipelines are being paused by checking rollout condition")
-			Eventually(func() metav1.ConditionStatus {
-				rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			}, testTimeout).Should(Equal(metav1.ConditionTrue))
+			Eventually(func() bool {
+				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
