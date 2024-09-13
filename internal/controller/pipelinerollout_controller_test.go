@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/numaproj/numaplane/internal/common"
 	"strings"
 	"time"
 
@@ -36,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -140,6 +140,9 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			By("Verifying the content of the pipeline spec")
 			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
+
+			By("Verifying the label of the pipeline")
+			Expect(createdResource.Labels[common.LabelKeyPipelineRolloutForPipeline]).Should(Equal(pipelineRollout.Name))
 		})
 
 		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
@@ -658,7 +661,12 @@ func TestPipelineLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			pipelineRolloutName := "my-pipeline"
 			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: defaultNamespace,
+					Name:      pipelineRolloutName,
+				},
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
@@ -671,8 +679,14 @@ func TestPipelineLabels(t *testing.T) {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
-			if err == nil && labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
-				t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
+			if err == nil {
+				if labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
+				}
+
+				if labels[common.LabelKeyPipelineRolloutForPipeline] != pipelineRolloutName {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyPipelineRolloutForPipeline, pipelineRolloutName)
+				}
 			}
 		})
 	}
