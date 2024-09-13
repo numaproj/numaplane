@@ -183,6 +183,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
+		verifyNumaflowControllerRolloutReady()
 		document("Verifying that the NumaflowControllerRollout conditions are as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -216,6 +217,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
 		document("Verifying that the ISBServiceRollout conditions are as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -256,21 +258,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
-		document("Verifying that the PipelineRollout conditions are as expected")
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
-
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
-
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+		verifyPipelineRolloutReady(pipelineRolloutName)
 
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
@@ -293,16 +281,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return monoVertexSpec.Source != nil
 		})
 
-		document("Verifying that the MonoVertexRollout conditions are as expected")
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
-
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
@@ -410,6 +389,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.13"
 		})
 
+		verifyNumaflowControllerRolloutReady()
 		document("Verifying that the NumaflowControllerRollout conditions are as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -459,6 +439,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
 
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
 		document("Verifying that the ISBServiceRollout conditions are as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -500,16 +481,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
 		})
 
-		document("Verifying that the MonoVertexRollout conditions are as expected")
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
-
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
 		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
