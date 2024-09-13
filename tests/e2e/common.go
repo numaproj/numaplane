@@ -35,6 +35,8 @@ var (
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
 	kubeClient                      clientgo.Interface
+
+	dataLossPrevention string
 )
 
 const (

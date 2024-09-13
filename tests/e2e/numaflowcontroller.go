@@ -44,11 +44,14 @@ func verifyNumaflowControllerRolloutReady() {
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	// TODO: add test when dataLossPrevention envVar is added
-	// Eventually(func() metav1.ConditionStatus {
-	// 	rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-	// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-	// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+	if dataLossPrevention == "true" {
+		document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+	}
+
 }
 
 func verifyNumaflowControllerReady(namespace string) {

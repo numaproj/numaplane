@@ -68,10 +68,13 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	// Eventually(func() metav1.ConditionStatus {
-	// 	rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-	// 	return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-	// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionUnknown))
+	if dataLossPrevention == "true" {
+		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+	}
 
 }
 
