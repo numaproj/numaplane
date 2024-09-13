@@ -184,7 +184,6 @@ func CreateUnstructuredCR(
 	return nil
 }
 
-// update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateCR(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -202,15 +201,7 @@ func UpdateCR(
 		return err
 	}
 
-	if err = UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name); err != nil {
-		return err
-	}
-	result, err := UnstructuredToObject(unstruc)
-	if err != nil {
-		return err
-	}
-	*object = *result
-	return nil
+	return UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name)
 }
 
 // update the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
