@@ -39,6 +39,10 @@ const (
 	// LabelKeyISBServiceNameForPipeline is the label key used to identify the ISBService being used by a Pipeline
 	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
 	LabelKeyISBServiceNameForPipeline = "numaplane.numaproj.io/isbsvc-name"
+
+	// LabelKeyPipelineRolloutForPipeline is the label key used to identify the PipelineRollout a Pipeline is managed by
+	// This is useful as a Label to quickly locate all Pipelines of a given PipelineRollout
+	LabelKeyPipelineRolloutForPipeline = "numaplane.numaproj.io/pipeline-rollout-name"
 )
 
 var (
