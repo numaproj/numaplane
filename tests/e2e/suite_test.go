@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -42,10 +45,12 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 
+	dataLossPrevention = os.Getenv("DATA_LOSS_PREVENTION")
+
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout)
+	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout) // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
 
 	var err error
 	scheme := runtime.NewScheme()
@@ -56,8 +61,12 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	useExistingCluster := true
 
+	restConfig := config.GetConfigOrDie()
+
 	testEnv = &envtest.Environment{
-		UseExistingCluster: &useExistingCluster,
+		UseExistingCluster:       &useExistingCluster,
+		Config:                   restConfig,
+		AttachControlPlaneOutput: true,
 	}
 
 	cfg, err := testEnv.Start()

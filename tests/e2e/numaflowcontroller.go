@@ -23,7 +23,35 @@ func verifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployme
 			return false
 		}
 		return f(*deployment)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+}
+
+func verifyNumaflowControllerRolloutReady() {
+	document("Verifying that the NumaflowControllerRollout is ready")
+
+	Eventually(func() bool {
+		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		return rollout.Status.Phase == apiv1.PhaseDeployed
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	if dataLossPrevention == "true" {
+		document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
+		Eventually(func() metav1.ConditionStatus {
+			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+	}
+
 }
 
 func verifyNumaflowControllerReady(namespace string) {
@@ -31,21 +59,7 @@ func verifyNumaflowControllerReady(namespace string) {
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return err
-	}).WithTimeout(testTimeout).Should(Succeed())
-
-	document("Verifying that the Numaflow ControllerRollout is ready")
-	Eventually(func() bool {
-		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		if rollout == nil {
-			return false
-		}
-		childResourcesHealthyCondition := rollout.Status.GetCondition(apiv1.ConditionChildResourceHealthy)
-		if childResourcesHealthyCondition == nil {
-			return false
-		}
-		return childResourcesHealthyCondition.Status == metav1.ConditionTrue
-
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(Succeed())
 }
 
 func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error)) {

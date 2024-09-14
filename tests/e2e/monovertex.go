@@ -45,8 +45,27 @@ func verifyMonoVertexSpec(namespace, name string, f func(numaflowv1.MonoVertexSp
 			return false
 		}
 		return f(retrievedMonoVertexSpec)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
+}
+
+func verifyMonoVertexRolloutReady(monoVertexRolloutName string) {
+	document("verifying that the MonoVertexRollout is ready")
+
+	Eventually(func() bool {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return rollout.Status.Phase == apiv1.PhaseDeployed
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
 func verifyMonoVertexReady(namespace, monoVertexName string) {
@@ -83,7 +102,7 @@ func verifyMonoVertexStatus(namespace, monoVertexName string, f func(numaflowv1.
 			return false
 		}
 		return f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 
 }
 

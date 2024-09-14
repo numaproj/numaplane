@@ -110,6 +110,11 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        datalossprevention: ["true", "false"]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -149,29 +154,10 @@ jobs:
         env:
           GOPATH: /home/runner/go
         run:
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=${{matrix.datalossprevention}} make start
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
-
-      - name: Create second cluster
-        run: |
-          export PATH=$PATH:/usr/local/bin
-          k3d cluster create e2e-data-loss-prevention
-          k3d kubeconfig get e2e-data-loss-prevention > ~/.kube/config
-          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
-          echo 'Waiting for the cluster to be ready...'
-          until kubectl cluster-info; do sleep 1; done
-
-      - name: Install Numaplane with dataLossPrevention=true
-        env:
-          GOPATH: /home/runner/go
-        run:
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true TEST_MANIFEST_DIR=tests/manifests/special-cases/pause make start
-
-      - name: Run e2e tests with dataLossPrevention=true
-        env:
-          GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true make test-e2e
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=${{matrix.datalossprevention}} make test-e2e
+        

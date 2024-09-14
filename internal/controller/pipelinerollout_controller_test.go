@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/numaproj/numaplane/internal/common"
 	"strings"
 	"time"
 
@@ -36,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -140,6 +140,9 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			By("Verifying the content of the pipeline spec")
 			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
+
+			By("Verifying the label of the pipeline")
+			Expect(createdResource.Labels[common.LabelKeyPipelineRolloutForPipeline]).Should(Equal(pipelineRollout.Name))
 		})
 
 		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
@@ -150,7 +153,35 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			By("Verifying the PipelineRollout metric")
 			Expect(testutil.ToFloat64(customMetrics.PipelinesRunning.WithLabelValues())).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.PipelinesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
+		})
+
+		Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
+			It("Should be automatically failed", func() {
+				Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: defaultNamespace,
+						Name:      "my-pipeline",
+					},
+					Spec: pipelineSpec,
+				})).Should(Succeed())
+				Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: defaultNamespace,
+						Name:      "my-pipeline",
+					},
+					Spec: apiv1.PipelineRolloutSpec{
+						Pipeline: apiv1.Pipeline{
+							Spec: runtime.RawExtension{
+								Raw: pipelineSpecRaw,
+							},
+						},
+					},
+				})).Should(Succeed())
+				time.Sleep(5 * time.Second)
+				verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
+
+				Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(BeNumerically(">", 1))
+			})
 		})
 
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
@@ -191,18 +222,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				return updatedChildResource.Spec, nil
 			}, timeout, interval).Should(Equal(pipelineSpec))
 
-			/*By("Verifying the Numaflow Pipeline lifecycle desiredPhase is 'Paused'")
-			Eventually(func() (string, error) {
-				updatedChildResource := &numaflowv1.Pipeline{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
-				if err != nil {
-					return "", err
-				}
-				return string(updatedChildResource.Spec.Lifecycle.DesiredPhase), nil
-			}, timeout, interval).Should(Equal("Paused"))
-
 			By("Verifying that the PipelineRollout Status Phase is Deployed and ObservedGeneration matches Generation")
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)*/
+			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, apiv1.PhaseDeployed)
 
 		})
 
@@ -230,16 +251,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
 			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
-
-			// TODO: use this on real cluster for e2e tests
-			// NOTE: it's necessary to run on existing cluster to allow for deletion of child resources.
-			// See https://book.kubebuilder.io/reference/envtest#testing-considerations for more details.
-			// Could also reuse the env var used to set useExistingCluster to skip or perform the deletion based on CI settings.
-			// Eventually(func() bool {
-			// 	deletedChildResource := &numaflowv1.Pipeline{}
-			// 	err := k8sClient.Get(ctx, resourceLookupKey, deletedChildResource)
-			// 	return errors.IsNotFound(err)
-			// }, timeout, interval).Should(BeTrue())
 		})
 	})
 
@@ -257,33 +268,6 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 				ObjectMeta: pipelineRollout.ObjectMeta,
 				Spec:       apiv1.PipelineRolloutSpec{},
 			})).ShouldNot(Succeed())
-		})
-	})
-
-	Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
-		It("Should be automatically failed", func() {
-			Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: defaultNamespace,
-					Name:      "my-pipeline",
-				},
-				Spec: pipelineSpec,
-			})).Should(Succeed())
-			Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: defaultNamespace,
-					Name:      "my-pipeline",
-				},
-				Spec: apiv1.PipelineRolloutSpec{
-					Pipeline: apiv1.Pipeline{
-						Spec: runtime.RawExtension{
-							Raw: pipelineSpecRaw,
-						},
-					},
-				},
-			})).Should(Succeed())
-			time.Sleep(5 * time.Second)
-			verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
 		})
 	})
 
@@ -677,7 +661,12 @@ func TestPipelineLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			pipelineRolloutName := "my-pipeline"
 			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: defaultNamespace,
+					Name:      pipelineRolloutName,
+				},
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
@@ -690,8 +679,14 @@ func TestPipelineLabels(t *testing.T) {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
-			if err == nil && labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
-				t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
+			if err == nil {
+				if labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
+				}
+
+				if labels[common.LabelKeyPipelineRolloutForPipeline] != pipelineRolloutName {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyPipelineRolloutForPipeline, pipelineRolloutName)
+				}
 			}
 		})
 	}

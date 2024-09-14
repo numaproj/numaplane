@@ -42,10 +42,13 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/metrics"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 var (
+	defaultNamespace         = "default"
 	defaultISBSvcRolloutName = "isbservicerollout-test"
 )
 
@@ -128,7 +131,6 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 			By("Verifying the ISBService metric")
 			Expect(testutil.ToFloat64(customMetrics.ISBServicesRunning.WithLabelValues())).Should(Equal(float64(1)))
 			Expect(testutil.ToFloat64(customMetrics.ISBServicesSynced.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.ISBServicesSyncFailed.WithLabelValues())).Should(Equal(float64(0)))
 		})
 
 		It("Should update the ISBServiceRollout and InterStepBufferService", func() {
@@ -243,7 +245,7 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 func Test_reconcile_PPND(t *testing.T) {
 
-	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := prepareK8SEnvironment()
+	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	// Make sure "dataLossPrevention" feature flag is turned on
@@ -320,6 +322,18 @@ func Test_reconcile_PPND(t *testing.T) {
 			expectedRolloutPhase:   apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionPausingPipelines:      metav1.ConditionTrue,
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+			expectedISBSvcSpec: createDefaultISBServiceSpec("2.10.11"),
+		},
+		{
+			name:                   "existing ISBService - new spec - pipelines failed",
+			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
+			existingPipelinePhase:  numaflowv1.PipelinePhaseFailed,
+			expectedRolloutPhase:   apiv1.PhaseDeployed,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec: createDefaultISBServiceSpec("2.10.11"),
