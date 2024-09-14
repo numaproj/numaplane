@@ -22,22 +22,12 @@ const (
 	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
 
-// DeriveUpgradeStrategy calculates the upgrade strategy to use during the
+// ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns the strategy to use and a boolean pointer indicating if the specs are different (if the specs were not compared, then nil will be returned).
-func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject,
-	inProgressUpgradeStrategy string, overrideToPPND, overrideToProgressive *bool) (UpgradeStrategy, *bool, error) {
+func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (bool, UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
-
-	if UpgradeStrategy(inProgressUpgradeStrategy) == UpgradeStrategyPPND || (overrideToPPND != nil && *overrideToPPND) {
-		return UpgradeStrategyPPND, nil, nil
-	}
-
-	if UpgradeStrategy(inProgressUpgradeStrategy) == UpgradeStrategyProgressive || (overrideToProgressive != nil && *overrideToProgressive) {
-		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		return UpgradeStrategyPPND, nil, nil
-	}
 
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
@@ -55,7 +45,7 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	// Split newSpec
 	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, ".")
 	if err != nil {
-		return UpgradeStrategyError, nil, err
+		return false, UpgradeStrategyError, err
 	}
 
 	numaLogger.WithValues("newSpecOnlyApplyPaths", newSpecOnlyApplyPaths, "newSpecWithoutApplyPaths", newSpecWithoutApplyPaths).Debug("split new spec")
@@ -63,7 +53,7 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 	// Split existingSpec
 	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, ".")
 	if err != nil {
-		return UpgradeStrategyError, nil, err
+		return false, UpgradeStrategyError, err
 	}
 
 	numaLogger.WithValues("existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths, "existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths).Debug("split existing spec")
@@ -72,32 +62,37 @@ func DeriveUpgradeStrategy(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace)
-
-		var userUpgradeStrategy config.USDEUserStrategy = ""
-		if namespaceConfig != nil {
-			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
-		}
+		userUpgradeStrategy := GetUserStrategy(newSpec.Namespace)
 
 		numaLogger.WithValues("userUpgradeStrategy", userUpgradeStrategy).Debug("the specs without the 'apply' paths are different")
 
 		if userUpgradeStrategy == config.PPNDStrategyID {
-			return UpgradeStrategyPPND, &specsDiffer, nil
+			return specsDiffer, UpgradeStrategyPPND, nil
 		}
 
 		// TODO-PROGRESSIVE: return UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		return UpgradeStrategyPPND, &specsDiffer, nil
+		return specsDiffer, UpgradeStrategyPPND, nil
 	}
 
 	// Compare specs with the apply fields
 	if !reflect.DeepEqual(newSpecOnlyApplyPaths, existingSpecOnlyApplyPaths) {
 		numaLogger.Debug("the specs with only the 'apply' paths are different")
-		return UpgradeStrategyApply, &specsDiffer, nil
+		return specsDiffer, UpgradeStrategyApply, nil
 	}
 
 	numaLogger.Debug("the specs are equal, no update needed")
 
 	// Return NoOp if no differences were found between the new and existing specs
 	specsDiffer = false
-	return UpgradeStrategyNoOp, &specsDiffer, nil
+	return specsDiffer, UpgradeStrategyNoOp, nil
+}
+
+func GetUserStrategy(namespace string) config.USDEUserStrategy {
+	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
+
+	var userUpgradeStrategy config.USDEUserStrategy = ""
+	if namespaceConfig != nil {
+		userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+	}
+	return userUpgradeStrategy
 }

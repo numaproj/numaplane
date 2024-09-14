@@ -245,7 +245,7 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
 			// TODO: write test cases with various values for inProgressUpgradeStrategy and override arguments instead of empty string and nils.
 			// Also, include testing the boolean returned value specsDiffer
-			strategy, _, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, "", nil, nil)
+			strategy, _, err := ResourceNeedsUpdating(ctx, &tc.newSpec, &tc.existingSpec, "", nil, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})
