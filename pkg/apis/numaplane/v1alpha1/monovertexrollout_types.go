@@ -65,8 +65,5 @@ func init() {
 
 // IsHealthy indicates whether the MonoVertexRollout is healthy.
 func (mv *MonoVertexRolloutStatus) IsHealthy() bool {
-	if mv.Phase != PhaseDeployed {
-		return false
-	}
-	return mv.IsReady()
+	return mv.Phase == PhaseDeployed
 }

@@ -201,16 +201,3 @@ func (s *Status) markTypeStatus(t ConditionType, status metav1.ConditionStatus, 
 		ObservedGeneration: generation,
 	})
 }
-
-// IsReady returns true when all the conditions are true
-func (s *Status) IsReady() bool {
-	if len(s.Conditions) == 0 {
-		return false
-	}
-	for _, c := range s.Conditions {
-		if c.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	return true
-}
