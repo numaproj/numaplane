@@ -428,6 +428,8 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 
+	numaLogger := logger.FromContext(ctx)
+
 	// what is the preferred strategy for this namespace?
 	userPreferredStrategy, err := usde.GetUserStrategy(newPipelineDef.Namespace)
 	if err != nil {
@@ -440,6 +442,9 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	if err != nil {
 		return err
 	}
+	numaLogger.
+		WithValues("pipelineNeedsToUpdate", pipelineNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed" depending on whether pipeline needs to update
 	if pipelineNeedsToUpdate {
