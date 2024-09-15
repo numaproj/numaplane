@@ -16,7 +16,7 @@ import (
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns the strategy to use and a boolean pointer indicating if the specs are different (if the specs were not compared, then nil will be returned).
-func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, comparisonExcludedPaths []string) (bool, UpgradeStrategy, error) {
+func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, comparisonExcludedPaths []string) (bool, apiv1.UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
 

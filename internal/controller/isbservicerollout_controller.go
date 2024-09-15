@@ -43,6 +43,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -281,7 +282,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
-	if common.DataLossPrevention {
+	// Get Numaplane Config
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return false, err
+	}
+
+	if globalConfig.DefaultUpgradeStrategy == config.PPNDStrategyID {
 		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)

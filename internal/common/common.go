@@ -58,5 +58,5 @@ var (
 	DefaultDelayedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
 
 	// DataLossPrevention is a feature flag used to turn on/off the automatic pause feature for pipelines based on how it's set in the Config
-	DataLossPrevention bool
+	//DataLossPrevention bool
 )

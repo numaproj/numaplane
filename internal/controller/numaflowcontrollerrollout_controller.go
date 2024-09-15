@@ -255,8 +255,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	// Get Numaplane Config
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
-	if deploymentExists && common.DataLossPrevention {
+	if deploymentExists && globalConfig.DefaultUpgradeStrategy == config.PPNDStrategyID {
 		numaLogger.Debugf("found existing numaflow-controller Deployment")
 
 		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing

@@ -10,6 +10,7 @@ type USDEUserStrategy string
 const (
 	ProgressiveStrategyID USDEUserStrategy = "progressive"
 	PPNDStrategyID        USDEUserStrategy = "pause-and-drain"
+	NoStrategyID          USDEUserStrategy = ""
 )
 
 type USDEConfig struct {

@@ -448,7 +448,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 	shouldBePausedForPPND := false
 	if userPreferredStrategy == config.PPNDStrategyID {
-		shouldBePaused, err := r.shouldBePausedForPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, upgradeStrategyType == usde.UpgradeStrategyPPND)
+		shouldBePaused, err := r.shouldBePausedForPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
 		if err != nil {
 			return err
 		}
