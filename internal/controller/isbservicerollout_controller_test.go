@@ -39,7 +39,6 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 
@@ -243,13 +242,13 @@ var _ = Describe("ISBServiceRollout Controller", Ordered, func() {
 
 // test reconcile() for the case of PPND
 
-func Test_reconcile_PPND(t *testing.T) {
+func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
-	// Make sure "dataLossPrevention" feature flag is turned on
-	common.DataLossPrevention = true
+	err = commontest.LoadGlobalConfig("./testdata", "ppnd-config.yaml")
+	assert.Nil(t, err)
 
 	ctx := context.Background()
 
