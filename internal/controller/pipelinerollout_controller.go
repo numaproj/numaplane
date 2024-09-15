@@ -486,13 +486,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
-	case apiv1.UpgradeStrategyApply:
-		if pipelineNeedsToUpdate {
-			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
-				return err
-			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-		}
 	case apiv1.UpgradeStrategyPPND:
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, shouldBePausedForPPND, pipelineNeedsToUpdate)
 		if err != nil {
@@ -512,6 +505,13 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			//if done {
 			//	r.unsetInProgressStrategy(namespacedName)
 			//}
+		}
+	default:
+		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
+			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
+				return err
+			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
 	}
 
@@ -611,7 +611,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 }
 
 // return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePausedForPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) shouldBePausedForPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
@@ -634,8 +634,6 @@ func (r *PipelineRolloutReconciler) shouldBePausedForPPND(ctx context.Context, p
 	existingPipelinePauseDesired := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
 	pipelineUpdating = pipelineUpdating && existingPipelinePauseDesired
 
-	numaLogger.Debugf("pipelineNeedsToUpdate: %t, pipelineUpdating: %t", pipelineNeedsToUpdate, pipelineUpdating)
-
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
@@ -647,9 +645,9 @@ func (r *PipelineRolloutReconciler) shouldBePausedForPPND(ctx context.Context, p
 
 	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
 
-	shouldBePausedForPPND := (pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePausedForPPND, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
+	shouldBePausedForPPND := (pipelineUpdateRequiringPPND || pipelineUpdating || externalPauseRequest || specBasedPause) && !unpausible
+	numaLogger.Debugf("shouldBePaused=%t, pipelineUpdateRequiringPPND=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
+		shouldBePausedForPPND, pipelineUpdateRequiringPPND, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
 	// that it's okay to pause
