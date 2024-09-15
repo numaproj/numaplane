@@ -122,6 +122,7 @@ func SplitMap(m map[string]any, paths []string, pathSeparator string) (onlyPaths
 		}
 	}
 
+	// TODO: remove this once Numaflow stops doing Update() calls to Pipeline
 	removeNullValuesFromMap(onlyPaths)
 	removeNullValuesFromMap(withoutPaths)
 
