@@ -42,8 +42,18 @@ type PipelineRolloutStatus struct {
 	PauseStatus PauseStatus `json:"pauseStatus,omitempty"`
 
 	// UpgradeInProgress indicates the upgrade strategy currently beign used and affecting the resource state or empty if no upgrade is in progress
-	UpgradeInProgress string `json:"upgradeInProgress,omitempty"`
+	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
 }
+
+type UpgradeStrategy string
+
+const (
+	UpgradeStrategyNoOp        UpgradeStrategy = ""
+	UpgradeStrategyError       UpgradeStrategy = "Error"
+	UpgradeStrategyApply       UpgradeStrategy = "DirectApply"
+	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
+	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
+)
 
 // +genclient
 // +kubebuilder:object:root=true
@@ -81,7 +91,7 @@ func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
 }
 
-func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy string) {
+func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
 	status.UpgradeInProgress = upgradeStrategy
 }
 

@@ -8,8 +8,8 @@ import (
 type USDEUserStrategy string
 
 const (
-	// ProgressiveStrategyID USDEUserStrategy = "progressive" // TODO-PROGRESSIVE: enable this
-	PPNDStrategyID USDEUserStrategy = "pause-and-drain"
+	ProgressiveStrategyID USDEUserStrategy = "progressive"
+	PPNDStrategyID        USDEUserStrategy = "pause-and-drain"
 )
 
 type USDEConfig struct {

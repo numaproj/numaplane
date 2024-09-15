@@ -96,11 +96,12 @@ type PipelineRolloutReconciler struct {
 	// the recorder is used to record events
 	recorder record.EventRecorder
 
-	inProgressUpgradeStrategies map[string]usde.UpgradeStrategy
+	// maintain inProgressStrategies in memory and in PipelineRollout Status
+	inProgressStrategyMgr *inProgressStrategyMgr
 }
 
 func NewPipelineRolloutReconciler(
-	client client.Client,
+	c client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
@@ -116,15 +117,34 @@ func NewPipelineRolloutReconciler(
 	pipelineRolloutQueue := util.NewWorkQueue("pipeline_rollout_queue")
 
 	r := &PipelineRolloutReconciler{
-		client,
+		c,
 		s,
 		restConfig,
 		pipelineRolloutQueue,
 		&sync.WaitGroup{},
 		customMetrics,
 		recorder,
+		nil, // defined below
 	}
 	pipelineROReconciler = r
+
+	pipelineROReconciler.inProgressStrategyMgr = newInProgressStrategyMgr(
+		// getRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
+			pipelineRollout := rollout.(*apiv1.PipelineRollout)
+
+			if pipelineRollout.Status.UpgradeInProgress != "" {
+				return (*apiv1.UpgradeStrategy)(&pipelineRollout.Status.UpgradeInProgress)
+			} else {
+				return nil
+			}
+		},
+		// setRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object, strategy apiv1.UpgradeStrategy) {
+			pipelineRollout := rollout.(*apiv1.PipelineRollout)
+			pipelineRollout.Status.SetUpgradeInProgress(strategy)
+		},
+	)
 
 	r.runWorkers(ctx)
 
@@ -407,6 +427,7 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+
 	// what is the preferred strategy for this namespace?
 	userPreferredStrategy := usde.GetUserStrategy(newPipelineDef.Namespace)
 
@@ -438,42 +459,42 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
-	inProgressStrategy := r.getInProgressStrategy(namespacedName)
+	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, pipelineRollout)
 
 	// if not, should we set one?
 	// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
-	if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != usde.UpgradeStrategyPPND {
+	if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != apiv1.UpgradeStrategyPPND {
 		if shouldBePausedForPPND {
-			inProgressStrategy = usde.UpgradeStrategyPPND
-			r.setInProgressStrategy(namespacedName, inProgressStrategy)
+			inProgressStrategy = apiv1.UpgradeStrategyPPND
+			r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
 		}
 	}
-	if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != usde.UpgradeStrategyProgressive {
-		if upgradeStrategyType == usde.UpgradeStrategyProgressive {
-			inProgressStrategy = usde.UpgradeStrategyProgressive
-			r.setInProgressStrategy(namespacedName, inProgressStrategy)
+	if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != apiv1.UpgradeStrategyProgressive {
+		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
 		}
 	}
 
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
-	case usde.UpgradeStrategyApply:
+	case apiv1.UpgradeStrategyApply:
 		if pipelineNeedsToUpdate {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
-	case usde.UpgradeStrategyPPND:
+	case apiv1.UpgradeStrategyPPND:
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, shouldBePausedForPPND, pipelineNeedsToUpdate)
 		if err != nil {
 			return err
 		}
 		if done {
-			r.unsetInProgressStrategy(namespacedName)
+			r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
 		}
 
-	case usde.UpgradeStrategyProgressive:
+	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
 			//TODO (just an idea of what it might look like below...)
 			//	done, err := r.processExistingPipelineWithProgressive(...)
@@ -537,6 +558,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelinePrev(ctx context.Cont
 	return nil
 }*/
 
+// TODO: move PPND logic out to its own separate file
 // normal sequence of events when we need to pause:
 // - set Pipeline's desiredPhase=Paused
 // - wait for the desire to Pause to be reconciled completely
