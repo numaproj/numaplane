@@ -429,7 +429,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 
 	// what is the preferred strategy for this namespace?
-	userPreferredStrategy := usde.GetUserStrategy(newPipelineDef.Namespace)
+	userPreferredStrategy, err := usde.GetUserStrategy(newPipelineDef.Namespace)
+	if err != nil {
+		return err
+	}
 
 	// does the Resource need updating, and if so how?
 	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}

@@ -20,12 +20,6 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	numaLogger := logger.FromContext(ctx)
 
-	// Get Numaplane Config
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
@@ -63,10 +57,9 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(newSpec.Namespace)
-		userUpgradeStrategy := globalConfig.DefaultUpgradeStrategy
-		if namespaceConfig != nil {
-			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+		userUpgradeStrategy, err := GetUserStrategy(newSpec.Namespace)
+		if err != nil {
+			return false, apiv1.UpgradeStrategyError, err
 		}
 
 		numaLogger.WithValues(
@@ -101,12 +94,19 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
-func GetUserStrategy(namespace string) config.USDEUserStrategy {
+func GetUserStrategy(namespace string) (config.USDEUserStrategy, error) {
+
+	// Get Numaplane Config
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return config.NoStrategyID, err
+	}
+
 	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
 
-	var userUpgradeStrategy config.USDEUserStrategy = ""
+	var userUpgradeStrategy config.USDEUserStrategy = globalConfig.DefaultUpgradeStrategy
 	if namespaceConfig != nil {
 		userUpgradeStrategy = namespaceConfig.UpgradeStrategy
 	}
-	return userUpgradeStrategy
+	return userUpgradeStrategy, nil
 }

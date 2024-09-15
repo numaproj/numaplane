@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -238,8 +237,5 @@ func loadConfigs() {
 	numaLogger.SetLevel(config.LogLevel)
 	logger.SetBaseLogger(numaLogger)
 	clog.SetLogger(*numaLogger.LogrLogger)
-
-	// feature flag
-	common.DataLossPrevention = config.DataLossPrevention
 
 }
