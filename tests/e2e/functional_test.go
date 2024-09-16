@@ -32,6 +32,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -75,6 +76,50 @@ var (
 		Edges: []numaflowv1.Edge{
 			{
 				From: "in",
+				To:   "out",
+			},
+		},
+	}
+
+	updatedPipelineSpec = numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: isbServiceRolloutName,
+		Vertices: []numaflowv1.AbstractVertex{
+			{
+				Name: "in",
+				Source: &numaflowv1.Source{
+					Generator: &numaflowv1.GeneratorSource{
+						RPU:      &pipelineSpecSourceRPU,
+						Duration: &pipelineSpecSourceDuration,
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+			{
+				Name: "cat",
+				UDF: &numaflowv1.UDF{
+					Builtin: &numaflowv1.Function{
+						Name: "cat",
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+			{
+				Name: "out",
+				Sink: &numaflowv1.Sink{
+					AbstractSink: numaflowv1.AbstractSink{
+						Log: &numaflowv1.Log{},
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+		},
+		Edges: []numaflowv1.Edge{
+			{
+				From: "in",
+				To:   "cat",
+			},
+			{
+				From: "cat",
 				To:   "out",
 			},
 		},
@@ -229,6 +274,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
 		})
 
+		verifyPipelineRolloutReady(pipelineRolloutName)
+
 		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
 
 	})
@@ -236,12 +283,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
 		document("Updating Pipeline spec in PipelineRollout")
-
-		// new Pipeline spec
-		updatedPipelineSpec := pipelineSpec
-		rpu := int64(10)
-		updatedPipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
-
 		rawSpec, err := json.Marshal(updatedPipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -251,13 +292,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		// TODO: check that when pipeline is being updated, it is being paused
-		//       could set envVar to signify dataLossPrevention is on
-		// Eventually(func() metav1.ConditionStatus {
-		// 	rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRollouName, metav1.GetOptions{})
-		//
-		// return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-		// }, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+		if dataLossPrevention == "true" {
+			document("Verify that child Pipeline is paused by checking rollout condition")
+			Eventually(func() metav1.ConditionStatus {
+				rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			}, testTimeout).Should(Equal(metav1.ConditionTrue))
+		}
 
 		// wait for update to reconcile
 		time.Sleep(5 * time.Second)
@@ -268,12 +309,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 		updatedPipelineSpecRunning := updatedPipelineSpec
 		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(10)
+			return len(retrievedPipelineSpec.Vertices) == 3
 		})
 
 		verifyPipelineRolloutReady(pipelineRolloutName)
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -289,6 +330,24 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
+		if dataLossPrevention == "true" {
+			document("Verify that Pipelines are being paused by checking rollout condition")
+			verifyPipelineStatus(Namespace, pipelineRolloutName,
+				func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
+					return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
+				})
+			Eventually(func() bool {
+				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
+		}
+
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
@@ -299,7 +358,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyNumaflowControllerReady(Namespace)
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -316,6 +375,24 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
+		if dataLossPrevention == "true" {
+			document("Verify that Pipelines are being paused by checking rollout condition")
+			verifyPipelineStatus(Namespace, pipelineRolloutName,
+				func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
+					return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
+				})
+			Eventually(func() bool {
+				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
+		}
+
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 		})
@@ -324,7 +401,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 
