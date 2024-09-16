@@ -39,29 +39,34 @@ func newInProgressStrategyStore() *inProgressStrategyStore {
 	}
 }
 
-// first look for value in memory
-// if not found, look for value in the Resource itself (could happen if application just started up) and store it
-// if not found, store and return UpgradeStrategyNoOp
 func (mgr *inProgressStrategyMgr) getStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+	return mgr.syncronize(ctx, rollout)
+}
+
+// make sure in-memory value and Rollout Status value are syncronized
+// if in-memory value is set, make sure Rollout Status value gets set the same
+// if in-memory value isn't set, make sure in-memory value gets set to Rollout Status value
+func (mgr *inProgressStrategyMgr) syncronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	// first look for value in memory
-	found, strategy := mgr.store.getStrategy(namespacedName)
-	if found {
-		return strategy
-	}
-	// not found in memory, so look for value in the Resource itself (could happen if application just started up) and store it
-	crDefinedStrategy := mgr.getRolloutStrategy(ctx, rollout)
-	if crDefinedStrategy == nil {
-		// not defined in the Resource either
-		mgr.store.setStrategy(namespacedName, apiv1.UpgradeStrategyNoOp)
-		mgr.setRolloutStrategy(ctx, rollout, apiv1.UpgradeStrategyNoOp)
+	foundInMemory, inMemoryStrategy := mgr.store.getStrategy(namespacedName)
 
-		return apiv1.UpgradeStrategyNoOp
+	// now look for the value in the Resource
+	crDefinedStrategy := mgr.getRolloutStrategy(ctx, rollout)
+
+	// if in-memory value is set, make sure Rollout Status value gets set the same
+	if foundInMemory {
+		mgr.setRolloutStrategy(ctx, rollout, inMemoryStrategy)
+		return inMemoryStrategy
 	} else {
-		// found in the Resource, so store that and return it
-		mgr.store.setStrategy(namespacedName, *crDefinedStrategy)
-		return *crDefinedStrategy
+		// make sure in-memory value gets set to Rollout Status value
+		if crDefinedStrategy != nil {
+			mgr.store.setStrategy(namespacedName, *crDefinedStrategy)
+			return *crDefinedStrategy
+		} else {
+			return apiv1.UpgradeStrategyNoOp
+		}
 	}
 }
 

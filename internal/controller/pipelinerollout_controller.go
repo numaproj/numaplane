@@ -487,6 +487,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
+		numaLogger.Debug("processing pipeline with PPND")
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, shouldBePausedForPPND, pipelineNeedsToUpdate)
 		if err != nil {
 			return err
@@ -659,6 +660,7 @@ func (r *PipelineRolloutReconciler) shouldBePausedForPPND(ctx context.Context, p
 	return &shouldBePausedForPPND, nil
 }
 
+/*
 func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	// Does pipeline spec need to be updated?
 	pipelineSpecsEqual, err := pipelineSpecEqual(ctx, existingPipelineDef, newPipelineDef)
@@ -666,7 +668,7 @@ func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.Gener
 		return false, err
 	}
 	return !pipelineSpecsEqual, nil
-}
+}*/
 
 // return true if Pipeline (or its children) is still in the process of being reconciled
 func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
