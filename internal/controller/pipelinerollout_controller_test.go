@@ -20,23 +20,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/numaproj/numaplane/internal/common"
 	"strings"
-	"time"
-
 	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -143,6 +141,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			By("Verifying the label of the pipeline")
 			Expect(createdResource.Labels[common.LabelKeyPipelineRolloutForPipeline]).Should(Equal(pipelineRollout.Name))
+			Expect(createdResource.Labels[common.LabelKeyUpgradeState]).Should(Equal(string(common.LabelValueUpgradePromoted)))
 		})
 
 		It("Should have the PipelineRollout Status Phase has Deployed and ObservedGeneration matching Generation", func() {
@@ -686,6 +685,10 @@ func TestPipelineLabels(t *testing.T) {
 
 				if labels[common.LabelKeyPipelineRolloutForPipeline] != pipelineRolloutName {
 					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyPipelineRolloutForPipeline, pipelineRolloutName)
+				}
+
+				if labels[common.LabelKeyUpgradeState] != string(common.LabelValueUpgradePromoted) {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyUpgradeState, string(common.LabelValueUpgradePromoted))
 				}
 			}
 		})

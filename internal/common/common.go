@@ -9,6 +9,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// UpgradeState is the enum to track the possible state of
+// a resource upgrade, it can only be `promoted` or `in-progress`.
+type UpgradeState string
+
 const (
 	// SSAManager is the default numaplane manager name used by server-side apply syncs
 	SSAManager = "numaplane-controller"
@@ -43,6 +47,18 @@ const (
 	// LabelKeyPipelineRolloutForPipeline is the label key used to identify the PipelineRollout a Pipeline is managed by
 	// This is useful as a Label to quickly locate all Pipelines of a given PipelineRollout
 	LabelKeyPipelineRolloutForPipeline = "numaplane.numaproj.io/pipeline-rollout-name"
+
+	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
+	// a NumaRollout.
+	LabelKeyUpgradeState = "numaplane.numaproj.io/upgrade-state"
+
+	// LabelValueUpgradePromoted is the label value indicate the resource, managed by a NumaRollout, is promoted
+	// after an upgrade.
+	LabelValueUpgradePromoted UpgradeState = "promoted"
+
+	// LabelValueUpgradeInProgress is the label value indicate the resource, managed by a NumaRollout, is in the progress
+	// of upgrade.
+	LabelValueUpgradeInProgress UpgradeState = "in-progress"
 )
 
 var (

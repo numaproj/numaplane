@@ -45,7 +45,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -866,6 +865,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	}
 
 	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
+	labelMapping[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
 	return labelMapping, nil
 }
