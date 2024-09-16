@@ -64,7 +64,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 	Eventually(func() bool {
 		podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-		if podsList != nil && len(podsList.Items) >= numPods {
+		if podsList != nil && len(podsList.Items) == numPods {
 			for _, pod := range podsList.Items {
 				if pod.Status.Phase != "Running" {
 					return false
