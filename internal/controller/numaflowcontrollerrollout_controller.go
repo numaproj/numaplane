@@ -351,6 +351,10 @@ func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx
 	_, healthConditionReason, _ := processDeploymentHealth(existingDeployment)
 	controllerDeploymentReconciled := healthConditionReason != "Progressing"
 
+	numaLogger.
+		WithValues("Conroller Deployment reconciled", controllerDeploymentReconciled, "Deployment Status", existingDeployment.Status).
+		Debug("Controller Deployment checked for reconciled")
+
 	currentVersion, err := getControllerDeploymentVersion(existingDeployment)
 	if err != nil {
 		return false, false, err

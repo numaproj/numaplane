@@ -683,9 +683,7 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 	// note if Pipeline's children are still being updated
 	unhealthyOrProgressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
-		// TODO: once we have "inProgressStrategy" we can just look for c.Status == metav1.ConditionFalse while inProgressStrategy==PPND
-		// https://github.com/numaproj/numaplane/issues/239
-		return c.Reason == "Progressing" || c.Reason == "GetDaemonServiceFailed" //return c.Status == metav1.ConditionFalse
+		return c.Status == metav1.ConditionFalse
 	})
 
 	return unhealthyOrProgressing, nil

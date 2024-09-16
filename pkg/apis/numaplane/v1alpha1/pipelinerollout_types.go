@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -93,6 +95,7 @@ func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 
 func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
 	status.UpgradeInProgress = upgradeStrategy
+	fmt.Printf("deletethis: SetUpgradeInProgress(): %+v\n", upgradeStrategy)
 }
 
 func (status *PipelineRolloutStatus) ClearUpgradeInProgress() {
