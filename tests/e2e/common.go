@@ -110,14 +110,14 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 
 	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		fmt.Println("Error getting pods logs")
+		fmt.Printf("Error listing pods: %v\n", err)
 		return
 	}
 
 	for _, pod := range podList.Items {
 		stream, err := client.CoreV1().Pods(namespace).GetLogs(pod.Name, podLogOptions).Stream(ctx)
 		if err != nil {
-			fmt.Println("Error getting pods logs")
+			fmt.Printf("Error getting pods logs: %v\n", err)
 			return
 		}
 		defer stream.Close()
@@ -125,7 +125,7 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 
 		err = os.WriteFile(fileName, logBytes, 0644)
 		if err != nil {
-			fmt.Println("Error writing pod logs")
+			fmt.Printf("Error writing pod logs to file: %v\n", err)
 			return
 		}
 	}
