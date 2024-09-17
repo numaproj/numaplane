@@ -3,6 +3,8 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,6 +21,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -41,6 +44,12 @@ var (
 
 const (
 	Namespace = "numaplane-system"
+
+	NumaplaneCtrlLogs = "output/numaplane-controller.log"
+	NumaflowCtrlLogs  = "output/numaflow-controller.log"
+
+	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
+	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow, app.kubernetes.io/component=controller-manager"
 )
 
 // document for Ginkgo framework and print to console
@@ -94,16 +103,31 @@ func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.Generic
 	return status, err
 }
 
-// commenting out to please Lint, but leaving here because it could be useful later
-/*
-func printPodLogs(client clientgo.Interface, namespace, podName, containerName string) {
-	podLogOptions := &apiv1.PodLogOptions{Container: containerName}
-	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, podLogOptions).Stream(ctx)
+func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerName, fileName string) {
+
+	ctx := context.Background()
+	podLogOptions := &corev1.PodLogOptions{Container: containerName}
+
+	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		fmt.Printf("Error getting Pod logs: namespace=%q, pod=%q, container=%q\n", namespace, podName, containerName)
+		fmt.Printf("Error listing pods: %v\n", err)
 		return
 	}
-	defer stream.Close()
-	logBytes, _ := io.ReadAll(stream)
-	fmt.Printf("Printing Log for namespace=%q, pod=%q, container=%q:\n%s\n", namespace, podName, containerName, string(logBytes))
-}*/
+
+	for _, pod := range podList.Items {
+		stream, err := client.CoreV1().Pods(namespace).GetLogs(pod.Name, podLogOptions).Stream(ctx)
+		if err != nil {
+			fmt.Printf("Error getting pods logs: %v\n", err)
+			return
+		}
+		defer stream.Close()
+		logBytes, _ := io.ReadAll(stream)
+
+		err = os.WriteFile(fileName, logBytes, 0644)
+		if err != nil {
+			fmt.Printf("Error writing pod logs to file: %v\n", err)
+			return
+		}
+	}
+
+}
