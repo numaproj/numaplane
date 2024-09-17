@@ -448,7 +448,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// does the Resource need updating, and if so how?
 	//comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
-	pipelineNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []string{})
+	pipelineNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return err
 	}

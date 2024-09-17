@@ -593,25 +593,25 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	testCases := []struct {
-		name          string
-		specYaml1     string
-		specYaml2     string
-		expectedEqual bool
-		expectedError bool
+		name                  string
+		specYaml1             string
+		specYaml2             string
+		expectedEqual         bool
+		expectedNeedsUpdating bool
 	}{
 		{
-			name:          "Equal Except for Lifecycle and null values",
-			specYaml1:     yamlHasDesiredPhase,
-			specYaml2:     yamlNoLifecycleWithNulls,
-			expectedEqual: true,
-			expectedError: false,
+			name:                  "Equal Except for Lifecycle and null values",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlNoLifecycleWithNulls,
+			expectedEqual:         false,
+			expectedNeedsUpdating: false,
 		},
 		{
-			name:          "Not Equal",
-			specYaml1:     yamlHasDesiredPhase,
-			specYaml2:     yamlHasDesiredPhaseDifferentUDF,
-			expectedEqual: false,
-			expectedError: false,
+			name:                  "Not Equal",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
+			expectedEqual:         true,
+			expectedNeedsUpdating: false,
 		},
 	}
 
@@ -622,7 +622,7 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
 			equal, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
-			if tc.expectedError {
+			if tc.expectedNeedsUpdating {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)

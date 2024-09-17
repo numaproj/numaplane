@@ -38,3 +38,14 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 
 	return nil
 }
+
+func (s USDEUserStrategy) IsValid() bool {
+	switch s {
+	case ProgressiveStrategyID:
+		return true
+	case PPNDStrategyID:
+		return true
+	default:
+		return false
+	}
+}

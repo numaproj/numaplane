@@ -1,0 +1,9 @@
+logLevel: 4
+syncTimeIntervalMs: 30000
+defaultUpgradeStrategy: "pause-and-drain"
+numaflowControllerImageNames:
+  - numaflow
+  - numaflow-rc
+includedResources: "group=apps,kind=Deployment;\
+group=,kind=ConfigMap;group=,kind=ServiceAccount;\
+group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"

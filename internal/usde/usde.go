@@ -2,6 +2,7 @@ package usde
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -16,7 +17,7 @@ import (
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns the strategy to use and a boolean pointer indicating if the specs are different (if the specs were not compared, then nil will be returned).
-func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject, comparisonExcludedPaths []string) (bool, apiv1.UpgradeStrategy, error) {
+func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -34,7 +35,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started deriving upgrade strategy")
 
 	// Split newSpec
-	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, comparisonExcludedPaths, ".")
+	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, []string{}, ".")
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -45,7 +46,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 	).Debug("split new spec")
 
 	// Split existingSpec
-	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, comparisonExcludedPaths, ".")
+	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, []string{}, ".")
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -57,7 +58,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		userUpgradeStrategy, err := GetUserStrategy(newSpec.Namespace)
+		userUpgradeStrategy, err := GetUserStrategy(ctx, newSpec.Namespace)
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
@@ -74,7 +75,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 		case config.ProgressiveStrategyID:
 			return true, apiv1.UpgradeStrategyProgressive, nil
 		default:
-			return true, apiv1.UpgradeStrategyApply, nil
+			return false, apiv1.UpgradeStrategyError, fmt.Errorf("invalid Upgrade Strategy: %v", userUpgradeStrategy)
 		}
 	}
 
@@ -94,7 +95,8 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
-func GetUserStrategy(namespace string) (config.USDEUserStrategy, error) {
+func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStrategy, error) {
+	numaLogger := logger.FromContext(ctx)
 
 	// Get Numaplane Config
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
@@ -106,7 +108,11 @@ func GetUserStrategy(namespace string) (config.USDEUserStrategy, error) {
 
 	var userUpgradeStrategy config.USDEUserStrategy = globalConfig.DefaultUpgradeStrategy
 	if namespaceConfig != nil {
-		userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+		if !namespaceConfig.UpgradeStrategy.IsValid() {
+			numaLogger.WithValues("upgrade strategy", namespaceConfig.UpgradeStrategy).Warnf("invalid Upgrade strategy for namespace %s", namespace)
+		} else {
+			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+		}
 	}
 	return userUpgradeStrategy, nil
 }
