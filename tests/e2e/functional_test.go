@@ -260,13 +260,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// update child Pipeline
 		updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
-			rpu := int64(10)
-			pipelineSpec.Vertices[0].Source.Generator.RPU = &rpu
+			pipelineSpec.Watermark.Disabled = true
 			return pipelineSpec, nil
 		})
 
 		if dataLossPrevention == "true" {
-			document("Verify that child Pipeline is not paused when auto-healing")
+			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
 			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 				return retrievedPipelineStatus.Phase != string(numaflowv1.PipelinePhasePaused)
 			})
@@ -278,7 +277,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// get updated Pipeline again to compare spec
 		document("Verifying self-healing")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
+			return !retrievedPipelineSpec.Watermark.Disabled
 		})
 
 		verifyPipelineRolloutReady(pipelineRolloutName)
