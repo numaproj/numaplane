@@ -6,8 +6,12 @@ import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const PipelineRollout = () => {
   const { props, kindToNodeMap } = useContext(RolloutComponentContext);
+    const conditions = props?.resource?.status?.conditions
+    const hasChildResourcesHealthy = conditions.some(condition => condition.type === 'ChildResourcesHealthy');
 
-  return (
+    console.log("CALVIN", hasChildResourcesHealthy, conditions)
+
+    return (
     <Box>
       <Box>
         {kindToNodeMap.get("Pipeline")?.map((node) => {
@@ -28,8 +32,7 @@ export const PipelineRollout = () => {
                 }}
               >
                 Pipeline Status:{" "}
-                {props?.resource?.status?.conditions?.[0].type ===
-                "ChildResourcesHealthy" ? (
+                {hasChildResourcesHealthy ? (
                   <SquareCheckIcon tooltipTitle={node?.name} />
                 ) : (
                   <SquareCancelIcon tooltipTitle={node?.name} />
