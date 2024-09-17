@@ -1,14 +1,13 @@
-import React, {useContext} from "react";
-import {RolloutComponentContext} from "./RolloutComponentWrapper";
-import {Box} from "@mui/material";
-import {SquareCheckIcon} from "../utils/SquareCheckIcon";
-import {SquareCancelIcon} from "../utils/SquareCancelIcon";
+import React, { useContext } from "react";
+import { RolloutComponentContext } from "./RolloutComponentWrapper";
+import { Box } from "@mui/material";
+import { SquareCheckIcon } from "../utils/SquareCheckIcon";
+import { SquareCancelIcon } from "../utils/SquareCancelIcon";
 
 export const MonovertexRollout = () => {
-    const {props, kindToNodeMap} = useContext(RolloutComponentContext);
+    const { props, kindToNodeMap } = useContext(RolloutComponentContext);
     const conditions = props?.resource?.status?.conditions
     const hasChildResourcesHealthy = conditions.some(condition => condition.type === 'ChildResourcesHealthy');
-
 
     return (
         <Box>
@@ -32,9 +31,9 @@ export const MonovertexRollout = () => {
                             >
                                 Monovertex Status:{" "}
                                 {hasChildResourcesHealthy ? (
-                                    <SquareCheckIcon tooltipTitle={node?.name}/>
+                                    <SquareCheckIcon tooltipTitle={node?.name} />
                                 ) : (
-                                    <SquareCancelIcon tooltipTitle={node?.name}/>
+                                    <SquareCancelIcon tooltipTitle={node?.name} />
                                 )}
                             </Box>
                         </Box>
