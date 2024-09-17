@@ -463,11 +463,12 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 		needPPND := false
 		if userPreferredStrategy == config.PPNDStrategyID {
-			ppndRequired, err := r.needPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
+			ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
 			if err != nil {
 				return err
 			}
 			if ppndRequired == nil { // not enough information
+				// TODO: mark something in the Status for why we're remaining in "Pending" here
 				return nil
 			}
 			needPPND = *ppndRequired
@@ -583,7 +584,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
-
 	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
 		doneWithPPND = true
 	}
@@ -658,7 +658,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 //
 //	there's any difference in spec between PipelineRollout and Pipeline
 //	any pause request coming from isbsvc or Numaflow Controller
-func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
@@ -921,7 +921,7 @@ func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject,
 
 	// TODO: don't need to ignore nulls after Derek changes Numaflow side
 	// return reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
-	return util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+	return !util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
 }
 
 // remove 'lifecycle' key/value pair from Pipeline spec
