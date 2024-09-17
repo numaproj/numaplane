@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +67,7 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, 3*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	if dataLossPrevention == "true" {
 		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
