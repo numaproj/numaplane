@@ -31,6 +31,8 @@ type CustomMetrics struct {
 	ISBServicesSyncFailed *prometheus.CounterVec
 	// ISBServicesSynced is the counter for the total number of ISB service synced.
 	ISBServicesSynced *prometheus.CounterVec
+	// MonoVerticesHealth is the gauge for the health of monovertices.
+	MonoVerticesHealth *prometheus.GaugeVec
 	// MonoVerticesRunning is the gauge for the number of running monovertices.
 	MonoVerticesRunning *prometheus.GaugeVec
 	// MonoVerticesCounterMap contains the information of all running monovertices.
@@ -78,6 +80,7 @@ const (
 	LabelPipeline           = "pipeline"
 	LabelISBService         = "isbservice"
 	LabelNumaflowController = "numaflowcontroller"
+	LabelMonoVertex         = "monovertex"
 )
 
 var (
@@ -106,6 +109,13 @@ var (
 		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelNumaflowController})
+
+	// monoVerticesHealth indicates whether the mono vertices are healthy (from k8s resource perspective).
+	monoVerticesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaplane_monovertex_rollout_health",
+		Help:        "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelMonoVertex})
 
 	pipelinesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipelines_running",
@@ -265,7 +275,7 @@ var (
 func RegisterCustomMetrics() *CustomMetrics {
 	metrics.Registry.MustRegister(pipelinesHealth, pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength,
 		isbServicesHealth, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
-		monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
+		monoVerticesHealth, monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
 		numaflowControllersHealth, numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
 		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
 		pipelinePausedSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
@@ -282,6 +292,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		ISBServiceCounterMap:                      make(map[string]map[string]struct{}),
 		ISBServicesSynced:                         isbServicesSynced,
 		ISBServicesSyncFailed:                     isbServicesSyncFailed,
+		MonoVerticesHealth:                        monoVerticesHealth,
 		MonoVerticesRunning:                       monoVerticesRunning,
 		MonoVerticesCounterMap:                    make(map[string]map[string]struct{}),
 		MonoVerticesSynced:                        monoVerticesSynced,
