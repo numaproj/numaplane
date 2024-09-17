@@ -40,13 +40,13 @@ func newInProgressStrategyStore() *inProgressStrategyStore {
 }
 
 func (mgr *inProgressStrategyMgr) getStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
-	return mgr.syncronize(ctx, rollout)
+	return mgr.synchronize(ctx, rollout)
 }
 
 // make sure in-memory value and Rollout Status value are syncronized
 // if in-memory value is set, make sure Rollout Status value gets set the same
 // if in-memory value isn't set, make sure in-memory value gets set to Rollout Status value
-func (mgr *inProgressStrategyMgr) syncronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	// first look for value in memory
