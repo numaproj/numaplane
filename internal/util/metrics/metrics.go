@@ -13,7 +13,7 @@ type CustomMetrics struct {
 	PipelinesHealth *prometheus.GaugeVec
 	// PipelinesRunning is the gauge for the number of running pipelines.
 	PipelinesRunning *prometheus.GaugeVec
-	// PipelineCounterMap contains the information of all running pipelines with "name_namespace" as a key.
+	// PipelineCounterMap contains the information of all running pipelines.
 	PipelineCounterMap map[string]map[string]struct{}
 	// PipelinesSyncFailed is the counter for the total number of failed synced.
 	PipelinesSyncFailed *prometheus.CounterVec
@@ -25,7 +25,7 @@ type CustomMetrics struct {
 	ISBServicesHealth *prometheus.GaugeVec
 	// ISBServicesRunning is the gauge for the number of running ISB services.
 	ISBServicesRunning *prometheus.GaugeVec
-	// ISBServiceCounterMap contains the information of all running isb services with "name_namespace" as a key.
+	// ISBServiceCounterMap contains the information of all running ISB services.
 	ISBServiceCounterMap map[string]map[string]struct{}
 	// ISBServicesSyncFailed is the counter for the total number of ISB service syncing failed.
 	ISBServicesSyncFailed *prometheus.CounterVec
@@ -33,7 +33,7 @@ type CustomMetrics struct {
 	ISBServicesSynced *prometheus.CounterVec
 	// MonoVerticesRunning is the gauge for the number of running monovertices.
 	MonoVerticesRunning *prometheus.GaugeVec
-	// MonoVerticesCounterMap contains the information of all running monovertices with "name_namespace" as a key.
+	// MonoVerticesCounterMap contains the information of all running monovertices.
 	MonoVerticesCounterMap map[string]map[string]struct{}
 	// MonoVerticesSyncFailed is the counter for the total number of monovertices syncing failed.
 	MonoVerticesSyncFailed *prometheus.CounterVec
@@ -41,8 +41,6 @@ type CustomMetrics struct {
 	MonoVerticesSynced *prometheus.CounterVec
 	// NumaflowControllersHealth is the gauge for the health of Numaflow controller.
 	NumaflowControllersHealth *prometheus.GaugeVec
-	// NumaflowControllerVersionCounter contains the information of all running numaflow controllers with "version" as a key and "name_namespace" as a value.
-	NumaflowControllerVersionCounter map[string]map[string]struct{}
 	// NumaflowControllerRunning is the gauge for the number of running numaflow controllers with a specific version.
 	NumaflowControllerRunning *prometheus.GaugeVec
 	// NumaflowControllersSyncFailed is the counter for the total number of Numaflow controller syncing failed.
