@@ -508,6 +508,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
+			numaLogger.Error(errors.New("Progressive not supported"), "Progressive not supported")
 			//TODO (just an idea of what it might look like below...)
 			//	done, err := r.processExistingPipelineWithProgressive(...)
 			//if err != nil {

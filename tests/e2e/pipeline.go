@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -34,9 +35,8 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
-func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
 
-	// document("verifying PipelineStatus")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus kubernetes.GenericStatus
 	Eventually(func() bool {
@@ -53,6 +53,26 @@ func verifyPipelineStatus(namespace string, pipelineName string, f func(numaflow
 
 		return f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}, testTimeout).Should(BeTrue())
+}
+
+func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+	var retrievedPipelineSpec numaflowv1.PipelineSpec
+	var retrievedPipelineStatus kubernetes.GenericStatus
+	Consistently(func() bool {
+		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		if retrievedPipelineSpec, err = getPipelineSpec(unstruct); err != nil {
+			return false
+		}
+		if retrievedPipelineStatus, err = getNumaflowResourceStatus(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedPipelineSpec, retrievedPipelineStatus)
+	}, 30*time.Second, testPollingInterval).Should(BeTrue())
+
 }
 
 func verifyPipelineRolloutReady(pipelineRolloutName string) {
@@ -82,7 +102,7 @@ func verifyPipelineRolloutReady(pipelineRolloutName string) {
 
 func verifyPipelineReady(namespace string, pipelineName string, numVertices int) {
 	document("Verifying that the Pipeline is running")
-	verifyPipelineStatus(namespace, pipelineName,
+	verifyPipelineStatusEventually(namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
 		})

@@ -265,6 +265,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return pipelineSpec, nil
 		})
 
+		if dataLossPrevention == "true" {
+			document("Verify that child Pipeline is not paused when auto-healing")
+			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
+				return retrievedPipelineStatus.Phase != string(numaflowv1.PipelinePhasePaused)
+			})
+		}
+
 		// allow time for self healing to reconcile
 		time.Sleep(5 * time.Second)
 
@@ -332,7 +339,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that Pipelines are being paused by checking rollout condition")
-			verifyPipelineStatus(Namespace, pipelineRolloutName,
+			verifyPipelineStatusEventually(Namespace, pipelineRolloutName,
 				func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 					return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
 				})
@@ -377,7 +384,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that Pipelines are being paused by checking rollout condition")
-			verifyPipelineStatus(Namespace, pipelineRolloutName,
+			verifyPipelineStatusEventually(Namespace, pipelineRolloutName,
 				func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 					return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
 				})
