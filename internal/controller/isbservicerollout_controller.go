@@ -162,6 +162,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
+	defer func() {
+		if isbServiceRollout.Status.IsHealthy() {
+			r.customMetrics.ISBServicesHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(1)
+		} else {
+			r.customMetrics.ISBServicesHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(0)
+		}
+	}()
+
 	isbsvcKey := GetPauseModule().getISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
@@ -175,6 +183,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
+		r.customMetrics.ISBServicesHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -374,7 +383,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, fmt.Sprintf("%s=%s", common.LabelKeyISBServiceNameForPipeline, rolloutName), "")
+	// here
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, fmt.Sprintf("%s=%s,%s", common.LabelKeyISBServiceNameForPipeline, rolloutName, common.LabelKeyPipelineRolloutForPipeline), "")
 }
 
 // Apply pod disruption budget for the ISBService

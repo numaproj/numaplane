@@ -62,3 +62,8 @@ type MonoVertexRolloutList struct {
 func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
 }
+
+// IsHealthy indicates whether the MonoVertexRollout is healthy.
+func (mv *MonoVertexRolloutStatus) IsHealthy() bool {
+	return mv.Phase == PhaseDeployed || mv.Phase == PhasePending
+}

@@ -358,7 +358,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyNumaflowControllerReady(Namespace)
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -401,7 +401,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		verifyPipelineReady(Namespace, pipelineRolloutName, 2)
+		verifyPipelineReady(Namespace, pipelineRolloutName, 3)
 
 	})
 

@@ -9,34 +9,40 @@ import (
 )
 
 type CustomMetrics struct {
+	// PipelinesHealth is the gauge for the health of pipelines.
+	PipelinesHealth *prometheus.GaugeVec
 	// PipelinesRunning is the gauge for the number of running pipelines.
 	PipelinesRunning *prometheus.GaugeVec
-	// PipelineCounterMap contains the information of all running pipelines with "name_namespace" as a key.
-	PipelineCounterMap map[string]struct{}
+	// PipelineCounterMap contains the information of all running pipelines.
+	PipelineCounterMap map[string]map[string]struct{}
 	// PipelinesSyncFailed is the counter for the total number of failed synced.
 	PipelinesSyncFailed *prometheus.CounterVec
 	// PipelineRolloutQueueLength is the gauge for the length of pipeline rollout queue.
 	PipelineRolloutQueueLength *prometheus.GaugeVec
 	// PipelinesSynced is the counter for the total number of pipelines synced.
 	PipelinesSynced *prometheus.CounterVec
+	// ISBServicesHealth is the gauge for the health of ISB services.
+	ISBServicesHealth *prometheus.GaugeVec
 	// ISBServicesRunning is the gauge for the number of running ISB services.
 	ISBServicesRunning *prometheus.GaugeVec
-	// ISBServiceCounterMap contains the information of all running isb services with "name_namespace" as a key.
-	ISBServiceCounterMap map[string]struct{}
+	// ISBServiceCounterMap contains the information of all running ISB services.
+	ISBServiceCounterMap map[string]map[string]struct{}
 	// ISBServicesSyncFailed is the counter for the total number of ISB service syncing failed.
 	ISBServicesSyncFailed *prometheus.CounterVec
 	// ISBServicesSynced is the counter for the total number of ISB service synced.
 	ISBServicesSynced *prometheus.CounterVec
+	// MonoVerticesHealth is the gauge for the health of monovertices.
+	MonoVerticesHealth *prometheus.GaugeVec
 	// MonoVerticesRunning is the gauge for the number of running monovertices.
 	MonoVerticesRunning *prometheus.GaugeVec
-	// MonoVerticesCounterMap contains the information of all running monovertices with "name_namespace" as a key.
-	MonoVerticesCounterMap map[string]struct{}
+	// MonoVerticesCounterMap contains the information of all running monovertices.
+	MonoVerticesCounterMap map[string]map[string]struct{}
 	// MonoVerticesSyncFailed is the counter for the total number of monovertices syncing failed.
 	MonoVerticesSyncFailed *prometheus.CounterVec
 	// MonoVerticesSynced is the counter for the total number of monovertices synced.
 	MonoVerticesSynced *prometheus.CounterVec
-	// NumaflowControllerVersionCounter contains the information of all running numaflow controllers with "version" as a key and "name_namespace" as a value.
-	NumaflowControllerVersionCounter map[string]map[string]struct{}
+	// NumaflowControllersHealth is the gauge for the health of Numaflow controller.
+	NumaflowControllersHealth *prometheus.GaugeVec
 	// NumaflowControllerRunning is the gauge for the number of running numaflow controllers with a specific version.
 	NumaflowControllerRunning *prometheus.GaugeVec
 	// NumaflowControllersSyncFailed is the counter for the total number of Numaflow controller syncing failed.
@@ -64,26 +70,58 @@ type CustomMetrics struct {
 }
 
 const (
-	LabelIntuit     = "intuit_alert"
-	LabelVersion    = "version"
-	LabelType       = "type"
-	LabelPhase      = "phase"
-	LabelK8SVersion = "K8SVersion"
-	LabelName       = "name"
+	LabelIntuit             = "intuit_alert"
+	LabelVersion            = "version"
+	LabelType               = "type"
+	LabelPhase              = "phase"
+	LabelK8SVersion         = "K8SVersion"
+	LabelName               = "name"
+	LabelNamespace          = "namespace"
+	LabelPipeline           = "pipeline"
+	LabelISBService         = "isbservice"
+	LabelNumaflowController = "numaflowcontroller"
+	LabelMonoVertex         = "monovertex"
 )
 
 var (
-	defaultLabels          = prometheus.Labels{LabelIntuit: "true"}
-	pipelineLock           sync.Mutex
-	isbServiceLock         sync.Mutex
-	monoVertexLock         sync.Mutex
-	numaflowControllerLock sync.Mutex
+	defaultLabels  = prometheus.Labels{LabelIntuit: "true"}
+	pipelineLock   sync.Mutex
+	isbServiceLock sync.Mutex
+	monoVertexLock sync.Mutex
+
+	// pipelinesHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
+	pipelinesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaplane_pipeline_rollout_health",
+		Help:        "A metric to indicate whether the pipeline is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelPipeline})
+
+	// isbServicesHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
+	isbServicesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaplane_isb_services_rollout_health",
+		Help:        "A metric to indicate whether the isb services rollout is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelISBService})
+
+	// numaflowControllersHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective).
+	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_rollout_health",
+		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelNumaflowController})
+
+	// monoVerticesHealth indicates whether the mono vertices are healthy (from k8s resource perspective).
+	monoVerticesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaplane_monovertex_rollout_health",
+		Help:        "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelMonoVertex})
 
 	pipelinesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipelines_running",
 		Help:        "Number of Numaflow pipelines running",
 		ConstLabels: defaultLabels,
-	}, []string{})
+	}, []string{LabelNamespace})
 
 	// pipelinePausedSeconds Check the total time a pipeline was paused
 	pipelinePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -118,7 +156,7 @@ var (
 		Name:        "numaflow_isb_services_running",
 		Help:        "Number of Numaflow ISB Service running",
 		ConstLabels: defaultLabels,
-	}, []string{})
+	}, []string{LabelNamespace})
 
 	// isbServicesSynced Check the total number of ISB services synced
 	isbServicesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -146,7 +184,7 @@ var (
 		Name:        "numaflow_monovertices_running",
 		Help:        "Number of Numaflow monovertices running",
 		ConstLabels: defaultLabels,
-	}, []string{})
+	}, []string{LabelNamespace})
 
 	// monoVerticesSynced Check the total number of monovertices synced
 	monoVerticesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -167,7 +205,7 @@ var (
 		Name:        "numaflow_controller_running",
 		Help:        "Number of Numaflow controller running",
 		ConstLabels: defaultLabels,
-	}, []string{LabelVersion})
+	}, []string{LabelName, LabelNamespace, LabelVersion})
 
 	// numaflowControllersSynced Check the total number of Numaflow controllers synced
 	numaflowControllersSynced = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -235,29 +273,32 @@ var (
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics() *CustomMetrics {
-	metrics.Registry.MustRegister(pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength,
-		isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
-		monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
-		numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
+	metrics.Registry.MustRegister(pipelinesHealth, pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength,
+		isbServicesHealth, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
+		monoVerticesHealth, monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
+		numaflowControllersHealth, numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
 		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
 		pipelinePausedSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
 
 	return &CustomMetrics{
+		PipelinesHealth:                           pipelinesHealth,
 		PipelinesRunning:                          pipelinesRunning,
-		PipelineCounterMap:                        make(map[string]struct{}),
+		PipelineCounterMap:                        make(map[string]map[string]struct{}),
 		PipelinesSynced:                           pipelinesSynced,
 		PipelinesSyncFailed:                       pipelinesSyncFailed,
 		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
+		ISBServicesHealth:                         isbServicesHealth,
 		ISBServicesRunning:                        isbServicesRunning,
-		ISBServiceCounterMap:                      make(map[string]struct{}),
+		ISBServiceCounterMap:                      make(map[string]map[string]struct{}),
 		ISBServicesSynced:                         isbServicesSynced,
 		ISBServicesSyncFailed:                     isbServicesSyncFailed,
+		MonoVerticesHealth:                        monoVerticesHealth,
 		MonoVerticesRunning:                       monoVerticesRunning,
-		MonoVerticesCounterMap:                    make(map[string]struct{}),
+		MonoVerticesCounterMap:                    make(map[string]map[string]struct{}),
 		MonoVerticesSynced:                        monoVerticesSynced,
 		MonoVerticesSyncFailed:                    monoVerticesSyncFailed,
+		NumaflowControllersHealth:                 numaflowControllersHealth,
 		NumaflowControllerRunning:                 numaflowControllerRunning,
-		NumaflowControllerVersionCounter:          make(map[string]map[string]struct{}),
 		NumaflowControllersSynced:                 numaflowControllersSynced,
 		NumaflowControllersSyncFailed:             numaflowControllersSyncFailed,
 		KubeRequestCounter:                        kubeRequestCounter,
@@ -276,71 +317,67 @@ func RegisterCustomMetrics() *CustomMetrics {
 func (m *CustomMetrics) IncPipelinesRunningMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
-	m.PipelineCounterMap[name+"_"+namespace] = struct{}{}
-	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
+	if _, ok := m.PipelineCounterMap[namespace]; !ok {
+		m.PipelineCounterMap[namespace] = make(map[string]struct{})
+	}
+	m.PipelineCounterMap[namespace][name] = struct{}{}
+	for ns, pipelines := range m.PipelineCounterMap {
+		m.PipelinesRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
+	}
 }
 
 // DecPipelineMetrics decrements the pipeline counter
 func (m *CustomMetrics) DecPipelineMetrics(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
-	delete(m.PipelineCounterMap, name+"_"+namespace)
-	m.PipelinesRunning.WithLabelValues().Set(float64(len(m.PipelineCounterMap)))
+	delete(m.PipelineCounterMap[namespace], name)
+	for ns, pipelines := range m.PipelineCounterMap {
+		m.PipelinesRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
+	}
 }
 
 // IncISBServiceMetrics increments the ISBService counter if it doesn't already know about the ISBService
 func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
-	m.ISBServiceCounterMap[name+"_"+namespace] = struct{}{}
-	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
+	if _, ok := m.ISBServiceCounterMap[namespace]; !ok {
+		m.ISBServiceCounterMap[namespace] = make(map[string]struct{})
+	}
+	m.ISBServiceCounterMap[namespace][name] = struct{}{}
+	for ns, isbServices := range m.ISBServiceCounterMap {
+		m.ISBServicesRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
+	}
 }
 
 // DecISBServiceMetrics decrements the ISBService counter
 func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
-	delete(m.ISBServiceCounterMap, name+"_"+namespace)
-	m.ISBServicesRunning.WithLabelValues().Set(float64(len(m.ISBServiceCounterMap)))
+	delete(m.ISBServiceCounterMap[namespace], name)
+	for ns, isbServices := range m.ISBServiceCounterMap {
+		m.ISBServicesRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
+	}
 }
 
 // IncMonoVertexMetrics increments the MonoVertex counter if it doesn't already know about the MonoVertex
 func (m *CustomMetrics) IncMonoVertexMetrics(name, namespace string) {
 	monoVertexLock.Lock()
 	defer monoVertexLock.Unlock()
-	m.MonoVerticesCounterMap[name+"_"+namespace] = struct{}{}
-	m.MonoVerticesRunning.WithLabelValues().Set(float64(len(m.MonoVerticesCounterMap)))
+	if _, ok := m.MonoVerticesCounterMap[namespace]; !ok {
+		m.MonoVerticesCounterMap[namespace] = make(map[string]struct{})
+	}
+	m.MonoVerticesCounterMap[namespace][name] = struct{}{}
+	for ns, monoVertices := range m.MonoVerticesCounterMap {
+		m.MonoVerticesRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
+	}
 }
 
 // DecMonoVertexMetrics decrements the MonoVertex counter
 func (m *CustomMetrics) DecMonoVertexMetrics(name, namespace string) {
 	monoVertexLock.Lock()
 	defer monoVertexLock.Unlock()
-	delete(m.MonoVerticesCounterMap, name+"_"+namespace)
-	m.MonoVerticesRunning.WithLabelValues().Set(float64(len(m.MonoVerticesCounterMap)))
-}
-
-// IncNumaflowControllerMetrics increments the Numaflow Controller counter
-// if it doesn't already know about the Numaflow Controller
-func (m *CustomMetrics) IncNumaflowControllerMetrics(name, namespace, version string) {
-	numaflowControllerLock.Lock()
-	defer numaflowControllerLock.Unlock()
-	// If the version is not in the map, create a new map for the version
-	if _, ok := m.NumaflowControllerVersionCounter[version]; !ok {
-		m.NumaflowControllerVersionCounter[version] = make(map[string]struct{})
-	}
-	m.NumaflowControllerVersionCounter[version][name+"_"+namespace] = struct{}{}
-	for key, value := range m.NumaflowControllerVersionCounter {
-		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
-	}
-}
-
-// DecNumaflowControllerMetrics decrements the Numaflow Controller counter
-func (m *CustomMetrics) DecNumaflowControllerMetrics(name, namespace, version string) {
-	numaflowControllerLock.Lock()
-	defer numaflowControllerLock.Unlock()
-	delete(m.NumaflowControllerVersionCounter[version], name+"_"+namespace)
-	for key, value := range m.NumaflowControllerVersionCounter {
-		m.NumaflowControllerRunning.WithLabelValues(key).Set(float64(len(value)))
+	delete(m.MonoVerticesCounterMap[namespace], name)
+	for ns, monoVertices := range m.MonoVerticesCounterMap {
+		m.MonoVerticesRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
 	}
 }
