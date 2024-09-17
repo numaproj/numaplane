@@ -113,10 +113,12 @@ var _ = AfterSuite(func() {
 })
 
 var _ = AfterEach(func() {
+
 	report := CurrentSpecReport()
 	if report.Failed() {
 		getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", NumaplaneCtrlLogs)
 		getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", NumaflowCtrlLogs)
-		AbortSuite("Test failed, ending run")
+		AbortSuite("Test spec has failed, aborting suite run")
 	}
+
 })
