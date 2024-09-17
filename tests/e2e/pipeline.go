@@ -93,7 +93,7 @@ func verifyPipelineReady(namespace string, pipelineName string, numVertices int)
 	// Get Pipeline Pods to verify they're all up
 	document("Verifying that the Pipeline is ready")
 	// check "vertex" Pods
-	verifyPodsRunning(namespace, 2, vertexLabelSelector)
+	verifyPodsRunning(namespace, numVertices, vertexLabelSelector)
 	verifyPodsRunning(namespace, 1, daemonLabelSelector)
 
 }
