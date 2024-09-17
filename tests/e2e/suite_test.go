@@ -45,6 +45,10 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 
+	var err error
+	err = os.Mkdir("output", os.ModePerm)
+	Expect(err).NotTo(HaveOccurred())
+
 	dataLossPrevention = os.Getenv("DATA_LOSS_PREVENTION")
 
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -52,7 +56,6 @@ var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
 	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout) // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
 
-	var err error
 	scheme := runtime.NewScheme()
 	err = apiv1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -103,7 +106,19 @@ var _ = AfterSuite(func() {
 
 	cancel()
 	By("tearing down test environment")
+	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", NumaplaneCtrlLogs)
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+
+})
+
+var _ = AfterEach(func() {
+
+	report := CurrentSpecReport()
+	if report.Failed() {
+		getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", NumaplaneCtrlLogs)
+		getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", NumaflowCtrlLogs)
+		AbortSuite("Test spec has failed, aborting suite run")
+	}
 
 })
