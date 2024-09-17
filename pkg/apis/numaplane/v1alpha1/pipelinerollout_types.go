@@ -98,3 +98,8 @@ func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy Upgrad
 func (status *PipelineRolloutStatus) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
+
+// IsHealthy indicates whether the PipelineRollout is healthy.
+func (status *PipelineRolloutStatus) IsHealthy() bool {
+	return status.Phase == PhaseDeployed || status.Phase == PhasePending
+}
