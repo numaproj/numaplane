@@ -271,7 +271,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// get updated Pipeline again to compare spec
 		document("Verifying self-healing")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(4)
+			return *retrievedPipelineSpec.Vertices[0].Source.Generator.RPU == int64(5)
 		})
 
 		verifyPipelineRolloutReady(pipelineRolloutName)
