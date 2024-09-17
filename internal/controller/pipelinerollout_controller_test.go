@@ -549,29 +549,24 @@ var yamlNoLifecycleWithNulls = `
 
 func Test_pipelineWithoutLifecycle(t *testing.T) {
 	testCases := []struct {
-		name          string
-		specYaml      string
-		expectedError bool
+		name     string
+		specYaml string
 	}{
 		{
-			name:          "desiredPhase set to Paused",
-			specYaml:      yamlHasDesiredPhase,
-			expectedError: false,
+			name:     "desiredPhase set to Paused",
+			specYaml: yamlHasDesiredPhase,
 		},
 		{
-			name:          "desiredPhase set to wrong type",
-			specYaml:      yamlDesiredPhaseWrongType,
-			expectedError: true,
+			name:     "desiredPhase set to wrong type",
+			specYaml: yamlDesiredPhaseWrongType,
 		},
 		{
-			name:          "desiredPhase not present",
-			specYaml:      yamlNoDesiredPhase,
-			expectedError: false,
+			name:     "desiredPhase not present",
+			specYaml: yamlNoDesiredPhase,
 		},
 		{
-			name:          "lifecycle not present",
-			specYaml:      yamlNoLifecycle,
-			expectedError: false,
+			name:     "lifecycle not present",
+			specYaml: yamlNoLifecycle,
 		},
 	}
 	for _, tc := range testCases {
@@ -579,14 +574,10 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 			obj := &kubernetes.GenericObject{}
 			obj.Spec.Raw = []byte(tc.specYaml)
 			withoutLifecycle, err := pipelineWithoutLifecycle(obj)
-			if tc.expectedError {
-				assert.NotNil(t, err)
-			} else {
-				assert.Nil(t, err)
-				bytes, _ := json.Marshal(withoutLifecycle)
-				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
-				assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
-			}
+			assert.Nil(t, err)
+			bytes, _ := json.Marshal(withoutLifecycle)
+			fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
+			assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
 		})
 	}
 }

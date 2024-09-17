@@ -247,7 +247,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
-	err = commontest.LoadGlobalConfig("./testdata", "ppnd-config.yaml")
+	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
 	assert.Nil(t, err)
 
 	ctx := context.Background()

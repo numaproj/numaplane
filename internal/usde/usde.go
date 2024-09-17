@@ -74,6 +74,8 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 			return true, apiv1.UpgradeStrategyPPND, nil
 		case config.ProgressiveStrategyID:
 			return true, apiv1.UpgradeStrategyProgressive, nil
+		case config.NoStrategyID:
+			return true, apiv1.UpgradeStrategyApply, nil
 		default:
 			return false, apiv1.UpgradeStrategyError, fmt.Errorf("invalid Upgrade Strategy: %v", userUpgradeStrategy)
 		}

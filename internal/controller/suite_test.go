@@ -161,9 +161,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	configManager := config.GetConfigManagerInstance()
-	err = configManager.LoadAllConfigs(func(err error) {
-		Expect(err).ToNot(HaveOccurred())
-	})
+	err = configManager.LoadAllConfigs(func(err error) { Expect(err).ToNot(HaveOccurred()) },
+		config.WithConfigsPath("./testdata/"),
+		config.WithConfigFileName("apply-upgrade-strategy-config"))
+
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
 

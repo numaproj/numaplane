@@ -312,8 +312,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying Pipeline got updated")
 
 		// get Pipeline to check that spec has been updated to correct spec
-		updatedPipelineSpecRunning := updatedPipelineSpec
-		updatedPipelineSpecRunning.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
 		})
