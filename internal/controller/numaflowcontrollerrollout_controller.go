@@ -196,7 +196,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// generate the metrics for the numaflow controller based on a numaflow version.
-	r.customMetrics.IncNumaflowControllerMetrics(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version)
+	r.customMetrics.NumaflowControllerRunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
 
 	numaLogger.Debug("reconciliation successful")
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
@@ -225,6 +225,14 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) (ctrl.Result, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	defer func() {
+		if controllerRollout.Status.IsHealthy() {
+			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(1)
+		} else {
+			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(0)
+		}
+	}()
+
 	controllerKey := GetPauseModule().getNumaflowControllerKey(namespace)
 
 	if !controllerRollout.DeletionTimestamp.IsZero() {
@@ -235,8 +243,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
-		r.customMetrics.DecNumaflowControllerMetrics(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
+		r.customMetrics.NumaflowControllerRunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
+		r.customMetrics.NumaflowControllersHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -327,7 +336,7 @@ func (r *NumaflowControllerRolloutReconciler) getChildTypeString() string {
 }
 
 func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, _ string) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, "", "")
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyPipelineRolloutForPipeline, "")
 }
 
 func (r *NumaflowControllerRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
