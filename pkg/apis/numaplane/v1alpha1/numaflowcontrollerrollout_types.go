@@ -65,3 +65,8 @@ type NumaflowControllerRolloutList struct {
 func init() {
 	SchemeBuilder.Register(&NumaflowControllerRollout{}, &NumaflowControllerRolloutList{})
 }
+
+// IsHealthy indicates whether the NumaflowController rollout is healthy or not
+func (nc *NumaflowControllerRolloutStatus) IsHealthy() bool {
+	return nc.Phase == PhaseDeployed || nc.Phase == PhasePending
+}
