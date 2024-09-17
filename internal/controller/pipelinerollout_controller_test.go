@@ -20,9 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/numaproj/numaplane/internal/common"
 	"strings"
 	"time"
+
+	"github.com/numaproj/numaplane/internal/common"
 
 	"testing"
 
@@ -590,7 +591,7 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 	}
 }
 
-func Test_pipelineSpecEqual(t *testing.T) {
+func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	testCases := []struct {
 		name          string
 		specYaml1     string
@@ -620,7 +621,7 @@ func Test_pipelineSpecEqual(t *testing.T) {
 			obj1.Spec.Raw = []byte(tc.specYaml1)
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
-			equal, err := pipelineSpecEqual(context.Background(), obj1, obj2)
+			equal, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

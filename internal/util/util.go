@@ -119,16 +119,15 @@ func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSepa
 	for _, path := range paths {
 		pathTokens := strings.Split(path, pathSeparator)
 
-		extractPath(withoutPaths, onlyPaths, pathTokens)
+		err = extractPath(withoutPaths, onlyPaths, pathTokens)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Remove the excluded paths from the 2 output maps
-	for _, path := range excludedPaths {
-		pathTokens := strings.Split(path, pathSeparator)
-
-		removePath(onlyPaths, pathTokens)
-		removePath(withoutPaths, pathTokens)
-	}
+	RemovePaths(onlyPaths, excludedPaths, pathSeparator)
+	RemovePaths(withoutPaths, excludedPaths, pathSeparator)
 
 	// Remove null and zero values, empty maps, empty strings, etc. from the 2 output maps
 	removeNullValuesFromMap(onlyPaths)
@@ -213,6 +212,16 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 	}
 
 	return nil
+}
+
+// RemovePaths removes all of the excludedPaths passed in from m, where each excludedPath is a string
+// representation of the path, demarcated by pathSeparator
+func RemovePaths(m map[string]any, excludedPaths []string, pathSeparator string) {
+	for _, path := range excludedPaths {
+		pathTokens := strings.Split(path, pathSeparator)
+
+		removePath(m, pathTokens)
+	}
 }
 
 // removePath removes a path (given as a slice of strings) from the given map
