@@ -9,8 +9,6 @@ export const PipelineRollout = () => {
     const conditions = props?.resource?.status?.conditions
     const hasChildResourcesHealthy = conditions.some(condition => condition.type === 'ChildResourcesHealthy');
 
-    console.log("CALVIN", hasChildResourcesHealthy, conditions)
-
     return (
     <Box>
       <Box>
