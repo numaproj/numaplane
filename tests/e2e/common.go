@@ -103,20 +103,6 @@ func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.Generic
 	return status, err
 }
 
-// commenting out to please Lint, but leaving here because it could be useful later
-/*
-func printPodLogs(client clientgo.Interface, namespace, podName, containerName string) {
-	podLogOptions := &apiv1.PodLogOptions{Container: containerName}
-	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, podLogOptions).Stream(ctx)
-	if err != nil {
-		fmt.Printf("Error getting Pod logs: namespace=%q, pod=%q, container=%q\n", namespace, podName, containerName)
-		return
-	}
-	defer stream.Close()
-	logBytes, _ := io.ReadAll(stream)
-	fmt.Printf("Printing Log for namespace=%q, pod=%q, container=%q:\n%s\n", namespace, podName, containerName, string(logBytes))
-}*/
-
 func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerName, fileName string) {
 
 	ctx := context.Background()
@@ -124,7 +110,6 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 
 	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		// TODO: improve error reporting
 		fmt.Println("Error getting pods logs")
 		return
 	}
