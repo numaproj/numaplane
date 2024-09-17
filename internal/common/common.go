@@ -52,11 +52,11 @@ const (
 	// a NumaRollout.
 	LabelKeyUpgradeState = "numaplane.numaproj.io/upgrade-state"
 
-	// LabelValueUpgradePromoted is the label value indicate the resource, managed by a NumaRollout, is promoted
+	// LabelValueUpgradePromoted is the label value indicating that the resource managed by a NumaRollout is promoted
 	// after an upgrade.
 	LabelValueUpgradePromoted UpgradeState = "promoted"
 
-	// LabelValueUpgradeInProgress is the label value indicate the resource, managed by a NumaRollout, is in the progress
+	// LabelValueUpgradeInProgress is the label value indicating that the resource managed by a NumaRollout is in progress
 	// of upgrade.
 	LabelValueUpgradeInProgress UpgradeState = "in-progress"
 )
