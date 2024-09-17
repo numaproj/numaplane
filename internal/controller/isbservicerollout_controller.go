@@ -294,7 +294,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	}
 
 	// determine the Upgrade Strategy user prefers
-	upgradeStrategy, err := usde.GetUserStrategy(isbServiceRollout.Namespace)
+	upgradeStrategy, err := usde.GetUserStrategy(ctx, isbServiceRollout.Namespace)
 	if err != nil {
 		return false, err
 	}

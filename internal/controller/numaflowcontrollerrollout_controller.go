@@ -267,7 +267,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	}
 
 	// determine the Upgrade Strategy user prefers
-	upgradeStrategy, err := usde.GetUserStrategy(controllerRollout.Namespace)
+	upgradeStrategy, err := usde.GetUserStrategy(ctx, controllerRollout.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

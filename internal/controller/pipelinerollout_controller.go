@@ -441,7 +441,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	numaLogger := logger.FromContext(ctx)
 
 	// what is the preferred strategy for this namespace?
-	userPreferredStrategy, err := usde.GetUserStrategy(newPipelineDef.Namespace)
+	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.Namespace)
 	if err != nil {
 		return err
 	}
