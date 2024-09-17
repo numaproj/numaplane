@@ -33,3 +33,5 @@ config/crd/bases/_.yaml
 .idea
 
 config/crd/external/
+
+tests/e2e/output

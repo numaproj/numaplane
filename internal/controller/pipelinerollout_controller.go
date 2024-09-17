@@ -1002,6 +1002,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	}
 
 	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
+	labelMapping[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
 	return labelMapping, nil
 }
