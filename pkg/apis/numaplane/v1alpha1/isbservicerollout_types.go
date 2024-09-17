@@ -69,5 +69,5 @@ func init() {
 
 // IsHealthy indicates whether the InterStepBufferService rollout is healthy or not
 func (isb *ISBServiceRolloutStatus) IsHealthy() bool {
-	return isb.Phase == PhaseDeployed
+	return isb.Phase == PhaseDeployed || isb.Phase == PhasePending
 }

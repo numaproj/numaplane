@@ -91,5 +91,5 @@ func (status *PipelineRolloutStatus) ClearUpgradeInProgress() {
 
 // IsHealthy indicates whether the PipelineRollout is healthy.
 func (status *PipelineRolloutStatus) IsHealthy() bool {
-	return status.Phase == PhaseDeployed
+	return status.Phase == PhaseDeployed || status.Phase == PhasePending
 }

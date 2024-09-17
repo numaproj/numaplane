@@ -68,5 +68,5 @@ func init() {
 
 // IsHealthy indicates whether the NumaflowController rollout is healthy or not
 func (nc *NumaflowControllerRolloutStatus) IsHealthy() bool {
-	return nc.Phase == PhaseDeployed
+	return nc.Phase == PhaseDeployed || nc.Phase == PhasePending
 }
