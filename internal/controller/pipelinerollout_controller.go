@@ -447,7 +447,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	// does the Resource need updating, and if so how?
-	//comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
 	pipelineNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return err
@@ -695,16 +694,6 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	return &needPPND, nil
 }
 
-/*
-func pipelineNeedsUpdating(ctx context.Context, newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
-	// Does pipeline spec need to be updated?
-	pipelineSpecsEqual, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
-	if err != nil {
-		return false, err
-	}
-	return !pipelineSpecsEqual, nil
-}*/
-
 // return true if Pipeline (or its children) is still in the process of being reconciled
 func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
@@ -943,35 +932,6 @@ func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interfa
 	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
 	util.RemovePaths(pipelineAsMap, comparisonExcludedPaths, ".")
 	return pipelineAsMap, nil
-	/*unstruc, err := kubernetes.ObjectToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-	_, found, err := unstructured.NestedString(unstruc.Object, "spec", "lifecycle", "desiredPhase")
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		unstrucNew := unstruc.DeepCopy()
-		specMapAsInterface, found := unstrucNew.Object["spec"]
-		if found {
-			specMap, ok := specMapAsInterface.(map[string]interface{})
-			if ok {
-				lifecycleMapAsInterface, found := specMap["lifecycle"]
-				if found {
-					lifecycleMap, ok := lifecycleMapAsInterface.(map[string]interface{})
-					if ok {
-						delete(lifecycleMap, "desiredPhase")
-						specMap["lifecycle"] = lifecycleMap
-						return specMap, nil
-					}
-				}
-			}
-
-			return nil, fmt.Errorf("failed to clear spec.lifecycle.desiredPhase from object: %+v", unstruc.Object)
-		}
-	}
-	return unstruc.Object["spec"].(map[string]interface{}), nil*/
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
