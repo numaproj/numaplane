@@ -1,5 +1,5 @@
 controllerDefinitions:
-- version: "0.0.16"
+- version: "0.0.12"
   fullSpec: |
     apiVersion: v1
     kind: ServiceAccount
@@ -318,7 +318,7 @@ controllerDefinitions:
             - controller
             env:
             - name: NUMAFLOW_IMAGE
-              value: quay.io/numaio/numaflow-rc:v0.0.16
+              value: quay.io/numaio/numaflow-rc:v0.0.12
             - name: NAMESPACE
               valueFrom:
                 fieldRef:
@@ -359,7 +359,7 @@ controllerDefinitions:
                   key: controller.leader.election.lease.renew.period
                   name: numaflow-cmd-params-config
                   optional: true
-            image: quay.io/numaio/numaflow-rc:v0.0.16
+            image: quay.io/numaio/numaflow-rc:v0.0.12
             imagePullPolicy: IfNotPresent
             livenessProbe:
               httpGet:
@@ -794,7 +794,7 @@ controllerDefinitions:
               name: numaflow-controller-config
             name: controller-config-volume
 
-- version: "0.0.17"
+- version: "0.0.13"
   fullSpec: |
     apiVersion: v1
     kind: ServiceAccount
@@ -1113,7 +1113,7 @@ controllerDefinitions:
             - controller
             env:
             - name: NUMAFLOW_IMAGE
-              value: quay.io/numaio/numaflow-rc:v0.0.17
+              value: quay.io/numaio/numaflow-rc:v0.0.13
             - name: NAMESPACE
               valueFrom:
                 fieldRef:
@@ -1154,7 +1154,7 @@ controllerDefinitions:
                   key: controller.leader.election.lease.renew.period
                   name: numaflow-cmd-params-config
                   optional: true
-            image: quay.io/numaio/numaflow-rc:v0.0.17
+            image: quay.io/numaio/numaflow-rc:v0.0.13
             imagePullPolicy: IfNotPresent
             livenessProbe:
               httpGet:
