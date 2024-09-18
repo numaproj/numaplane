@@ -32,11 +32,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 var (
@@ -683,5 +687,133 @@ func TestPipelineLabels(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+	pipelineRaw, _ := json.Marshal(isbsvcSpec)
+	return &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         defaultNamespace,
+			Name:              defaultPipelineRolloutName,
+			UID:               "some-uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{
+					Raw: pipelineRaw,
+				},
+			},
+		},
+	}
+}
+
+// in this test, the user preferred strategy is PPND
+// tests:
+// - direct apply result (verify pipeline spec change happened)
+// - nothing to do case (verify pipeline spec is the same)
+// - PPND started due to difference in spec (verify inProgressStrategy, desiredPhase)
+// - PPND started due to external pause request (verify inProgressStrategy, desiredPhase)
+// - Incomplete pause request
+// - PPND started due to user sets desiredPhase=Paused when it was not set before (verify desiredPhase)
+// - PPND started due to user sets desiredPhase=Running when it was not set before to Paused (verify desiredPhase)
+// - PPND already in progress but spec not yet applied: pipeline was paused and fully reconciled (verify pipeline spec applied)
+// - PPND in progress and spec has already been applied: pipeline still being reconciled (verify desiredPhase still Paused)
+// - PPND in progress and spec has already been applied: pipeline no longer reconciled, pipeline Paused (now it can run and in progress strategy should be removed)
+//
+// What should we check for?:
+// - Status fields: Phase, Conditions, InProgressStrategy, Pipeline result (at least desiredPhase)
+func Test_processExistingPipeline_PPND(t *testing.T) {
+	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
+	assert.Nil(t, err)
+
+	ctx := context.Background()
+
+	// other tests may call this, but it fails if called more than once
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewPipelineRolloutReconciler(
+		numaplaneClient,
+		scheme.Scheme,
+		restConfig,
+		customMetrics,
+		recorder)
+
+	testCases := []struct {
+		name                           string
+		newPipelineSpec                numaflowv1.PipelineSpec
+		existingPipelineDef            numaflowv1.Pipeline
+		initialInProgressStrategy      *apiv1.UpgradeStrategy
+		numaflowControllerPauseRequest *bool
+		isbServicePauseRequest         *bool
+
+		expectedInProgressStrategy apiv1.UpgradeStrategy
+		expectedRolloutPhase       apiv1.Phase
+		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
+		expectedConditionsSet      map[apiv1.ConditionType]metav1.ConditionStatus
+		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
+	}{}
+
+	for _, tc := range testCases {
+		// first delete Pipeline in case it already exists, in Kubernetes
+		_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+
+		pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
+		assert.NoError(t, err)
+		assert.Len(t, pipelineList.Items, 0)
+
+		// create Pipeline definition
+		rollout := createPipelineRollout(tc.newPipelineSpec)
+		if tc.initialInProgressStrategy != nil {
+			rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
+		}
+
+		// the Reconcile() function does this, so we need to do it before calling reconcile() as well
+		rollout.Status.Init(rollout.Generation)
+
+		// create the already-existing Pipeline in Kubernetes
+		// this updates everything but the Status subresource
+		pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, &tc.existingPipelineDef, metav1.CreateOptions{})
+		assert.NoError(t, err)
+		// update Status subresource
+		pipeline.Status = tc.existingPipelineDef.Status
+		_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+		assert.NoError(t, err)
+
+		_, err = r.reconcile(context.Background(), rollout, time.Now())
+		assert.NoError(t, err)
+
+		////// check results:
+		// Check Phase of Rollout:
+		assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+		// Check In-Progress Strategy
+		assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+
+		// Check Conditions:
+		for conditionType, conditionStatus := range tc.expectedConditionsSet {
+			found := false
+			for _, condition := range rollout.Status.Conditions {
+				if condition.Type == string(conditionType) && condition.Status == conditionStatus {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "condition type %s failed, conditions=%+v", conditionType, rollout.Status.Conditions)
+		}
+
+		// Check Pipeline spec
+		resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
+		assert.NoError(t, err)
+		assert.NotNil(t, resultPipeline)
+		assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec))
 	}
 }
