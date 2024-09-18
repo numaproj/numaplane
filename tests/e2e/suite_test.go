@@ -46,7 +46,15 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func() {
 
 	var err error
-	err = os.Mkdir("output", os.ModePerm)
+
+	// make output directory to store temporary outputs; if it's there from before delete it
+	directory := "output"
+	_, err = os.Stat(directory)
+	if err == nil {
+		err = os.RemoveAll(directory)
+		Expect(err).NotTo(HaveOccurred())
+	}
+	err = os.Mkdir(directory, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
 
 	dataLossPrevention = os.Getenv("DATA_LOSS_PREVENTION")
