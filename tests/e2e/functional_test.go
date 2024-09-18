@@ -306,7 +306,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-			verifyPipelinePaused(Namespace, pipelineRolloutName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName, true)
 		}
 
 		// wait for update to reconcile
@@ -401,7 +401,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-			verifyPipelinePaused(Namespace, pipelineRolloutName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName, true)
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
@@ -444,7 +444,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-			verifyPipelinePaused(Namespace, pipelineRolloutName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName, true)
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
