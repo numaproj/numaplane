@@ -798,7 +798,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	falseValue := false
-	//trueValue := true
+	trueValue := true
 
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
@@ -859,6 +859,20 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
 			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "external pause request",
+			newPipelineSpec:                pipelineSpec,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &trueValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
 			},
