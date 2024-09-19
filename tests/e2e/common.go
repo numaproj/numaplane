@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -39,18 +40,32 @@ var (
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
 	kubeClient                      clientgo.Interface
 
+	wg     sync.WaitGroup
+	stopCh chan struct{}
+
 	dataLossPrevention string
 )
 
 const (
 	Namespace = "numaplane-system"
 
-	NumaplaneCtrlLogs = "output/numaplane-controller.log"
-	NumaflowCtrlLogs  = "output/numaflow-controller.log"
+	ControllerOutputPath      = "output/controllers"
+	ResourceChangesOutputPath = "output/resources"
+
+	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
+	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
 
 	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
 	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow, app.kubernetes.io/component=controller-manager"
 )
+
+type Output struct {
+	APIVersion string            `json:"apiVersion"`
+	Kind       string            `json:"kind"`
+	Metadata   metav1.ObjectMeta `json:"metadata"`
+	Spec       interface{}       `json:"spec"`
+	Status     interface{}       `json:"status,omitempty"`
+}
 
 // document for Ginkgo framework and print to console
 func document(testName string) {

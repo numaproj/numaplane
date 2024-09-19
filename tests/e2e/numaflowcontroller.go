@@ -1,10 +1,18 @@
 package e2e
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/yaml"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -78,4 +86,45 @@ func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func watchNumaflowControllerRollout() {
+
+	defer wg.Done()
+	watcher, err := numaflowControllerRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "numaflowcontroller_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if rollout, ok := event.Object.(*apiv1.NumaflowControllerRollout); ok {
+					rollout.ManagedFields = nil
+					rl := Output{
+						APIVersion: NumaplaneAPIVersion,
+						Kind:       "NumaflowControllerRollout",
+						Metadata:   rollout.ObjectMeta,
+						Spec:       rollout.Spec,
+						Status:     rollout.Status,
+					}
+					bytes, _ := yaml.Marshal(rl)
+					updateLog := fmt.Sprintf("NumaflowControllerRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
+					file.WriteString(updateLog)
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
 }

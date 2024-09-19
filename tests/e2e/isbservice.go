@@ -1,15 +1,20 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -125,4 +130,93 @@ func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func watchISBServiceRollout() {
+
+	defer wg.Done()
+	watcher, err := isbServiceRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "isbservice_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if rollout, ok := event.Object.(*apiv1.ISBServiceRollout); ok {
+					rollout.ManagedFields = nil
+					rl := Output{
+						APIVersion: NumaplaneAPIVersion,
+						Kind:       "ISBServiceRollout",
+						Metadata:   rollout.ObjectMeta,
+						Spec:       rollout.Spec,
+						Status:     rollout.Status,
+					}
+					bytes, _ := yaml.Marshal(rl)
+					updateLog := fmt.Sprintf("ISBServiceRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
+					file.WriteString(updateLog)
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+}
+
+func watchISBService() {
+
+	defer wg.Done()
+	watcher, err := dynamicClient.Resource(getGVRForISBService()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "isbservice.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
+					isbsvc := numaflowv1.InterStepBufferService{}
+					err = util.StructToStruct(&obj, &isbsvc)
+					if err != nil {
+						fmt.Printf("Failed to convert unstruct: %v\n", err)
+						return
+					}
+					isbsvc.ManagedFields = nil
+					output := Output{
+						APIVersion: NumaflowAPIVersion,
+						Kind:       "InterStepBufferService",
+						Metadata:   isbsvc.ObjectMeta,
+						Spec:       isbsvc.Spec,
+						Status:     isbsvc.Status,
+					}
+					bytes, _ := yaml.Marshal(output)
+					updateLog := fmt.Sprintf("ISBService update time: %v\nSpec: %s\n", time.Now().Format(time.RFC3339), string(bytes))
+					file.WriteString(updateLog)
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+
 }
