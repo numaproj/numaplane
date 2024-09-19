@@ -735,7 +735,7 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 	}
 }
 
-func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
 	status := numaflowv1.PipelineStatus{
 		Phase: phase,
 	}
@@ -753,9 +753,14 @@ func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool)
 			Name:      defaultPipelineRolloutName,
 			Namespace: defaultNamespace,
 		},
-		Spec:   pipelineSpec,
+		Spec:   spec,
 		Status: status,
 	}
+
+}
+
+func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+	return createPipelineOfSpec(pipelineSpec, phase, fullyReconciled)
 }
 
 func withDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) numaflowv1.PipelineSpec {
@@ -770,7 +775,7 @@ func withDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePha
 // - PPND started due to difference in spec (verify inProgressStrategy, desiredPhase)
 // - PPND started due to external pause request (verify inProgressStrategy, desiredPhase)
 // - PPND started due to user sets desiredPhase=Paused when it was not set before (verify desiredPhase)
-// - PPND started due to user sets desiredPhase=Running when it was not set before to Paused (verify desiredPhase)
+// - PPND started due to user sets desiredPhase=Running when it was set before to Paused (verify desiredPhase)
 // - PPND already in progress but spec not yet applied: pipeline was paused and fully reconciled (verify pipeline spec applied)
 // - PPND in progress and spec has already been applied: pipeline still being reconciled (verify desiredPhase still Paused)
 // - PPND in progress and spec has already been applied: pipeline no longer reconciled, pipeline Paused (now it can run and in progress strategy should be removed)
@@ -890,6 +895,22 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:            "user sets desiredPhase=Running",
+			newPipelineSpec: withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
+			existingPipelineDef: *createPipelineOfSpec(
+				withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
+				numaflowv1.PipelinePhasePaused, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
 	}
