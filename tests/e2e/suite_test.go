@@ -46,7 +46,6 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func() {
 
 	var err error
-
 	// make output directory to store temporary outputs; if it's there from before delete it
 	directory := "output"
 	_, err = os.Stat(directory)

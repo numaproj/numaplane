@@ -95,25 +95,13 @@ func verifyPipelineRunning(namespace string, pipelineName string, numVertices in
 
 }
 
-func verifyPipelinePaused(namespace string, pipelineName string, withPPND bool) {
+func verifyPipelinePaused(namespace string, pipelineName string) {
 
 	document("Verify that child Pipeline is paused")
 	verifyPipelineStatusEventually(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status kubernetes.GenericStatus) bool {
 		pauseCondition := getRolloutCondition(status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-		/*if withPPND { // TODO: first, need to change verifyPipelineStatusEventually() to use PipelineStatus specifically, not GenericStatus
-			return pauseCondition == metav1.ConditionTrue && status.inProgressStrategy == UpgradeStrategyPPND
-		} else {
-			return pauseCondition == metav1.ConditionTrue
-		}*/
 		return pauseCondition == metav1.ConditionTrue
 	})
-
-	/*
-		Eventually(func() metav1.ConditionStatus {
-			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineName, metav1.GetOptions{})
-
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-		}, testTimeout).Should(Equal(metav1.ConditionTrue))*/
 
 	verifyPipelineStatusEventually(Namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
