@@ -115,13 +115,9 @@ test: codegen fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
 
 .PHONY: test-e2e
-test-e2e: cleanup-e2e codegen fmt vet envtest ## Run e2e tests.
-	GOFLAGS="-count=1" go test -v ./tests/e2e/... 
+test-e2e: codegen fmt vet envtest ## Run e2e tests.
+	GOFLAGS="-count=1" go test -v ./tests/e2e/... 	
 
-.PHONY: cleanup-e2e
-cleanup-e2e:
-	rm -r -f tests/e2e/output
-	
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v1.58.0

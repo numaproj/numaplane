@@ -56,9 +56,9 @@ var _ = BeforeSuite(func() {
 	}
 	err = os.Mkdir(directory, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
-	err = os.MkdirAll("output/controllers", os.ModePerm)
+	err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
-	err = os.MkdirAll("output/resources", os.ModePerm)
+	err = os.MkdirAll(ResourceChangesOutputPath, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
 
 	stopCh = make(chan struct{})
