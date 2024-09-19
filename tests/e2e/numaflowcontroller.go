@@ -120,7 +120,11 @@ func watchNumaflowControllerRollout() {
 					}
 					bytes, _ := yaml.Marshal(rl)
 					updateLog := fmt.Sprintf("NumaflowControllerRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
-					file.WriteString(updateLog)
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
 				}
 			}
 		case <-stopCh:

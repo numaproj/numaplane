@@ -164,7 +164,11 @@ func watchMonoVertexRollout() {
 					}
 					bytes, _ := yaml.Marshal(rl)
 					updateLog := fmt.Sprintf("MonoVertexRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
-					file.WriteString(updateLog)
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
 				}
 			}
 		case <-stopCh:
@@ -211,7 +215,11 @@ func watchMonoVertex() {
 					}
 					bytes, _ := yaml.Marshal(output)
 					updateLog := fmt.Sprintf("MonoVertex update time: %v\nSpec: %s\n", time.Now().Format(time.RFC3339), string(bytes))
-					file.WriteString(updateLog)
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
 				}
 			}
 		case <-stopCh:
