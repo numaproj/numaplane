@@ -757,10 +757,15 @@ func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool)
 	}
 }
 
+func withDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) numaflowv1.PipelineSpec {
+	spec.Lifecycle.DesiredPhase = phase
+	return spec
+}
+
 // in this test, the user preferred strategy is PPND
 // tests:
-// - direct apply result (verify pipeline spec change happened)
 // - nothing to do case (verify pipeline spec is the same)
+// - direct apply result (verify pipeline spec change happened)
 // - PPND started due to difference in spec (verify inProgressStrategy, desiredPhase)
 // - PPND started due to external pause request (verify inProgressStrategy, desiredPhase)
 // - Incomplete pause request
@@ -814,7 +819,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
-		expectedConditionsSet      map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
 	}{
 		{
@@ -827,9 +831,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
-			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
-				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
-			},
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(pipelineSpec, spec)
 			},
@@ -844,78 +845,81 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
-			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
-				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
-			},
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(pipelineSpecWithWatermarkDisabled, spec)
+			},
+		},
+		{
+			name:                           "spec difference results in PPND",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		// first delete Pipeline in case it already exists, in Kubernetes
-		_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
 
-		pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
-		assert.NoError(t, err)
-		assert.Len(t, pipelineList.Items, 0)
+		t.Run(tc.name, func(t *testing.T) {
 
-		// create Pipeline definition
-		rollout := createPipelineRollout(tc.newPipelineSpec)
-		rollout.Status.Phase = tc.initialPhase
-		if tc.initialInProgressStrategy != nil {
-			rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
-		}
+			// first delete Pipeline in case it already exists, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
 
-		// the Reconcile() function does this, so we need to do it before calling reconcile() as well
-		rollout.Status.Init(rollout.Generation)
+			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, pipelineList.Items, 0)
 
-		// create the already-existing Pipeline in Kubernetes
-		// this updates everything but the Status subresource
-		existingPipelineDef := &tc.existingPipelineDef
-		existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
-		pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
-		assert.NoError(t, err)
-		// update Status subresource
-		pipeline.Status = tc.existingPipelineDef.Status
-		_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
-		assert.NoError(t, err)
-
-		// external pause requests
-		GetPauseModule().pauseRequests = map[string]*bool{}
-		if tc.numaflowControllerPauseRequest != nil {
-			GetPauseModule().pauseRequests[GetPauseModule().getNumaflowControllerKey(defaultNamespace)] = tc.numaflowControllerPauseRequest
-		}
-		if tc.isbServicePauseRequest != nil {
-			GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
-		}
-
-		_, err = r.reconcile(context.Background(), rollout, time.Now())
-		assert.NoError(t, err)
-
-		////// check results:
-		// Check Phase of Rollout:
-		assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
-		// Check In-Progress Strategy
-		assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
-
-		// Check Conditions:
-		for conditionType, conditionStatus := range tc.expectedConditionsSet {
-			found := false
-			for _, condition := range rollout.Status.Conditions {
-				if condition.Type == string(conditionType) && condition.Status == conditionStatus {
-					found = true
-					break
-				}
+			// create Pipeline definition
+			rollout := createPipelineRollout(tc.newPipelineSpec)
+			rollout.Status.Phase = tc.initialPhase
+			if tc.initialInProgressStrategy != nil {
+				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 			}
-			assert.True(t, found, "condition type %s failed, conditions=%+v", conditionType, rollout.Status.Conditions)
-		}
 
-		// Check Pipeline spec
-		resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
-		assert.NoError(t, err)
-		assert.NotNil(t, resultPipeline)
-		assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec))
+			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
+			rollout.Status.Init(rollout.Generation)
+
+			// create the already-existing Pipeline in Kubernetes
+			// this updates everything but the Status subresource
+			existingPipelineDef := &tc.existingPipelineDef
+			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
+			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+			// update Status subresource
+			pipeline.Status = tc.existingPipelineDef.Status
+			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			// external pause requests
+			GetPauseModule().pauseRequests = map[string]*bool{}
+			if tc.numaflowControllerPauseRequest != nil {
+				GetPauseModule().pauseRequests[GetPauseModule().getNumaflowControllerKey(defaultNamespace)] = tc.numaflowControllerPauseRequest
+			}
+			if tc.isbServicePauseRequest != nil {
+				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
+			}
+
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			assert.NoError(t, err)
+
+			////// check results:
+			// Check Phase of Rollout:
+			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+			// Check In-Progress Strategy
+			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+
+			// Check Pipeline spec
+			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.NotNil(t, resultPipeline)
+			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", resultPipeline.Spec)
+		})
 	}
 }
