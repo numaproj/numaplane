@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -571,11 +570,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 			// make sure lifecycle is left set to "Paused" in the new spec
-			unstruc, err := kubernetes.ObjectToUnstructured(newPipelineDef)
+			/*unstruc, err := kubernetes.ObjectToUnstructured(newPipelineDef)
 			if err != nil {
 				return false, err
 			}
-			// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
 			err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
 			if err != nil {
 				return false, err
@@ -583,7 +581,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			err = kubernetes.UpdateUnstructuredCR(ctx, r.restConfig, unstruc, common.PipelineGVR, pipelineRollout.Namespace, pipelineRollout.Name)
 			if err != nil {
 				return false, err
-			}
+			}*/
+			GetPauseModule().updatePipelineLifecycle(ctx, r.restConfig, newPipelineDef, "Paused")
+
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
 	}

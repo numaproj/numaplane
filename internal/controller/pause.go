@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
@@ -115,12 +114,28 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 		return err
 	}
 
+	// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
 	err = unstructured.SetNestedField(unstruc.Object, status, "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
 	}
 
-	return kubernetes.UpdateUnstructuredCR(ctx, restConfig, unstruc, common.PipelineGVR, pipeline.Namespace, pipeline.Name)
+	resultObj, err := kubernetes.UnstructuredToObject(unstruc)
+	if err != nil {
+		return err
+	}
+	if resultObj == nil {
+		return fmt.Errorf("error converting unstructured %+v to object, result is nil?", unstruc.Object)
+	}
+
+	err = kubernetes.UpdateCR(ctx, restConfig, resultObj, "pipelines")
+	if err != nil {
+		return err
+	}
+	*pipeline = *resultObj
+	return nil
+	//return kubernetes.UpdateUnstructuredCR(ctx, restConfig, unstruc, common.PipelineGVR, pipeline.Namespace, pipeline.Name)*/
+
 }
 
 func (pm *PauseModule) getNumaflowControllerKey(namespace string) string {

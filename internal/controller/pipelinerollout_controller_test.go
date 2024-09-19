@@ -942,6 +942,20 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				return reflect.DeepEqual(withDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), spec)
 			},
 		},
+		{
+			name:                           "PPND in progress, spec applied, done being reconciled",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createPipelineOfSpec(withDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(withDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
