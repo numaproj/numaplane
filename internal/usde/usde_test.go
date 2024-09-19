@@ -90,7 +90,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 	ctx := context.Background()
 
 	configManager := config.GetConfigManagerInstance()
-	// TODO: should this default be in the usde config?
+
 	err := commontest.LoadGlobalConfig("./testdata", "ppnd-config.yaml")
 	assert.Nil(t, err)
 
@@ -129,7 +129,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field (changed)",
@@ -170,7 +170,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with invalid user strategy)",
@@ -185,7 +185,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with valid user strategy)",
@@ -248,7 +248,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				configManager.UnsetNamespaceConfig(defaultNamespace)
 			}
 
-			needsUpdating, strategy, err := ResourceNeedsUpdating(ctx, &tc.newSpec, &tc.existingSpec) // TODO: add some tests cases to test comparisonExcludedPaths instead of passing nil
+			needsUpdating, strategy, err := ResourceNeedsUpdating(ctx, &tc.newSpec, &tc.existingSpec)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			assert.Equal(t, tc.expectedStrategy, strategy)
