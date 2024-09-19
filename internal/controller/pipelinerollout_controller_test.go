@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -45,18 +46,13 @@ import (
 
 var (
 	defaultPipelineRolloutName = "pipelinerollout-test"
-)
 
-var _ = Describe("PipelineRollout Controller", Ordered, func() {
-
-	ctx := context.Background()
-
-	pipelineSpecSourceRPU := int64(5)
-	pipelineSpecSourceDuration := metav1.Duration{
+	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
 
-	pipelineSpec := numaflowv1.PipelineSpec{
+	pipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "my-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -96,6 +92,33 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			},
 		},
 	}
+
+	pipelineSpecWithWatermarkDisabled numaflowv1.PipelineSpec
+	pipelineSpecWithTopologyChange    numaflowv1.PipelineSpec
+)
+
+func init() {
+	pipelineSpecWithWatermarkDisabled = pipelineSpec
+	pipelineSpecWithWatermarkDisabled.Watermark.Disabled = true
+
+	pipelineSpecWithTopologyChange = pipelineSpec
+	pipelineSpecWithTopologyChange.Vertices = append(pipelineSpecWithTopologyChange.Vertices, numaflowv1.AbstractVertex{})
+	pipelineSpecWithTopologyChange.Vertices[3] = pipelineSpecWithTopologyChange.Vertices[2]
+	pipelineSpecWithTopologyChange.Vertices[2] = numaflowv1.AbstractVertex{
+		Name: "cat-2",
+		UDF: &numaflowv1.UDF{
+			Builtin: &numaflowv1.Function{
+				Name: "cat",
+			},
+		},
+	}
+	pipelineSpecWithTopologyChange.Edges[1].To = "cat-2"
+	pipelineSpecWithTopologyChange.Edges = append(pipelineSpecWithTopologyChange.Edges, numaflowv1.Edge{From: "cat-2", To: "out"})
+}
+
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
+
+	ctx := context.Background()
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ToNot(HaveOccurred())
@@ -710,6 +733,29 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 	}
 }
 
+func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+	status := numaflowv1.PipelineStatus{
+		Phase: phase,
+	}
+	if fullyReconciled {
+		status.ObservedGeneration = 1
+	} else {
+		status.ObservedGeneration = 0
+	}
+	return &numaflowv1.Pipeline{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pipeline",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultPipelineRolloutName,
+			Namespace: defaultNamespace,
+		},
+		Spec:   pipelineSpec,
+		Status: status,
+	}
+}
+
 // in this test, the user preferred strategy is PPND
 // tests:
 // - direct apply result (verify pipeline spec change happened)
@@ -722,6 +768,7 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 // - PPND already in progress but spec not yet applied: pipeline was paused and fully reconciled (verify pipeline spec applied)
 // - PPND in progress and spec has already been applied: pipeline still being reconciled (verify desiredPhase still Paused)
 // - PPND in progress and spec has already been applied: pipeline no longer reconciled, pipeline Paused (now it can run and in progress strategy should be removed)
+// - various cases where Pipeline is Failed?
 //
 // What should we check for?:
 // - Status fields: Phase, Conditions, InProgressStrategy, Pipeline result (at least desiredPhase)
@@ -752,6 +799,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		name                           string
 		newPipelineSpec                numaflowv1.PipelineSpec
 		existingPipelineDef            numaflowv1.Pipeline
+		initialPhase                   apiv1.Phase
 		initialInProgressStrategy      *apiv1.UpgradeStrategy
 		numaflowControllerPauseRequest *bool
 		isbServicePauseRequest         *bool
@@ -761,7 +809,25 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedConditionsSet      map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
-	}{}
+	}{
+		{
+			name:                           "nothing to do",
+			newPipelineSpec:                pipelineSpec,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: nil,
+			isbServicePauseRequest:         nil,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpec, spec)
+			},
+		},
+	}
 
 	for _, tc := range testCases {
 		// first delete Pipeline in case it already exists, in Kubernetes
@@ -773,6 +839,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 		// create Pipeline definition
 		rollout := createPipelineRollout(tc.newPipelineSpec)
+		rollout.Status.Phase = tc.initialPhase
 		if tc.initialInProgressStrategy != nil {
 			rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 		}
@@ -782,7 +849,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 		// create the already-existing Pipeline in Kubernetes
 		// this updates everything but the Status subresource
-		pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, &tc.existingPipelineDef, metav1.CreateOptions{})
+		existingPipelineDef := &tc.existingPipelineDef
+		existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
+		pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
 		assert.NoError(t, err)
 		// update Status subresource
 		pipeline.Status = tc.existingPipelineDef.Status
