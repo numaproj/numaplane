@@ -108,14 +108,29 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 	return true, nil
 }
 
-func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, status string) error {
+func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, phase string) error {
+
+	err := withDesiredPhase(pipeline, phase)
+	if err != nil {
+		return err
+	}
+
+	err = kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func withDesiredPhase(pipeline *kubernetes.GenericObject, phase string) error {
 	unstruc, err := kubernetes.ObjectToUnstructured(pipeline)
 	if err != nil {
 		return err
 	}
 
 	// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
-	err = unstructured.SetNestedField(unstruc.Object, status, "spec", "lifecycle", "desiredPhase")
+	err = unstructured.SetNestedField(unstruc.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
 	}
@@ -124,17 +139,11 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 	if err != nil {
 		return err
 	}
-	if resultObj == nil {
+	if pipeline == nil {
 		return fmt.Errorf("error converting unstructured %+v to object, result is nil?", unstruc.Object)
-	}
-
-	err = kubernetes.UpdateCR(ctx, restConfig, resultObj, "pipelines")
-	if err != nil {
-		return err
 	}
 	*pipeline = *resultObj
 	return nil
-
 }
 
 func (pm *PauseModule) getNumaflowControllerKey(namespace string) string {
