@@ -38,6 +38,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -778,6 +779,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
 	assert.Nil(t, err)
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
+		PipelineSpecExcludedPaths: []string{"watermark"},
+	})
 
 	ctx := context.Background()
 
@@ -787,6 +791,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	}
 
 	recorder := record.NewFakeRecorder(64)
+
+	falseValue := false
+	//trueValue := true
 
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
@@ -816,8 +823,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
 			initialPhase:                   apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
-			numaflowControllerPauseRequest: nil,
-			isbServicePauseRequest:         nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
@@ -825,6 +832,23 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			},
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(pipelineSpec, spec)
+			},
+		},
+		{
+			name:                           "direct apply",
+			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpecWithWatermarkDisabled, spec)
 			},
 		},
 	}
@@ -857,6 +881,15 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		pipeline.Status = tc.existingPipelineDef.Status
 		_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
 		assert.NoError(t, err)
+
+		// external pause requests
+		GetPauseModule().pauseRequests = map[string]*bool{}
+		if tc.numaflowControllerPauseRequest != nil {
+			GetPauseModule().pauseRequests[GetPauseModule().getNumaflowControllerKey(defaultNamespace)] = tc.numaflowControllerPauseRequest
+		}
+		if tc.isbServicePauseRequest != nil {
+			GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
+		}
 
 		_, err = r.reconcile(context.Background(), rollout, time.Now())
 		assert.NoError(t, err)
