@@ -415,7 +415,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
+			return retrievedISBServiceSpec.JetStream.Version == "2.9.0"
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
