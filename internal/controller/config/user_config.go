@@ -29,10 +29,6 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 	if !found {
 		return fmt.Errorf("invalid strategy '%s' (allowed values: %+v)", usdeUserStrategyStr, allowedValues)
 	}
-	// TODO-PROGRESSIVE: replace if-statement above for if-statement below
-	// if usdeUserStrategyStr != string(ProgressiveStrategyID) && usdeUserStrategyStr != string(PPNDStrategyID) {
-	// 	return fmt.Errorf("invalid strategy '%s' (allowed values are: %s or %s)", usdeUserStrategyStr, ProgressiveStrategyID, PPNDStrategyID)
-	// }
 
 	*s = USDEUserStrategy(usdeUserStrategyStr)
 

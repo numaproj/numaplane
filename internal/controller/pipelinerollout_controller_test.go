@@ -768,22 +768,8 @@ func withDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePha
 	return spec
 }
 
+// process an existing pipeline
 // in this test, the user preferred strategy is PPND
-// tests:
-// - nothing to do case (verify pipeline spec is the same)
-// - direct apply result (verify pipeline spec change happened)
-// - PPND started due to difference in spec (verify inProgressStrategy, desiredPhase)
-// - PPND started due to external pause request (verify inProgressStrategy, desiredPhase)
-// - PPND started due to user sets desiredPhase=Paused when it was not set before (verify desiredPhase)
-// - PPND started due to user sets desiredPhase=Running when it was set before to Paused (verify desiredPhase)
-// - PPND already in progress but spec not yet applied: pipeline was paused and fully reconciled (verify pipeline spec applied)
-// - PPND in progress and spec has already been applied: pipeline still being reconciled (verify desiredPhase still Paused)
-// - PPND in progress and spec has already been applied: pipeline no longer reconciled, pipeline Paused (now it can run and in progress strategy should be removed)
-// - Incomplete pause request
-// - various cases where Pipeline is Failed?
-//
-// What should we check for?:
-// - Status fields: Phase, Conditions, InProgressStrategy, Pipeline result (at least desiredPhase)
 func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

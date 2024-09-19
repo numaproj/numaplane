@@ -569,20 +569,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
-			// make sure lifecycle is left set to "Paused" in the new spec
-			/*unstruc, err := kubernetes.ObjectToUnstructured(newPipelineDef)
-			if err != nil {
+			if err = GetPauseModule().updatePipelineLifecycle(ctx, r.restConfig, newPipelineDef, "Paused"); err != nil {
 				return false, err
 			}
-			err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
-			if err != nil {
-				return false, err
-			}
-			err = kubernetes.UpdateUnstructuredCR(ctx, r.restConfig, unstruc, common.PipelineGVR, pipelineRollout.Namespace, pipelineRollout.Name)
-			if err != nil {
-				return false, err
-			}*/
-			GetPauseModule().updatePipelineLifecycle(ctx, r.restConfig, newPipelineDef, "Paused")
 
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}

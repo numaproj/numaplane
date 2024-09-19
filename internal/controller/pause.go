@@ -134,7 +134,6 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 	}
 	*pipeline = *resultObj
 	return nil
-	//return kubernetes.UpdateUnstructuredCR(ctx, restConfig, unstruc, common.PipelineGVR, pipeline.Namespace, pipeline.Name)*/
 
 }
 
