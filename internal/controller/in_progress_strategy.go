@@ -11,12 +11,16 @@ import (
 )
 
 // inProgressStrategyMgr is responsible to maintain a Rollout's inProgressStrategy
+// state is maintained both in memory as well as in the Rollout's Status
+// in memory always gives us the latest state in case the Informer cache is out of date
+// the Rollout's Status is useful as a backup mechanism in case Numaplane has just restarted
 type inProgressStrategyMgr struct {
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy
 	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)
 	store              *inProgressStrategyStore
 }
 
+// in memory storage of UpgradeStrategy in progress for a given Rollout
 type inProgressStrategyStore struct {
 	inProgressUpgradeStrategies map[string]apiv1.UpgradeStrategy
 	mutex                       sync.RWMutex

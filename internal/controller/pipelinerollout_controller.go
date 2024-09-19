@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -569,9 +570,33 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
-			if err = GetPauseModule().updatePipelineLifecycle(ctx, r.restConfig, newPipelineDef, "Paused"); err != nil {
+			/*if err = GetPauseModule().updatePipelineLifecycle(ctx, r.restConfig, newPipelineDef, "Paused"); err != nil {
+				return false, err
+			}*/
+			newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
+			unstruc, err := kubernetes.ObjectToUnstructured(newPipelineDef)
+			if err != nil {
 				return false, err
 			}
+			if shouldBePaused {
+				err = unstructured.SetNestedField(unstruc.Object, "Paused", "spec", "lifecycle", "desiredPhase")
+				if err != nil {
+					return false, err
+				}
+			}
+			resultObj, err := kubernetes.UnstructuredToObject(unstruc)
+			if err != nil {
+				return false, err
+			}
+			if resultObj == nil {
+				return false, fmt.Errorf("error converting unstructured %+v to object, result is nil?", unstruc.Object)
+			}
+
+			err = kubernetes.UpdateCR(ctx, r.restConfig, resultObj, "pipelines")
+			if err != nil {
+				return false, err
+			}
+			*existingPipelineDef = *resultObj
 
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
