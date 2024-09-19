@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 
@@ -768,12 +769,12 @@ func withDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePha
 // - direct apply result (verify pipeline spec change happened)
 // - PPND started due to difference in spec (verify inProgressStrategy, desiredPhase)
 // - PPND started due to external pause request (verify inProgressStrategy, desiredPhase)
-// - Incomplete pause request
 // - PPND started due to user sets desiredPhase=Paused when it was not set before (verify desiredPhase)
 // - PPND started due to user sets desiredPhase=Running when it was not set before to Paused (verify desiredPhase)
 // - PPND already in progress but spec not yet applied: pipeline was paused and fully reconciled (verify pipeline spec applied)
 // - PPND in progress and spec has already been applied: pipeline still being reconciled (verify desiredPhase still Paused)
 // - PPND in progress and spec has already been applied: pipeline no longer reconciled, pipeline Paused (now it can run and in progress strategy should be removed)
+// - Incomplete pause request
 // - various cases where Pipeline is Failed?
 //
 // What should we check for?:
@@ -785,7 +786,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
 	assert.Nil(t, err)
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		PipelineSpecExcludedPaths: []string{"watermark"},
+		PipelineSpecExcludedPaths: []string{"watermark", "lifecycle"},
 	})
 
 	ctx := context.Background()
@@ -864,14 +865,28 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			},
 		},
 		{
-			name:                           "external pause request",
-			newPipelineSpec:                pipelineSpec,
+			name:                           "external pause request at the same time as a DirectApply change",
+			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
 			initialPhase:                   apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &trueValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "user sets desiredPhase=Paused",
+			newPipelineSpec:                withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialPhase:                   apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(withDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
@@ -895,6 +910,10 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			rollout.Status.Phase = tc.initialPhase
 			if tc.initialInProgressStrategy != nil {
 				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
+			} else {
+				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
 			}
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
