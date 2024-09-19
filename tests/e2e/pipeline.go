@@ -97,12 +97,13 @@ func verifyPipelineRunning(namespace string, pipelineName string, numVertices in
 
 func verifyPipelinePaused(namespace string, pipelineName string) {
 
-	document("Verify that child Pipeline is paused")
+	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	verifyPipelineStatusEventually(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status kubernetes.GenericStatus) bool {
 		pauseCondition := getRolloutCondition(status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 		return pauseCondition == metav1.ConditionTrue
 	})
 
+	document("Verify that Pipeline is paused")
 	verifyPipelineStatusEventually(Namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
 			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
