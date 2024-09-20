@@ -463,32 +463,35 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
 	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, pipelineRollout)
+	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
-	// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
-	if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != apiv1.UpgradeStrategyPPND {
-		// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
-		needPPND := false
-		if userPreferredStrategy == config.PPNDStrategyID {
-			ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
-			if err != nil {
-				return err
+	if !inProgressStrategySet {
+		// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
+		if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != apiv1.UpgradeStrategyPPND {
+			// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
+			needPPND := false
+			if userPreferredStrategy == config.PPNDStrategyID {
+				ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
+				if err != nil {
+					return err
+				}
+				if ppndRequired == nil { // not enough information
+					// TODO: mark something in the Status for why we're remaining in "Pending" here
+					return nil
+				}
+				needPPND = *ppndRequired
 			}
-			if ppndRequired == nil { // not enough information
-				// TODO: mark something in the Status for why we're remaining in "Pending" here
-				return nil
+			if needPPND {
+				inProgressStrategy = apiv1.UpgradeStrategyPPND
+				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
-			needPPND = *ppndRequired
 		}
-		if needPPND {
-			inProgressStrategy = apiv1.UpgradeStrategyPPND
-			r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
-		}
-	}
-	if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != apiv1.UpgradeStrategyProgressive {
-		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-			inProgressStrategy = apiv1.UpgradeStrategyProgressive
-			r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
+		if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != apiv1.UpgradeStrategyProgressive {
+			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+				inProgressStrategy = apiv1.UpgradeStrategyProgressive
+				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
+			}
 		}
 	}
 

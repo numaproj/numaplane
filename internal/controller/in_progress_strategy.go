@@ -47,7 +47,7 @@ func (mgr *inProgressStrategyMgr) getStrategy(ctx context.Context, rollout clien
 	return mgr.synchronize(ctx, rollout)
 }
 
-// make sure in-memory value and Rollout Status value are syncronized
+// make sure in-memory value and Rollout Status value are synchronized
 // if in-memory value is set, make sure Rollout Status value gets set the same
 // if in-memory value isn't set, make sure in-memory value gets set to Rollout Status value
 func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
