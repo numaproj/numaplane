@@ -374,7 +374,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	newPipelineDef, err := makePipelineDefinition(pipelineRollout)
+	newPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -542,7 +542,7 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineDef, err := makePipelineDefinition(pipelineRollout)
+	pipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return err
 	}
@@ -729,19 +729,28 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
+func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
 
+	if pipelineRollout.Status.NameCount == nil {
+		pipelineRollout.Status.NameCount = new(int32)
+		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		if statusUpdateErr != nil {
+			return nil, statusUpdateErr
+		}
+	}
+
+	curNameCount := *pipelineRollout.Status.NameCount
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name,
+			Name:            pipelineRollout.Name + "-" + fmt.Sprint(curNameCount),
 			Namespace:       pipelineRollout.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},

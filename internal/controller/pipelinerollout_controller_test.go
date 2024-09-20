@@ -48,6 +48,7 @@ import (
 
 var (
 	defaultPipelineRolloutName = "pipelinerollout-test"
+	defaultPipelineName        = defaultPipelineRolloutName + "-0"
 
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
@@ -139,12 +140,11 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		},
 	}
 
-	resourceLookupKey := types.NamespacedName{Name: defaultPipelineRolloutName, Namespace: defaultNamespace}
-
 	Context("When applying a PipelineRollout spec", func() {
 		It("Should create the PipelineRollout if it does not exist or it should update existing PipelineRollout and Numaflow Pipeline", func() {
 			Expect(k8sClient.Create(ctx, pipelineRollout)).Should(Succeed())
 
+			resourceLookupKey := types.NamespacedName{Name: defaultPipelineRolloutName, Namespace: defaultNamespace}
 			createdResource := &apiv1.PipelineRollout{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
@@ -160,6 +160,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		It("Should create a Numaflow Pipeline", func() {
 			createdResource := &numaflowv1.Pipeline{}
+			resourceLookupKey := types.NamespacedName{Name: defaultPipelineName, Namespace: defaultNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
 				return err == nil
@@ -185,17 +186,19 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
 			It("Should be automatically failed", func() {
+				pipelineRolloutName := "my-pipeline"
+				pipelineName := pipelineRolloutName + "-0"
 				Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: defaultNamespace,
-						Name:      "my-pipeline",
+						Name:      pipelineName,
 					},
 					Spec: pipelineSpec,
 				})).Should(Succeed())
 				Expect(k8sClient.Create(ctx, &apiv1.PipelineRollout{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: defaultNamespace,
-						Name:      "my-pipeline",
+						Name:      pipelineRolloutName,
 					},
 					Spec: apiv1.PipelineRolloutSpec{
 						Pipeline: apiv1.Pipeline{
@@ -206,7 +209,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					},
 				})).Should(Succeed())
 				time.Sleep(5 * time.Second)
-				verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, "my-pipeline", apiv1.PhaseFailed)
+				verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, pipelineRolloutName, apiv1.PhaseFailed)
 
 				Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(BeNumerically(">", 1))
 			})
@@ -215,6 +218,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		It("Should update the PipelineRollout and Numaflow Pipeline", func() {
 			By("updating the PipelineRollout")
 
+			resourceLookupKey := types.NamespacedName{Name: defaultPipelineRolloutName, Namespace: defaultNamespace}
 			currentPipelineRollout := &apiv1.PipelineRollout{}
 			Expect(k8sClient.Get(ctx, resourceLookupKey, currentPipelineRollout)).ToNot(HaveOccurred())
 
@@ -242,6 +246,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			By("Verifying the content of the spec field of the Numaflow Pipeline")
 			Eventually(func() (numaflowv1.PipelineSpec, error) {
+				resourceLookupKey := types.NamespacedName{Name: defaultPipelineName, Namespace: defaultNamespace}
 				updatedChildResource := &numaflowv1.Pipeline{}
 				err := k8sClient.Get(ctx, resourceLookupKey, updatedChildResource)
 				if err != nil {
@@ -257,7 +262,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 		It("Should auto heal the Numaflow Pipeline with the PipelineRollout pipeline spec when the Numaflow Pipeline spec is changed", func() {
 			By("updating the Numaflow Pipeline and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, defaultNamespace, defaultPipelineRolloutName, "spec.interStepBufferServiceName", "someotherisbsname")
+			verifyAutoHealing(ctx, numaflowv1.PipelineGroupVersionKind, defaultNamespace, defaultPipelineName, "spec.interStepBufferServiceName", "someotherisbsname")
 		})
 
 		It("Should delete the PipelineRollout and Numaflow Pipeline", func() {
@@ -267,12 +272,14 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 
 			deletedResource := &apiv1.PipelineRollout{}
 			Eventually(func() bool {
+				resourceLookupKey := types.NamespacedName{Name: defaultPipelineRolloutName, Namespace: defaultNamespace}
 				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 
 			deletingChildResource := &numaflowv1.Pipeline{}
 			Eventually(func() bool {
+				resourceLookupKey := types.NamespacedName{Name: defaultPipelineName, Namespace: defaultNamespace}
 				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
