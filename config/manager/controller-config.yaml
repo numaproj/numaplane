@@ -5,7 +5,6 @@ metadata:
 data:
   config.yaml: |
     logLevel: 3
-    defaultUpgradeStrategy: ""
     includedResources: "group=apps,kind=Deployment;\
     group=,kind=ConfigMap;group=,kind=ServiceAccount;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
