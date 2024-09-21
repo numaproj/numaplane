@@ -110,7 +110,7 @@ func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSepa
 		return onlyPaths, withoutPaths, nil
 	}
 
-	// Sort the paths slices before using it to avoid maps merging in case the slice were to
+	// Sort the paths slice before using it to avoid maps merging in case the slice were to
 	// include deeply nested fields and then the higher level fields (ex: []string{"map.field.inner2", "map"})
 	sort.Strings(paths)
 	sort.Strings(excludedPaths)
