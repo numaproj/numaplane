@@ -14,7 +14,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 const defaultNamespace = "default"
@@ -91,9 +90,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 
 	configManager := config.GetConfigManagerInstance()
 
-	err := commontest.LoadGlobalConfig("./testdata", "ppnd-config.yaml")
-	assert.Nil(t, err)
-
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
 
 	testCases := []struct {
@@ -110,6 +106,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newSpec:      pipelineDefn,
 			existingSpec: pipelineDefn,
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{},
 			},
 			namespaceConfig:       nil,
@@ -125,6 +122,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{},
 			},
 			namespaceConfig:       nil,
@@ -140,6 +138,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:       nil,
@@ -151,6 +150,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newSpec:      pipelineDefn,
 			existingSpec: pipelineDefn,
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:       nil,
@@ -166,6 +166,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:       nil,
@@ -181,6 +182,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
@@ -196,6 +198,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -213,6 +216,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -231,6 +235,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
