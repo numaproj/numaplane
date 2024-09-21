@@ -39,6 +39,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 
@@ -247,8 +248,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
-	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
-	assert.Nil(t, err)
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
 
 	ctx := context.Background()
 

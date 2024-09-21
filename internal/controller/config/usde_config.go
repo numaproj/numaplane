@@ -1,8 +1,10 @@
 package config
 
 type USDEConfig struct {
-	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
-	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
+	// If user's config doesn't exist or doesn't specify strategy, this is the default
+	DefaultUpgradeStrategy      USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
+	PipelineSpecExcludedPaths   []string         `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
+	ISBServiceSpecExcludedPaths []string         `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
 }
 
 func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {

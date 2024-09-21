@@ -100,15 +100,9 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// Get Numaplane Config
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return config.NoStrategyID, err
-	}
-
 	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
 
-	var userUpgradeStrategy config.USDEUserStrategy = globalConfig.DefaultUpgradeStrategy
+	var userUpgradeStrategy config.USDEUserStrategy = config.GetConfigManagerInstance().GetUSDEConfig().DefaultUpgradeStrategy
 	if namespaceConfig != nil {
 		if !namespaceConfig.UpgradeStrategy.IsValid() {
 			numaLogger.WithValues("upgrade strategy", namespaceConfig.UpgradeStrategy).Warnf("invalid Upgrade strategy for namespace %s", namespace)

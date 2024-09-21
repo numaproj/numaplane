@@ -1,4 +1,0 @@
-# file includes minimum fields required for test
-
-defaultUpgradeStrategy: "pause-and-drain"
-logLevel: 4

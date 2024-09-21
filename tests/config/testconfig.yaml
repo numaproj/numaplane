@@ -1,5 +1,4 @@
 logLevel: 3
-defaultUpgradeStrategy: "pause-and-drain"
 numaflowControllerImageNames:
   - numaflow
   - numaflow-rc

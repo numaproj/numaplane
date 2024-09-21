@@ -774,9 +774,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
-	err = commontest.LoadGlobalConfig("./testdata", "ppnd-upgrade-strategy-config.yaml")
-	assert.Nil(t, err)
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
+		DefaultUpgradeStrategy:    config.PPNDStrategyID,
 		PipelineSpecExcludedPaths: []string{"watermark", "lifecycle"},
 	})
 

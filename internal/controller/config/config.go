@@ -69,9 +69,6 @@ func (*ConfigManager) GetControllerDefinitionsMgr() *NumaflowControllerDefinitio
 type GlobalConfig struct {
 	LogLevel          int    `json:"logLevel" mapstructure:"logLevel"`
 	IncludedResources string `json:"includedResources" mapstructure:"includedResources"`
-	// If user's config doesn't exist or doesn't specify strategy, this is the default
-	// TODO: should we put this here or in usde config?
-	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 	// List of Numaflow Controller image names to look for
 	NumaflowControllerImageNames []string `json:"numaflowControllerImageNames" mapstructure:"numaflowControllerImageNames"`
 }
