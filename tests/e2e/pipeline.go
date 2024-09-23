@@ -3,11 +3,8 @@ package e2e
 import (
 	"context"
 	"fmt"
-<<<<<<< HEAD
-=======
 	"os"
 	"path/filepath"
->>>>>>> origin/main
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -42,11 +39,7 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
-<<<<<<< HEAD
 func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
-=======
-func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
->>>>>>> origin/main
 
 	Eventually(func() bool {
 
@@ -56,11 +49,8 @@ func verifyPipelineStatusEventually(namespace string, pipelineName string, f fun
 	}, testTimeout).Should(BeTrue())
 }
 
-<<<<<<< HEAD
 func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
-=======
-func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
->>>>>>> origin/main
+
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineName)
 
@@ -94,13 +84,8 @@ func verifyPipelineRolloutHealthy(pipelineRolloutName string) {
 func verifyPipelineRunning(namespace string, pipelineName string, numVertices int) {
 	document("Verifying that the Pipeline is running")
 	verifyPipelineStatusEventually(namespace, pipelineName,
-<<<<<<< HEAD
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhaseRunning
-=======
-		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
->>>>>>> origin/main
 		})
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineName, metav1.GetOptions{})
@@ -115,15 +100,7 @@ func verifyPipelineRunning(namespace string, pipelineName string, numVertices in
 
 }
 
-<<<<<<< HEAD
-func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string, ppnd bool) {
-	if ppnd {
-		document("Verify that in-progress-strategy gets set to PPND")
-		verifyInProgressStrategy(namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-	}
-=======
 func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string) {
->>>>>>> origin/main
 
 	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
@@ -131,17 +108,11 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
-<<<<<<< HEAD
 	document("Verify that Pipeline is paused and fully drained")
 	verifyPipelineStatusEventually(Namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
-=======
-	document("Verify that Pipeline is paused")
-	verifyPipelineStatusEventually(Namespace, pipelineName,
-		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
->>>>>>> origin/main
+
 		})
 	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
@@ -188,7 +159,6 @@ func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-
 func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
@@ -211,14 +181,12 @@ func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Un
 	return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, nil
 }
 
-<
 func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus, error) {
 	statusMap := u.Object["status"]
 	var status numaflowv1.PipelineStatus
 	err := util.StructToStruct(&statusMap, &status)
 	return status, err
 }
-
 
 func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -267,8 +235,6 @@ func getVertexLabelSelector(pipelineName string) string {
 func getDaemonLabelSelector(pipelineName string) string {
 	return fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyPipelineName, pipelineName, numaflowv1.KeyComponent, "daemon")
 }
-<<<<<<< HEAD
-=======
 
 // build watcher functions for both Pipeline and PipelineRollout
 func watchPipelineRollout() {
@@ -367,4 +333,3 @@ func watchPipeline() {
 	}
 
 }
->>>>>>> origin/main

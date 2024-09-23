@@ -237,7 +237,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
-
 		wg.Add(1)
 		go watchPipeline()
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
@@ -291,13 +290,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
-<<<<<<< HEAD
 			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
-=======
-			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-				return retrievedPipelineStatus.Phase != string(numaflowv1.PipelinePhasePaused)
->>>>>>> origin/main
 			})
 		}
 
@@ -312,14 +306,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
-<<<<<<< HEAD
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-=======
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-
->>>>>>> origin/main
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
 
 	})
@@ -339,14 +328,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-<<<<<<< HEAD
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName, true)
-=======
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
->>>>>>> origin/main
+
 		}
 
 		// wait for update to reconcile
@@ -361,14 +348,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
-<<<<<<< HEAD
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-=======
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-
->>>>>>> origin/main
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
@@ -395,17 +377,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays that way
-<<<<<<< HEAD
-		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
-		/*verifyPipelinePaused(Namespace, pipelineRolloutName)
-		document("verifying Pipeline stays paused")
-		Consistently(func() bool {
-=======
+
 		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
 		//document("verifying Pipeline stays paused")
 		/*Consistently(func() bool {
->>>>>>> origin/main
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			if err != nil {
@@ -414,10 +390,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue && retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())*/
 
-<<<<<<< HEAD
-=======
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
->>>>>>> origin/main
+
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineRolloutName))
 	})
 
@@ -441,10 +415,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/main
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 	})
@@ -464,13 +435,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-<<<<<<< HEAD
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName, true)
-=======
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
->>>>>>> origin/main
+
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
@@ -494,10 +463,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerReady(Namespace)
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/main
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
@@ -518,13 +484,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
-<<<<<<< HEAD
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName, true)
-=======
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
->>>>>>> origin/main
+
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
