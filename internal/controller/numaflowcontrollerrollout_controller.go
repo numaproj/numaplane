@@ -53,6 +53,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -265,7 +266,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, err
 	}
 
-	if deploymentExists && common.DataLossPrevention {
+	// determine the Upgrade Strategy user prefers
+	upgradeStrategy, err := usde.GetUserStrategy(ctx, controllerRollout.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if deploymentExists && upgradeStrategy == config.PPNDStrategyID {
 		numaLogger.Debugf("found existing numaflow-controller Deployment")
 
 		// if I need to update or am in the middle of an update of the Controller Deployment, then I need to make sure all the Pipelines are pausing
@@ -285,7 +292,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
+		needsRequeue, err := processChildObjectWithPPND(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
@@ -352,6 +359,10 @@ func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx
 
 	_, healthConditionReason, _ := processDeploymentHealth(existingDeployment)
 	controllerDeploymentReconciled := healthConditionReason != "Progressing"
+
+	numaLogger.
+		WithValues("Controller Deployment reconciled", controllerDeploymentReconciled, "Deployment Status", existingDeployment.Status).
+		Debug("Controller Deployment checked for reconciled")
 
 	currentVersion, err := getControllerDeploymentVersion(existingDeployment)
 	if err != nil {

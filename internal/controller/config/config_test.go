@@ -25,7 +25,6 @@ func TestLoadConfigMatchValues(t *testing.T) {
 
 	assert.Nil(t, err, "Failed to load configuration")
 	assert.Equal(t, 3, config.LogLevel, "Log Level does not match")
-	assert.Equal(t, true, config.DataLossPrevention, "DataLossPrevention does not match")
 	assert.Contains(t, config.NumaflowControllerImageNames, "numaflow")
 	assert.Contains(t, config.NumaflowControllerImageNames, "numaflow-rc")
 	// now verify that if we modify the file, it will still be okay

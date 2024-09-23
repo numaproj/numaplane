@@ -1408,6 +1408,7 @@ metadata:
 ---
 apiVersion: v1
 data:
+  defaultUpgradeStrategy: ""
   pipelineSpecExcludedPaths: |
     - "lifecycle"
     - "limits"

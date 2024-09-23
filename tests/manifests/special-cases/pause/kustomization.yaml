@@ -4,9 +4,5 @@ kind: Kustomization
 resources:
   - ../../default
 
-configMapGenerator:
-- name: numaplane-controller-config
-  namespace: numaplane-system
-  files:
-    - config.yaml
-  behavior: merge  # Optional, defaults to "create"
+patches:
+  - path: usde-config.yaml

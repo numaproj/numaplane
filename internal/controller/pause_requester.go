@@ -28,7 +28,7 @@ type PauseRequester interface {
 // return:
 // - true if needs a requeue
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
-func processChildObjectWithoutDataLoss(ctx context.Context, rollout client.Object, pauseRequester PauseRequester,
+func processChildObjectWithPPND(ctx context.Context, rollout client.Object, pauseRequester PauseRequester,
 	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 

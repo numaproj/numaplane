@@ -1,5 +1,4 @@
 logLevel: 3
-dataLossPrevention: true
 numaflowControllerImageNames:
   - numaflow
   - numaflow-rc
