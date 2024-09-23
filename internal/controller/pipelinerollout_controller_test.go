@@ -728,7 +728,7 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         defaultNamespace,
 			Name:              defaultPipelineRolloutName,
-			UID:               "some-uid",
+			UID:               "uid",
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 		},
@@ -757,7 +757,7 @@ func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.Pipelin
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultPipelineRolloutName,
+			Name:      defaultPipelineName,
 			Namespace: defaultNamespace,
 		},
 		Spec:   spec,
@@ -955,16 +955,18 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete Pipeline in case it already exists, in Kubernetes
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineName, metav1.DeleteOptions{})
 
 			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
 			assert.Len(t, pipelineList.Items, 0)
 
-			// create Pipeline definition
 			rollout := createPipelineRollout(tc.newPipelineSpec)
+			_ = numaplaneClient.Delete(ctx, rollout)
+
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if tc.initialInProgressStrategy != nil {
+				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
 			} else {
@@ -974,6 +976,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
+
+			err = numaplaneClient.Create(ctx, rollout)
+			assert.NoError(t, err)
 
 			// create the already-existing Pipeline in Kubernetes
 			// this updates everything but the Status subresource
@@ -1005,7 +1010,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
 
 			// Check Pipeline spec
-			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
+			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultPipeline)
 			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", resultPipeline.Spec)
