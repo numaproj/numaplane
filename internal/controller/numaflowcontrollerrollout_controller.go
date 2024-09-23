@@ -292,7 +292,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		needsRequeue, err := processChildObjectWithoutDataLoss(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
+		needsRequeue, err := processChildObjectWithPPND(ctx, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
