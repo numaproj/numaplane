@@ -129,7 +129,12 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 
 		usdeConfig := config.USDEConfig{}
 
-		err := yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
+		err := yaml.Unmarshal([]byte(configMap.Data["defaultUpgradeStrategy"]), &usdeConfig.DefaultUpgradeStrategy)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling USDE DefaultUpgradeStrategy: %v", err)
+		}
+
+		err = yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
 		}

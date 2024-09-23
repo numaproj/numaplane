@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -32,27 +33,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 var (
 	defaultPipelineRolloutName = "pipelinerollout-test"
-)
 
-var _ = Describe("PipelineRollout Controller", Ordered, func() {
-
-	ctx := context.Background()
-
-	pipelineSpecSourceRPU := int64(5)
-	pipelineSpecSourceDuration := metav1.Duration{
+	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
 
-	pipelineSpec := numaflowv1.PipelineSpec{
+	pipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: "my-isbsvc",
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -92,6 +94,33 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			},
 		},
 	}
+
+	pipelineSpecWithWatermarkDisabled numaflowv1.PipelineSpec
+	pipelineSpecWithTopologyChange    numaflowv1.PipelineSpec
+)
+
+func init() {
+	pipelineSpecWithWatermarkDisabled = pipelineSpec
+	pipelineSpecWithWatermarkDisabled.Watermark.Disabled = true
+
+	pipelineSpecWithTopologyChange = pipelineSpec
+	pipelineSpecWithTopologyChange.Vertices = append(pipelineSpecWithTopologyChange.Vertices, numaflowv1.AbstractVertex{})
+	pipelineSpecWithTopologyChange.Vertices[3] = pipelineSpecWithTopologyChange.Vertices[2]
+	pipelineSpecWithTopologyChange.Vertices[2] = numaflowv1.AbstractVertex{
+		Name: "cat-2",
+		UDF: &numaflowv1.UDF{
+			Builtin: &numaflowv1.Function{
+				Name: "cat",
+			},
+		},
+	}
+	pipelineSpecWithTopologyChange.Edges[1].To = "cat-2"
+	pipelineSpecWithTopologyChange.Edges = append(pipelineSpecWithTopologyChange.Edges, numaflowv1.Edge{From: "cat-2", To: "out"})
+}
+
+var _ = Describe("PipelineRollout Controller", Ordered, func() {
+
+	ctx := context.Background()
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ToNot(HaveOccurred())
@@ -547,29 +576,24 @@ var yamlNoLifecycleWithNulls = `
 
 func Test_pipelineWithoutLifecycle(t *testing.T) {
 	testCases := []struct {
-		name          string
-		specYaml      string
-		expectedError bool
+		name     string
+		specYaml string
 	}{
 		{
-			name:          "desiredPhase set to Paused",
-			specYaml:      yamlHasDesiredPhase,
-			expectedError: false,
+			name:     "desiredPhase set to Paused",
+			specYaml: yamlHasDesiredPhase,
 		},
 		{
-			name:          "desiredPhase set to wrong type",
-			specYaml:      yamlDesiredPhaseWrongType,
-			expectedError: true,
+			name:     "desiredPhase set to wrong type",
+			specYaml: yamlDesiredPhaseWrongType,
 		},
 		{
-			name:          "desiredPhase not present",
-			specYaml:      yamlNoDesiredPhase,
-			expectedError: false,
+			name:     "desiredPhase not present",
+			specYaml: yamlNoDesiredPhase,
 		},
 		{
-			name:          "lifecycle not present",
-			specYaml:      yamlNoLifecycle,
-			expectedError: false,
+			name:     "lifecycle not present",
+			specYaml: yamlNoLifecycle,
 		},
 	}
 	for _, tc := range testCases {
@@ -577,39 +601,35 @@ func Test_pipelineWithoutLifecycle(t *testing.T) {
 			obj := &kubernetes.GenericObject{}
 			obj.Spec.Raw = []byte(tc.specYaml)
 			withoutLifecycle, err := pipelineWithoutLifecycle(obj)
-			if tc.expectedError {
-				assert.NotNil(t, err)
-			} else {
-				assert.Nil(t, err)
-				bytes, _ := json.Marshal(withoutLifecycle)
-				fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
-				assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
-			}
+			assert.Nil(t, err)
+			bytes, _ := json.Marshal(withoutLifecycle)
+			fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
+			assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
 		})
 	}
 }
 
-func Test_pipelineSpecEqual(t *testing.T) {
+func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	testCases := []struct {
-		name          string
-		specYaml1     string
-		specYaml2     string
-		expectedEqual bool
-		expectedError bool
+		name                  string
+		specYaml1             string
+		specYaml2             string
+		expectedEqual         bool
+		expectedNeedsUpdating bool
 	}{
 		{
-			name:          "Equal Except for Lifecycle and null values",
-			specYaml1:     yamlHasDesiredPhase,
-			specYaml2:     yamlNoLifecycleWithNulls,
-			expectedEqual: true,
-			expectedError: false,
+			name:                  "Equal Except for Lifecycle and null values",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlNoLifecycleWithNulls,
+			expectedEqual:         false,
+			expectedNeedsUpdating: false,
 		},
 		{
-			name:          "Not Equal",
-			specYaml1:     yamlHasDesiredPhase,
-			specYaml2:     yamlHasDesiredPhaseDifferentUDF,
-			expectedEqual: false,
-			expectedError: false,
+			name:                  "Not Equal",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
+			expectedEqual:         true,
+			expectedNeedsUpdating: false,
 		},
 	}
 
@@ -619,8 +639,8 @@ func Test_pipelineSpecEqual(t *testing.T) {
 			obj1.Spec.Raw = []byte(tc.specYaml1)
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
-			equal, err := pipelineSpecEqual(context.Background(), obj1, obj2)
-			if tc.expectedError {
+			equal, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
+			if tc.expectedNeedsUpdating {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
@@ -691,6 +711,297 @@ func TestPipelineLabels(t *testing.T) {
 					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyUpgradeState, string(common.LabelValueUpgradePromoted))
 				}
 			}
+		})
+	}
+}
+
+func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+	pipelineRaw, _ := json.Marshal(isbsvcSpec)
+	return &apiv1.PipelineRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         defaultNamespace,
+			Name:              defaultPipelineRolloutName,
+			UID:               "some-uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{
+					Raw: pipelineRaw,
+				},
+			},
+		},
+	}
+}
+
+func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+	status := numaflowv1.PipelineStatus{
+		Phase: phase,
+	}
+	if fullyReconciled {
+		status.ObservedGeneration = 1
+	} else {
+		status.ObservedGeneration = 0
+	}
+	return &numaflowv1.Pipeline{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pipeline",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultPipelineRolloutName,
+			Namespace: defaultNamespace,
+		},
+		Spec:   spec,
+		Status: status,
+	}
+
+}
+
+func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+	return createPipelineOfSpec(pipelineSpec, phase, fullyReconciled)
+}
+
+func pipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) numaflowv1.PipelineSpec {
+	spec.Lifecycle.DesiredPhase = phase
+	return spec
+}
+
+// process an existing pipeline
+// in this test, the user preferred strategy is PPND
+func Test_processExistingPipeline_PPND(t *testing.T) {
+	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
+		DefaultUpgradeStrategy:    config.PPNDStrategyID,
+		PipelineSpecExcludedPaths: []string{"watermark", "lifecycle"},
+	})
+
+	ctx := context.Background()
+
+	// other tests may call this, but it fails if called more than once
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	falseValue := false
+	trueValue := true
+	ppndUpgradeStrategy := apiv1.UpgradeStrategyPPND
+
+	r := NewPipelineRolloutReconciler(
+		numaplaneClient,
+		scheme.Scheme,
+		restConfig,
+		customMetrics,
+		recorder)
+
+	testCases := []struct {
+		name                           string
+		newPipelineSpec                numaflowv1.PipelineSpec
+		existingPipelineDef            numaflowv1.Pipeline
+		initialRolloutPhase            apiv1.Phase
+		initialInProgressStrategy      *apiv1.UpgradeStrategy
+		numaflowControllerPauseRequest *bool
+		isbServicePauseRequest         *bool
+
+		expectedInProgressStrategy apiv1.UpgradeStrategy
+		expectedRolloutPhase       apiv1.Phase
+		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
+		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
+	}{
+		{
+			name:                           "nothing to do",
+			newPipelineSpec:                pipelineSpec,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpec, spec)
+			},
+		},
+		{
+			name:                           "direct apply",
+			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpecWithWatermarkDisabled, spec)
+			},
+		},
+		{
+			name:                           "spec difference results in PPND",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "external pause request at the same time as a DirectApply change",
+			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &trueValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "user sets desiredPhase=Paused",
+			newPipelineSpec:                pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:            "user sets desiredPhase=Running",
+			newPipelineSpec: pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
+			existingPipelineDef: *createPipelineOfSpec(
+				pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
+				numaflowv1.PipelinePhasePaused, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      nil,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning), spec)
+			},
+		},
+		{
+			name:                           "PPND in progress, spec not yet applied, pipeline not paused",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "PPND in progress, spec applied, still being reconciled",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createPipelineOfSpec(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused, false),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+		{
+			name:                           "PPND in progress, spec applied, done being reconciled",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			existingPipelineDef:            *createPipelineOfSpec(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused, true),
+			initialRolloutPhase:            apiv1.PhaseDeployed,
+			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			numaflowControllerPauseRequest: &falseValue,
+			isbServicePauseRequest:         &falseValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpecWithTopologyChange, spec)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			// first delete Pipeline in case it already exists, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+
+			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, pipelineList.Items, 0)
+
+			// create Pipeline definition
+			rollout := createPipelineRollout(tc.newPipelineSpec)
+			rollout.Status.Phase = tc.initialRolloutPhase
+			if tc.initialInProgressStrategy != nil {
+				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
+			} else {
+				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
+			}
+
+			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
+			rollout.Status.Init(rollout.Generation)
+
+			// create the already-existing Pipeline in Kubernetes
+			// this updates everything but the Status subresource
+			existingPipelineDef := &tc.existingPipelineDef
+			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
+			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+			// update Status subresource
+			pipeline.Status = tc.existingPipelineDef.Status
+			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			// external pause requests
+			GetPauseModule().pauseRequests = map[string]*bool{}
+			if tc.numaflowControllerPauseRequest != nil {
+				GetPauseModule().pauseRequests[GetPauseModule().getNumaflowControllerKey(defaultNamespace)] = tc.numaflowControllerPauseRequest
+			}
+			if tc.isbServicePauseRequest != nil {
+				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
+			}
+
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			assert.NoError(t, err)
+
+			////// check results:
+			// Check Phase of Rollout:
+			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+			// Check In-Progress Strategy
+			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+
+			// Check Pipeline spec
+			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineRolloutName, metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.NotNil(t, resultPipeline)
+			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", resultPipeline.Spec)
 		})
 	}
 }

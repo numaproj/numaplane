@@ -69,8 +69,6 @@ func (*ConfigManager) GetControllerDefinitionsMgr() *NumaflowControllerDefinitio
 type GlobalConfig struct {
 	LogLevel          int    `json:"logLevel" mapstructure:"logLevel"`
 	IncludedResources string `json:"includedResources" mapstructure:"includedResources"`
-	// Feature flag - if enabled causes pipeline(s) to be paused when pipeline, numaflow controller, or ISB Service gets updated
-	DataLossPrevention bool `json:"dataLossPrevention" mapstructure:"dataLossPrevention"`
 	// List of Numaflow Controller image names to look for
 	NumaflowControllerImageNames []string `json:"numaflowControllerImageNames" mapstructure:"numaflowControllerImageNames"`
 }

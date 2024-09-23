@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,6 +44,8 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -290,8 +293,15 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
-	if common.DataLossPrevention {
-		return processChildObjectWithoutDataLoss(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+	// determine the Upgrade Strategy user prefers
+	upgradeStrategy, err := usde.GetUserStrategy(ctx, isbServiceRollout.Namespace)
+	if err != nil {
+		return false, err
+	}
+
+	switch upgradeStrategy {
+	case config.PPNDStrategyID:
+		return processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -300,13 +310,19 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	} else if isbServiceNeedsUpdating {
-		// update ISBService
-		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
-		if err != nil {
-			return false, err
+	case config.NoStrategyID:
+		if isbServiceNeedsUpdating {
+			// update ISBService
+			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+			if err != nil {
+				return false, err
+			}
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case config.ProgressiveStrategyID:
+		return false, errors.New("Progressive Strategy not supported yet")
+	default:
+		return false, fmt.Errorf("%v strategy not recognized", upgradeStrategy)
 	}
 
 	return false, nil

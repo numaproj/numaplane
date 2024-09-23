@@ -44,7 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -120,8 +119,6 @@ var _ = BeforeSuite(func() {
 	numaLogger.SetLevel(4) // change to 3 for "info" level
 	logger.SetBaseLogger(numaLogger)
 
-	common.DataLossPrevention = false
-
 	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
@@ -164,9 +161,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	configManager := config.GetConfigManagerInstance()
-	err = configManager.LoadAllConfigs(func(err error) {
-		Expect(err).ToNot(HaveOccurred())
-	})
+	err = configManager.LoadAllConfigs(func(err error) { Expect(err).ToNot(HaveOccurred()) })
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.NoStrategyID})
+
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
 

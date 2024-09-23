@@ -12,12 +12,13 @@ import (
 	k8sclientgo "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
@@ -143,4 +144,9 @@ func downloadCRDToPath(url string, downloadDir string) error {
 		return err
 	}
 	return nil
+}
+
+func LoadGlobalConfig(fileDirectory string, fileName string) error {
+	configManager := config.GetConfigManagerInstance()
+	return configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(fileDirectory), config.WithConfigFileName(fileName))
 }
