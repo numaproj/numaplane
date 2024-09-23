@@ -111,6 +111,14 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
 
+func verifyInProgressStrategy(namespace string, pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	document("Verifying InProgressStrategy")
+	Eventually(func() bool {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return rollout.Status.UpgradeInProgress == inProgressStrategy
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+}
+
 // Get PipelineSpec from Unstructured type
 func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, error) {
 	specMap := u.Object["spec"]

@@ -228,6 +228,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
 
@@ -286,6 +287,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
 
@@ -306,6 +308,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 		}
 
@@ -321,6 +326,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
@@ -348,10 +354,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays that way
+		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
-		/*verifyPipelinePaused(Namespace, pipelineRolloutName)
-		document("verifying Pipeline stays paused")
-		Consistently(func() bool {
+		//document("verifying Pipeline stays paused")
+		/*Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			if err != nil {
@@ -360,6 +366,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue && retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())*/
 
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineRolloutName))
 	})
 
@@ -383,6 +390,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 	})
 
@@ -401,6 +409,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -424,6 +434,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyNumaflowControllerReady(Namespace)
 
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
@@ -444,6 +455,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -465,6 +478,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
+		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
