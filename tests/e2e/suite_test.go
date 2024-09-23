@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,6 +56,12 @@ var _ = BeforeSuite(func() {
 	}
 	err = os.Mkdir(directory, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
+	err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
+	Expect(err).NotTo(HaveOccurred())
+	err = os.MkdirAll(ResourceChangesOutputPath, os.ModePerm)
+	Expect(err).NotTo(HaveOccurred())
+
+	stopCh = make(chan struct{})
 
 	dataLossPrevention = os.Getenv("DATA_LOSS_PREVENTION")
 
@@ -113,7 +120,8 @@ var _ = AfterSuite(func() {
 
 	cancel()
 	By("tearing down test environment")
-	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", NumaplaneCtrlLogs)
+	close(stopCh)
+	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
@@ -123,8 +131,7 @@ var _ = AfterEach(func() {
 
 	report := CurrentSpecReport()
 	if report.Failed() {
-		getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", NumaplaneCtrlLogs)
-		getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", NumaflowCtrlLogs)
+		getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
 		AbortSuite("Test spec has failed, aborting suite run")
 	}
 
