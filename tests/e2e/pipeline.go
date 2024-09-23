@@ -1,7 +1,10 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -9,7 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/yaml"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -218,4 +223,102 @@ func getVertexLabelSelector(pipelineName string) string {
 
 func getDaemonLabelSelector(pipelineName string) string {
 	return fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyPipelineName, pipelineName, numaflowv1.KeyComponent, "daemon")
+}
+
+// build watcher functions for both Pipeline and PipelineRollout
+func watchPipelineRollout() {
+
+	defer wg.Done()
+	watcher, err := pipelineRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "pipeline_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if rollout, ok := event.Object.(*apiv1.PipelineRollout); ok {
+					rollout.ManagedFields = nil
+					rl := Output{
+						APIVersion: NumaplaneAPIVersion,
+						Kind:       "PipelineRollout",
+						Metadata:   rollout.ObjectMeta,
+						Spec:       rollout.Spec,
+						Status:     rollout.Status,
+					}
+					bytes, _ := yaml.Marshal(rl)
+					updateLog := fmt.Sprintf("PipelineRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+}
+
+func watchPipeline() {
+
+	defer wg.Done()
+	watcher, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "pipeline.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
+					pl := numaflowv1.Pipeline{}
+					err = util.StructToStruct(&obj, &pl)
+					if err != nil {
+						fmt.Printf("Failed to convert unstruct: %v\n", err)
+						return
+					}
+					pl.ManagedFields = nil
+					output := Output{
+						APIVersion: NumaflowAPIVersion,
+						Kind:       "Pipeline",
+						Metadata:   pl.ObjectMeta,
+						Spec:       pl.Spec,
+						Status:     pl.Status,
+					}
+					bytes, _ := yaml.Marshal(output)
+					updateLog := fmt.Sprintf("Pipeline update time: %v\nSpec: %s\n", time.Now().Format(time.RFC3339), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+
 }

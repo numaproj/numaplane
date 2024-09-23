@@ -1,13 +1,19 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/yaml"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
@@ -124,4 +130,101 @@ func updateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func watchMonoVertexRollout() {
+
+	defer wg.Done()
+	watcher, err := monoVertexRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "monovertex_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if rollout, ok := event.Object.(*apiv1.MonoVertexRollout); ok {
+					rollout.ManagedFields = nil
+					rl := Output{
+						APIVersion: NumaplaneAPIVersion,
+						Kind:       "MonoVertexRollout",
+						Metadata:   rollout.ObjectMeta,
+						Spec:       rollout.Spec,
+						Status:     rollout.Status,
+					}
+					bytes, _ := yaml.Marshal(rl)
+					updateLog := fmt.Sprintf("MonoVertexRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+}
+
+func watchMonoVertex() {
+
+	defer wg.Done()
+	watcher, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "monovertex.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
+					mvtx := numaflowv1.MonoVertex{}
+					err = util.StructToStruct(&obj, &mvtx)
+					if err != nil {
+						fmt.Printf("Failed to convert unstruct: %v\n", err)
+						return
+					}
+					mvtx.ManagedFields = nil
+					output := Output{
+						APIVersion: NumaflowAPIVersion,
+						Kind:       "MonoVertex",
+						Metadata:   mvtx.ObjectMeta,
+						Spec:       mvtx.Spec,
+						Status:     mvtx.Status,
+					}
+					bytes, _ := yaml.Marshal(output)
+					updateLog := fmt.Sprintf("MonoVertex update time: %v\nSpec: %s\n", time.Now().Format(time.RFC3339), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+
 }
