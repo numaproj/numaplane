@@ -85,7 +85,7 @@ func makePipelineDefinition(pipelineSpec numaflowv1.PipelineSpec) kubernetes.Gen
 	}
 }
 
-func Test_GetUpgradeStrategy(t *testing.T) {
+func Test_ResourceNeedsUpdating(t *testing.T) {
 	ctx := context.Background()
 
 	configManager := config.GetConfigManagerInstance()
@@ -93,22 +93,25 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
 
 	testCases := []struct {
-		name             string
-		newSpec          kubernetes.GenericObject
-		existingSpec     kubernetes.GenericObject
-		usdeConfig       config.USDEConfig
-		namespaceConfig  config.NamespaceConfig
-		expectedStrategy UpgradeStrategy
+		name                  string
+		newSpec               kubernetes.GenericObject
+		existingSpec          kubernetes.GenericObject
+		usdeConfig            config.USDEConfig
+		namespaceConfig       *config.NamespaceConfig
+		expectedNeedsUpdating bool
+		expectedStrategy      apiv1.UpgradeStrategy
 	}{
 		{
 			name:         "empty pipeline spec excluded paths",
 			newSpec:      pipelineDefn,
 			existingSpec: pipelineDefn,
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{},
 			},
-			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyNoOp,
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: false,
+			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
 			name:    "empty pipeline spec excluded paths and change interStepBufferServiceName field",
@@ -119,10 +122,12 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{},
 			},
-			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field (changed)",
@@ -133,20 +138,24 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
-			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyApply,
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
 			name:         "only exclude interStepBufferServiceName field (NOT changed)",
 			newSpec:      pipelineDefn,
 			existingSpec: pipelineDefn,
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
-			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyNoOp,
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: false,
+			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (no user strategy)",
@@ -157,24 +166,12 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
-			namespaceConfig:  config.NamespaceConfig{},
-			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
-		},
-		{
-			name:    "only exclude interStepBufferServiceName field and change some other field (with empty user strategy)",
-			newSpec: pipelineDefn,
-			existingSpec: func() kubernetes.GenericObject {
-				newPipelineSpec := defaultPipelineSpec.DeepCopy()
-				newPipelineSpec.Vertices[0].Name = "new-vtx-name"
-				return makePipelineDefinition(*newPipelineSpec)
-			}(),
-			usdeConfig: config.USDEConfig{
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
-			},
-			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: ""},
-			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with invalid user strategy)",
@@ -185,10 +182,12 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
-			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: "invalid"},
-			expectedStrategy: UpgradeStrategyPPND, // TODO-PROGRESSIVE: the strategy should be UpgradeStrategyProgressive instead of UpgradeStrategyPPND
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "only exclude interStepBufferServiceName field and change some other field (with valid user strategy)",
@@ -199,10 +198,12 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
 			},
-			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedStrategy: UpgradeStrategyPPND,
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:    "with changes in array deep map but excluded",
@@ -215,10 +216,12 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
 			},
-			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedStrategy: UpgradeStrategyApply,
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
 			name:    "with changes in array deep map but one is NOT excluded",
@@ -232,21 +235,27 @@ func Test_GetUpgradeStrategy(t *testing.T) {
 				return makePipelineDefinition(*newPipelineSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
 			},
-			namespaceConfig:  config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedStrategy: UpgradeStrategyPPND,
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			configManager.UpdateUSDEConfig(tc.usdeConfig)
-			configManager.UpdateNamespaceConfig(defaultNamespace, tc.namespaceConfig)
-			// TODO: write test cases with various values for inProgressUpgradeStrategy and override arguments instead of empty string and nils.
-			// Also, include testing the boolean returned value specsDiffer
-			strategy, _, err := DeriveUpgradeStrategy(ctx, &tc.newSpec, &tc.existingSpec, "", nil, nil)
+			if tc.namespaceConfig != nil {
+				configManager.UpdateNamespaceConfig(defaultNamespace, *tc.namespaceConfig)
+			} else {
+				configManager.UnsetNamespaceConfig(defaultNamespace)
+			}
+
+			needsUpdating, strategy, err := ResourceNeedsUpdating(ctx, &tc.newSpec, &tc.existingSpec)
 			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			assert.Equal(t, tc.expectedStrategy, strategy)
 		})
 	}

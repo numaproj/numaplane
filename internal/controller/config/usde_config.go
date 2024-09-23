@@ -1,20 +1,10 @@
 package config
 
-import (
-	"encoding/json"
-	"fmt"
-)
-
-type USDEUserStrategy string
-
-const (
-	// ProgressiveStrategyID USDEUserStrategy = "progressive" // TODO-PROGRESSIVE: enable this
-	PPNDStrategyID USDEUserStrategy = "pause-and-drain"
-)
-
 type USDEConfig struct {
-	PipelineSpecExcludedPaths   []string `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
-	ISBServiceSpecExcludedPaths []string `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
+	// If user's config doesn't exist or doesn't specify strategy, this is the default
+	DefaultUpgradeStrategy      USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
+	PipelineSpecExcludedPaths   []string         `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
+	ISBServiceSpecExcludedPaths []string         `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
 }
 
 func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
@@ -36,24 +26,4 @@ func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
 	defer cm.usdeConfigLock.Unlock()
 
 	return cm.usdeConfig
-}
-
-func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
-	var usdeUserStrategyStr string
-	if err := json.Unmarshal(data, &usdeUserStrategyStr); err != nil {
-		return err
-	}
-
-	// Make sure the string is one of the possible strategy values
-	if usdeUserStrategyStr != string(PPNDStrategyID) {
-		return fmt.Errorf("invalid strategy '%s' (allowed value is: %s)", usdeUserStrategyStr, PPNDStrategyID)
-	}
-	// TODO-PROGRESSIVE: replace if-statement above for if-statement below
-	// if usdeUserStrategyStr != string(ProgressiveStrategyID) && usdeUserStrategyStr != string(PPNDStrategyID) {
-	// 	return fmt.Errorf("invalid strategy '%s' (allowed values are: %s or %s)", usdeUserStrategyStr, ProgressiveStrategyID, PPNDStrategyID)
-	// }
-
-	*s = USDEUserStrategy(usdeUserStrategyStr)
-
-	return nil
 }
