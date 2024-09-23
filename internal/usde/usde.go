@@ -56,7 +56,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 		"existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths,
 	).Debug("split existing spec")
 
-	// Compare specs without the apply fields and check user's strategy to either return PPND or Progressive
+	// Compare specs without the apply fields and check user's strategy to return their preferred strategy
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
 		userUpgradeStrategy, err := GetUserStrategy(ctx, newSpec.Namespace)
 		if err != nil {
