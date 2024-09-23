@@ -95,10 +95,10 @@ func verifyPipelineRunning(namespace string, pipelineName string, numVertices in
 }
 
 func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string, ppnd bool) {
-	/*if ppnd {
+	if ppnd {
 		document("Verify that in-progress-strategy gets set to PPND")
-		verifyInProgressStrategy("pause-and-drain")
-	}*/
+		verifyInProgressStrategy(namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+	}
 
 	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
@@ -112,6 +112,14 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 		})
 	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
+}
+
+func verifyInProgressStrategy(namespace string, pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	document("Verifying InProgressStrategy")
+	Eventually(func() bool {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return rollout.Status.UpgradeInProgress == inProgressStrategy
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
 // Get PipelineSpec from Unstructured type
