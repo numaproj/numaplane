@@ -118,7 +118,6 @@ test: codegen fmt vet envtest ## Run tests.
 test-e2e: codegen fmt vet envtest ## Run e2e tests.
 	GOFLAGS="-count=1" go test -v ./tests/e2e/... 
 
-	
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v1.58.0

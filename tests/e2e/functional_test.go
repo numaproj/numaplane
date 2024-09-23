@@ -184,6 +184,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
+		wg.Add(1)
+		go watchNumaflowControllerRollout()
+
 		verifyNumaflowControllerRolloutReady()
 
 		verifyNumaflowControllerReady(Namespace)
@@ -200,6 +203,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
+
+		wg.Add(1)
+		go watchISBServiceRollout()
+
+		wg.Add(1)
+		go watchISBService()
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
@@ -219,11 +228,17 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
+		wg.Add(1)
+		go watchPipelineRollout()
+
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
+
+		wg.Add(1)
+		go watchPipeline()
 
 		verifyPipelineRolloutReady(pipelineRolloutName)
 
@@ -247,6 +262,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
+
+		wg.Add(1)
+		go watchMonoVertexRollout()
+
+		wg.Add(1)
+		go watchMonoVertex()
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
