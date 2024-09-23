@@ -32,7 +32,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -150,7 +149,7 @@ var (
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
-					Container: numaflowv1.Container{
+					Container: &numaflowv1.Container{
 						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 					},
 				},
@@ -270,8 +269,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
-			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-				return retrievedPipelineStatus.Phase != string(numaflowv1.PipelinePhasePaused)
+			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
 		}
 

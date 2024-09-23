@@ -58,7 +58,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
-					Container: numaflowv1.Container{
+					Container: &numaflowv1.Container{
 						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 					},
 				},
@@ -146,7 +146,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 				Sink: &numaflowv1.Sink{
 					AbstractSink: numaflowv1.AbstractSink{
 						UDSink: &numaflowv1.UDSink{
-							Container: numaflowv1.Container{
+							Container: &numaflowv1.Container{
 								Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 							},
 						},

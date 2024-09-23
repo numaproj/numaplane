@@ -14,7 +14,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -35,7 +34,7 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
-func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 
 	Eventually(func() bool {
 
@@ -45,7 +44,7 @@ func verifyPipelineStatusEventually(namespace string, pipelineName string, f fun
 	}, testTimeout).Should(BeTrue())
 }
 
-func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, kubernetes.GenericStatus) bool) {
+func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineName)
 
@@ -79,8 +78,8 @@ func verifyPipelineRolloutHealthy(pipelineRolloutName string) {
 func verifyPipelineRunning(namespace string, pipelineName string, numVertices int) {
 	document("Verifying that the Pipeline is running")
 	verifyPipelineStatusEventually(namespace, pipelineName,
-		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhaseRunning)
+		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhaseRunning
 		})
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineName, metav1.GetOptions{})
@@ -95,7 +94,11 @@ func verifyPipelineRunning(namespace string, pipelineName string, numVertices in
 
 }
 
-func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string) {
+func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string, ppnd bool) {
+	/*if ppnd {
+		document("Verify that in-progress-strategy gets set to PPND")
+		verifyInProgressStrategy("pause-and-drain")
+	}*/
 
 	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
@@ -103,10 +106,10 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
-	document("Verify that Pipeline is paused")
+	document("Verify that Pipeline is paused and fully drained")
 	verifyPipelineStatusEventually(Namespace, pipelineName,
-		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-			return retrievedPipelineStatus.Phase == string(numaflowv1.PipelinePhasePaused)
+		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 		})
 	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
@@ -145,10 +148,10 @@ func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, kubernetes.GenericStatus, error) {
+func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
-	var retrievedPipelineStatus kubernetes.GenericStatus
+	var retrievedPipelineStatus numaflowv1.PipelineStatus
 	unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 	if err != nil {
 		return nil, retrievedPipelineSpec, retrievedPipelineStatus, err
@@ -157,11 +160,18 @@ func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Un
 	if err != nil {
 		return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, err
 	}
-	retrievedPipelineStatus, err = getNumaflowResourceStatus(unstruct)
+	retrievedPipelineStatus, err = getPipelineStatus(unstruct)
 	if err != nil {
 		return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, err
 	}
 	return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, nil
+}
+
+func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus, error) {
+	statusMap := u.Object["status"]
+	var status numaflowv1.PipelineStatus
+	err := util.StructToStruct(&statusMap, &status)
+	return status, err
 }
 
 func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
