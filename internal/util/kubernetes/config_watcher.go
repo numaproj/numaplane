@@ -48,6 +48,8 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, numaplane
 		return
 	}
 
+	fmt.Println("deletethis: watching configmaps")
+
 	for {
 		event, ok := <-watcher.ResultChan()
 		if !ok {
@@ -67,8 +69,10 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, numaplane
 		switch labelVal {
 
 		case common.LabelValueNumaflowControllerDefinitions:
+
 			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
 			if configMap.Namespace != numaplaneNamespace {
+				fmt.Println("deletethis: got a Numaflow controller definition in the wrong namespace")
 				break
 			}
 
@@ -114,6 +118,10 @@ func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, conf
 
 		// controller config definition is immutable, so no need to update the existing config
 		if event.Type == watch.Added {
+			for _, definition := range controllerConfig.ControllerDefinitions {
+				fmt.Printf("deletethis: added Numaflow Controller Definition Config: %+v\n", definition.Version)
+			}
+
 			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig)
 		} else if event.Type == watch.Deleted {
 			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig)
