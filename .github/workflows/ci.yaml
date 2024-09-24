@@ -155,6 +155,7 @@ jobs:
           GOPATH: /home/runner/go
         run:
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=${{matrix.datalossprevention}} make start
+          sleep 60
 
       - name: Run e2e tests
         env:
