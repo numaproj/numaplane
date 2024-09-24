@@ -468,7 +468,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// if not, should we set one?
 	if !inProgressStrategySet {
 		// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
-		if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != apiv1.UpgradeStrategyPPND {
+		if userPreferredStrategy == config.PPNDStrategyID {
 			// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 			needPPND := false
 			if userPreferredStrategy == config.PPNDStrategyID {
@@ -487,7 +487,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
 		}
-		if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != apiv1.UpgradeStrategyProgressive {
+		if userPreferredStrategy == config.ProgressiveStrategyID {
 			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 				inProgressStrategy = apiv1.UpgradeStrategyProgressive
 				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
