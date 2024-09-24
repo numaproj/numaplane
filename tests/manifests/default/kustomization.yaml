@@ -3,6 +3,8 @@ kind: Kustomization
 
 resources:
   - ../../../config/default
+  - ./controller_def_rc0.0.18.yaml
+  - ./controller_def_rc0.0.19.yaml
 
 patches:
   - patch: |-

@@ -426,7 +426,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.13"},
+			Controller: apiv1.Controller{Version: "0.0.19"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -455,7 +455,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.13"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.19"
 		})
 
 		verifyNumaflowControllerRolloutReady()
@@ -714,7 +714,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.12"},
+			Controller: apiv1.Controller{Version: "0.0.18"},
 		},
 	}
 
