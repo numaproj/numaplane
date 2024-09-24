@@ -86,7 +86,9 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 	resourceLookupKey := types.NamespacedName{Name: monoVertexRolloutName, Namespace: namespace}
 
 	Context("When applying a MonoVertexRollout spec", func() {
+
 		It("Should create the MonoVertexRollout if it does not exist", func() {
+
 			Expect(k8sClient.Create(ctx, monoVertexRollout)).Should(Succeed())
 
 			createdResource := &apiv1.MonoVertexRollout{}
@@ -109,8 +111,8 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			//By("Veryifying the content of the MonoVertex spec")
-			//Expect(createdMonoVertex.Spec).Should(Equal(monoVertexSpec))
+			By("Veryifying the content of the MonoVertex spec")
+			Expect(createdMonoVertex.Spec).Should(Equal(monoVertexSpec))
 		})
 
 		It("Should have the MonoVertexRollout.Status.Phase as Deployed and ObservedGeneration matching Generation", func() {
