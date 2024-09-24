@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -918,9 +919,7 @@ func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject,
 	}
 	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
 
-	// TODO: don't need to ignore nulls after Derek changes Numaflow side
-	// return reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
-	return !util.CompareMapsIgnoringNulls(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+	return !reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
 }
 
 // remove 'lifecycle' key/value pair from Pipeline spec
