@@ -67,6 +67,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, numaplane
 		switch labelVal {
 
 		case common.LabelValueNumaflowControllerDefinitions:
+
 			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
 			if configMap.Namespace != numaplaneNamespace {
 				break

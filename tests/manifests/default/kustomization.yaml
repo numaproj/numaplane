@@ -3,6 +3,8 @@ kind: Kustomization
 
 resources:
   - ../../../config/default
+  - ./controller_def_rc0.0.18.yaml
+  - ./controller_def_rc0.0.19.yaml
 
 patches:
   - patch: |-
@@ -19,12 +21,3 @@ configMapGenerator:
   files:
     - config.yaml
   behavior: merge  # Optional, defaults to "create"
-- name: numaflow-controller-definitions-config
-  namespace: numaplane-system
-  files:
-    - controller_definitions.yaml
-  options:
-    immutable: true
-    disableNameSuffixHash: true
-    labels:
-      numaplane.numaproj.io/config: numaflow-controller-definitions

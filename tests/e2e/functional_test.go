@@ -32,7 +32,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -150,7 +149,7 @@ var (
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
-					Container: numaflowv1.Container{
+					Container: &numaflowv1.Container{
 						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 					},
 				},
@@ -291,8 +290,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		if dataLossPrevention == "true" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
-			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus kubernetes.GenericStatus) bool {
-				return retrievedPipelineStatus.Phase != string(numaflowv1.PipelinePhasePaused)
+			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
 		}
 
@@ -307,6 +306,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
@@ -328,10 +328,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
+
 		}
 
 		// wait for update to reconcile
@@ -346,6 +348,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
@@ -374,6 +377,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays that way
+
 		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
 		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
 		//document("verifying Pipeline stays paused")
@@ -387,6 +391,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())*/
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineRolloutName))
 	})
 
@@ -410,6 +415,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
+
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 	})
@@ -420,7 +426,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.13"},
+			Controller: apiv1.Controller{Version: "0.0.19"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -429,9 +435,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
+
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
@@ -447,7 +455,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.13"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.19"
 		})
 
 		verifyNumaflowControllerRolloutReady()
@@ -455,6 +463,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerReady(Namespace)
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
@@ -475,9 +484,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if dataLossPrevention == "true" {
+
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
+
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
@@ -703,7 +714,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.12"},
+			Controller: apiv1.Controller{Version: "0.0.18"},
 		},
 	}
 
