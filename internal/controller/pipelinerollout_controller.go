@@ -759,6 +759,13 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, 
 	}, nil
 }
 
+// getPipelineRolloutName gets the PipelineRollout name from the pipeline
+// by locating the last index of '-' and trimming the suffix.
+func getPipelineRolloutName(pipeline string) string {
+	index := strings.LastIndex(pipeline, "-")
+	return pipeline[:index]
+}
+
 func getISBSvcName(pipeline PipelineSpec) string {
 	if pipeline.InterStepBufferServiceName == "" {
 		return "default"

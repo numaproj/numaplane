@@ -954,7 +954,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			// first delete Pipeline in case it already exists, in Kubernetes
+			// first delete Pipeline and PipelineRollout in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineName, metav1.DeleteOptions{})
 
 			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
