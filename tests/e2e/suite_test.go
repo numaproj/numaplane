@@ -49,9 +49,7 @@ var _ = BeforeSuite(func() {
 	var err error
 	// make output directory to store temporary outputs; if it's there from before delete it
 	disableWatch = os.Getenv("DISABLE_WATCH")
-	if disableWatch != "true" {
-		setupOutputDir()
-	}
+	setupOutputDir()
 
 	stopCh = make(chan struct{})
 
@@ -116,9 +114,7 @@ var _ = AfterSuite(func() {
 	cancel()
 	By("tearing down test environment")
 	close(stopCh)
-	if disableWatch != "true" {
-		getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
-	}
+	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
@@ -128,9 +124,7 @@ var _ = AfterEach(func() {
 
 	report := CurrentSpecReport()
 	if report.Failed() {
-		if disableWatch != "true" {
-			getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
-		}
+		getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
 		AbortSuite("Test spec has failed, aborting suite run")
 	}
 
@@ -149,9 +143,11 @@ func setupOutputDir() {
 	}
 	err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
 	Expect(err).NotTo(HaveOccurred())
-	for _, dir := range dirs {
-		err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
-		Expect(err).NotTo(HaveOccurred())
+	if disableWatch != "true" {
+		for _, dir := range dirs {
+			err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
+			Expect(err).NotTo(HaveOccurred())
+		}
 	}
 
 }
