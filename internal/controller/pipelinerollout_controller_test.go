@@ -967,7 +967,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if tc.initialInProgressStrategy != nil {
 				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
-				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
 			} else {
 				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
