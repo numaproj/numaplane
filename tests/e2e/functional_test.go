@@ -470,7 +470,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerReady(Namespace)
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 4)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
 
