@@ -410,7 +410,7 @@ var yamlHasDesiredPhaseAndOtherLifecycleField = `
 		  "name": "cat",
 		  "udf": {
 			"builtin": {
-			  "name": "SOMETHING_ELSE"
+			  "name": "cat"
 			}
 		  }
 		},
@@ -435,11 +435,9 @@ var yamlHasDesiredPhaseAndOtherLifecycleField = `
 }
 `
 
-var yamlNoDesiredPhase = `
+var yamlNoLifecycle = `
 {
 	  "interStepBufferServiceName": "default",
-	  "lifecycle": {
-	  },
 	  "vertices": [
 		{
 		  "name": "in",
@@ -479,9 +477,11 @@ var yamlNoDesiredPhase = `
 }
 `
 
-var yamlNoLifecycle = `
+var yamlNoDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
+	  "lifecycle": {
+	  },
 	  "vertices": [
 		{
 		  "name": "in",
