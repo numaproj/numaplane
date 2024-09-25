@@ -908,28 +908,35 @@ func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.Gene
 // pipelineSpecNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle field from comparison, as well as any nulls to test for equality
-	pipelineWithoutLifecycleA, err := pipelineWithoutLifecycle(a)
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutLifecycleB, err := pipelineWithoutLifecycle(b)
+	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
 	if err != nil {
 		return false, err
 	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutLifecycleA=%v, pipelineWithoutLifecycleB=%v\n", pipelineWithoutLifecycleA, pipelineWithoutLifecycleB)
+	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
 
-	return !reflect.DeepEqual(pipelineWithoutLifecycleA, pipelineWithoutLifecycleB), nil
+	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
 }
 
-// remove 'lifecycle' key/value pair from Pipeline spec
-func pipelineWithoutLifecycle(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
+// remove 'lifecycle.desiredPhase' key/value pair from Pipeline spec
+// also remove 'lifecycle' if it's an empty map
+func pipelineWithoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
 	var pipelineAsMap map[string]any
 	if err := json.Unmarshal(obj.Spec.Raw, &pipelineAsMap); err != nil {
 		return nil, err
 	}
+	// remove "lifecycle.desiredPhase"
 	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
 	util.RemovePaths(pipelineAsMap, comparisonExcludedPaths, ".")
+	// if "lifecycle" is there and empty, remove it
+	lifecycleMap, found := pipelineAsMap["lifecycle"].(map[string]interface{})
+	if found && len(lifecycleMap) == 0 {
+		util.RemovePaths(pipelineAsMap, []string{"lifecycle"}, ".")
+	}
 	return pipelineAsMap, nil
 }
 

@@ -3,7 +3,6 @@ package util
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -276,95 +275,6 @@ func Test_SplitMap(t *testing.T) {
 
 			assert.Equal(t, expectedOnlyPaths.String(), actualOnlyPaths.String())
 			assert.Equal(t, expectedWithoutPaths.String(), actualWithoutPaths.String())
-		})
-	}
-}
-
-func Test_removeNullValuesFromMap(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    msa
-		expected msa
-	}{
-		{
-			name:     "nested map with empty map",
-			input:    msa{"foo": msa{"bar": msa{}, "baz": "qux"}, "hello": "world"},
-			expected: msa{"foo": msa{"baz": "qux"}, "hello": "world"},
-		},
-		{
-			name:     "array with nil elements",
-			input:    msa{"foo": []any{nil, "bar", nil, "baz"}, "hello": "world"},
-			expected: msa{"foo": []any{"bar", "baz"}, "hello": "world"},
-		},
-		{
-			name:     "array with empty element map",
-			input:    msa{"foo": []any{"bar", msa{}, "baz", nil}, "hello": "world"},
-			expected: msa{"foo": []any{"bar", "baz"}, "hello": "world"},
-		},
-		{
-			name:     "map with nil value",
-			input:    msa{"foo": nil, "bar": "baz"},
-			expected: msa{"bar": "baz"},
-		},
-		{
-			name:     "map with empty string, false boolean, and 0 numeric value",
-			input:    msa{"foo": "", "bar": "baz", "bool": false, "number": 0.0, "boolt": true, "num": 123},
-			expected: msa{"bar": "baz", "boolt": true, "num": 123},
-		},
-		{
-			name: "complex map with many cases",
-			input: msa{
-				"mapKey": msa{
-					"empty":         nil,
-					"scalarInt":     5,
-					"scalarString":  "blah",
-					"emptyMap":      msa{},
-					"emptyArray":    []any{},
-					"nonEmptyArray": []any{"a", "b"},
-					"arrayOfEmptyMaps": []any{
-						msa{"emptyMap1": msa{}},
-						msa{"emptyMap2": msa{}},
-					},
-					"arrayOfEmptyAndNonEmptyMaps": []any{
-						msa{"emptyMap1": msa{}},
-						msa{"emptyMap2": msa{}},
-						msa{"nonEmptyMap": msa{"x": 123}},
-					},
-					"nestedMapKeep": msa{
-						"innerMapKeep":   msa{"a": "b"},
-						"innerMapDelete": msa{},
-					},
-					"nestedMapDelete": msa{
-						"innerMapDelete": msa{},
-					},
-					"stringKeyWithEmptyValue": "",
-					"intKeyWithZeroValue":     0,
-					"boolKeyWithZeroValue":    false,
-				},
-			},
-			expected: msa{
-				"mapKey": msa{
-					"scalarInt":     5,
-					"scalarString":  "blah",
-					"nonEmptyArray": []any{"a", "b"},
-					"arrayOfEmptyAndNonEmptyMaps": []any{
-						msa{"nonEmptyMap": msa{"x": 123}},
-					},
-					"nestedMapKeep": msa{
-						"innerMapKeep": msa{"a": "b"},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			removeNullValuesFromMap(tc.input)
-
-			if !reflect.DeepEqual(tc.expected, tc.input) {
-				t.Errorf("\nexpected:\t%+v\nactual:\t%+v", tc.expected, tc.input)
-			}
 		})
 	}
 }

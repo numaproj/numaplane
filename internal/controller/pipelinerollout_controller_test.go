@@ -19,9 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -391,11 +389,12 @@ var yamlHasDesiredPhaseDifferentUDF = `
 }
 `
 
-var yamlDesiredPhaseWrongType = `
+var yamlHasDesiredPhaseAndOtherLifecycleField = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
-		"desiredPhase": 3
+		"desiredPhase": "Paused",
+		"anotherField": 1
 	  },
 	  "vertices": [
 		{
@@ -411,7 +410,7 @@ var yamlDesiredPhaseWrongType = `
 		  "name": "cat",
 		  "udf": {
 			"builtin": {
-			  "name": "cat"
+			  "name": "SOMETHING_ELSE"
 			}
 		  }
 		},
@@ -483,9 +482,6 @@ var yamlNoDesiredPhase = `
 var yamlNoLifecycle = `
 {
 	  "interStepBufferServiceName": "default",
-	  "lifecycle": {
-		"desiredPhase": "Paused"
-	  },
 	  "vertices": [
 		{
 		  "name": "in",
@@ -525,111 +521,41 @@ var yamlNoLifecycle = `
 }
 `
 
-var yamlNoLifecycleWithNulls = `
-{
-	  "interStepBufferServiceName": "default",
-	  "lifecycle": {
-		"desiredPhase": "Paused"
-	  },
-	  "vertices": [
-		{
-		  "name": "in",
-		  "source": {
-			"generator": {
-			  "rpu": 5,
-			  "duration": "1s"
-			}
-		  }
-		},
-		{
-		  "name": "cat",
-		  "udf": {
-			"builtin": {
-			  "name": "cat"
-			}
-		  }
-		},
-		{
-		  "name": "out",
-		  "sink": {
-			"log": {},
-			"RANDOM_KEY":
-			{
-				"RANDOM_INNER_KEY": {}
-			}
-		  }
-		}
-	  ],
-	  "edges": [
-		{
-		  "from": "in",
-		  "to": "cat"
-		},
-		{
-		  "from": "cat",
-		  "to": "out"
-		}
-	  ]
-	
-}
-`
-
-func Test_pipelineWithoutLifecycle(t *testing.T) {
-	testCases := []struct {
-		name     string
-		specYaml string
-	}{
-		{
-			name:     "desiredPhase set to Paused",
-			specYaml: yamlHasDesiredPhase,
-		},
-		{
-			name:     "desiredPhase set to wrong type",
-			specYaml: yamlDesiredPhaseWrongType,
-		},
-		{
-			name:     "desiredPhase not present",
-			specYaml: yamlNoDesiredPhase,
-		},
-		{
-			name:     "lifecycle not present",
-			specYaml: yamlNoLifecycle,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			obj := &kubernetes.GenericObject{}
-			obj.Spec.Raw = []byte(tc.specYaml)
-			withoutLifecycle, err := pipelineWithoutLifecycle(obj)
-			assert.Nil(t, err)
-			bytes, _ := json.Marshal(withoutLifecycle)
-			fmt.Printf("Test case %q: final yaml=%s\n", tc.name, string(bytes))
-			assert.False(t, strings.Contains(string(bytes), "desiredPhase"))
-		})
-	}
-}
-
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	testCases := []struct {
 		name                  string
 		specYaml1             string
 		specYaml2             string
-		expectedEqual         bool
 		expectedNeedsUpdating bool
+		expectedError         bool
 	}{
-		{
-			name:                  "Equal Except for Lifecycle and null values",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlNoLifecycleWithNulls,
-			expectedEqual:         false,
-			expectedNeedsUpdating: false,
-		},
 		{
 			name:                  "Not Equal",
 			specYaml1:             yamlHasDesiredPhase,
 			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
-			expectedEqual:         true,
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Not Equal - another lifecycle field",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlHasDesiredPhaseAndOtherLifecycleField,
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Equal - just desiredPhase different",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlNoDesiredPhase,
 			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Equal - just lifecycle different",
+			specYaml1:             yamlHasDesiredPhase,
+			specYaml2:             yamlNoLifecycle,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
 		},
 	}
 
@@ -639,12 +565,12 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 			obj1.Spec.Raw = []byte(tc.specYaml1)
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
-			equal, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
-			if tc.expectedNeedsUpdating {
+			needsUpdating, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
+			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedEqual, equal)
+				assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			}
 
 		})
