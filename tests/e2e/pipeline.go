@@ -236,7 +236,7 @@ func watchPipelineRollout() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "pipeline_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("Failed to open log file: %v\n", err)
 		return
@@ -257,7 +257,7 @@ func watchPipelineRollout() {
 						Status:     rollout.Status,
 					}
 					bytes, _ := yaml.Marshal(rl)
-					updateLog := fmt.Sprintf("PipelineRollout update time: %v\n%s\n", time.Now().Format(time.RFC3339), string(bytes))
+					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
 					_, err = file.WriteString(updateLog)
 					if err != nil {
 						fmt.Printf("Failed to write to log file: %v\n", err)
@@ -281,7 +281,7 @@ func watchPipeline() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesOutputPath, "pipeline.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("Failed to open log file: %v\n", err)
 		return
@@ -308,7 +308,7 @@ func watchPipeline() {
 						Status:     pl.Status,
 					}
 					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("Pipeline update time: %v\nSpec: %s\n", time.Now().Format(time.RFC3339), string(bytes))
+					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
 					_, err = file.WriteString(updateLog)
 					if err != nil {
 						fmt.Printf("Failed to write to log file: %v\n", err)

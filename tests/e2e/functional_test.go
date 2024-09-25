@@ -185,8 +185,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		wg.Add(1)
-		go watchNumaflowControllerRollout()
+		if disableWatch != "true" {
+			wg.Add(1)
+			go watchNumaflowControllerRollout()
+		}
 
 		verifyNumaflowControllerRolloutReady()
 
@@ -205,11 +207,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		wg.Add(1)
-		go watchISBServiceRollout()
+		if disableWatch != "true" {
+			wg.Add(1)
+			go watchISBServiceRollout()
 
-		wg.Add(1)
-		go watchISBService()
+			wg.Add(1)
+			go watchISBService()
+		}
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
@@ -229,8 +233,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		wg.Add(1)
-		go watchPipelineRollout()
+		if disableWatch != "true" {
+			wg.Add(1)
+			go watchPipelineRollout()
+
+			wg.Add(1)
+			go watchPipeline()
+		}
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -238,8 +247,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
-		wg.Add(1)
-		go watchPipeline()
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -267,11 +274,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return monoVertexSpec.Source != nil
 		})
 
-		wg.Add(1)
-		go watchMonoVertexRollout()
+		if disableWatch != "true" {
+			wg.Add(1)
+			go watchMonoVertexRollout()
 
-		wg.Add(1)
-		go watchMonoVertex()
+			wg.Add(1)
+			go watchMonoVertex()
+		}
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
