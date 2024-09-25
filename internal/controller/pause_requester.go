@@ -92,7 +92,8 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 			return false, err
 		}
 		for _, pipeline := range pipelines {
-			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipeline.Name})
+			pipelineRollout := getPipelineRolloutName(pipeline.Name)
+			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipelineRollout})
 		}
 	}
 

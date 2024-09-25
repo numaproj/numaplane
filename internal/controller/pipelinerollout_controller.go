@@ -374,7 +374,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	newPipelineDef, err := makePipelineDefinition(pipelineRollout)
+	newPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -468,7 +468,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// if not, should we set one?
 	if !inProgressStrategySet {
 		// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
-		if userPreferredStrategy == config.PPNDStrategyID && inProgressStrategy != apiv1.UpgradeStrategyPPND {
+		if userPreferredStrategy == config.PPNDStrategyID {
 			// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 			needPPND := false
 			if userPreferredStrategy == config.PPNDStrategyID {
@@ -487,7 +487,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
 		}
-		if userPreferredStrategy == config.ProgressiveStrategyID && inProgressStrategy != apiv1.UpgradeStrategyProgressive {
+		if userPreferredStrategy == config.ProgressiveStrategyID {
 			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 				inProgressStrategy = apiv1.UpgradeStrategyProgressive
 				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
@@ -542,7 +542,7 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineDef, err := makePipelineDefinition(pipelineRollout)
+	pipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return err
 	}
@@ -729,25 +729,41 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-func makePipelineDefinition(pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
+func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
 
+	if pipelineRollout.Status.NameCount == nil {
+		pipelineRollout.Status.NameCount = new(int32)
+		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		if statusUpdateErr != nil {
+			return nil, statusUpdateErr
+		}
+	}
+
+	curNameCount := *pipelineRollout.Status.NameCount
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name,
+			Name:            pipelineRollout.Name + "-" + fmt.Sprint(curNameCount),
 			Namespace:       pipelineRollout.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}, nil
+}
+
+// getPipelineRolloutName gets the PipelineRollout name from the pipeline
+// by locating the last index of '-' and trimming the suffix.
+func getPipelineRolloutName(pipeline string) string {
+	index := strings.LastIndex(pipeline, "-")
+	return pipeline[:index]
 }
 
 func getISBSvcName(pipeline PipelineSpec) string {

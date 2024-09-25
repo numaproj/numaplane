@@ -58,7 +58,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
-					Container: numaflowv1.Container{
+					Container: &numaflowv1.Container{
 						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 					},
 				},
@@ -86,7 +86,9 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 	resourceLookupKey := types.NamespacedName{Name: monoVertexRolloutName, Namespace: namespace}
 
 	Context("When applying a MonoVertexRollout spec", func() {
+
 		It("Should create the MonoVertexRollout if it does not exist", func() {
+
 			Expect(k8sClient.Create(ctx, monoVertexRollout)).Should(Succeed())
 
 			createdResource := &apiv1.MonoVertexRollout{}
@@ -146,7 +148,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 				Sink: &numaflowv1.Sink{
 					AbstractSink: numaflowv1.AbstractSink{
 						UDSink: &numaflowv1.UDSink{
-							Container: numaflowv1.Container{
+							Container: &numaflowv1.Container{
 								Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
 							},
 						},
