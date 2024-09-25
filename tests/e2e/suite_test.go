@@ -104,8 +104,10 @@ var _ = BeforeSuite(func() {
 	Expect(dynamicClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
-	wg.Add(1)
-	go watchPods()
+	if disableWatch != "true" {
+		wg.Add(1)
+		go watchPods()
+	}
 
 })
 
