@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -43,20 +47,28 @@ var (
 	wg     sync.WaitGroup
 	stopCh chan struct{}
 
-	dataLossPrevention string
+	dataLossPrevention   string
+	disableTestArtifacts string
 )
 
 const (
 	Namespace = "numaplane-system"
 
-	ControllerOutputPath      = "output/controllers"
-	ResourceChangesOutputPath = "output/resources"
+	ControllerOutputPath = "output/controllers"
+	// ResourceChangesOutputPath = "output/resources"
+
+	ResourceChangesPipelineOutputPath           = "output/resources/pipelinerollouts"
+	ResourceChangesISBServiceOutputPath         = "output/resources/isbservicerollouts"
+	ResourceChangesMonoVertexOutputPath         = "output/resources/monovertexrollouts"
+	ResourceChangesNumaflowControllerOutputPath = "output/resources/numaflowcontrollerrollouts"
 
 	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
 	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
 
 	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
 	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow, app.kubernetes.io/component=controller-manager"
+
+	LogSpacer = "================================"
 )
 
 type Output struct {
@@ -145,4 +157,64 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 		}
 	}
 
+}
+
+func watchPods() {
+
+	ctx := context.Background()
+
+	defer wg.Done()
+	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if pod, ok := event.Object.(*corev1.Pod); ok {
+					pod.ManagedFields = nil
+					pd := Output{
+						APIVersion: "v1",
+						Kind:       "Pod",
+						Metadata:   pod.ObjectMeta,
+						Spec:       pod.Spec,
+						Status:     pod.Status,
+					}
+
+					var fileName string
+					switch pod.Labels["app.kubernetes.io/component"] {
+					case "controller-manager":
+						fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					case "isbsvc":
+						fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					case "mono-vertex", "mono-vertex-daemon":
+						fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					case "daemon", "vertex":
+						fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					}
+
+					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						fmt.Printf("Failed to open log file: %v\n", err)
+						return
+					}
+					defer file.Close()
+
+					bytes, _ := yaml.Marshal(pd)
+					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
 }
