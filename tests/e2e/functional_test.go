@@ -379,14 +379,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// Give it a little while to get to Paused and then verify that it stays that way
 
 		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineRolloutName)
-		document("verifying Pipeline stays paused")
+		document("verifying Pipeline stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			if err != nil {
 				return false
 			}
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue && retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)

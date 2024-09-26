@@ -24,11 +24,17 @@ import (
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
 func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (bool, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+	// this will check for any update required except for "desiredPhase", which PPND
+	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	if err != nil {
+		return false, err
+	}
+
+	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
 	if err != nil {
 		return false, err
 	}
@@ -88,7 +94,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 //	pipeline spec change is still being reconciled
 //
 // return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (*bool, error) {
+func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
@@ -98,11 +104,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
-	}
-
-	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
-	if err != nil {
-		return nil, err
 	}
 
 	// is the Pipeline currently being reconciled?
