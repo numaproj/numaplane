@@ -35,6 +35,10 @@ func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparat
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
+// NOTE: any path in "paths" which is not found in m will have an associated empty key in "onlyPaths"
+// If the caller is calling this function on 2 maps for the purpose of comparing them, then if the key is not found in either one,
+// then an empty key will exist in both, and they will be deemed equal
+// Also ignores any paths included in the excludedPaths list which are each demarcated by "pathSeparator" value
 func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
 	withoutPaths, err = cloneMap(m)
@@ -83,6 +87,7 @@ func cloneMap(m map[string]any) (map[string]any, error) {
 }
 
 // extractPath extracts a path from the source map into the destination map based on a slice of token representing the path
+// NOTE: if the path is not found in m, it will have an associated empty key in "dst"
 func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
@@ -118,7 +123,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 			dst[key] = make([]any, len(nextSrc))
 		}
 
-		// Loop throught each slice element to extract paths inside slice of objects
+		// Loop through each slice element to extract paths inside slice of objects
 		for i := range nextSrc {
 			switch nextSrcElem := nextSrc[i].(type) {
 			case map[string]any:
