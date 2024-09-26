@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -871,7 +872,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
-				return reflect.DeepEqual(pipelineSpecWithTopologyChange, spec)
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
 	}
@@ -938,7 +939,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultPipeline)
-			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", resultPipeline.Spec)
+			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", fmt.Sprint(resultPipeline.Spec))
 		})
 	}
 }

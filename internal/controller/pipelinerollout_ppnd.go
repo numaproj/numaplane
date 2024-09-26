@@ -55,6 +55,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
+		pipelineRollout.Status.MarkPending()
 		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
@@ -71,6 +72,8 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
+	} else {
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
 	// are we done with PPND?
