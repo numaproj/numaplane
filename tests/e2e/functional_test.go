@@ -182,7 +182,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		if disableWatch != "true" {
+		if disableTestArtifacts != "true" {
 			wg.Add(1)
 			go watchNumaflowControllerRollout()
 		}
@@ -204,7 +204,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		if disableWatch != "true" {
+		if disableTestArtifacts != "true" {
 			wg.Add(1)
 			go watchISBServiceRollout()
 
@@ -230,7 +230,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		if disableWatch != "true" {
+		if disableTestArtifacts != "true" {
 			wg.Add(1)
 			go watchPipelineRollout()
 
@@ -271,7 +271,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return monoVertexSpec.Source != nil
 		})
 
-		if disableWatch != "true" {
+		if disableTestArtifacts != "true" {
 			wg.Add(1)
 			go watchMonoVertexRollout()
 
