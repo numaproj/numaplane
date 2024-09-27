@@ -35,10 +35,11 @@ func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparat
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-// NOTE: any path in "paths" which is not found in m will have an associated empty key in "onlyPaths"
-// If the caller is calling this function on 2 maps for the purpose of comparing them, then if the key is not found in either one,
-// then an empty key will exist in both, and they will be deemed equal
-// Also ignores any paths included in the excludedPaths list which are each demarcated by "pathSeparator" value
+// NOTE: any path in "paths" which is not found in m will have an associated key in "onlyPaths", which is "{}"
+// If the caller is calling this function on 2 maps for the purpose of comparing them, and if the key is not found in either one,
+// then 'key: {}' will be returned for both, and they will be deemed equal
+//
+// Also ignores any paths in the excludedPaths list which are each demarcated by "pathSeparator" value
 func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
 	withoutPaths, err = cloneMap(m)

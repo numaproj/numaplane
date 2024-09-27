@@ -28,7 +28,11 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	numaLogger := logger.FromContext(ctx)
 
-	// this will check for any update required except for "desiredPhase", which PPND
+	var newPipelineSpec PipelineSpec
+	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	}
+
 	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, err
@@ -42,14 +46,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
-
-	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
-	}
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
 		return false, err
 	}
+
 	// update the ResourceVersion in the newPipelineDef in case it got updated
 	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
 
