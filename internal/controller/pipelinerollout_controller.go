@@ -757,7 +757,7 @@ func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelin
 }
 
 // calPipelineNameSuffix calculates the suffix of the pipeline name by utilizing the `NameCount`
-// field. 
+// field.
 func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
 	if pipelineRollout.Status.NameCount == nil {
 		pipelineRollout.Status.NameCount = new(int32)
