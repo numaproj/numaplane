@@ -560,7 +560,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 		document("Verifying Pipeline deletion")
 
@@ -573,7 +573,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
 
 	})
 
@@ -595,7 +595,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
 
 		document("Verifying MonoVertex deletion")
 
@@ -608,7 +608,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
 	})
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
@@ -629,7 +629,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 		document("Verifying ISBService deletion")
 
@@ -642,7 +642,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
 
 	})
 
@@ -662,7 +662,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 		document("Verifying Numaflow Controller deletion")
 
@@ -675,7 +675,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return true
-		}).WithTimeout(testTimeout).WithPolling(1*time.Second).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+		}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 
 	})
 

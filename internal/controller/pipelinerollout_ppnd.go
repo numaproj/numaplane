@@ -71,7 +71,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	doneWithPPND := !shouldBePaused
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
-	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
+	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
 	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
 		doneWithPPND = true
 	}

@@ -46,7 +46,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
-
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -467,21 +466,18 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// if not, should we set one?
 	if !inProgressStrategySet {
-		// inProgressStrategy is used for PPND and Progressive strategies (i.e. any strategies which require multiple reconciliations to perform)
 		if userPreferredStrategy == config.PPNDStrategyID {
 			// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 			needPPND := false
-			if userPreferredStrategy == config.PPNDStrategyID {
-				ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
-				if err != nil {
-					return err
-				}
-				if ppndRequired == nil { // not enough information
-					// TODO: mark something in the Status for why we're remaining in "Pending" here
-					return nil
-				}
-				needPPND = *ppndRequired
+			ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
+			if err != nil {
+				return err
 			}
+			if ppndRequired == nil { // not enough information
+				// TODO: mark something in the Status for why we're remaining in "Pending" here
+				return nil
+			}
+			needPPND = *ppndRequired
 			if needPPND {
 				inProgressStrategy = apiv1.UpgradeStrategyPPND
 				r.inProgressStrategyMgr.setStrategy(ctx, pipelineRollout, inProgressStrategy)
