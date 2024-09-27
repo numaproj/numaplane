@@ -162,9 +162,8 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 func watchPods() {
 
 	ctx := context.Background()
-
 	defer wg.Done()
-	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{})
+	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/part-of=numaflow"})
 	if err != nil {
 		fmt.Printf("Failed to start watcher: %v\n", err)
 		return
@@ -193,8 +192,10 @@ func watchPods() {
 						fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
 					case "mono-vertex", "mono-vertex-daemon":
 						fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
-					case "daemon", "vertex":
+					case "daemon", "vertex", "job":
 						fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					default:
+						continue
 					}
 
 					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
