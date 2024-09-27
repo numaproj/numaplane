@@ -394,7 +394,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	if err != nil {
 		return false, false, err
 	}
-	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
+
 	isbServiceNeedsToUpdate := !reflect.DeepEqual(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
