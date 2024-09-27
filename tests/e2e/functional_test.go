@@ -383,19 +383,18 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("verifying PipelineRollout spec deployed")
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 
-		// Give it a little while to get to Paused and then verify that it stays that way
-
+		// Give it a little while to get to Paused and then verify that it stays in Paused (or otherwise Pausing)
 		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
-		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
-		//document("verifying Pipeline stays paused")
-		/*Consistently(func() bool {
+		document("verifying Pipeline stays in paused or otherwise pausing")
+		Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
+			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
 			if err != nil {
 				return false
 			}
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue && retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused
-		}, 1*time.Minute, testPollingInterval).Should(BeTrue())*/
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
+		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 

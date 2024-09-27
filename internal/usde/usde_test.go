@@ -224,6 +224,24 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
+			name:    "with changes in array deep map but excluded parent",
+			newSpec: pipelineDefn,
+			existingSpec: func() kubernetes.GenericObject {
+				newRPU := int64(10)
+				newPipelineSpec := defaultPipelineSpec.DeepCopy()
+				newPipelineSpec.InterStepBufferServiceName = "changed-isbsvc"
+				newPipelineSpec.Vertices[0].Source.Generator.RPU = &newRPU
+				return makePipelineDefinition(*newPipelineSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
+				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator"},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
+		},
+		{
 			name:    "with changes in array deep map but one is NOT excluded",
 			newSpec: pipelineDefn,
 			existingSpec: func() kubernetes.GenericObject {
@@ -241,6 +259,52 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name:    "with changes in array deep map - detect pointer fields",
+			newSpec: pipelineDefn,
+			existingSpec: func() kubernetes.GenericObject {
+				newPipelineSpec := defaultPipelineSpec.DeepCopy()
+				newPipelineSpec.Vertices[2].Sink.Log = nil
+				newPipelineSpec.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
+				return makePipelineDefinition(*newPipelineSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
+				PipelineSpecExcludedPaths: []string{"vertices.sink.log"},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name:    "with changes in array deep map - detect pointer fields - parent field is excluded",
+			newSpec: pipelineDefn,
+			existingSpec: func() kubernetes.GenericObject {
+				newPipelineSpec := defaultPipelineSpec.DeepCopy()
+				newPipelineSpec.Vertices[2].Sink.Log = nil
+				newPipelineSpec.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
+				return makePipelineDefinition(*newPipelineSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
+				PipelineSpecExcludedPaths: []string{"vertices"},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
+		},
+		{
+			name:         "excluded paths not found",
+			newSpec:      pipelineDefn,
+			existingSpec: pipelineDefn,
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
+				PipelineSpecExcludedPaths: []string{"vertices.source.something"},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: false,
+			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 	}
 
