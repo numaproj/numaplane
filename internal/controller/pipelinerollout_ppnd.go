@@ -24,11 +24,21 @@ import (
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
 func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (bool, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+	var newPipelineSpec PipelineSpec
+	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	}
+
+	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	if err != nil {
+		return false, err
+	}
+
+	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
 	if err != nil {
 		return false, err
 	}
@@ -36,19 +46,16 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
-
-	var newPipelineSpec PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
-	}
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
 		return false, err
 	}
+
 	// update the ResourceVersion in the newPipelineDef in case it got updated
 	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
+		pipelineRollout.Status.MarkPending()
 		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
@@ -65,6 +72,8 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
+	} else {
+		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 	}
 
 	// are we done with PPND?
@@ -88,7 +97,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 //	pipeline spec change is still being reconciled
 //
 // return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (*bool, error) {
+func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
@@ -98,11 +107,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
-	}
-
-	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
-	if err != nil {
-		return nil, err
 	}
 
 	// is the Pipeline currently being reconciled?
@@ -132,7 +136,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
-	// that it's okay to pause
+	// that it's okay to run
 	if !shouldBePaused && !pauseRequestsKnown {
 		numaLogger.Debugf("incomplete pause request information")
 		return nil, nil

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -393,8 +394,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	if err != nil {
 		return false, false, err
 	}
-	// TODO: see if we can just use DeepEqual or if there may be null values we need to ignore
-	isbServiceNeedsToUpdate := !util.CompareMapsIgnoringNulls(existingSpecAsMap, newSpecAsMap)
+
+	isbServiceNeedsToUpdate := !reflect.DeepEqual(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }

@@ -3,8 +3,6 @@ package util
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
-	"reflect"
 	"sort"
 	"strings"
 )
@@ -24,65 +22,6 @@ func StructToStruct(src any, dst any) error {
 	return nil
 }
 
-// CompareMapsIgnoringNulls compares 2 maps for equality, ignoring any null values, empty maps, empty arrays, zero numerical values, and empty strings
-func CompareMapsIgnoringNulls(a map[string]any, b map[string]any) bool {
-	aNoNulls := make(map[string]any)
-	maps.Copy(aNoNulls, a)
-
-	bNoNulls := make(map[string]any)
-	maps.Copy(bNoNulls, b)
-
-	removeNullValuesFromMap(aNoNulls)
-	removeNullValuesFromMap(bNoNulls)
-
-	return reflect.DeepEqual(aNoNulls, bNoNulls)
-}
-
-// removeNullValuesFromMap recursively removes any zero values from the map including:
-// null references, empty strings, numbers that are zero, empty maps, and empty arrays
-func removeNullValuesFromMap(m map[string]any) {
-	for key, val := range m {
-		switch typedVal := val.(type) {
-		case map[string]any:
-			removeNullValuesFromMap(typedVal)
-
-			if len(typedVal) == 0 {
-				delete(m, key)
-			}
-
-		case []any:
-			for i := 0; i < len(typedVal); i++ {
-				if elemMap, ok := typedVal[i].(map[string]any); ok {
-					removeNullValuesFromMap(elemMap)
-
-					if len(elemMap) == 0 {
-						typedVal = append(typedVal[:i], typedVal[i+1:]...)
-						i--
-					}
-				} else if typedVal[i] == nil {
-					typedVal = append(typedVal[:i], typedVal[i+1:]...)
-					i--
-				}
-			}
-
-			if len(typedVal) == 0 {
-				delete(m, key)
-			} else {
-				m[key] = typedVal
-			}
-
-		case nil:
-			delete(m, key)
-
-		default:
-			if reflect.ValueOf(typedVal).IsZero() {
-				delete(m, key)
-			}
-
-		}
-	}
-}
-
 // SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
 func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparator string) (map[string]any, map[string]any, error) {
@@ -96,6 +35,11 @@ func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparat
 
 // SplitMap returns 2 maps from a given map and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
+// NOTE: any path in "paths" which is not found in m will have an associated key in "onlyPaths", which is "{}"
+// If the caller is calling this function on 2 maps for the purpose of comparing them, and if the key is not found in either one,
+// then 'key: {}' will be returned for both, and they will be deemed equal
+//
+// Also ignores any paths in the excludedPaths list which are each demarcated by "pathSeparator" value
 func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSeparator string) (onlyPaths map[string]any, withoutPaths map[string]any, err error) {
 	onlyPaths = make(map[string]any)
 	withoutPaths, err = cloneMap(m)
@@ -129,10 +73,6 @@ func SplitMap(m map[string]any, paths []string, excludedPaths []string, pathSepa
 	RemovePaths(onlyPaths, excludedPaths, pathSeparator)
 	RemovePaths(withoutPaths, excludedPaths, pathSeparator)
 
-	// Remove null and zero values, empty maps, empty strings, etc. from the 2 output maps
-	removeNullValuesFromMap(onlyPaths)
-	removeNullValuesFromMap(withoutPaths)
-
 	return onlyPaths, withoutPaths, nil
 }
 
@@ -148,6 +88,7 @@ func cloneMap(m map[string]any) (map[string]any, error) {
 }
 
 // extractPath extracts a path from the source map into the destination map based on a slice of token representing the path
+// NOTE: if the path is not found in m, it will have an associated empty key in "dst"
 func extractPath(src, dst map[string]any, pathTokens []string) error {
 	// panic guardrail (this condition should never be reached and true)
 	if len(pathTokens) == 0 {
@@ -183,7 +124,7 @@ func extractPath(src, dst map[string]any, pathTokens []string) error {
 			dst[key] = make([]any, len(nextSrc))
 		}
 
-		// Loop throught each slice element to extract paths inside slice of objects
+		// Loop through each slice element to extract paths inside slice of objects
 		for i := range nextSrc {
 			switch nextSrcElem := nextSrc[i].(type) {
 			case map[string]any:
