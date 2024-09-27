@@ -393,7 +393,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return false
 			}
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
-				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
+				retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused // || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
