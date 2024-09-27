@@ -136,7 +136,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
-	// that it's okay to pause
+	// that it's okay to run
 	if !shouldBePaused && !pauseRequestsKnown {
 		numaLogger.Debugf("incomplete pause request information")
 		return nil, nil
