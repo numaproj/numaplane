@@ -401,7 +401,7 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .spec.replicas
+    - jsonPath: .status.desiredReplicas
       name: Desired
       type: string
     - jsonPath: .status.replicas
@@ -900,7 +900,7 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .spec.replicas
+    - jsonPath: .status.desiredReplicas
       name: Desired
       type: string
     - jsonPath: .status.replicas
