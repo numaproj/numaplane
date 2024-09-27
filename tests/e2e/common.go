@@ -194,6 +194,8 @@ func watchPods() {
 						fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
 					case "daemon", "vertex", "job":
 						fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
+					default:
+						continue
 					}
 
 					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
