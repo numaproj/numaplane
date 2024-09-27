@@ -390,7 +390,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
 			if err != nil {
-				return false // TODO: if this is a transient error, return true; otherwise false?
+				return false
 			}
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
