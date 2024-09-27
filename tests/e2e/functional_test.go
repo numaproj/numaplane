@@ -388,14 +388,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 		// TODO: add back after Numaflow fixes this to not go from Paused to Pausing
 		//document("verifying Pipeline stays paused")
-		Consistently(func() bool {
+		/*Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			if err != nil {
 				return false
 			}
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue && retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused
-		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
+		}, 1*time.Minute, testPollingInterval).Should(BeTrue())*/
 
 		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
