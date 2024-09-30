@@ -374,7 +374,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	newPipelineDef, err := r.getPipelineDefinition(ctx, pipelineRollout)
+	newPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -539,7 +539,7 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineDef, err := r.getPipelineDefinition(ctx, pipelineRollout)
+	pipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return err
 	}
@@ -732,14 +732,14 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // getPipelineName retrieves the name of the current running pipeline managed by the given
-// pipelineRollout through the `promoted` label. Unless there is non such pipeline exist, then
-// construct the name by calculate the suffix and append to the PipelineRollout name.
+// pipelineRollout through the `promoted` label. If no such pipeline exists, then it
+// constructs the name by calculating the suffix and appending to the PipelineRollout name.
 func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
 	pipelines, err := kubernetes.ListCR(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
-			common.LabelKeyPipelineRolloutForPipeline, common.LabelValueUpgradePromoted,
+			common.LabelKeyUpgradeState, common.LabelValueUpgradePromoted,
 		), "")
 	if err != nil {
 		return "", err
@@ -770,7 +770,7 @@ func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, p
 	return "-" + fmt.Sprint(*pipelineRollout.Status.NameCount), nil
 }
 
-func (r *PipelineRolloutReconciler) getPipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
+func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
