@@ -163,6 +163,11 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
             type: object
         required:
         - spec
