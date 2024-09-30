@@ -392,7 +392,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err != nil {
 				return false, err
 			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			pipelineRollout.Status.MarkPipelineRolloutDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 			return false, nil
 		}
@@ -458,7 +458,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
 	} else {
-		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		pipelineRollout.Status.MarkPipelineRolloutDeployed(pipelineRollout.Generation)
 	}
 
 	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
@@ -521,7 +521,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 				return err
 			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			pipelineRollout.Status.MarkPipelineRolloutDeployed(pipelineRollout.Generation)
 		}
 	}
 

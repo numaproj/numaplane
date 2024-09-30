@@ -47,6 +47,15 @@ type PipelineRolloutStatus struct {
 	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
 	// identify a pipeline.
 	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// PPNDStatus includes status required for the Pipeline Pause and Drain strategy
+	PPNDStatus PPNDStatus `json:"ppndStatus,omitempty"`
+}
+
+type PPNDStatus struct {
+	// PipelineFailTime is the first time pipeline was indicated as "Failed" while in the middle of processing PPND strategy
+	// If Pipeline needs to update, and Pipeline is still failed at some time delta after this time, we deploy and clear this value
+	PipelineFailTime metav1.Time `json:"pipelineFailTime,omitempty"`
 }
 
 type UpgradeStrategy string
@@ -93,6 +102,11 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
+}
+
+func (status *PipelineRolloutStatus) MarkPipelineRolloutDeployed(generation int64) {
+	status.MarkDeployed(generation)
+	status.PPNDStatus.PipelineFailTime = metav1.Time{}
 }
 
 func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {

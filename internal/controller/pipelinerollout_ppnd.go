@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	minimumPipelineFailTimeForUpdate time.Duration = 30 * time.Second
 )
 
 // TODO: move PPND logic out to its own separate file
@@ -53,10 +58,15 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// update the ResourceVersion in the newPipelineDef in case it got updated
 	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
 
+	safeToUpdate, err := isPipelinePausedOrUnpausible(ctx, existingPipelineDef, pipelineRollout)
+	if err != nil {
+		return false, err
+	}
+
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
+		if !shouldBePaused || (shouldBePaused && safeToUpdate) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
@@ -70,10 +80,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			if err != nil {
 				return false, err
 			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			pipelineRollout.Status.MarkPipelineRolloutDeployed(pipelineRollout.Generation)
 		}
 	} else {
-		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		pipelineRollout.Status.MarkPipelineRolloutDeployed(pipelineRollout.Generation)
 	}
 
 	// are we done with PPND?
@@ -81,7 +91,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
-	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
+	if specBasedPause && safeToUpdate {
 		doneWithPPND = true
 	}
 
@@ -256,7 +266,29 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 	return unhealthyOrProgressing, nil
 
 }
-func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
+	if checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) {
+		return true, nil
+	}
+
+	// Contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
+	failed := checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+	if failed {
+		// check if we recorded this as Failed a certain time delta back - if so, we can consider it to be unpausible
+		// note that if the Pipeline flips back and forth between Failed and some other state besides Paused, we consider the time delta between
+		// the initial Failed time and the last Failed time
+		if !pipelineRollout.Status.PPNDStatus.PipelineFailTime.IsZero() {
+			if time.Since(pipelineRollout.Status.PPNDStatus.PipelineFailTime.Time) > minimumPipelineFailTimeForUpdate {
+				return true, nil
+			} else {
+				return false, nil
+			}
+		} else {
+			pipelineRollout.Status.PPNDStatus.PipelineFailTime = metav1.NewTime(time.Now())
+			return false, nil
+		}
+	} else {
+		return false, nil
+	}
+
 }
