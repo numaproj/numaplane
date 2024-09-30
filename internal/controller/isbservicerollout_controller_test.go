@@ -259,13 +259,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	r := &ISBServiceRolloutReconciler{
-		client:        numaplaneClient,
-		scheme:        scheme.Scheme,
-		restConfig:    restConfig,
-		customMetrics: customMetrics,
-		recorder:      recorder,
-	}
+	r := NewISBServiceRolloutReconciler(numaplaneClient, scheme.Scheme, restConfig, customMetrics, recorder)
 
 	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 

@@ -38,6 +38,9 @@ type InterStepBufferService struct {
 type ISBServiceRolloutStatus struct {
 	Status             `json:",inline"`
 	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
+
+	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
+	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
 }
 
 // +genclient
@@ -65,6 +68,13 @@ type ISBServiceRolloutList struct {
 
 func init() {
 	SchemeBuilder.Register(&ISBServiceRollout{}, &ISBServiceRolloutList{})
+}
+func (status *ISBServiceRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
+	status.UpgradeInProgress = upgradeStrategy
+}
+
+func (status *ISBServiceRolloutStatus) ClearUpgradeInProgress() {
+	status.UpgradeInProgress = ""
 }
 
 // IsHealthy indicates whether the InterStepBufferService rollout is healthy or not

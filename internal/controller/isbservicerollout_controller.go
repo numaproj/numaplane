@@ -66,23 +66,47 @@ type ISBServiceRolloutReconciler struct {
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
+
+	// maintain inProgressStrategies in memory and in ISBServiceRollout Status
+	inProgressStrategyMgr *inProgressStrategyMgr
 }
 
 func NewISBServiceRolloutReconciler(
-	client client.Client,
+	c client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
 
-	return &ISBServiceRolloutReconciler{
-		client,
+	r := &ISBServiceRolloutReconciler{
+		c,
 		s,
 		restConfig,
 		customMetrics,
 		recorder,
+		nil,
 	}
+
+	r.inProgressStrategyMgr = newInProgressStrategyMgr(
+		// getRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
+			isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
+
+			if isbServiceRollout.Status.UpgradeInProgress != "" {
+				return (*apiv1.UpgradeStrategy)(&isbServiceRollout.Status.UpgradeInProgress)
+			} else {
+				return nil
+			}
+		},
+		// setRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object, strategy apiv1.UpgradeStrategy) {
+			isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
+			isbServiceRollout.Status.SetUpgradeInProgress(strategy)
+		},
+	)
+
+	return r
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=isbservicerollouts,verbs=get;list;watch;create;update;patch;delete
@@ -278,31 +302,60 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+	// TODO: do we need the value isbServiceNeedsUpdating still?
 	isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, err
 	}
 
-	numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
+	// determine if we're trying to update the ISBService spec
+	// if it's a simple change, direct apply
+	// if not, it will require PPND or Progressive
+	isbServiceNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.
+		WithValues("isbserviceNeedsToUpdate", isbServiceNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
-	if isbServiceNeedsUpdating {
+	if isbServiceNeedsToUpdate {
 		isbServiceRollout.Status.MarkPending()
 	} else {
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
-	// determine the Upgrade Strategy user prefers
-	upgradeStrategy, err := usde.GetUserStrategy(ctx, isbServiceRollout.Namespace)
+	// what is the preferred strategy for this namespace?
+	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newISBServiceDef.Namespace)
 	if err != nil {
 		return false, err
 	}
 
-	switch upgradeStrategy {
-	case config.PPNDStrategyID:
+	// is there currently an inProgressStrategy for the isbService? (This will override any new decision)
+	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, isbServiceRollout)
+	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
+	// if not, should we set one?
+	if !inProgressStrategySet {
+		if userPreferredStrategy == config.PPNDStrategyID {
+			if upgradeStrategyType == apiv1.UpgradeStrategyPPND {
+				inProgressStrategy = apiv1.UpgradeStrategyPPND
+				r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
+			}
+		}
+		if userPreferredStrategy == config.ProgressiveStrategyID {
+			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+				inProgressStrategy = apiv1.UpgradeStrategyProgressive
+				r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
+			}
+		}
+	}
+
+	switch inProgressStrategy {
+	case apiv1.UpgradeStrategyPPND:
 		return processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
@@ -312,7 +365,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
 		})
-	case config.NoStrategyID:
+	case apiv1.UpgradeStrategyNoOp:
 		if isbServiceNeedsUpdating {
 			// update ISBService
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
@@ -321,10 +374,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-	case config.ProgressiveStrategyID:
+	case apiv1.UpgradeStrategyProgressive:
 		return false, errors.New("Progressive Strategy not supported yet")
 	default:
-		return false, fmt.Errorf("%v strategy not recognized", upgradeStrategy)
+		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 
 	return false, nil
