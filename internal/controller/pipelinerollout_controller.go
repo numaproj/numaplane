@@ -731,28 +731,62 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
+// getPipelineName retrieves the name of the current running pipeline managed by the given
+// pipelineRollout through the `promoted` label. If no such pipeline exists, then it
+// constructs the name by calculating the suffix and appending to the PipelineRollout name.
+func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
+	pipelines, err := kubernetes.ListCR(
+		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		pipelineRollout.Namespace, fmt.Sprintf(
+			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
+			common.LabelKeyUpgradeState, common.LabelValueUpgradePromoted,
+		), "")
+	if err != nil {
+		return "", err
+	}
+	if len(pipelines) > 1 {
+		return "", fmt.Errorf("there should only be one promoted pipeline")
+	} else if len(pipelines) == 0 {
+		suffixName, err := r.calPipelineNameSuffix(ctx, pipelineRollout)
+		if err != nil {
+			return "", err
+		}
+		return pipelineRollout.Name + suffixName, nil
+	}
+	return pipelines[0].Name, nil
+}
+
+// calPipelineNameSuffix calculates the suffix of the pipeline name by utilizing the `NameCount`
+// field.
+func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
+	if pipelineRollout.Status.NameCount == nil {
+		pipelineRollout.Status.NameCount = new(int32)
+		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+		if statusUpdateErr != nil {
+			return "", statusUpdateErr
+		}
+	}
+
+	return "-" + fmt.Sprint(*pipelineRollout.Status.NameCount), nil
+}
+
 func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
 	labels, err := pipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-
-	if pipelineRollout.Status.NameCount == nil {
-		pipelineRollout.Status.NameCount = new(int32)
-		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-		if statusUpdateErr != nil {
-			return nil, statusUpdateErr
-		}
+	pipelineName, err := r.getPipelineName(ctx, pipelineRollout)
+	if err != nil {
+		return nil, err
 	}
 
-	curNameCount := *pipelineRollout.Status.NameCount
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pipelineRollout.Name + "-" + fmt.Sprint(curNameCount),
+			Name:            pipelineName,
 			Namespace:       pipelineRollout.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
