@@ -19,8 +19,7 @@ const (
 	// EnvLogLevel log level that is defined by `--loglevel` option
 	EnvLogLevel = "NUMAPLANE_LOG_LEVEL"
 
-	NumaflowAPIGroup = "numaflow.numaproj.io"
-
+	NumaflowAPIGroup   = "numaflow.numaproj.io"
 	NumaflowAPIVersion = "v1alpha1"
 
 	// LABELS:
