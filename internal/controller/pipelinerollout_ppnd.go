@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	// unpausibleDelay represents the amount of time that we will allow before a Pipeline is considered "unpausible", determined if the pipeline is in a "Failed" state and has had
+	// a desiredPhase=Paused for this long
+	unpausibleDelay time.Duration = 30 * time.Second
 )
 
 // TODO: move PPND logic out to its own separate file
@@ -46,9 +54,15 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
+
+	pipelineUnpausible := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
+	shouldBePaused = shouldBePaused && !pipelineUnpausible
+
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
 		return false, err
 	}
+
+	pipelinePaused := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
 	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
@@ -56,7 +70,8 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
+
+		if !shouldBePaused || (shouldBePaused && pipelinePaused) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
@@ -81,7 +96,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
-	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
+	if specBasedPause && (pipelinePaused || pipelineUnpausible) {
 		doneWithPPND = true
 	}
 
@@ -129,11 +144,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
-
-	shouldBePaused := (pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
+	shouldBePaused := pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
 	// that it's okay to run
@@ -143,6 +156,31 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	return &shouldBePaused, nil
+}
+
+// determine if Pipeline has been trying to pause for a period of time and is in "Failed" state
+// determine what the Pipeline annotation should be, and set it if it's not already set
+func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+	if shouldBePaused {
+		// do we need to set DesiredPauseBeginTime?
+		if pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.IsZero() {
+			pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Now())
+			r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
+			return false
+		}
+
+		// if Failed and 30s since desiredPausedStartTime
+		if checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed) && time.Since(pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.Time) > unpausibleDelay {
+			// TODO: set unpausible annotation
+			return true
+		}
+		return false
+	} else {
+		// clear DesiredPauseBeginTime
+		pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Time{})
+		// TODO: clear annotation on pipeline
+		return false
+	}
 }
 
 // do we need to start the PPND process, if we haven't already?
@@ -256,7 +294,11 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 	return unhealthyOrProgressing, nil
 
 }
-func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+
+func markPipelineUnpausible(mark bool) {
+
+}
+
+func isPipelineMarkedUnpausible(pipeline *kubernetes.GenericObject) {
+
 }

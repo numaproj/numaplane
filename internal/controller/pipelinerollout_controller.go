@@ -162,15 +162,20 @@ func NewPipelineRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
-	r.enqueuePipeline(req.NamespacedName)
+	r.enqueuePipelineRollout(req.NamespacedName)
 	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
 	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
+func (r *PipelineRolloutReconciler) enqueuePipelineRollout(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
 	r.queue.Add(key)
+}
+
+func (r *PipelineRolloutReconciler) enqueuePipelineRolloutWithDelay(namespacedName k8stypes.NamespacedName, delay time.Duration) {
+	key := namespacedNameToKey(namespacedName)
+	r.queue.AddAfter(key, delay)
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {

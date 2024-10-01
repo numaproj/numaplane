@@ -38,8 +38,9 @@ type Pipeline struct {
 
 // PipelineRolloutStatus defines the observed state of PipelineRollout
 type PipelineRolloutStatus struct {
-	Status      `json:",inline"`
-	PauseStatus PauseStatus `json:"pauseStatus,omitempty"`
+	Status `json:",inline"`
+
+	PauseStatus PauseStatus `json:"pauseStatus,omitempty"` // TODO: if this only applies to PPND then it can go in the PPNDStatus below
 
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
@@ -47,6 +48,15 @@ type PipelineRolloutStatus struct {
 	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
 	// identify a pipeline.
 	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// PPNDStatus includes status required for the Pipeline Pause and Drain strategy
+	PPNDStatus PPNDStatus `json:"ppndStatus,omitempty"`
+}
+
+// PauseStatus is a common structure used to communicate how long Pipelines are paused.
+type PPNDStatus struct {
+	// DesiredPauseBeginTime indicates the begin time for when we made a request to set "desiredPhase: Paused" on the pipeline due to an upgrade
+	DesiredPauseBeginTime metav1.Time `json:"desiredPauseBeginTime,omitempty"`
 }
 
 type UpgradeStrategy string
