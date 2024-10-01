@@ -306,15 +306,17 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 // TODO: consider patch?
 func (r *PipelineRolloutReconciler) markPipelineUnpausible(ctx context.Context, mark bool, pipeline *kubernetes.GenericObject) error {
 	var patchJson string
-	annotationName := strings.ReplaceAll(common.LabelKeyPipelineUnpausible, "/", "~1")
+
 	if mark {
-		//patchJson = fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, common.LabelKeyPipelineUnpausible, "true")
-		patchJson = fmt.Sprintf(`[{"op": "add", "path": "/metadata/annotations/%s", "value": "true"}]`, annotationName)
+		// use MergePatchType to add annotation, as JSON Patch type seems to result in error if metadata.annotations isn't present
+		patchJson = fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, common.LabelKeyPipelineUnpausible, "true")
+		//patchJson = fmt.Sprintf(`[{"op": "add", "path": "/metadata/annotations/%s", "value": "true"}]`, annotationName)
+		return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
 	} else {
-		//delete(pipeline.Annotations, common.LabelKeyPipelineUnpausible)
+		annotationName := strings.ReplaceAll(common.LabelKeyPipelineUnpausible, "/", "~1")
 		patchJson = fmt.Sprintf(`[{"op": "remove", "path": "/metadata/annotations/%s"}]`, annotationName)
+		return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.JSONPatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
 	}
 
-	return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.JSONPatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
 	//return kubernetes.UpdateCR(ctx, r.restConfig, pipeline, "pipelines")
 }
