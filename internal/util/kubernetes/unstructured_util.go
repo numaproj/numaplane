@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 // this file contains utility functions for working with Unstructured types
@@ -242,11 +244,11 @@ func UpdateUnstructuredCR(
 	return nil
 }
 
-/*
-func PatchUnstructuredCR(
+func PatchCR(
 	ctx context.Context,
 	restConfig *rest.Config,
 	jsonPatch string,
+	patchType k8stypes.PatchType,
 	gvr schema.GroupVersionResource,
 	namespace string,
 	name string,
@@ -259,17 +261,16 @@ func PatchUnstructuredCR(
 		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	result, err := client.Resource(gvr).Namespace(namespace).Patch .Update(ctx, unstruc, metav1.UpdateOptions{})
+	// TODO: check if this returns a new resource version number, in which case we can pass the Object into this function and return the revised instead
+	_, err = client.Resource(gvr).Namespace(namespace).Patch(ctx, name, patchType, []byte(jsonPatch), metav1.PatchOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to patch resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
-	} else {
-		*unstruc = *result
 	}
 
 	numaLogger.Infof("successfully patched resource %s/%s of type %+v with json patch %s", namespace, name, gvr, jsonPatch)
 	return nil
 
-}*/
+}
 
 func parseApiVersion(apiVersion string) (string, string, error) {
 	// should be separated by slash

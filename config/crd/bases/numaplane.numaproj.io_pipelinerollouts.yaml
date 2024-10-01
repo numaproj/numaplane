@@ -173,6 +173,17 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              ppndStatus:
+                description: PPNDStatus includes status required for the Pipeline
+                  Pause and Drain strategy
+                properties:
+                  desiredPauseBeginTime:
+                    description: 'DesiredPauseBeginTime indicates the begin time for
+                      when we made a request to set "desiredPhase: Paused" on the
+                      pipeline due to an upgrade'
+                    format: date-time
+                    type: string
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade

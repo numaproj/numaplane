@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -13,6 +14,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
@@ -56,7 +58,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	}
 	shouldBePaused := *needsPaused
 
-	pipelineUnpausible := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
+	pipelineUnpausible, err := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
+	if err != nil {
+		return false, err
+	}
 	shouldBePaused = shouldBePaused && !pipelineUnpausible
 
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
@@ -93,7 +98,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	}
 
 	// are we done with PPND?
-	doneWithPPND := !shouldBePaused
+	doneWithPPND := !*needsPaused
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
@@ -161,26 +166,28 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 // determine if Pipeline has been trying to pause for a period of time and is in "Failed" state
 // determine what the Pipeline annotation should be, and set it if it's not already set
-func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
 	if shouldBePaused {
 		// do we need to set DesiredPauseBeginTime?
 		if pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.IsZero() {
 			pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Now())
+			// check the pipeline again later to see if we can mark it as "unpausible" at that time
 			r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
-			return false
+			return false, nil
 		}
 
 		// if Failed and 30s since desiredPausedStartTime
 		if checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed) && time.Since(pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.Time) > unpausibleDelay {
-			// TODO: set unpausible annotation
-			return true
+			err := r.markPipelineUnpausible(ctx, true, existingPipelineDef)
+			return true, err
 		}
-		return false
+		return false, nil
 	} else {
 		// clear DesiredPauseBeginTime
 		pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Time{})
-		// TODO: clear annotation on pipeline
-		return false
+		// remove the "unpausible" annotation
+		err := r.markPipelineUnpausible(ctx, false, existingPipelineDef)
+		return false, err
 	}
 }
 
@@ -298,10 +305,16 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 // TODO: consider patch?
 func (r *PipelineRolloutReconciler) markPipelineUnpausible(ctx context.Context, mark bool, pipeline *kubernetes.GenericObject) error {
+	var patchJson string
+	annotationName := strings.ReplaceAll(common.LabelKeyPipelineUnpausible, "/", "~1")
 	if mark {
-		pipeline.Annotations[common.LabelKeyPipelineUnpausible] = "true"
+		//patchJson = fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, common.LabelKeyPipelineUnpausible, "true")
+		patchJson = fmt.Sprintf(`[{"op": "add", "path": "/metadata/annotations/%s", "value": "true"}]`, annotationName)
 	} else {
-		delete(pipeline.Annotations, common.LabelKeyPipelineUnpausible)
+		//delete(pipeline.Annotations, common.LabelKeyPipelineUnpausible)
+		patchJson = fmt.Sprintf(`[{"op": "remove", "path": "/metadata/annotations/%s"}]`, annotationName)
 	}
-	return kubernetes.UpdateCR(ctx, r.restConfig, pipeline, "pipelines")
+
+	return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.JSONPatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
+	//return kubernetes.UpdateCR(ctx, r.restConfig, pipeline, "pipelines")
 }
