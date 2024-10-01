@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 
@@ -227,4 +229,51 @@ func watchISBService() {
 		}
 	}
 
+}
+
+func watchStatefulSet() {
+
+	ctx := context.Background()
+	defer wg.Done()
+	watcher, err := kubeClient.AppsV1().StatefulSets(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/part-of=numaflow"})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if sts, ok := event.Object.(*appsv1.StatefulSet); ok {
+					sts.ManagedFields = nil
+					output := Output{
+						APIVersion: "v1",
+						Kind:       "StatefulSet",
+						Metadata:   sts.ObjectMeta,
+						Spec:       sts.Spec,
+						Status:     sts.Status,
+					}
+
+					bytes, _ := yaml.Marshal(output)
+					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+					fileName := filepath.Join(ResourceChangesISBServiceOutputPath, "statefulsets", strings.Join([]string{sts.Name, ".yaml"}, ""))
+					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						fmt.Printf("Failed to open log file: %v\n", err)
+						return
+					}
+					defer file.Close()
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
 }
