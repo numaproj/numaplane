@@ -8,6 +8,7 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -295,10 +296,12 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 }
 
-func markPipelineUnpausible(mark bool) {
-
-}
-
-func isPipelineMarkedUnpausible(pipeline *kubernetes.GenericObject) {
-
+// TODO: consider patch?
+func (r *PipelineRolloutReconciler) markPipelineUnpausible(ctx context.Context, mark bool, pipeline *kubernetes.GenericObject) error {
+	if mark {
+		pipeline.Annotations[common.LabelKeyPipelineUnpausible] = "true"
+	} else {
+		delete(pipeline.Annotations, common.LabelKeyPipelineUnpausible)
+	}
+	return kubernetes.UpdateCR(ctx, r.restConfig, pipeline, "pipelines")
 }

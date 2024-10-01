@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -113,11 +114,17 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester Pause
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "Paused" && status.Phase != "Failed" {
-			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
+		pausedOrUnpausible := status.Phase == "Paused" || isPipelineMarkedUnpausible(pipeline)
+		if !pausedOrUnpausible {
+			numaLogger.Debugf("pipeline %q not paused or unpausible, pipeline has status.phase=%q", pipeline.Name, status.Phase)
 
 			return false, nil
 		}
 	}
 	return true, nil
+}
+
+func isPipelineMarkedUnpausible(pipeline *kubernetes.GenericObject) bool {
+	unpausible, found := pipeline.Annotations[common.LabelKeyPipelineUnpausible]
+	return found && unpausible == "true"
 }

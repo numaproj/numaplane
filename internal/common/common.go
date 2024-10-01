@@ -52,6 +52,9 @@ const (
 	// a NumaRollout.
 	LabelKeyUpgradeState = "numaplane.numaproj.io/upgrade-state"
 
+	// LabelKeyPipelineUnpausible is the label key used to identify that a Pipeline has been deemed unpausible, used for PPND strategy
+	LabelKeyPipelineUnpausible = "numaplane.numaproj.io/unpausible"
+
 	// LabelValueUpgradePromoted is the label value indicating that the resource managed by a NumaRollout is promoted
 	// after an upgrade.
 	LabelValueUpgradePromoted UpgradeState = "promoted"

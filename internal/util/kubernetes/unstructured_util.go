@@ -242,6 +242,35 @@ func UpdateUnstructuredCR(
 	return nil
 }
 
+/*
+func PatchUnstructuredCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	jsonPatch string,
+	gvr schema.GroupVersionResource,
+	namespace string,
+	name string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will patch resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	result, err := client.Resource(gvr).Namespace(namespace).Patch .Update(ctx, unstruc, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to patch resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	} else {
+		*unstruc = *result
+	}
+
+	numaLogger.Infof("successfully patched resource %s/%s of type %+v with json patch %s", namespace, name, gvr, jsonPatch)
+	return nil
+
+}*/
+
 func parseApiVersion(apiVersion string) (string, string, error) {
 	// should be separated by slash
 	index := strings.Index(apiVersion, "/")
