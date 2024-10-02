@@ -222,7 +222,13 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	return nil
 }
 
+// either pipeline must be:
+//   - Paused
+//   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
+//   - Annotated to allow data loss
 func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
+
+	// we need PipelineRollout...
+
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
 }

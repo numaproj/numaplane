@@ -109,13 +109,21 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester Pause
 		return false, err
 	}
 	for _, pipeline := range pipelines {
-		status, err := kubernetes.ParseStatus(pipeline)
+		/*status, err := kubernetes.ParseStatus(pipeline)
 		if err != nil {
 			return false, err
 		}
 		if status.Phase != "Paused" && status.Phase != "Failed" && !pipeline.allowingDataLoss() {
 			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
 
+			return false, nil
+		}*/
+
+		// get PipelineRollout parent of pipeline
+		pipelineRolloutName := getPipelineRolloutName(pipeline.Name)
+
+		if isPipelinePausedOrUnpausible(ctx, pipeline) {
+			numaLogger.Debugf("pipeline %q not paused or unpausible", pipeline.Name)
 			return false, nil
 		}
 	}
