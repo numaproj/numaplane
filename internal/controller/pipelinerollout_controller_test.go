@@ -588,24 +588,28 @@ func TestPipelineLabels(t *testing.T) {
 	tests := []struct {
 		name          string
 		jsonInput     string
+		upgradeState  string
 		expectedLabel string
 		expectError   bool
 	}{
 		{
 			name:          "Valid Input",
 			jsonInput:     `{"interStepBufferServiceName": "buffer-service"}`,
+			upgradeState:  string(common.LabelValueUpgradePromoted),
 			expectedLabel: "buffer-service",
 			expectError:   false,
 		},
 		{
 			name:          "Missing InterStepBufferServiceName",
 			jsonInput:     `{}`,
+			upgradeState:  string(common.LabelValueUpgradePromoted),
 			expectedLabel: "default",
 			expectError:   false,
 		},
 		{
 			name:          "Invalid JSON",
 			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
+			upgradeState:  string(common.LabelValueUpgradeInProgress),
 			expectedLabel: "",
 			expectError:   true,
 		},
@@ -626,7 +630,7 @@ func TestPipelineLabels(t *testing.T) {
 				},
 			}
 
-			labels, err := pipelineLabels(pipelineRollout)
+			labels, err := pipelineLabels(pipelineRollout, tt.upgradeState)
 			if (err != nil) != tt.expectError {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
@@ -640,8 +644,8 @@ func TestPipelineLabels(t *testing.T) {
 					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyPipelineRolloutForPipeline, pipelineRolloutName)
 				}
 
-				if labels[common.LabelKeyUpgradeState] != string(common.LabelValueUpgradePromoted) {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyUpgradeState, string(common.LabelValueUpgradePromoted))
+				if labels[common.LabelKeyUpgradeState] != tt.upgradeState {
+					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyUpgradeState, tt.upgradeState)
 				}
 			}
 		})
