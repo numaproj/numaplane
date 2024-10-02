@@ -105,17 +105,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
-	// is the Pipeline currently being reconciled?
-	/*pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
-	if err != nil {
-		return nil, err
-	}
-
-	// is the Pipeline currently being reconciled while our desiredPhase==Paused?
-	// only in this circumstance do we need to make sure to remain Paused until that reconciliation is complete
-	existingPipelinePauseDesired := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
-	pipelineUpdating = pipelineUpdating && existingPipelinePauseDesired*/
-
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
 	if err != nil {
@@ -232,26 +221,6 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	}
 	return nil
 }
-
-// return true if Pipeline (or its children) is still in the process of being reconciled
-/*func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
-	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
-	if err != nil {
-		return false, err
-	}
-	// if Pipeline's ObservedGeneration is old, then Numaflow Controller hasn't even seen the generation change yet
-	if !pipelineObservedGenerationCurrent(newPipelineDef.Generation, existingPipelineStatus.ObservedGeneration) {
-		return true, nil
-	}
-
-	// note if Pipeline's children are still being updated
-	unhealthyOrProgressing, _ := checkChildResources(existingPipelineStatus.Conditions, func(c metav1.Condition) bool {
-		return c.Status == metav1.ConditionFalse
-	})
-
-	return unhealthyOrProgressing, nil
-
-}*/
 
 func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
