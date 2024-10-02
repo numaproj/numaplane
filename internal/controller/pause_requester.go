@@ -119,9 +119,6 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester Pause
 			return false, nil
 		}*/
 
-		// get PipelineRollout parent of pipeline
-		pipelineRolloutName := getPipelineRolloutName(pipeline.Name)
-
 		if isPipelinePausedOrUnpausible(ctx, pipeline) {
 			numaLogger.Debugf("pipeline %q not paused or unpausible", pipeline.Name)
 			return false, nil

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -228,7 +229,11 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 //   - Annotated to allow data loss
 func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 
-	// we need PipelineRollout...
+	allowDataLoss := false
+	annotation, found := pipeline.Annotations[common.LabelKeyAllowDataLoss]
+	if found && annotation == "true" {
+		allowDataLoss = true
+	}
 
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed) || allowDataLoss
 }
