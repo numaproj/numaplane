@@ -822,6 +822,7 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 	return "True", ""
 }
 
+/*
 func checkChildResources(conditions []metav1.Condition, f func(metav1.Condition) bool) (bool, metav1.Condition) {
 	for _, cond := range conditions {
 		if f(cond) {
@@ -829,7 +830,7 @@ func checkChildResources(conditions []metav1.Condition, f func(metav1.Condition)
 		}
 	}
 	return false, metav1.Condition{}
-}
+}*/
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
