@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -123,10 +124,14 @@ var (
 		},
 	}
 
+	volSize, _     = apiresource.ParseQuantity("10Mi")
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: "2.9.6",
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &volSize,
+			},
 		},
 	}
 
