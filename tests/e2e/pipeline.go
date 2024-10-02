@@ -110,7 +110,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	document("Verify that Pipeline is paused and fully drained")
-	verifyPipelineStatusEventually(Namespace, pipelineName,
+	verifyPipelineStatusEventually(namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 
@@ -119,7 +119,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
 
-func verifyInProgressStrategy(namespace string, pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+func verifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
 	document("Verifying InProgressStrategy")
 	Eventually(func() bool {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
