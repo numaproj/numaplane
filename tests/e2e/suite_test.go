@@ -109,6 +109,12 @@ var _ = BeforeSuite(func() {
 	if disableTestArtifacts != "true" {
 		wg.Add(1)
 		go watchPods()
+
+		wg.Add(1)
+		go watchStatefulSet()
+
+		wg.Add(1)
+		go watchVertices()
 	}
 
 })
@@ -153,6 +159,14 @@ func setupOutputDir() {
 	Expect(err).NotTo(HaveOccurred())
 	if disableTestArtifacts != "true" {
 		for _, dir := range dirs {
+			if dir == ResourceChangesPipelineOutputPath {
+				err = os.MkdirAll(filepath.Join(dir, "vertices"), os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			if dir == ResourceChangesISBServiceOutputPath {
+				err = os.MkdirAll(filepath.Join(dir, "statefulsets"), os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
 			err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
 			Expect(err).NotTo(HaveOccurred())
 		}

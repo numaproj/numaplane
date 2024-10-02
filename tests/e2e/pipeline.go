@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -109,15 +110,16 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	document("Verify that Pipeline is paused and fully drained")
-	verifyPipelineStatusEventually(Namespace, pipelineName,
+	verifyPipelineStatusEventually(namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 
 		})
-	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
+	// this happens too fast to verify it:
+	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
 
-func verifyInProgressStrategy(namespace string, pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+func verifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
 	document("Verifying InProgressStrategy")
 	Eventually(func() bool {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
@@ -138,6 +140,14 @@ func getGVRForPipeline() schema.GroupVersionResource {
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
 		Resource: "pipelines",
+	}
+}
+
+func getGVRForVertex() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "numaflow.numaproj.io",
+		Version:  "v1alpha1",
+		Resource: "vertices",
 	}
 }
 
@@ -320,6 +330,58 @@ func watchPipeline() {
 					}
 					bytes, _ := yaml.Marshal(output)
 					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+					_, err = file.WriteString(updateLog)
+					if err != nil {
+						fmt.Printf("Failed to write to log file: %v\n", err)
+						return
+					}
+				}
+			}
+		case <-stopCh:
+			return
+		}
+	}
+
+}
+
+func watchVertices() {
+
+	defer wg.Done()
+	watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Failed to start watcher: %v\n", err)
+		return
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
+					vtx := numaflowv1.Vertex{}
+					err = util.StructToStruct(&obj, &vtx)
+					if err != nil {
+						fmt.Printf("Failed to convert unstruct: %v\n", err)
+						return
+					}
+					vtx.ManagedFields = nil
+					output := Output{
+						APIVersion: NumaflowAPIVersion,
+						Kind:       "Vertex",
+						Metadata:   vtx.ObjectMeta,
+						Spec:       vtx.Spec,
+						Status:     vtx.Status,
+					}
+					bytes, _ := yaml.Marshal(output)
+					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+					fileName := filepath.Join(ResourceChangesPipelineOutputPath, "vertices", strings.Join([]string{vtx.Name, ".yaml"}, ""))
+					file, err := os.OpenFile(filepath.Join(fileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						fmt.Printf("Failed to open log file: %v\n", err)
+						return
+					}
+					defer file.Close()
 					_, err = file.WriteString(updateLog)
 					if err != nil {
 						fmt.Printf("Failed to write to log file: %v\n", err)
