@@ -113,7 +113,7 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester Pause
 		if err != nil {
 			return false, err
 		}
-		if status.Phase != "Paused" && status.Phase != "Failed" {
+		if status.Phase != "Paused" && status.Phase != "Failed" && !pipeline.allowingDataLoss() {
 			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
 
 			return false, nil
