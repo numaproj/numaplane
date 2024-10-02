@@ -10,16 +10,13 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TODO: move PPND logic out to its own separate file
 // normal sequence of events when we need to pause:
 // - set Pipeline's desiredPhase=Paused
-// - wait for the desire to Pause to be reconciled completely
-// - if we need to update the Pipeline spec:
-//   - update it
-//   - wait for the spec update to be reconciled completely
+// - wait for Pipeline to become Paused
+// - then if we need to update the Pipeline spec, update it
 //
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
@@ -94,7 +91,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 //	any difference in spec between PipelineRollout and Pipeline, with the exception of lifecycle.desiredPhase field
 //	any pause request coming from isbsvc or Numaflow Controller
 //	spec says to pause
-//	pipeline spec change is still being reconciled
 //
 // return whether to pause, not to pause, or otherwise unknown
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
@@ -110,7 +106,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// is the Pipeline currently being reconciled?
-	pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
+	/*pipelineUpdating, err := pipelineIsUpdating(newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +114,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// is the Pipeline currently being reconciled while our desiredPhase==Paused?
 	// only in this circumstance do we need to make sure to remain Paused until that reconciliation is complete
 	existingPipelinePauseDesired := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
-	pipelineUpdating = pipelineUpdating && existingPipelinePauseDesired
+	pipelineUpdating = pipelineUpdating && existingPipelinePauseDesired*/
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
@@ -131,9 +127,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
 
-	shouldBePaused := (pipelineNeedsToUpdate || pipelineUpdating || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, pipelineUpdating=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePaused, pipelineNeedsToUpdate, pipelineUpdating, externalPauseRequest, specBasedPause, unpausible)
+	shouldBePaused := (pipelineNeedsToUpdate || externalPauseRequest || specBasedPause) && !unpausible
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
+		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause, unpausible)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
 	// that it's okay to run
@@ -238,7 +234,7 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 }
 
 // return true if Pipeline (or its children) is still in the process of being reconciled
-func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
+/*func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipelineDef *kubernetes.GenericObject) (bool, error) {
 	existingPipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
 		return false, err
@@ -255,7 +251,8 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 	return unhealthyOrProgressing, nil
 
-}
+}*/
+
 func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
 	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
 	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)

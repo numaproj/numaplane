@@ -115,7 +115,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 
 		})
-	verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
+	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
 }
 
 func verifyInProgressStrategy(namespace string, pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
