@@ -669,14 +669,9 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 	}
 }
 
-func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
+func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
 	status := numaflowv1.PipelineStatus{
 		Phase: phase,
-	}
-	if fullyReconciled {
-		status.ObservedGeneration = 1
-	} else {
-		status.ObservedGeneration = 0
 	}
 	return &numaflowv1.Pipeline{
 		TypeMeta: metav1.TypeMeta{
@@ -693,8 +688,8 @@ func createPipelineOfSpec(spec numaflowv1.PipelineSpec, phase numaflowv1.Pipelin
 
 }
 
-func createDefaultPipeline(phase numaflowv1.PipelinePhase, fullyReconciled bool) *numaflowv1.Pipeline {
-	return createPipelineOfSpec(pipelineSpec, phase, fullyReconciled)
+func createDefaultPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
+	return createPipelineOfSpec(pipelineSpec, phase)
 }
 
 func pipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) numaflowv1.PipelineSpec {
@@ -750,7 +745,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "nothing to do",
 			newPipelineSpec:                pipelineSpec,
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &falseValue,
@@ -764,7 +759,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "direct apply",
 			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &falseValue,
@@ -778,7 +773,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "spec difference results in PPND",
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &falseValue,
@@ -792,7 +787,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "external pause request at the same time as a DirectApply change",
 			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &trueValue,
@@ -806,7 +801,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "user sets desiredPhase=Paused",
 			newPipelineSpec:                pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused),
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &falseValue,
@@ -822,7 +817,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec: pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
 			existingPipelineDef: *createPipelineOfSpec(
 				pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
-				numaflowv1.PipelinePhasePaused, true),
+				numaflowv1.PipelinePhasePaused),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      nil,
 			numaflowControllerPauseRequest: &falseValue,
@@ -836,7 +831,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		{
 			name:                           "PPND in progress, spec not yet applied, pipeline not paused",
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
-			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhasePending,
 			initialInProgressStrategy:      &ppndUpgradeStrategy,
 			numaflowControllerPauseRequest: &falseValue,
@@ -848,23 +843,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			},
 		},
 		{
-			name:                           "PPND in progress, spec applied, still being reconciled",
+			name:                           "PPND in progress, spec applied",
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
-			existingPipelineDef:            *createPipelineOfSpec(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused, false),
-			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      &ppndUpgradeStrategy,
-			numaflowControllerPauseRequest: &falseValue,
-			isbServicePauseRequest:         &falseValue,
-			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
-			expectedRolloutPhase:           apiv1.PhaseDeployed,
-			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
-				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), spec)
-			},
-		},
-		{
-			name:                           "PPND in progress, spec applied, done being reconciled",
-			newPipelineSpec:                pipelineSpecWithTopologyChange,
-			existingPipelineDef:            *createPipelineOfSpec(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused, true),
+			existingPipelineDef:            *createPipelineOfSpec(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), numaflowv1.PipelinePhasePaused),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      &ppndUpgradeStrategy,
 			numaflowControllerPauseRequest: &falseValue,
