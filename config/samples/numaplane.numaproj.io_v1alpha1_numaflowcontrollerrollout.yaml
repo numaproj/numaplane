@@ -5,4 +5,4 @@ metadata:
   namespace: example-namespace
 spec:
   controller:
-    version: "0.0.18" #numaflow-rc:v0.0.18
+    version: "0.0.20" #numaflow-rc:v0.0.20: draft of this PR: https://github.com/numaproj/numaflow/pull/2112
