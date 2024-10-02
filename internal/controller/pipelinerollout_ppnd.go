@@ -35,37 +35,37 @@ const (
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
 func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, *time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+		return false, nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
 	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if needsPaused == nil { // not enough information to know
-		return false, errors.New("not enough information available to know if we need to pause")
+		return false, nil, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
 
-	pipelineUnpausible, err := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
+	pipelineUnpausible, reenqueueDuration, err := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	shouldBePaused = shouldBePaused && !pipelineUnpausible
 
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	pipelinePaused := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
@@ -84,12 +84,12 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			if shouldBePaused {
 				err = withDesiredPhase(newPipelineDef, "Paused")
 				if err != nil {
-					return false, err
+					return false, nil, err
 				}
 			}
 			err = kubernetes.UpdateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
-				return false, err
+				return false, nil, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
@@ -106,7 +106,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		doneWithPPND = true
 	}
 
-	return doneWithPPND, nil
+	return doneWithPPND, reenqueueDuration, nil
 }
 
 // Does the Pipeline need to be paused?
@@ -166,28 +166,29 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 // determine if Pipeline has been trying to pause for a period of time and is in "Failed" state
 // determine what the Pipeline annotation should be, and set it if it's not already set
-func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
+func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, *time.Duration, error) {
 	if shouldBePaused {
 		// do we need to set DesiredPauseBeginTime?
 		if pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.IsZero() {
 			pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Now())
 			// check the pipeline again later to see if we can mark it as "unpausible" at that time
-			r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
-			return false, nil
+			//r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
+			duration := unpausibleDelay + 1*time.Second
+			return false, &duration, nil
 		}
 
 		// if Failed and 30s since desiredPausedStartTime
 		if checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed) && time.Since(pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.Time) > unpausibleDelay {
 			err := r.markPipelineUnpausible(ctx, true, existingPipelineDef)
-			return true, err
+			return true, nil, err
 		}
-		return false, nil
+		return false, nil, nil
 	} else {
 		// clear DesiredPauseBeginTime
 		pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Time{})
 		// remove the "unpausible" annotation
 		err := r.markPipelineUnpausible(ctx, false, existingPipelineDef)
-		return false, err
+		return false, nil, err
 	}
 }
 
@@ -305,18 +306,31 @@ func pipelineIsUpdating(newPipelineDef *kubernetes.GenericObject, existingPipeli
 
 // TODO: consider patch?
 func (r *PipelineRolloutReconciler) markPipelineUnpausible(ctx context.Context, mark bool, pipeline *kubernetes.GenericObject) error {
+	numaLogger := logger.FromContext(ctx)
 	var patchJson string
 
+	annotationSet := false
+	unpausible, foundAnnotation := pipeline.Annotations[common.LabelKeyPipelineUnpausible]
+	annotationSet = foundAnnotation && unpausible == "true"
+
 	if mark {
-		// use MergePatchType to add annotation, as JSON Patch type seems to result in error if metadata.annotations isn't present
-		patchJson = fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, common.LabelKeyPipelineUnpausible, "true")
-		//patchJson = fmt.Sprintf(`[{"op": "add", "path": "/metadata/annotations/%s", "value": "true"}]`, annotationName)
-		return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
+		if !annotationSet {
+			numaLogger.Debugf("patching pipeline with annotation %s", common.LabelKeyPipelineUnpausible)
+			// use MergePatchType to add annotation, as JSON Patch type seems to result in error if metadata.annotations isn't present
+			patchJson = fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, common.LabelKeyPipelineUnpausible, "true")
+			//patchJson = fmt.Sprintf(`[{"op": "add", "path": "/metadata/annotations/%s", "value": "true"}]`, annotationName)
+			return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
+		}
 	} else {
-		annotationName := strings.ReplaceAll(common.LabelKeyPipelineUnpausible, "/", "~1")
-		patchJson = fmt.Sprintf(`[{"op": "remove", "path": "/metadata/annotations/%s"}]`, annotationName)
-		return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.JSONPatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
+		if annotationSet {
+			numaLogger.Debugf("patching pipeline to remove annotation %s", common.LabelKeyPipelineUnpausible)
+			annotationName := strings.ReplaceAll(common.LabelKeyPipelineUnpausible, "/", "~1")
+			patchJson = fmt.Sprintf(`[{"op": "remove", "path": "/metadata/annotations/%s"}]`, annotationName)
+			return kubernetes.PatchCR(ctx, r.restConfig, patchJson, k8stypes.JSONPatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
+		}
 	}
+
+	return nil
 
 	//return kubernetes.UpdateCR(ctx, r.restConfig, pipeline, "pipelines")
 }

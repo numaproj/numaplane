@@ -173,10 +173,11 @@ func (r *PipelineRolloutReconciler) enqueuePipelineRollout(namespacedName k8styp
 	r.queue.Add(key)
 }
 
-func (r *PipelineRolloutReconciler) enqueuePipelineRolloutWithDelay(namespacedName k8stypes.NamespacedName, delay time.Duration) {
+/*func (r *PipelineRolloutReconciler) enqueuePipelineRolloutWithDelay(namespacedName k8stypes.NamespacedName, delay time.Duration) {
 	key := namespacedNameToKey(namespacedName)
+	fmt.Printf("deletethis: will add key %s after delay %+v\n", key, delay)
 	r.queue.AddAfter(key, delay)
-}
+}*/
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
 	syncStartTime := time.Now()
@@ -202,7 +203,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	pipelineRollout.Status.Init(pipelineRollout.Generation)
 
-	requeue, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
+	requeueAfter, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
 		r.ErrorHandler(pipelineRollout, err, "ReconcileFailed", "Failed to reconcile PipelineRollout")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
@@ -255,8 +256,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// generate the metrics for the Pipeline.
 	r.customMetrics.IncPipelinesRunningMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 
-	if requeue {
-		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+	if requeueAfter != nil {
+		return ctrl.Result{Requeue: true, RequeueAfter: *requeueAfter}, nil
 	}
 
 	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
@@ -350,7 +351,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 	syncStartTime time.Time,
-) (bool, error) {
+) (*time.Duration, error) {
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
 		if pipelineRollout.Status.IsHealthy() {
@@ -371,7 +372,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.PipelinesHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
-		return false, nil
+		return nil, nil
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
@@ -381,7 +382,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	newPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	// Get the object to see if it exists
@@ -395,14 +396,14 @@ func (r *PipelineRolloutReconciler) reconcile(
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
-				return false, err
+				return nil, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-			return false, nil
+			return nil, nil
 		}
 
-		return false, fmt.Errorf("error getting Pipeline: %v", err)
+		return nil, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
 	// Object already exists
@@ -410,11 +411,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
 		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
 		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
-		return false, errors.New(errStr)
+		return nil, errors.New(errStr)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
-	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
-	return false, err
+	requeueAfter, err := r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
+	return requeueAfter, err
 }
 
 // determine if this Pipeline is owned by this PipelineRollout
@@ -440,20 +441,20 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 }
 
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) (*time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// what is the preferred strategy for this namespace?
 	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.Namespace)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// does the Resource need updating, and if so how?
 	pipelineNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	numaLogger.
 		WithValues("pipelineNeedsToUpdate", pipelineNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
@@ -477,11 +478,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			needPPND := false
 			ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if ppndRequired == nil { // not enough information
 				// TODO: mark something in the Status for why we're remaining in "Pending" here
-				return nil
+				return nil, nil
 			}
 			needPPND = *ppndRequired
 			if needPPND {
@@ -497,13 +498,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
+	var reenqueueDuration *time.Duration
+
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 		numaLogger.Debug("processing pipeline with PPND")
-		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
+		done, reenqueueDuration, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
 		if err != nil {
-			return err
+			return reenqueueDuration, err
 		}
 		if done {
 			r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
@@ -524,7 +527,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
-				return err
+				return nil, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
@@ -533,7 +536,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
-	return nil
+	return reenqueueDuration, nil
 }
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	return generation <= observedGeneration
