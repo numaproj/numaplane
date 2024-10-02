@@ -33,37 +33,37 @@ const (
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
 func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, *time.Duration, error) {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
 	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	if needsPaused == nil { // not enough information to know
-		return false, nil, errors.New("not enough information available to know if we need to pause")
+		return false, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
 
-	pipelineUnpausible, reenqueueDuration, err := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
+	pipelineUnpausible, err := r.checkPipelineUnpausible(ctx, shouldBePaused, existingPipelineDef, pipelineRollout)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	shouldBePaused = shouldBePaused && !pipelineUnpausible
 
 	if err := r.setPipelineLifecycle(ctx, shouldBePaused, existingPipelineDef); err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	pipelinePaused := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
@@ -82,12 +82,12 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			if shouldBePaused {
 				err = withDesiredPhase(newPipelineDef, "Paused")
 				if err != nil {
-					return false, nil, err
+					return false, err
 				}
 			}
 			err = kubernetes.UpdateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
 			if err != nil {
-				return false, nil, err
+				return false, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
@@ -104,7 +104,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		doneWithPPND = true
 	}
 
-	return doneWithPPND, reenqueueDuration, nil
+	return doneWithPPND, nil
 }
 
 // Does the Pipeline need to be paused?
@@ -136,11 +136,9 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
-
-	shouldBePaused := (pipelineNeedsToUpdate || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause, unpausible)
+	shouldBePaused := pipelineNeedsToUpdate || externalPauseRequest || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t",
+		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
 	// that it's okay to run
@@ -154,29 +152,28 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 // determine if Pipeline has been trying to pause for a period of time and is in "Failed" state
 // determine what the Pipeline annotation should be, and set it if it's not already set
-func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, *time.Duration, error) {
+func (r *PipelineRolloutReconciler) checkPipelineUnpausible(ctx context.Context, shouldBePaused bool, existingPipelineDef *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
 	if shouldBePaused {
 		// do we need to set DesiredPauseBeginTime?
 		if pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.IsZero() {
 			pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Now())
 			// check the pipeline again later to see if we can mark it as "unpausible" at that time
-			//r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
-			duration := unpausibleDelay + 1*time.Second
-			return false, &duration, nil
+			r.enqueuePipelineRolloutWithDelay(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name}, unpausibleDelay+1*time.Second)
+			return false, nil // TODO: this wouldn't work because if something returns an error in the meeting, that will trump the requeueAfter
 		}
 
 		// if Failed and 30s since desiredPausedStartTime
 		if checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed) && time.Since(pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime.Time) > unpausibleDelay {
 			err := r.markPipelineUnpausible(ctx, true, existingPipelineDef)
-			return true, nil, err
+			return true, err
 		}
-		return false, nil, nil
+		return false, nil
 	} else {
 		// clear DesiredPauseBeginTime
 		pipelineRollout.Status.PPNDStatus.DesiredPauseBeginTime = metav1.NewTime(time.Time{})
 		// remove the "unpausible" annotation
 		err := r.markPipelineUnpausible(ctx, false, existingPipelineDef)
-		return false, nil, err
+		return false, err
 	}
 }
 

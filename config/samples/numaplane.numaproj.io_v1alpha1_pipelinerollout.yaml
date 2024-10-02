@@ -19,9 +19,9 @@ spec:
             builtin:
               name: cat # A built-in UDF which simply cats the message
         - name: out
-          sink:
+          #sink:
             # A simple log printing sink
-            log: {}
+          #  log: {}
       edges:
         - from: in
           to: cat
