@@ -496,6 +496,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		if dataLossPrevention == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 
