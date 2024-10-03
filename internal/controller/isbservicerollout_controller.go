@@ -363,6 +363,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				return err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+			r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
 			return nil
 		})
 	case apiv1.UpgradeStrategyNoOp:
@@ -374,6 +375,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
+		// r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
 	case apiv1.UpgradeStrategyProgressive:
 		return false, errors.New("Progressive Strategy not supported yet")
 	default:
