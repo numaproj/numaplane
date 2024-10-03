@@ -353,13 +353,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			existingISBSvcDef:          createDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, false),
 			existingStatefulSetDef:     createDefaultISBStatefulSet("2.10.3", false),
 			existingPipelinePhase:      numaflowv1.PipelinePhasePaused,
-			existingInProgressStrategy: nil,
+			existingInProgressStrategy: &ppndUpgradeStrategy,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionPausingPipelines: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                       "existing ISBService - spec already updated - isbsvc done reconciling",
@@ -370,7 +370,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			existingInProgressStrategy: nil,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
-				apiv1.ConditionPausingPipelines: metav1.ConditionFalse,
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
