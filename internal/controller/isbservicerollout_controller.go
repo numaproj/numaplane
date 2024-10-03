@@ -356,16 +356,23 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
-		return processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+		done, err := processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
 				return err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
-			r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
+			// r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
 			return nil
 		})
+		if err != nil {
+			return false, err
+		}
+		if done {
+			r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
+			return done, nil
+		}
 	case apiv1.UpgradeStrategyNoOp:
 		if isbServiceNeedsUpdating {
 			// update ISBService
