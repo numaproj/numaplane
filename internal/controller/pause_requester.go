@@ -119,7 +119,7 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, k8sClient client.Cli
 			return false, err
 		}
 
-		if isPipelinePausedOrUnpausible(ctx, pipeline, pipelineRollout) {
+		if isPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
 			numaLogger.Debugf("pipeline %q not paused or unpausible", pipeline.Name)
 			return false, nil
 		}
