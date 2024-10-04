@@ -5,6 +5,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,7 +29,7 @@ type PauseRequester interface {
 // return:
 // - true if needs a requeue
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
-func processChildObjectWithPPND(ctx context.Context, rollout client.Object, pauseRequester PauseRequester,
+func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, rollout client.Object, pauseRequester PauseRequester,
 	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -49,7 +50,7 @@ func processChildObjectWithPPND(ctx context.Context, rollout client.Object, paus
 		if !pauseRequestUpdated && resourceNeedsUpdating {
 
 			// check if the pipelines are all paused (or can't be paused)
-			allPaused, err := areAllPipelinesPausedOrUnpausible(ctx, pauseRequester, rolloutNamespace, rolloutName)
+			allPaused, err := areAllPipelinesPausedOrUnpausible(ctx, k8sclient, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
 				return false, err
 			}
@@ -102,24 +103,23 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 }
 
 // check if all Pipelines corresponding to this Rollout have paused or are otherwise not pausible (contract with Numaflow is that this is Pipelines which are "Failed")
-func areAllPipelinesPausedOrUnpausible(ctx context.Context, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
+// or have an exception for allowing data loss
+func areAllPipelinesPausedOrUnpausible(ctx context.Context, k8sClient client.Client, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
 	if err != nil {
 		return false, err
 	}
 	for _, pipeline := range pipelines {
-		/*status, err := kubernetes.ParseStatus(pipeline)
-		if err != nil {
+
+		// Get PipelineRollout CR
+		pipelineRolloutName := getPipelineRolloutName(pipeline.Name)
+		pipelineRollout := &apiv1.PipelineRollout{}
+		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: pipelineRolloutName}, pipelineRollout); err != nil {
 			return false, err
 		}
-		if status.Phase != "Paused" && status.Phase != "Failed" && !pipeline.allowingDataLoss() {
-			numaLogger.Debugf("pipeline %q has status.phase=%q", pipeline.Name, status.Phase)
 
-			return false, nil
-		}*/
-
-		if isPipelinePausedOrUnpausible(ctx, pipeline) {
+		if isPipelinePausedOrUnpausible(ctx, pipeline, pipelineRollout) {
 			numaLogger.Debugf("pipeline %q not paused or unpausible", pipeline.Name)
 			return false, nil
 		}

@@ -54,7 +54,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
+		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef, pipelineRollout)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
@@ -79,7 +79,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
-	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
+	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef, pipelineRollout) {
 		doneWithPPND = true
 	}
 
@@ -226,14 +226,10 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 // either pipeline must be:
 //   - Paused
 //   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
-//   - Annotated to allow data loss
-func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
+//   - PipelineRollout parent Annotated to allow data loss
+func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
 
-	allowDataLoss := false
-	annotation, found := pipeline.Annotations[common.LabelKeyAllowDataLoss]
-	if found && annotation == "true" {
-		allowDataLoss = true
-	}
+	allowDataLossAnnotation := pipelineRollout.Annotations[common.LabelKeyAllowDataLoss]
 
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed) || allowDataLoss
+	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed) || allowDataLossAnnotation == "true"
 }
