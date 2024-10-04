@@ -26,7 +26,7 @@ type PauseRequester interface {
 
 // process a child object, pausing pipelines or resuming pipelines if needed
 // return:
-// - true if needs a requeue
+// - true if done with PPND
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
 func processChildObjectWithPPND(ctx context.Context, rollout client.Object, pauseRequester PauseRequester,
 	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
@@ -64,7 +64,7 @@ func processChildObjectWithPPND(ctx context.Context, rollout client.Object, paus
 			}
 
 		}
-		return true, nil
+		return false, nil
 
 	} else {
 		// remove any pause requirement if necessary
@@ -74,7 +74,7 @@ func processChildObjectWithPPND(ctx context.Context, rollout client.Object, paus
 		}
 	}
 
-	return false, nil
+	return true, nil
 }
 
 // request that the Pipelines corresponding to this Rollout pause

@@ -302,8 +302,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
-	// TODO: do we need the value isbServiceNeedsUpdating still?
-	isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
+	_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, err
 	}
@@ -356,7 +355,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
-		done, err := processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
+		done, err := processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -370,10 +369,12 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 		if done {
 			r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
-			return done, nil
+		} else {
+			// requeue if done with PPND is false
+			return true, nil
 		}
 	case apiv1.UpgradeStrategyNoOp:
-		if isbServiceNeedsUpdating {
+		if isbServiceNeedsToUpdate {
 			// update ISBService
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -381,7 +382,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-		// r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
 	case apiv1.UpgradeStrategyProgressive:
 		return false, errors.New("Progressive Strategy not supported yet")
 	default:

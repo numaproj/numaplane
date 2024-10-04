@@ -316,7 +316,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedRolloutPhase:       apiv1.PhasePending,
 			expectedConditionsSet:      map[apiv1.ConditionType]metav1.ConditionStatus{apiv1.ConditionPausingPipelines: metav1.ConditionTrue},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.3"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                       "existing ISBService - new spec - pipelines paused",
@@ -331,7 +331,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                       "existing ISBService - new spec - pipelines failed",
@@ -345,7 +345,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                       "existing ISBService - spec already updated - isbsvc reconciling",
@@ -359,7 +359,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				apiv1.ConditionPausingPipelines: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                       "existing ISBService - spec already updated - isbsvc done reconciling",
