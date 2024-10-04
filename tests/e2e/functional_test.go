@@ -558,12 +558,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-			if dataLossPrevention == "true" {
-				document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
-				verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-					return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
-				})
-			}
+			document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+			verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
+			})
 
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
