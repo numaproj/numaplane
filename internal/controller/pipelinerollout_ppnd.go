@@ -79,7 +79,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
-	if specBasedPause && isPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
+	if specBasedPause && checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused) {
 		doneWithPPND = true
 	}
 
@@ -117,7 +117,8 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 
 	wontPause := checkIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
 
-	shouldBePaused := (pipelineNeedsToUpdate || externalPauseRequest || specBasedPause) && !wontPause
+	ppndPause := (pipelineNeedsToUpdate || externalPauseRequest) && !wontPause
+	shouldBePaused := ppndPause || specBasedPause
 	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t, wontPause=%t",
 		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause, wontPause)
 

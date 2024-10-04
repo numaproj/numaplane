@@ -50,7 +50,7 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 		if !pauseRequestUpdated && resourceNeedsUpdating {
 
 			// check if the pipelines are all paused (or can't be paused)
-			allPaused, err := areAllPipelinesPausedOrUnpausible(ctx, k8sclient, pauseRequester, rolloutNamespace, rolloutName)
+			allPaused, err := areAllPipelinesPausedOrWontPause(ctx, k8sclient, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
 				return false, err
 			}
@@ -104,7 +104,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 
 // check if all Pipelines corresponding to this Rollout have paused or are otherwise not pausible (contract with Numaflow is that this is Pipelines which are "Failed")
 // or have an exception for allowing data loss
-func areAllPipelinesPausedOrUnpausible(ctx context.Context, k8sClient client.Client, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
+func areAllPipelinesPausedOrWontPause(ctx context.Context, k8sClient client.Client, pauseRequester PauseRequester, rolloutNamespace string, rolloutName string) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelines, err := pauseRequester.getPipelineList(ctx, rolloutNamespace, rolloutName)
 	if err != nil {
@@ -119,8 +119,8 @@ func areAllPipelinesPausedOrUnpausible(ctx context.Context, k8sClient client.Cli
 			return false, err
 		}
 
-		if isPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
-			numaLogger.Debugf("pipeline %q not paused or unpausible", pipeline.Name)
+		if !isPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
+			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.Name)
 			return false, nil
 		}
 	}
