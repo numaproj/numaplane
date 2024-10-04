@@ -557,7 +557,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			document("Verify that in-progress-strategy gets set to NoOp")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			// verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
+
+			if dataLossPrevention == "true" {
+				document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+				verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+					return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
+				})
+			}
 
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -572,7 +578,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			// return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
 			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == memLimit
 		})
 
