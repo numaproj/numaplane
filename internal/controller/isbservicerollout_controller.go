@@ -301,7 +301,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// update our Status with the ISBService's Status
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
+	// if I am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
 	_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, err
