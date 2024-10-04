@@ -363,7 +363,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				return err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
-			// r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
 			return nil
 		})
 		if err != nil {

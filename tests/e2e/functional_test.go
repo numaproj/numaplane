@@ -126,7 +126,7 @@ var (
 	}
 
 	volSize, _     = apiresource.ParseQuantity("10Mi")
-	memLimit, _    = apiresource.ParseQuantity("10Gi")
+	memLimit, _    = apiresource.ParseQuantity("10Mi")
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
