@@ -290,7 +290,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
@@ -327,7 +327,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
@@ -371,7 +371,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	currentPipelineSpec = updatedPipelineSpec
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should pause the Pipeline if user requests it", func() {
 
@@ -408,7 +408,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineName))
 	})
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should resume the Pipeline if user requests it", func() {
 
@@ -433,7 +433,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 	})
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 
@@ -480,7 +480,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
 
