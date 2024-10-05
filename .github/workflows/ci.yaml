@@ -112,8 +112,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      matrix:
-        datalossprevention: ["true", "false"]
+      #matrix:
+      #  datalossprevention: ["true", "false"]
 
     steps:
       - name: Checkout code
@@ -150,23 +150,23 @@ jobs:
           echo 'Waiting for the cluster to be ready...'
           until kubectl cluster-info; do sleep 1; done
 
-      - name: Install Numaplane
+      - name: Install Numaplane - Run without PPND
         env:
           GOPATH: /home/runner/go
         run: 
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=${{matrix.datalossprevention}} make start
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=false make start
           
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=${{matrix.datalossprevention}} make test-e2e
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=false make test-e2e
 
       - name: Archive controller logs
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: controller-logs-${{matrix.datalossprevention}}
+          name: controller-logs-false
           path: |
             tests/e2e/output/controllers/
           retention-days: 7
@@ -175,7 +175,37 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: resource-changes-${{matrix.datalossprevention}}
+          name: resource-changes-false
+          path: |
+            tests/e2e/output/resources/
+          retention-days: 7
+
+      - name: Install Numaplane - Run with PPND
+        env:
+          GOPATH: /home/runner/go
+        run: 
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=true make start
+          
+
+      - name: Run e2e tests
+        env:
+          GOPATH: /home/runner/go
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true DATA_LOSS_PREVENTION=true make test-e2e
+
+      - name: Archive controller logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: controller-logs-true
+          path: |
+            tests/e2e/output/controllers/
+          retention-days: 7
+
+      - name: Archive resource changes
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: resource-changes-true
           path: |
             tests/e2e/output/resources/
           retention-days: 7
