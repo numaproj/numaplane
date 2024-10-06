@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -649,7 +648,7 @@ func TestPipelineLabels(t *testing.T) {
 	}
 }
 
-func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec, annotations map[string]string, labels map[string]string) *apiv1.PipelineRollout {
 	pipelineRaw, _ := json.Marshal(isbsvcSpec)
 	return &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{
@@ -658,6 +657,8 @@ func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec) *apiv1.PipelineRo
 			UID:               "uid",
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
+			Annotations:       annotations,
+			Labels:            labels,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Pipeline: apiv1.Pipeline{
@@ -731,6 +732,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	testCases := []struct {
 		name                           string
 		newPipelineSpec                numaflowv1.PipelineSpec
+		pipelineRolloutAnnotations     map[string]string
 		existingPipelineDef            numaflowv1.Pipeline
 		initialRolloutPhase            apiv1.Phase
 		initialInProgressStrategy      *apiv1.UpgradeStrategy
@@ -856,6 +858,21 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
+		{
+			name:                           "Pipeline stuck pausing, allow-data-loss annotation applied",
+			newPipelineSpec:                pipelineSpecWithTopologyChange,
+			pipelineRolloutAnnotations:     map[string]string{common.LabelKeyAllowDataLoss: "true"},
+			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhasePausing),
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			numaflowControllerPauseRequest: &trueValue,
+			isbServicePauseRequest:         &trueValue,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpecWithTopologyChange, spec)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -869,7 +886,11 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, pipelineList.Items, 0)
 
-			rollout := createPipelineRollout(tc.newPipelineSpec)
+			if tc.pipelineRolloutAnnotations == nil {
+				tc.pipelineRolloutAnnotations = map[string]string{}
+			}
+
+			rollout := createPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{})
 			_ = numaplaneClient.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
@@ -920,7 +941,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultPipeline)
-			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", fmt.Sprint(resultPipeline.Spec))
+			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", resultPipeline.Spec)
 		})
 	}
 }
