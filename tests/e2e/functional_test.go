@@ -126,13 +126,18 @@ var (
 	}
 
 	volSize, _     = apiresource.ParseQuantity("10Mi")
-	memLimit, _    = apiresource.ParseQuantity("10Mi")
+	memLimit, _    = apiresource.ParseQuantity("20Mi")
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: "2.9.6",
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: volSize},
+				},
 			},
 		},
 	}
@@ -526,6 +531,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				}
 				return true
 			}, testTimeout).Should(BeTrue())
+
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
@@ -552,24 +558,29 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if dataLossPrevention == "true" {
-
-			document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+		// verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+		// 	return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
+		// })
+		verifyNotPausing := func() bool {
+			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
-
-			Consistently(func() bool {
-				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-				if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-					return false
-				}
-				return true
-			}, testTimeout).Should(BeTrue())
+			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+				return false
+			}
+			return true
 		}
+
+		Eventually(verifyNotPausing, testTimeout).Should(BeTrue())
+
+		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == memLimit
