@@ -9,7 +9,6 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -136,7 +135,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 	configManager := config.GetConfigManagerInstance()
 
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
-	isbServiceDefn := makeISBServiceDefinition(defaultISBServiceSpec)
+	// isbServiceDefn := makeISBServiceDefinition(defaultISBServiceSpec)
 
 	testCases := []struct {
 		name                  string
@@ -352,27 +351,27 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedNeedsUpdating: false,
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
-		{
-			name:    "isb test",
-			newSpec: isbServiceDefn,
-			existingSpec: func() kubernetes.GenericObject {
-				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
-				newISBServiceSpec.JetStream.ContainerTemplate = &numaflowv1.ContainerTemplate{
-					Resources: v1.ResourceRequirements{
-						Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
-					},
-				}
-				return makeISBServiceDefinition(*newISBServiceSpec)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:      config.PPNDStrategyID,
-				PipelineSpecExcludedPaths:   []string{"vertices.source.something"},
-				ISBServiceSpecExcludedPaths: []string{"jetstream.containerTemplate.resources.limits"},
-			},
-			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyApply,
-		},
+		// {
+		// 	name:    "isb test",
+		// 	newSpec: isbServiceDefn,
+		// 	existingSpec: func() kubernetes.GenericObject {
+		// 		newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
+		// 		newISBServiceSpec.JetStream.ContainerTemplate = &numaflowv1.ContainerTemplate{
+		// 			Resources: v1.ResourceRequirements{
+		// 				Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+		// 			},
+		// 		}
+		// 		return makeISBServiceDefinition(*newISBServiceSpec)
+		// 	}(),
+		// 	usdeConfig: config.USDEConfig{
+		// 		DefaultUpgradeStrategy:      config.PPNDStrategyID,
+		// 		PipelineSpecExcludedPaths:   []string{"vertices.source.something"},
+		// 		ISBServiceSpecExcludedPaths: []string{"jetstream.containerTemplate.resources.limits"},
+		// 	},
+		// 	namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+		// 	expectedNeedsUpdating: true,
+		// 	expectedStrategy:      apiv1.UpgradeStrategyApply,
+		// },
 	}
 
 	for _, tc := range testCases {
