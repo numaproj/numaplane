@@ -92,7 +92,7 @@ var (
 	// pipelinesHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_pipeline_rollout_health",
-		Help:        "A metric to indicate whether the pipeline is healthy. '1' means healthy, '0' means unhealthy",
+		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelPipeline})
 
