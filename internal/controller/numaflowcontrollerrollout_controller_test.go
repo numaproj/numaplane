@@ -370,7 +370,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	testCases := []struct {
 		name                      string
 		newControllerVersion      string
-		existingControllerVersion *string // if nil, then there isn't a Controller installed
+		existingControllerVersion string // if "", then there isn't a Controller installed
 		stillReconciling          bool
 		existingPipeline          *numaflowv1.Pipeline
 		expectedRolloutPhase      apiv1.Phase
@@ -378,21 +378,29 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		expectedConditionsSet           map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedResultControllerVersion string
 	}{
-		{
+		/*{
 			name:                      "no existing Controller",
 			newControllerVersion:      "1.2.0",
-			existingControllerVersion: nil,
+			existingControllerVersion: "",
 			existingPipeline:          nil,
 			expectedRolloutPhase:      apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedResultControllerVersion: "1.2.0",
+		},*/
+		{
+			name:                      "new Controller version, pipelines not yet paused",
+			newControllerVersion:      "1.2.1",
+			existingControllerVersion: "1.2.0",
+			existingPipeline:          createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			expectedRolloutPhase:      apiv1.PhasePending,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionPausingPipelines: metav1.ConditionTrue,
+			},
+			expectedResultControllerVersion: "1.2.0",
 		},
 		/*{
-			name: "new Controller version, pipelines not yet paused",
-		},
-		{
 			name: "new Controller version, pipelines paused",
 		},
 		{
@@ -425,9 +433,10 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			rollout.Status.Init(rollout.Generation)
 
 			// create the already-existing Deployment in Kubernetes
-			if tc.existingControllerVersion != nil {
-				imagePath := "numaflow:v" + *tc.existingControllerVersion
-				k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, createDeploymentDefinition(imagePath), metav1.CreateOptions{})
+			if tc.existingControllerVersion != "" {
+				imagePath := "quay.io/numaproj/numaflow:v" + tc.existingControllerVersion
+				_, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, createDeploymentDefinition(imagePath), metav1.CreateOptions{})
+				assert.NoError(t, err)
 			}
 
 			if tc.existingPipeline != nil {
@@ -469,12 +478,20 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 }
 
 func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
+	labels := map[string]string{
+		"app.kubernetes.io/component": "controller-manager",
+		"app.kubernetes.io/name":      "controller-manager",
+		"app.kubernetes.io/part-of":   "numaflow",
+	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: defaultNamespace,
-			Name:      "numaflow-controller",
+			Name:      NumaflowControllerDeploymentName,
 		},
 		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -483,6 +500,9 @@ func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
 							Image: imagePath,
 						},
 					},
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
 				},
 			},
 		},
