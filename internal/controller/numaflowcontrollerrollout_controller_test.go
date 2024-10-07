@@ -378,7 +378,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		expectedConditionsSet           map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedResultControllerVersion string
 	}{
-		/*{
+		{
 			name:                      "no existing Controller",
 			newControllerVersion:      "1.2.0",
 			existingControllerVersion: "",
@@ -388,7 +388,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedResultControllerVersion: "1.2.0",
-		},*/
+		},
 		{
 			name:                      "new Controller version, pipelines not yet paused",
 			newControllerVersion:      "1.2.1",
@@ -400,10 +400,16 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			},
 			expectedResultControllerVersion: "1.2.0",
 		},
-		/*{
-			name: "new Controller version, pipelines paused",
-		},
 		{
+			name:                            "new Controller version, pipelines paused",
+			newControllerVersion:            "1.2.1",
+			existingControllerVersion:       "1.2.0",
+			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
+			expectedRolloutPhase:            apiv1.PhaseDeployed,
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedResultControllerVersion: "1.2.1",
+		},
+		/*{
 			name: "already updated the Controller version but it's still reconciling",
 		},
 		{
@@ -425,6 +431,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.CoreV1().ConfigMaps(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().Roles(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
 
 			// create NumaflowControllerRollout definition
 			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion)
