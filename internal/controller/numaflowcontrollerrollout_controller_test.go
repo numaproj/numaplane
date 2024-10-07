@@ -329,7 +329,9 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	assert.Nil(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
-	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	controllerDefinitions, err := getNumaflowControllerDefinitions()
+	assert.Nil(t, err)
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*controllerDefinitions)
 
 	ctx := context.Background()
 
@@ -359,7 +361,37 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedConditionsSet           map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedResultControllerVersion string
-	}{}
+	}{
+		{
+			name:                      "no existing Controller",
+			newControllerVersion:      "1.2.0",
+			existingControllerVersion: nil,
+			existingPipeline:          nil,
+			expectedRolloutPhase:      apiv1.PhaseDeployed,
+			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
+				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
+			},
+			expectedResultControllerVersion: "1.2.0",
+		},
+		/*{
+			name: "new Controller version, pipelines not yet paused",
+		},
+		{
+			name: "new Controller version, pipelines paused",
+		},
+		{
+			name: "already updated the Controller version but it's still reconciling",
+		},
+		{
+			name: "new Controller version done reconciling",
+		},
+		{
+			name: "new Controller version, pipelines not paused but failed",
+		},
+		{
+			name: "new Controller version, pipelines not paused but set to allow data loss",
+		},*/
+	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -382,13 +414,15 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 				k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, createDeploymentDefinition(imagePath), metav1.CreateOptions{})
 			}
 
-			// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
-			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
-			assert.NoError(t, err)
-			pipeline.Status = tc.existingPipeline.Status
-			// updating the Status subresource is a separate operation
-			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
-			assert.NoError(t, err)
+			if tc.existingPipeline != nil {
+				// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
+				pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
+				assert.NoError(t, err)
+				pipeline.Status = tc.existingPipeline.Status
+				// updating the Status subresource is a separate operation
+				_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+				assert.NoError(t, err)
+			}
 
 			// call reconcile()
 			_, err = r.reconcile(ctx, rollout, defaultNamespace, time.Now())
@@ -420,6 +454,10 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
 	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: defaultNamespace,
+			Name:      "numaflow-controller",
+		},
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

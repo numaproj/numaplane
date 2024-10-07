@@ -165,7 +165,9 @@ var _ = BeforeSuite(func() {
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.NoStrategyID})
 
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(getNumaflowControllerDefinitions())
+	definitions, err := getNumaflowControllerDefinitions()
+	Expect(err).ToNot(HaveOccurred())
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions)
 
 	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
 		cfg, kubernetes.NewKubectl(), customMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowController))
@@ -213,15 +215,19 @@ func downloadCRD(url string, downloadDir string) {
 	Expect(err).ToNot(HaveOccurred())
 }
 
-func getNumaflowControllerDefinitions() config.NumaflowControllerDefinitionConfig {
+func getNumaflowControllerDefinitions() (*config.NumaflowControllerDefinitionConfig, error) {
 	// Read definitions config file
 	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return nil, err
+	}
 	var controllerConfig config.NumaflowControllerDefinitionConfig
 	err = yaml.Unmarshal(configData, &controllerConfig)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return nil, err
+	}
 
-	return controllerConfig
+	return &controllerConfig, nil
 }
 
 // verifyAutoHealing tests the auto healing feature
