@@ -944,3 +944,115 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		})
 	}
 }
+
+// process an existing pipeline in this test, the user preferred strategy is Progressive
+func Test_processExistingPipeline_Progressive(t *testing.T) {
+	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
+		DefaultUpgradeStrategy:    config.ProgressiveStrategyID,
+		PipelineSpecExcludedPaths: []string{"watermark", "lifecycle"},
+	})
+
+	ctx := context.Background()
+
+	// other tests may call this, but it fails if called more than once
+	if customMetrics == nil {
+		customMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewPipelineRolloutReconciler(
+		numaplaneClient,
+		scheme.Scheme,
+		restConfig,
+		customMetrics,
+		recorder)
+
+	testCases := []struct {
+		name                           string
+		newPipelineSpec                numaflowv1.PipelineSpec
+		existingPipelineDef            numaflowv1.Pipeline
+		initialRolloutPhase            apiv1.Phase
+		initialInProgressStrategy      *apiv1.UpgradeStrategy
+		numaflowControllerPauseRequest *bool
+		isbServicePauseRequest         *bool
+
+		expectedInProgressStrategy apiv1.UpgradeStrategy
+		expectedRolloutPhase       apiv1.Phase
+		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
+		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
+	}{
+		{
+			name:                       "spec difference results in Progressive",
+			newPipelineSpec:            pipelineSpecWithTopologyChange,
+			existingPipelineDef:        *createDefaultPipeline(numaflowv1.PipelinePhaseRunning, true),
+			initialRolloutPhase:        apiv1.PhaseDeployed,
+			initialInProgressStrategy:  nil,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:       apiv1.PhasePending,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			// first delete Pipeline and PipelineRollout in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineName, metav1.DeleteOptions{})
+
+			pipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, pipelineList.Items, 0)
+
+			rollout := createPipelineRollout(tc.newPipelineSpec)
+			_ = numaplaneClient.Delete(ctx, rollout)
+
+			rollout.Status.Phase = tc.initialRolloutPhase
+			if tc.initialInProgressStrategy != nil {
+				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
+			} else {
+				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
+				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
+			}
+
+			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
+			rollout.Status.Init(rollout.Generation)
+
+			err = numaplaneClient.Create(ctx, rollout)
+			assert.NoError(t, err)
+
+			// create the already-existing Pipeline in Kubernetes
+			// this updates everything but the Status subresource
+			existingPipelineDef := &tc.existingPipelineDef
+			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
+			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+			// update Status subresource
+			pipeline.Status = tc.existingPipelineDef.Status
+			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			assert.NoError(t, err)
+
+			////// check results:
+			// Check Phase of Rollout:
+			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+			// Check In-Progress Strategy
+			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+
+			// Check Pipeline spec
+			resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Get(ctx, defaultPipelineName, metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.NotNil(t, resultPipeline)
+			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", fmt.Sprint(resultPipeline.Spec))
+		})
+	}
+}

@@ -506,7 +506,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
-			done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, newPipelineDef, pipelineNeedsToUpdate)
+			done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
 			if err != nil {
 				return err
 			}
@@ -514,6 +514,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
 			}
 		}
+		// TODO: clean up old pipeline when drained
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
@@ -769,7 +770,10 @@ func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, p
 		}
 	}
 
-	return "-" + fmt.Sprint(*pipelineRollout.Status.NameCount), nil
+	preNameCount := *pipelineRollout.Status.NameCount
+	*pipelineRollout.Status.NameCount++
+
+	return "-" + fmt.Sprint(preNameCount), nil
 }
 
 func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
