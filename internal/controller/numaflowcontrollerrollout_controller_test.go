@@ -420,7 +420,10 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		},
 		{
 			name: "new Controller version, pipelines not paused but set to allow data loss",
-		},*/
+		},
+		{
+		    name: "version requested of Controller can't be found"
+		}*/
 	}
 
 	for _, tc := range testCases {
