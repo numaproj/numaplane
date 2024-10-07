@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -46,9 +47,16 @@ import (
 
 func createNumaflowControllerRolloutDef(namespace string, version string) *apiv1.NumaflowControllerRollout {
 	return &apiv1.NumaflowControllerRollout{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "numaflowcontrollerrollout",
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      NumaflowControllerDeploymentName,
-			Namespace: namespace,
+			Name:              NumaflowControllerDeploymentName,
+			Namespace:         namespace,
+			UID:               "uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
 			Controller: apiv1.Controller{Version: version},
@@ -67,13 +75,21 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			Namespace: namespace,
 		}
 
-		numaflowControllerResource := createNumaflowControllerRolloutDef(defaultNamespace, "1.2.0")
+		numaflowControllerResource := apiv1.NumaflowControllerRollout{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      NumaflowControllerDeploymentName,
+				Namespace: namespace,
+			},
+			Spec: apiv1.NumaflowControllerRolloutSpec{
+				Controller: apiv1.Controller{Version: "1.2.0"},
+			},
+		}
 
 		It("Should throw a CR validation error", func() {
 			By("Creating a NumaflowControllerRollout resource with an invalid name")
 			resource := numaflowControllerResource
 			resource.Name = "test-numaflow-controller"
-			err := k8sClient.Create(ctx, resource)
+			err := k8sClient.Create(ctx, &resource)
 			Expect(err).NotTo(Succeed())
 			Expect(err.Error()).To(ContainSubstring("The metadata name must be 'numaflow-controller'"))
 		})
@@ -81,11 +97,11 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		It("Should throw duplicate resource error", func() {
 			By("Creating duplicate NumaflowControllerRollout resource with the same name")
 			resource := numaflowControllerResource
-			err := k8sClient.Create(ctx, resource)
+			err := k8sClient.Create(ctx, &resource)
 			Expect(err).To(Succeed())
 
 			resource.ResourceVersion = "" // Reset the resource version to create a new resource
-			err = k8sClient.Create(ctx, resource)
+			err = k8sClient.Create(ctx, &resource)
 			Expect(err).NotTo(Succeed())
 			Expect(err.Error()).To(ContainSubstring("numaflowcontrollerrollouts.numaplane.numaproj.io \"numaflow-controller\" already exists"))
 		})
@@ -112,7 +128,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			// Fetch the resource and update the spec
 			resource := numaflowControllerResource
 			resource.Spec.Controller.Version = "1.2.1"
-			Expect(k8sClient.Patch(ctx, resource, client.Merge)).To(Succeed())
+			Expect(k8sClient.Patch(ctx, &resource, client.Merge)).To(Succeed())
 
 			// Validate the resource status after the update
 			By("Verifying the numaflow controller deployment image version")
@@ -434,7 +450,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			// Check Deployment
 			deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
 			assert.NoError(t, err)
-			assert.Equal(t, "v"+tc.expectedResultControllerVersion, deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
+			assert.Equal(t, fmt.Sprintf("quay.io/numaproj/numaflow:v%s", tc.expectedResultControllerVersion), deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
 
 			// Check Conditions:
 			for conditionType, conditionStatus := range tc.expectedConditionsSet {
