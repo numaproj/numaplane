@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -53,7 +54,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && isPipelinePausedOrUnpausible(ctx, existingPipelineDef)) {
+		if !shouldBePaused || (shouldBePaused && checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
@@ -76,9 +77,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// are we done with PPND?
 	doneWithPPND := !shouldBePaused
 
-	// but if the PipelineRollout says to pause and we're Paused, this is also "doneWithPPND"
+	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
-	if specBasedPause && isPipelinePausedOrUnpausible(ctx, existingPipelineDef) {
+	if specBasedPause && isPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
 		doneWithPPND = true
 	}
 
@@ -114,11 +115,12 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 
-	unpausible := checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhaseFailed)
+	wontPause := checkIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
 
-	shouldBePaused := (pipelineNeedsToUpdate || externalPauseRequest || specBasedPause) && !unpausible
-	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t, unpausible=%t",
-		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause, unpausible)
+	ppndPause := (pipelineNeedsToUpdate || externalPauseRequest) && !wontPause
+	shouldBePaused := ppndPause || specBasedPause
+	numaLogger.Debugf("shouldBePaused=%t, pipelineNeedsToUpdate=%t, externalPauseRequest=%t, specBasedPause=%t, wontPause=%t",
+		shouldBePaused, pipelineNeedsToUpdate, externalPauseRequest, specBasedPause, wontPause)
 
 	// if we have incomplete pause request information (i.e. numaflowcontrollerrollout or isbservicerollout not yet reconciled), don't return
 	// that it's okay to run
@@ -222,7 +224,25 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	return nil
 }
 
-func isPipelinePausedOrUnpausible(ctx context.Context, pipeline *kubernetes.GenericObject) bool {
-	// contract with Numaflow is that unpausible Pipelines are "Failed" pipelines
-	return checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused) || checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+// either pipeline must be:
+//   - Paused
+//   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
+//   - PipelineRollout parent Annotated to allow data loss
+func isPipelinePausedOrWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+	wontPause := checkIfPipelineWontPause(ctx, pipeline, pipelineRollout)
+
+	paused := checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+	return paused || wontPause
+}
+
+func checkIfPipelineWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+	numaLogger := logger.FromContext(ctx)
+
+	allowDataLossAnnotation := pipelineRollout.Annotations[common.LabelKeyAllowDataLoss]
+	allowDataLoss := allowDataLossAnnotation == "true"
+	failed := checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+	wontPause := allowDataLoss || failed
+	numaLogger.Debugf("wontPause=%t, allowDataLoss=%t, failed=%t", wontPause, allowDataLoss, failed)
+
+	return wontPause
 }
