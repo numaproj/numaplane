@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -43,8 +44,8 @@ import (
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
-func createNumaflowControllerRolloutDef(namespace string, version string) apiv1.NumaflowControllerRollout {
-	return apiv1.NumaflowControllerRollout{
+func createNumaflowControllerRolloutDef(namespace string, version string) *apiv1.NumaflowControllerRollout {
+	return &apiv1.NumaflowControllerRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      NumaflowControllerDeploymentName,
 			Namespace: namespace,
@@ -72,7 +73,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Creating a NumaflowControllerRollout resource with an invalid name")
 			resource := numaflowControllerResource
 			resource.Name = "test-numaflow-controller"
-			err := k8sClient.Create(ctx, &resource)
+			err := k8sClient.Create(ctx, resource)
 			Expect(err).NotTo(Succeed())
 			Expect(err.Error()).To(ContainSubstring("The metadata name must be 'numaflow-controller'"))
 		})
@@ -80,11 +81,11 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		It("Should throw duplicate resource error", func() {
 			By("Creating duplicate NumaflowControllerRollout resource with the same name")
 			resource := numaflowControllerResource
-			err := k8sClient.Create(ctx, &resource)
+			err := k8sClient.Create(ctx, resource)
 			Expect(err).To(Succeed())
 
 			resource.ResourceVersion = "" // Reset the resource version to create a new resource
-			err = k8sClient.Create(ctx, &resource)
+			err = k8sClient.Create(ctx, resource)
 			Expect(err).NotTo(Succeed())
 			Expect(err.Error()).To(ContainSubstring("numaflowcontrollerrollouts.numaplane.numaproj.io \"numaflow-controller\" already exists"))
 		})
@@ -111,7 +112,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			// Fetch the resource and update the spec
 			resource := numaflowControllerResource
 			resource.Spec.Controller.Version = "1.2.1"
-			Expect(k8sClient.Patch(ctx, &resource, client.Merge)).To(Succeed())
+			Expect(k8sClient.Patch(ctx, resource, client.Merge)).To(Succeed())
 
 			// Validate the resource status after the update
 			By("Verifying the numaflow controller deployment image version")
@@ -339,7 +340,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(
+	r, err := NewNumaflowControllerRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
 		restConfig,
@@ -380,6 +381,38 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 				imagePath := "numaflow:v" + *tc.existingControllerVersion
 				k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, createDeploymentDefinition(imagePath), metav1.CreateOptions{})
 			}
+
+			// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
+			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
+			assert.NoError(t, err)
+			pipeline.Status = tc.existingPipeline.Status
+			// updating the Status subresource is a separate operation
+			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			// call reconcile()
+			_, err = r.reconcile(ctx, rollout, defaultNamespace, time.Now())
+			assert.NoError(t, err)
+
+			////// check results:
+			// Check Phase of Rollout:
+			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+			// Check Deployment
+			deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.Equal(t, "v"+tc.expectedResultControllerVersion, deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
+
+			// Check Conditions:
+			for conditionType, conditionStatus := range tc.expectedConditionsSet {
+				found := false
+				for _, condition := range rollout.Status.Conditions {
+					if condition.Type == string(conditionType) && condition.Status == conditionStatus {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "condition type %s failed, conditions=%+v", conditionType, rollout.Status.Conditions)
+			}
 		})
 	}
 
@@ -392,7 +425,7 @@ func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "main",
+							Name:  "controller-manager",
 							Image: imagePath,
 						},
 					},
