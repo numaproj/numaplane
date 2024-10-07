@@ -355,7 +355,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
-		done, err := processChildObjectWithPPND(ctx, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
+		done, err := processChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
