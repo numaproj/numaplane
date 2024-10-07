@@ -9,11 +9,13 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 )
 
 const defaultNamespace = "default"
@@ -61,6 +63,24 @@ var defaultPipelineSpec = numaflowv1.PipelineSpec{
 	},
 }
 
+var volSize, _ = apiresource.ParseQuantity("10Mi")
+var memLimit, _ = apiresource.ParseQuantity("10Mi")
+var newMemLimit, _ = apiresource.ParseQuantity("20Mi")
+var defaultISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	Redis: nil,
+	JetStream: &numaflowv1.JetStreamBufferService{
+		Version: "2.9.6",
+		Persistence: &numaflowv1.PersistenceStrategy{
+			VolumeSize: &volSize,
+		},
+		// ContainerTemplate: &numaflowv1.ContainerTemplate{
+		// 	Resources: v1.ResourceRequirements{
+		// 		Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+		// 	},
+		// },
+	},
+}
+
 func makePipelineDefinition(pipelineSpec numaflowv1.PipelineSpec) kubernetes.GenericObject {
 	pipelineSpecRaw, _ := json.Marshal(pipelineSpec)
 
@@ -85,12 +105,38 @@ func makePipelineDefinition(pipelineSpec numaflowv1.PipelineSpec) kubernetes.Gen
 	}
 }
 
+func makeISBServiceDefinition(isbServiceSpec numaflowv1.InterStepBufferServiceSpec) kubernetes.GenericObject {
+	isbServiceSpecRaw, _ := json.Marshal(isbServiceSpec)
+
+	isbrs := apiv1.ISBServiceRolloutSpec{
+		InterStepBufferService: apiv1.InterStepBufferService{
+			Spec: runtime.RawExtension{
+				Raw: isbServiceSpecRaw,
+			},
+		},
+	}
+
+	return kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "InterStepBufferService",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isbsvc",
+			Namespace: defaultNamespace,
+		},
+		Spec: isbrs.InterStepBufferService.Spec,
+	}
+
+}
+
 func Test_ResourceNeedsUpdating(t *testing.T) {
 	ctx := context.Background()
 
 	configManager := config.GetConfigManagerInstance()
 
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
+	isbServiceDefn := makeISBServiceDefinition(defaultISBServiceSpec)
 
 	testCases := []struct {
 		name                  string
@@ -305,6 +351,27 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: false,
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
+		},
+		{
+			name:    "isb test",
+			newSpec: isbServiceDefn,
+			existingSpec: func() kubernetes.GenericObject {
+				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
+				newISBServiceSpec.JetStream.ContainerTemplate = &numaflowv1.ContainerTemplate{
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+					},
+				}
+				return makeISBServiceDefinition(*newISBServiceSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:      config.PPNDStrategyID,
+				PipelineSpecExcludedPaths:   []string{"vertices.source.something"},
+				ISBServiceSpecExcludedPaths: []string{"jetstream.containerTemplate.resources.limits"},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 	}
 
