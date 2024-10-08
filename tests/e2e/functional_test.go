@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -437,7 +438,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.19"},
+			Controller: apiv1.Controller{Version: "0.0.22"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -724,7 +725,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.18"},
+			Controller: apiv1.Controller{Version: "0.0.22"},
 		},
 	}
 
