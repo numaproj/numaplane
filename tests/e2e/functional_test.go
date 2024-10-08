@@ -438,7 +438,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.22"},
+			Controller: apiv1.Controller{Version: "0.0.19"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
