@@ -575,8 +575,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return true
 		}
 
-		Eventually(verifyNotPausing, testTimeout).Should(BeTrue())
-
 		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
