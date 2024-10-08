@@ -5,7 +5,7 @@ resources:
   - ../../../config/default
   - ./controller_def_rc0.0.18.yaml
   - ./controller_def_rc0.0.19.yaml
-  - ./controller_def_rc0.0.22.yaml
+  - ./controller_def_rc0.0.23.yaml
 
 patches:
   - patch: |-

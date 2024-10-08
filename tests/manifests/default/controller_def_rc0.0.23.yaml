@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: numaflow-controller-definitions-rc0.0.22
+  name: numaflow-controller-definitions-rc0.0.23
   namespace: numaplane-system
   labels:
     "numaplane.numaproj.io/config": numaflow-controller-definitions
 data:
   controller_definitions.yaml: |
     controllerDefinitions:
-      - version: "0.0.22"
+      - version: "0.0.23"
         fullSpec: |
 
           apiVersion: v1
@@ -328,7 +328,7 @@ data:
                   - controller
                   env:
                   - name: NUMAFLOW_IMAGE
-                    value: quay.io/numaio/numaflow-rc:v0.0.22
+                    value: quay.io/numaio/numaflow-rc:v0.0.23
                   - name: NAMESPACE
                     valueFrom:
                       fieldRef:
@@ -369,7 +369,7 @@ data:
                         key: controller.leader.election.lease.renew.period
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaio/numaflow-rc:v0.0.22
+                  image: quay.io/numaio/numaflow-rc:v0.0.23
                   imagePullPolicy: IfNotPresent
                   livenessProbe:
                     httpGet:

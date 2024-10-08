@@ -725,7 +725,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.22"},
+			Controller: apiv1.Controller{Version: "0.0.23"},
 		},
 	}
 
