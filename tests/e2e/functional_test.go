@@ -730,7 +730,6 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 	}
 
 	return controllerRollout
-
 }
 
 func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
