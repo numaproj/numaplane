@@ -192,13 +192,13 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	existingMonoVertexDef, err := kubernetes.GetCR(ctx, newMonoVertexDef, "monovertices")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices"); err != nil {
+			if err := kubernetes.CreateCR(ctx, newMonoVertexDef, "monovertices"); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -290,7 +290,7 @@ func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRoll
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *kubernetes.GenericObject) error {
-	err := kubernetes.UpdateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	err := kubernetes.UpdateCR(ctx, newMonoVertexDef, "monovertices")
 	if err != nil {
 		return err
 	}

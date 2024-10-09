@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	commontest "github.com/numaproj/numaplane/tests/common"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,8 +44,8 @@ func TestGetLabelWithInvalidData(t *testing.T) {
 }
 
 func TestCreateUpdateGetListCR(t *testing.T) {
-	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
-	assert.Nil(t, err)
+	//restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
+	//assert.Nil(t, err)
 
 	pipelineSpec := numaflowv1.PipelineSpec{
 		Vertices: []numaflowv1.AbstractVertex{
@@ -90,16 +89,16 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 			Raw: pipelineSpecRaw,
 		},
 	}
-	err = CreateCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	err = CreateCR(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
-	pipelineObject, err = GetCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	pipelineObject, err = GetCR(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
 	version1 := pipelineObject.ResourceVersion
 	fmt.Printf("Created CR, resource version=%s\n", version1)
 
 	// Updating should return the result Pipeline with the updated ResourceVersion
 	pipelineObject.ObjectMeta.Labels = map[string]string{"test": "value"}
-	err = UpdateCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	err = UpdateCR(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
 	version2 := pipelineObject.ResourceVersion
 
@@ -107,19 +106,19 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	assert.NotEqual(t, version1, version2)
 
 	// Doing a GET should return the same thing
-	pipelineObject, err = GetCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	pipelineObject, err = GetCR(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
 	assert.Equal(t, version2, pipelineObject.ResourceVersion)
 
 	// Do another update
 	pipelineObject.ObjectMeta.Labels["test-2"] = "value-2"
-	err = UpdateCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	err = UpdateCR(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
 	version3 := pipelineObject.ResourceVersion
 	assert.NotEqual(t, version2, version3)
 
 	// List resource
-	pipelineList, err := ListCR(context.Background(), restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	pipelineList, err := ListCR(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)
 }

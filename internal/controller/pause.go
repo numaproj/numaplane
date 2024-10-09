@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
+
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
 var (
@@ -78,7 +79,7 @@ func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Confi
 		return err
 	}
 
-	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Paused")
+	return pm.updatePipelineLifecycle(ctx, pipeline, "Paused")
 }
 
 // resume pipeline
@@ -101,21 +102,21 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 		return false, nil
 	}
 
-	err := pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Running")
+	err := pm.updatePipelineLifecycle(ctx, pipeline, "Running")
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, phase string) error {
+func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, pipeline *kubernetes.GenericObject, phase string) error {
 
 	err := withDesiredPhase(pipeline, phase)
 	if err != nil {
 		return err
 	}
 
-	err = kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
+	err = kubernetes.UpdateCR(ctx, pipeline, "pipelines")
 	if err != nil {
 		return err
 	}

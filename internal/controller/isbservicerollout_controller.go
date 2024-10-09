@@ -581,13 +581,13 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch InterStepBufferServices
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{
+	isbServiceUns := &unstructured.Unstructured{}
+	isbServiceUns.SetGroupVersionKind(schema.GroupVersionKind{
 		Kind:    "InterStepBufferService",
 		Group:   "numaflow.numaproj.io",
 		Version: "v1alpha1",
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), u),
+	if err := controller.Watch(source.Kind(mgr.GetCache(), isbServiceUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
