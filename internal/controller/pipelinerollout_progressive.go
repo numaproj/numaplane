@@ -97,6 +97,10 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
+		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, "")
+		if err != nil {
+			return false, err
+		}
 		pipelineRollout.Status.MarkPipelineProgressiveUpgradeFailed("New Pipeline Failed", pipelineRollout.Generation)
 		return false, nil
 	} else if pipelinePhase == numaflowv1.PipelinePhaseRunning {
@@ -120,9 +124,15 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		return true, nil
 	} else {
 		// Ensure the latest pipeline spec is applied
-		err = kubernetes.UpdateCR(ctx, r.restConfig, pipelineDef, "pipelines")
+		pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingUpgradingPipelineDef, pipelineDef)
 		if err != nil {
 			return false, err
+		}
+		if pipelineNeedsToUpdate {
+			err = kubernetes.UpdateCR(ctx, r.restConfig, pipelineDef, "pipelines")
+			if err != nil {
+				return false, err
+			}
 		}
 		//continue (re-enqueue)
 		return false, nil

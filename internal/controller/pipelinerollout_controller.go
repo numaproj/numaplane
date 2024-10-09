@@ -742,7 +742,7 @@ func (r *PipelineRolloutReconciler) getPipelineName(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
-			common.LabelKeyPipelineRolloutForPipeline, upgradeState,
+			common.LabelKeyUpgradeState, upgradeState,
 		), "")
 	if err != nil {
 		return "", err
