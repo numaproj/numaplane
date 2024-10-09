@@ -495,6 +495,13 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
 		existingPipelineDef, err = kubernetes.GetCR(ctx, newPipelineDef, "pipelines")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
+			} else {
+				return fmt.Errorf("error getting Pipeline for status processing: %v", err)
+			}
+		}
 		newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	}
 

@@ -626,7 +626,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
 	}
 	imageNames := []string{DefaultNumaflowControllerImageName}
-	if c.NumaflowControllerImageNames != nil && len(c.NumaflowControllerImageNames) > 0 {
+	if len(c.NumaflowControllerImageNames) > 0 {
 		imageNames = c.NumaflowControllerImageNames
 	}
 
