@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -437,7 +438,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.19"},
+			Controller: apiv1.Controller{Version: "0.0.24"},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -466,7 +467,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// TODO: update this controller image when Numaflow v1.3.1 is released
 		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.19"
+			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v0.0.24"
 		})
 
 		verifyNumaflowControllerRolloutReady()
@@ -724,12 +725,11 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "0.0.18"},
+			Controller: apiv1.Controller{Version: "0.0.23"},
 		},
 	}
 
 	return controllerRollout
-
 }
 
 func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollout {
