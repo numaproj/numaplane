@@ -562,9 +562,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNotPausing := func() bool {
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			verifyPipelineStatusEventually(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
-			})
+			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
 			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
