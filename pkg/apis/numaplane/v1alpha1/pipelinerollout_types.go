@@ -26,7 +26,7 @@ const (
 	ConditionPipelinePausingOrPaused ConditionType = "PipelinePausingOrPaused"
 
 	// ConditionPipelineProgressiveUpgradeSucceeded indicates that whether the progressive upgrade for the Pipeline succeeded.
-	ConditionPipelineProgressiveUpgradeSucceeded ConditionType = "ConditionPipelineProgressiveUpgradeSucceed"
+	ConditionPipelineProgressiveUpgradeSucceeded ConditionType = "PipelineProgressiveUpgradeSucceed"
 )
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout

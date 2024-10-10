@@ -184,8 +184,8 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		})
 
 		Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
-			It("Should be automatically failed", func() {
-				pipelineRolloutName := "my-pipeline"
+			It("Should be automatically create another one with different naming", func() {
+				pipelineRolloutName := "test"
 				pipelineName := pipelineRolloutName + "-0"
 				Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
@@ -208,8 +208,16 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 					},
 				})).Should(Succeed())
 				time.Sleep(5 * time.Second)
-				verifyStatusPhase(ctx, apiv1.PipelineRolloutGroupVersionKind, defaultNamespace, pipelineRolloutName, apiv1.PhaseFailed)
 
+				newPipelineName := pipelineRolloutName + "-1"
+				resourceLookupKey := types.NamespacedName{Name: newPipelineName, Namespace: defaultNamespace}
+				createdResource := &numaflowv1.Pipeline{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+
+				// Still expect the intermediate failed state trigger the metric
 				Expect(testutil.ToFloat64(customMetrics.PipelinesSyncFailed.WithLabelValues())).Should(BeNumerically(">", 1))
 			})
 		})
