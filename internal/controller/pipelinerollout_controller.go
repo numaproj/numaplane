@@ -514,13 +514,20 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
 			}
 		}
-		// TODO: clean up old pipeline when drained
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		}
+
+		// When progressive is the default strategy, clean up recyclable pipeline when drained
+		if userPreferredStrategy == config.ProgressiveStrategyID {
+			err = r.cleanUpPipelines(ctx, pipelineRollout)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

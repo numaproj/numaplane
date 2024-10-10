@@ -112,7 +112,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 			return false, err
 		}
 
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, "")
+		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
@@ -120,7 +120,10 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		pipelineRollout.Status.MarkPipelineProgressiveUpgradeSucceeded("New Pipeline Running", pipelineRollout.Generation)
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
-		// TODO: pause old pipeline
+		// Pause old pipeline
+		if err := r.setPipelineLifecycle(ctx, true, existingPipelineDef); err != nil {
+			return false, err
+		}
 		return true, nil
 	} else {
 		// Ensure the latest pipeline spec is applied
@@ -155,5 +158,59 @@ func (r *PipelineRolloutReconciler) updatePipelineLabel(
 		return err
 	}
 	return nil
+}
 
+func (r *PipelineRolloutReconciler) cleanUpPipelines(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) error {
+	recyclablePipelines, err := r.getRecyclablePipelines(ctx, pipelineRollout)
+	if err != nil {
+		return err
+	}
+
+	for _, recyclablePipeline := range recyclablePipelines {
+		err = r.processRecyclablePipelineStatus(ctx, recyclablePipeline)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// getRecyclablePipelines retrieves all the recyclable pipelines managed by the given
+// pipelineRollout through the `recyclable` label.
+func (r *PipelineRolloutReconciler) getRecyclablePipelines(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) ([]*kubernetes.GenericObject, error) {
+	return kubernetes.ListCR(
+		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		pipelineRollout.Namespace, fmt.Sprintf(
+			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
+			common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
+		), "")
+}
+
+func (r *PipelineRolloutReconciler) processRecyclablePipelineStatus(
+	ctx context.Context,
+	pipelineDef *kubernetes.GenericObject,
+) error {
+	pipelineStatus, err := kubernetes.ParseStatus(pipelineDef)
+	if err != nil {
+		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
+	}
+	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+
+	// Only delete fully drained pipelines
+	if pipelinePhase == numaflowv1.PipelinePhasePaused {
+		// TODO: check if `pipelineStatus.DrainedOnPause` is true
+		err = kubernetes.DeleteCR(ctx, r.restConfig, pipelineDef, "pipelines")
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
 }
