@@ -7,14 +7,15 @@ import (
 	"os"
 	"testing"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 func TestGetLabel(t *testing.T) {
@@ -44,8 +45,10 @@ func TestGetLabelWithInvalidData(t *testing.T) {
 }
 
 func TestCreateUpdateGetListCR(t *testing.T) {
-	//restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
-	//assert.Nil(t, err)
+	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	err = SetDynamicClient(restConfig)
+	assert.Nil(t, err)
 
 	pipelineSpec := numaflowv1.PipelineSpec{
 		Vertices: []numaflowv1.AbstractVertex{

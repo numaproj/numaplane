@@ -144,6 +144,9 @@ var _ = BeforeSuite(func() {
 		customMetrics = metrics.RegisterCustomMetrics()
 	}
 
+	err = kubernetes.SetDynamicClient(k8sManager.GetConfig())
+	Expect(err).ToNot(HaveOccurred())
+
 	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())

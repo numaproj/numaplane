@@ -220,7 +220,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
-
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {

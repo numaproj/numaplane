@@ -324,14 +324,51 @@ func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 }
 
 func GetResource(ctx context.Context, c client.Client, obj *GenericObject) (*GenericObject, error) {
-	unstructuredObj, err := ObjectToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
+	unstructuredObj := &unstructured.Unstructured{}
+	unstructuredObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
 
-	if err = c.Get(ctx, k8stypes.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, unstructuredObj); err != nil {
+	if err := c.Get(ctx, k8stypes.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, unstructuredObj); err != nil {
 		return nil, err
 	}
 
 	return UnstructuredToObject(unstructuredObj)
+}
+
+func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) error {
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+
+	if err = c.Update(ctx, unstructuredObj); err != nil {
+		return err
+	} else {
+		result, err := UnstructuredToObject(unstructuredObj)
+		if err != nil {
+			return err
+		}
+		*obj = *result
+	}
+
+	return nil
+}
+
+func ListResources(ctx context.Context, c client.Client, obj *GenericObject, opts ...client.ListOption) ([]*GenericObject, error) {
+	unstructuredList := &unstructured.UnstructuredList{}
+	unstructuredList.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+
+	if err := c.List(ctx, unstructuredList, opts...); err != nil {
+		return nil, err
+	}
+
+	objects := make([]*GenericObject, len(unstructuredList.Items))
+	for i, unstructuredObj := range unstructuredList.Items {
+		obj, err := UnstructuredToObject(&unstructuredObj)
+		if err != nil {
+			return nil, err
+		}
+		objects[i] = obj
+	}
+
+	return objects, nil
 }
