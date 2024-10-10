@@ -45,7 +45,6 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -327,29 +326,19 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
 
-	// what is the preferred strategy for this namespace?
-	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newISBServiceDef.Namespace)
-	if err != nil {
-		return false, err
-	}
-
 	// is there currently an inProgressStrategy for the isbService? (This will override any new decision)
 	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, isbServiceRollout)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
 	if !inProgressStrategySet {
-		if userPreferredStrategy == config.PPNDStrategyID {
-			if upgradeStrategyType == apiv1.UpgradeStrategyPPND {
-				inProgressStrategy = apiv1.UpgradeStrategyPPND
-				r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
-			}
+		if upgradeStrategyType == apiv1.UpgradeStrategyPPND {
+			inProgressStrategy = apiv1.UpgradeStrategyPPND
+			r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
-		if userPreferredStrategy == config.ProgressiveStrategyID {
-			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-				inProgressStrategy = apiv1.UpgradeStrategyProgressive
-				r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
-			}
+		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 	}
 

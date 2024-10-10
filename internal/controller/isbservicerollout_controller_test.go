@@ -382,7 +382,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			existingStatefulSetDef:     createDefaultISBStatefulSet("2.10.11", true),
 			existingPipeline:           createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused, map[string]string{}),
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
-			existingInProgressStrategy: nil,
+			existingInProgressStrategy: &ppndUpgradeStrategy,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
