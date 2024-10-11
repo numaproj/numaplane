@@ -38,7 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -367,11 +369,14 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		recorder,
 	)
 
+	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
+
 	testCases := []struct {
 		name                      string
 		newControllerVersion      string
 		existingControllerVersion string // if "", then there isn't a Controller installed
 		stillReconciling          bool
+		existingPipelineRollout   *apiv1.PipelineRollout
 		existingPipeline          *numaflowv1.Pipeline
 		expectedRolloutPhase      apiv1.Phase
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
@@ -382,6 +387,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                      "no existing Controller",
 			newControllerVersion:      "1.2.0",
 			existingControllerVersion: "",
+			existingPipelineRollout:   nil,
 			existingPipeline:          nil,
 			expectedRolloutPhase:      apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
@@ -393,6 +399,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                      "new Controller version, pipelines not yet paused",
 			newControllerVersion:      "1.2.1",
 			existingControllerVersion: "1.2.0",
+			existingPipelineRollout:   createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:          createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
 			expectedRolloutPhase:      apiv1.PhasePending,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
@@ -404,6 +411,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                            "new Controller version, pipelines paused",
 			newControllerVersion:            "1.2.1",
 			existingControllerVersion:       "1.2.0",
+			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
 			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
@@ -419,15 +427,23 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                            "new Controller version, pipelines not paused but failed",
 			newControllerVersion:            "1.2.1",
 			existingControllerVersion:       "1.2.0",
+			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
 			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
 			expectedResultControllerVersion: "1.2.1",
 		},
-		/*{
-			name: "new Controller version, pipelines not paused but set to allow data loss",
-		},
 		{
+			name:                            "new Controller version, pipelines not paused but set to allow data loss",
+			newControllerVersion:            "1.2.1",
+			existingControllerVersion:       "1.2.0",
+			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}),
+			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			expectedRolloutPhase:            apiv1.PhaseDeployed,
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedResultControllerVersion: "1.2.1",
+		},
+		/*{
 		    name: "version requested of Controller can't be found"
 		}*/
 	}
@@ -441,6 +457,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.RbacV1().Roles(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s-0", defaultPipelineRolloutName), metav1.DeleteOptions{})
+			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}})
 
 			// create NumaflowControllerRollout definition
 			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion)
@@ -455,6 +472,11 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
+			if tc.existingPipelineRollout != nil {
+				err = numaplaneClient.Create(ctx, tc.existingPipelineRollout)
+				assert.NoError(t, err)
+
+			}
 			if tc.existingPipeline != nil {
 				// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
 				pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
