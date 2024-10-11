@@ -402,7 +402,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
 	// here
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, fmt.Sprintf("%s=%s,%s", common.LabelKeyISBServiceNameForPipeline, rolloutName, common.LabelKeyPipelineRolloutForPipeline), "")
+	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace,
+		fmt.Sprintf("%s=%s,%s", common.LabelKeyISBServiceNameForPipeline, rolloutName, common.LabelKeyPipelineRolloutForPipeline), "")
 }
 
 // Apply pod disruption budget for the ISBService

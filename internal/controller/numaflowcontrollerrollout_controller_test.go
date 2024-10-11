@@ -414,11 +414,17 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		},
 		{
 			name: "new Controller version done reconciling",
-		},
+		},*/
 		{
-			name: "new Controller version, pipelines not paused but failed",
+			name:                            "new Controller version, pipelines not paused but failed",
+			newControllerVersion:            "1.2.1",
+			existingControllerVersion:       "1.2.0",
+			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
+			expectedRolloutPhase:            apiv1.PhaseDeployed,
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedResultControllerVersion: "1.2.1",
 		},
-		{
+		/*{
 			name: "new Controller version, pipelines not paused but set to allow data loss",
 		},
 		{
@@ -434,7 +440,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.CoreV1().ConfigMaps(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().Roles(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineRolloutName, metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s-0", defaultPipelineRolloutName), metav1.DeleteOptions{})
 
 			// create NumaflowControllerRollout definition
 			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion)
