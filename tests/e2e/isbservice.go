@@ -135,7 +135,7 @@ func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 }
 
 func verifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	document("Verifying InProgressStrategy")
+	document("Verifying InProgressStrategy for ISBService")
 	Eventually(func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
 		return rollout.Status.UpgradeInProgress == inProgressStrategy
