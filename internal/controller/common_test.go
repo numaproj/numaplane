@@ -2,16 +2,19 @@ package controller
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	k8sclientgo "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -78,4 +81,19 @@ func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pi
 			Phase: phase,
 		},
 	}
+}
+
+func getNumaflowControllerDefinitions() (*config.NumaflowControllerDefinitionConfig, error) {
+	// Read definitions config file
+	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
+	if err != nil {
+		return nil, err
+	}
+	var controllerConfig config.NumaflowControllerDefinitionConfig
+	err = yaml.Unmarshal(configData, &controllerConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return &controllerConfig, nil
 }

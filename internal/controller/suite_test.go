@@ -34,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -213,21 +212,6 @@ func downloadCRD(url string, downloadDir string) {
 	// Write the response body to file
 	_, err = io.Copy(out, resp.Body)
 	Expect(err).ToNot(HaveOccurred())
-}
-
-func getNumaflowControllerDefinitions() (*config.NumaflowControllerDefinitionConfig, error) {
-	// Read definitions config file
-	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
-	if err != nil {
-		return nil, err
-	}
-	var controllerConfig config.NumaflowControllerDefinitionConfig
-	err = yaml.Unmarshal(configData, &controllerConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return &controllerConfig, nil
 }
 
 // verifyAutoHealing tests the auto healing feature
