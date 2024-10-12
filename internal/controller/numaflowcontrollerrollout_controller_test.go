@@ -502,34 +502,17 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 			if tc.existingController != nil {
 				// create the already-existing Deployment in Kubernetes
-				deployment, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, tc.existingController, metav1.CreateOptions{})
-				assert.NoError(t, err)
-				deployment.Status = tc.existingController.Status
-				_, err = k8sClientSet.AppsV1().Deployments(defaultNamespace).UpdateStatus(ctx, deployment, metav1.UpdateOptions{})
-				assert.NoError(t, err)
+				createDeploymentInK8S(ctx, t, k8sClientSet, tc.existingController)
+
 			}
 
-			// create the already-existing NCRollout in Kubernetes
-			/*if tc.existingNCRollout != nil {
-				err = numaplaneClient.Create(ctx, tc.existingNCRollout)
-				assert.NoError(t, err)
-				err = numaplaneClient.Status().Update(ctx, tc.existingNCRollout)
-				assert.NoError(t, err)
-			}*/
-
 			if tc.existingPipelineRollout != nil {
-				err = numaplaneClient.Create(ctx, tc.existingPipelineRollout)
-				assert.NoError(t, err)
+				createPipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
 
 			}
 			if tc.existingPipeline != nil {
-				// create the Pipeline beforehand in Kubernetes, this updates everything but the Status subresource
-				pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
-				assert.NoError(t, err)
-				pipeline.Status = tc.existingPipeline.Status
-				// updating the Status subresource is a separate operation
-				_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
-				assert.NoError(t, err)
+				// create the Pipeline beforehand in Kubernetes
+				createPipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
 			}
 
 			pm := GetPauseModule()

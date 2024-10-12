@@ -416,7 +416,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 
-			// first delete ISBSvc and Pipeline in case they already exist, in Kubernetes
+			// first delete any previous resources if they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(defaultNamespace).Delete(ctx, defaultISBSvcRolloutName, metav1.DeleteOptions{})
 			_ = k8sClientSet.AppsV1().StatefulSets(defaultNamespace).Delete(ctx, deriveISBSvcStatefulSetName(defaultISBSvcRolloutName), metav1.DeleteOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, defaultPipelineName, metav1.DeleteOptions{})
@@ -448,17 +448,9 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				createStatefulSetInK8S(ctx, t, k8sClientSet, tc.existingStatefulSetDef)
 			}
 
-			err = numaplaneClient.Create(ctx, tc.existingPipelineRollout)
-			assert.NoError(t, err)
+			createPipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
 
 			createPipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
-			/*pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, tc.existingPipeline, metav1.CreateOptions{})
-			assert.NoError(t, err)
-			pipeline.Status = tc.existingPipeline.Status
-
-			// updating the Status subresource is a separate operation
-			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
-			assert.NoError(t, err)*/
 
 			pm := GetPauseModule()
 			pm.pauseRequests[pm.getISBServiceKey(defaultNamespace, defaultISBSvcRolloutName)] = tc.existingPauseRequest
@@ -591,27 +583,6 @@ func createISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *
 					Raw: isbsSpecRaw,
 				},
 			},
-		},
-	}
-}
-
-func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
-	return &numaflowv1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              defaultPipelineName,
-			Namespace:         defaultNamespace,
-			UID:               "some-uid",
-			CreationTimestamp: metav1.NewTime(time.Now()),
-			Generation:        1,
-			Labels: map[string]string{
-				common.LabelKeyISBServiceNameForPipeline:  defaultISBSvcRolloutName,
-				common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName},
-		},
-		Spec: numaflowv1.PipelineSpec{
-			InterStepBufferServiceName: defaultISBSvcRolloutName,
-		},
-		Status: numaflowv1.PipelineStatus{
-			Phase: phase,
 		},
 	}
 }
