@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -380,19 +381,17 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
-		name                 string
-		newControllerVersion string
-		//existingNCRollout       *apiv1.NumaflowControllerRollout
+		name                    string
+		newControllerVersion    string             // new version specified in NumaflowControllerRollout
 		existingController      *appsv1.Deployment // if nil, then there isn't a Controller installed
-		stillReconciling        bool
 		existingPipelineRollout *apiv1.PipelineRollout
 		existingPipeline        *numaflowv1.Pipeline
 		existingPauseRequest    *bool // was Numaflow Controller previously requesting pause?
-		expectedPauseRequest    *bool
+		expectedPauseRequest    *bool // after reconcile(), should it be requesting pause?
 		expectedRolloutPhase    apiv1.Phase
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedConditionsSet           map[apiv1.ConditionType]metav1.ConditionStatus
-		expectedResultControllerVersion string
+		expectedResultControllerVersion string // the one that's been deployed
 		expectedReconcileError          bool
 	}{
 		{
@@ -410,10 +409,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			expectedResultControllerVersion: "1.2.0",
 		},
 		{
-			name:                 "new Controller version, pipelines not yet paused",
-			newControllerVersion: "1.2.1",
-			//existingNCRollout:       createNumaflowControllerRolloutDef(defaultNamespace, "1.2.1", apiv1.PhaseDeployed, []metav1.Condition{
-			//	{Type: string(apiv1.ConditionChildResourceDeployed), Status: metav1.ConditionTrue}}),
+			name:                    "new Controller version, pipelines not yet paused",
+			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
@@ -434,20 +431,9 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			existingPauseRequest:            &trueValue,
 			expectedPauseRequest:            &trueValue,
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
-			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue},
 			expectedResultControllerVersion: "1.2.1",
 		},
-		/*{
-		// todo: we can create the NCRollout ahead of time and add the initial conditions, initial phase
-			name: "already updated the Controller version but it's still reconciling",
-			newControllerVersion:            "1.2.1",
-			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.1", true),
-			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
-			expectedRolloutPhase:            apiv1.PhaseDeployed,
-			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including Deployed because it already would've been
-			expectedResultControllerVersion: "1.2.1",
-		},*/
 		{
 			name:                    "new Controller version done reconciling",
 			newControllerVersion:    "1.2.1",
@@ -461,27 +447,30 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 				apiv1.ConditionPausingPipelines: metav1.ConditionFalse},
 			expectedResultControllerVersion: "1.2.1",
 		},
-		//todo: why would this one fail due to previous pause request state but the other similar tests don't?
-		/*{
+		{
 			name:                            "new Controller version, pipelines not paused but failed",
 			newControllerVersion:            "1.2.1",
 			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
+			existingPauseRequest:            &trueValue,
+			expectedPauseRequest:            &trueValue,
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
-			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue},
 			expectedResultControllerVersion: "1.2.1",
-		},*/
-		/*{
+		},
+		{
 			name:                            "new Controller version, pipelines not paused but set to allow data loss",
 			newControllerVersion:            "1.2.1",
 			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			existingPauseRequest:            &trueValue,
+			expectedPauseRequest:            &trueValue,
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
-			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue},
 			expectedResultControllerVersion: "1.2.1",
-		},*/
+		},
 	}
 
 	for _, tc := range testCases {
