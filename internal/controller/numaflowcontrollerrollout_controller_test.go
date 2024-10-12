@@ -47,7 +47,7 @@ import (
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
-func createNumaflowControllerRolloutDef(namespace string, version string) *apiv1.NumaflowControllerRollout {
+func createNumaflowControllerRolloutDef(namespace string, version string, phase apiv1.Phase, conditions []metav1.Condition) *apiv1.NumaflowControllerRollout {
 	return &apiv1.NumaflowControllerRollout{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "numaflowcontrollerrollout",
@@ -62,6 +62,12 @@ func createNumaflowControllerRolloutDef(namespace string, version string) *apiv1
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
 			Controller: apiv1.Controller{Version: version},
+		},
+		Status: apiv1.NumaflowControllerRolloutStatus{
+			Status: apiv1.Status{
+				Phase:      phase,
+				Conditions: conditions,
+			},
 		},
 	}
 }
@@ -372,36 +378,40 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
-		name                      string
-		newControllerVersion      string
-		existingControllerVersion string // if "", then there isn't a Controller installed
-		stillReconciling          bool
-		existingPipelineRollout   *apiv1.PipelineRollout
-		existingPipeline          *numaflowv1.Pipeline
-		expectedRolloutPhase      apiv1.Phase
+		name                 string
+		newControllerVersion string
+		//existingNCRollout       *apiv1.NumaflowControllerRollout
+		existingController      *appsv1.Deployment // if nil, then there isn't a Controller installed
+		stillReconciling        bool
+		existingPipelineRollout *apiv1.PipelineRollout
+		existingPipeline        *numaflowv1.Pipeline
+		expectedRolloutPhase    apiv1.Phase
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedConditionsSet           map[apiv1.ConditionType]metav1.ConditionStatus
 		expectedResultControllerVersion string
+		expectedReconcileError          bool
 	}{
 		{
-			name:                      "no existing Controller",
-			newControllerVersion:      "1.2.0",
-			existingControllerVersion: "",
-			existingPipelineRollout:   nil,
-			existingPipeline:          nil,
-			expectedRolloutPhase:      apiv1.PhaseDeployed,
+			name:                    "no existing Controller",
+			newControllerVersion:    "1.2.0",
+			existingController:      nil,
+			existingPipelineRollout: nil,
+			existingPipeline:        nil,
+			expectedRolloutPhase:    apiv1.PhaseDeployed,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedResultControllerVersion: "1.2.0",
 		},
 		{
-			name:                      "new Controller version, pipelines not yet paused",
-			newControllerVersion:      "1.2.1",
-			existingControllerVersion: "1.2.0",
-			existingPipelineRollout:   createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:          createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
-			expectedRolloutPhase:      apiv1.PhasePending,
+			name:                 "new Controller version, pipelines not yet paused",
+			newControllerVersion: "1.2.1",
+			//existingNCRollout:       createNumaflowControllerRolloutDef(defaultNamespace, "1.2.1", apiv1.PhaseDeployed, []metav1.Condition{
+			//	{Type: string(apiv1.ConditionChildResourceDeployed), Status: metav1.ConditionTrue}}),
+			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
+			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			expectedRolloutPhase:    apiv1.PhasePending,
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionPausingPipelines: metav1.ConditionTrue,
 			},
@@ -410,7 +420,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		{
 			name:                            "new Controller version, pipelines paused",
 			newControllerVersion:            "1.2.1",
-			existingControllerVersion:       "1.2.0",
+			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
@@ -418,7 +428,15 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			expectedResultControllerVersion: "1.2.1",
 		},
 		/*{
+		// todo: we can create the NCRollout ahead of time and add the initial conditions, initial phase
 			name: "already updated the Controller version but it's still reconciling",
+			newControllerVersion:            "1.2.1",
+			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.1", true),
+			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
+			expectedRolloutPhase:            apiv1.PhaseDeployed,
+			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including Deployed because it already would've been
+			expectedResultControllerVersion: "1.2.1",
 		},
 		{
 			name: "new Controller version done reconciling",
@@ -426,7 +444,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		{
 			name:                            "new Controller version, pipelines not paused but failed",
 			newControllerVersion:            "1.2.1",
-			existingControllerVersion:       "1.2.0",
+			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
@@ -436,16 +454,13 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		{
 			name:                            "new Controller version, pipelines not paused but set to allow data loss",
 			newControllerVersion:            "1.2.1",
-			existingControllerVersion:       "1.2.0",
+			existingController:              createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout:         createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}),
 			existingPipeline:                createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
 			expectedRolloutPhase:            apiv1.PhaseDeployed,
 			expectedConditionsSet:           map[apiv1.ConditionType]metav1.ConditionStatus{}, // not including ConditionPausingPipelines because that was already set before
 			expectedResultControllerVersion: "1.2.1",
 		},
-		/*{
-		    name: "version requested of Controller can't be found"
-		}*/
 	}
 
 	for _, tc := range testCases {
@@ -458,19 +473,29 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s-0", defaultPipelineRolloutName), metav1.DeleteOptions{})
 			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}})
+			_ = numaplaneClient.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: NumaflowControllerDeploymentName}})
 
 			// create NumaflowControllerRollout definition
-			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion)
+			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion, "", []metav1.Condition{})
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
 
-			// create the already-existing Deployment in Kubernetes
-			if tc.existingControllerVersion != "" {
-				imagePath := "quay.io/numaproj/numaflow:v" + tc.existingControllerVersion
-				_, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, createDeploymentDefinition(imagePath), metav1.CreateOptions{})
+			if tc.existingController != nil {
+				// create the already-existing Deployment in Kubernetes
+				deployment, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Create(ctx, tc.existingController, metav1.CreateOptions{})
+				assert.NoError(t, err)
+				_, err = k8sClientSet.AppsV1().Deployments(defaultNamespace).UpdateStatus(ctx, deployment, metav1.UpdateOptions{})
 				assert.NoError(t, err)
 			}
+
+			// create the already-existing NCRollout in Kubernetes
+			/*if tc.existingNCRollout != nil {
+				err = numaplaneClient.Create(ctx, tc.existingNCRollout)
+				assert.NoError(t, err)
+				err = numaplaneClient.Status().Update(ctx, tc.existingNCRollout)
+				assert.NoError(t, err)
+			}*/
 
 			if tc.existingPipelineRollout != nil {
 				err = numaplaneClient.Create(ctx, tc.existingPipelineRollout)
@@ -489,15 +514,21 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 			// call reconcile()
 			_, err = r.reconcile(ctx, rollout, defaultNamespace, time.Now())
-			assert.NoError(t, err)
+			if tc.expectedReconcileError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 
 			////// check results:
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
-			// Check Deployment
-			deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
-			assert.NoError(t, err)
-			assert.Equal(t, fmt.Sprintf("quay.io/numaproj/numaflow:v%s", tc.expectedResultControllerVersion), deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
+			if tc.expectedResultControllerVersion != "" {
+				// Check Deployment
+				deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
+				assert.NoError(t, err)
+				assert.Equal(t, fmt.Sprintf("quay.io/numaproj/numaflow:v%s", tc.expectedResultControllerVersion), deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
+			}
 
 			// Check Conditions:
 			for conditionType, conditionStatus := range tc.expectedConditionsSet {
@@ -515,7 +546,12 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 }
 
-func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
+func createDeploymentDefinition(imagePath string, stillReconciling bool) *appsv1.Deployment {
+	generation := 2
+	observedGeneration := generation
+	if stillReconciling {
+		observedGeneration = generation - 1
+	}
 	labels := map[string]string{
 		"app.kubernetes.io/component": "controller-manager",
 		"app.kubernetes.io/name":      "controller-manager",
@@ -523,8 +559,9 @@ func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: defaultNamespace,
-			Name:      NumaflowControllerDeploymentName,
+			Namespace:  defaultNamespace,
+			Name:       NumaflowControllerDeploymentName,
+			Generation: int64(generation),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -543,6 +580,9 @@ func createDeploymentDefinition(imagePath string) *appsv1.Deployment {
 					Labels: labels,
 				},
 			},
+		},
+		Status: appsv1.DeploymentStatus{
+			ObservedGeneration: int64(observedGeneration),
 		},
 	}
 }
