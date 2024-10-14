@@ -164,7 +164,7 @@ var _ = BeforeSuite(func() {
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.NoStrategyID})
 
 	Expect(err).ToNot(HaveOccurred())
-	definitions, err := getNumaflowControllerDefinitions()
+	definitions, err := getNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions)
 

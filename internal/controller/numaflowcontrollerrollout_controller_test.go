@@ -353,7 +353,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	assert.Nil(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
-	controllerDefinitions, err := getNumaflowControllerDefinitions()
+	controllerDefinitions, err := getNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
 	assert.Nil(t, err)
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*controllerDefinitions)
 

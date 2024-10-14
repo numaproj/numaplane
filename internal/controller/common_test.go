@@ -83,9 +83,9 @@ func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pi
 	}
 }
 
-func getNumaflowControllerDefinitions() (*config.NumaflowControllerDefinitionConfig, error) {
+func getNumaflowControllerDefinitions(definitionsFile string) (*config.NumaflowControllerDefinitionConfig, error) {
 	// Read definitions config file
-	configData, err := os.ReadFile("../../tests/config/controller-definitions-config.yaml")
+	configData, err := os.ReadFile(definitionsFile)
 	if err != nil {
 		return nil, err
 	}
