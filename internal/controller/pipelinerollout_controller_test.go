@@ -729,7 +729,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		scheme.Scheme,
 		restConfig,
 		customMetrics,
-		recorder)
+		recorder,
+	)
 
 	testCases := []struct {
 		name                           string

@@ -50,11 +50,7 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
-func GetUnstructuredCR(
-	ctx context.Context,
-	object *GenericObject,
-	pluralName string,
-) (*unstructured.Unstructured, error) {
+func GetLiveUnstructuredResource(ctx context.Context, object *GenericObject, pluralName string) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	gvr, err := getGroupVersionResource(object, pluralName)
@@ -62,22 +58,15 @@ func GetUnstructuredCR(
 		return nil, err
 	}
 
-	unstruc, err := dynamicClient.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
-	if unstruc != nil {
-		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, unstruc.Object)
+	uns, err := dynamicClient.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	if uns != nil {
+		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, uns.Object)
 	}
-	return unstruc, err
+	return uns, err
 }
 
-func ListUnstructuredCR(
-	ctx context.Context,
-	apiGroup string,
-	version string,
-	pluralName string,
-	namespace string,
-	labelSelector string, // set to empty string if none
-	fieldSelector string, // set to empty string if none
-) (*unstructured.UnstructuredList, error) {
+func ListLiveUnstructuredResource(ctx context.Context, apiGroup, version, pluralName, namespace, labelSelector,
+	fieldSelector string) (*unstructured.UnstructuredList, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    apiGroup,
 		Version:  version,
@@ -86,35 +75,27 @@ func ListUnstructuredCR(
 	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
-// look up a Resource
-func GetCR(ctx context.Context, object *GenericObject, pluralName string) (*GenericObject, error) {
-	unstruc, err := GetUnstructuredCR(ctx, object, pluralName)
-	if unstruc != nil {
-		return UnstructuredToObject(unstruc)
+// GetLiveResource retrieves the data from Kubernetes API server instead of the cache
+func GetLiveResource(ctx context.Context, object *GenericObject, pluralName string) (*GenericObject, error) {
+	uns, err := GetLiveUnstructuredResource(ctx, object, pluralName)
+	if uns != nil {
+		return UnstructuredToObject(uns)
 	} else {
 		return nil, err
 	}
 }
 
-func ListCR(ctx context.Context,
-	apiGroup string,
-	version string,
-	pluralName string,
-	namespace string,
-	// set to empty string if none
-	labelSelector string,
-	// set to empty string if none
-	fieldSelector string) ([]*GenericObject, error) {
+func ListLiveResource(ctx context.Context, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector string) ([]*GenericObject, error) {
 	numaLogger := logger.FromContext(ctx)
-	unstrucList, err := ListUnstructuredCR(ctx, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	unsList, err := ListLiveUnstructuredResource(ctx, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, err
 	}
 
-	if unstrucList != nil {
-		numaLogger.Debugf("found %d %s", len(unstrucList.Items), pluralName)
-		objects := make([]*GenericObject, len(unstrucList.Items))
-		for i, unstruc := range unstrucList.Items {
+	if unsList != nil {
+		numaLogger.Debugf("found %d %s", len(unsList.Items), pluralName)
+		objects := make([]*GenericObject, len(unsList.Items))
+		for i, unstruc := range unsList.Items {
 			obj, err := UnstructuredToObject(&unstruc)
 			if err != nil {
 				return nil, err
@@ -132,7 +113,7 @@ func CreateCR(
 	object *GenericObject,
 	pluralName string,
 ) error {
-	unstruc, err := ObjectToUnstructured(object)
+	uns, err := ObjectToUnstructured(object)
 	if err != nil {
 		return err
 	}
@@ -142,7 +123,7 @@ func CreateCR(
 		return err
 	}
 
-	return CreateUnstructuredCR(ctx, unstruc, gvr, object.Namespace, object.Name)
+	return CreateUnstructuredCR(ctx, uns, gvr, object.Namespace, object.Name)
 }
 
 func CreateUnstructuredCR(
@@ -323,6 +304,7 @@ func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 	return c.Create(ctx, unstructuredObj)
 }
 
+// GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
 func GetResource(ctx context.Context, c client.Client, obj *GenericObject) (*GenericObject, error) {
 	unstructuredObj := &unstructured.Unstructured{}
 	unstructuredObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
@@ -353,6 +335,7 @@ func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 	return nil
 }
 
+// ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
 func ListResources(ctx context.Context, c client.Client, obj *GenericObject, opts ...client.ListOption) ([]*GenericObject, error) {
 	unstructuredList := &unstructured.UnstructuredList{}
 	unstructuredList.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())

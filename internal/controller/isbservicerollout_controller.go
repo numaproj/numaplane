@@ -400,9 +400,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	// list pipeline CRs
 	obj := kubernetes.GenericObject{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "numaflow.numaproj.io", Version: "v1alpha1", Kind: "Pipeline"})
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"})
 	obj.SetNamespace(rolloutNamespace)
 	return kubernetes.ListResources(ctx, r.client, &obj, client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName}, client.HasLabels{common.LabelKeyPipelineRolloutForPipeline})
 }
@@ -562,8 +561,8 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	isbServiceUns := &unstructured.Unstructured{}
 	isbServiceUns.SetGroupVersionKind(schema.GroupVersionKind{
 		Kind:    "InterStepBufferService",
-		Group:   "numaflow.numaproj.io",
-		Version: "v1alpha1",
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
 	})
 	if err := controller.Watch(source.Kind(mgr.GetCache(), isbServiceUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()),

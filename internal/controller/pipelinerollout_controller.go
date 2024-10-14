@@ -494,7 +494,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
-		existingPipelineDef, err = kubernetes.GetCR(ctx, newPipelineDef, "pipelines")
+		existingPipelineDef, err = kubernetes.GetLiveResource(ctx, newPipelineDef, "pipelines")
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
@@ -558,7 +558,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	}
 
 	// Get existing Pipeline
-	existingPipelineDef, err := kubernetes.GetCR(ctx, pipelineDef, "pipelines")
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
@@ -661,8 +661,8 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	pipelineUns := &unstructured.Unstructured{}
 	pipelineUns.SetGroupVersionKind(schema.GroupVersionKind{
 		Kind:    "Pipeline",
-		Group:   "numaflow.numaproj.io",
-		Version: "v1alpha1",
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
 	})
 	if err := controller.Watch(source.Kind(mgr.GetCache(), pipelineUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
@@ -753,7 +753,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 // pipelineRollout through the `promoted` label. If no such pipeline exists, then it
 // constructs the name by calculating the suffix and appending to the PipelineRollout name.
 func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
-	pipelines, err := kubernetes.ListCR(
+	pipelines, err := kubernetes.ListLiveResource(
 		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
