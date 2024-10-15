@@ -251,7 +251,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineName, 2)
 
@@ -321,7 +321,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineName, 2)
 
@@ -344,7 +344,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		if dataLossPrevention == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
-			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 
@@ -363,7 +363,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 
@@ -403,7 +403,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
 		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineName))
 	})
@@ -429,7 +429,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 	})
 
@@ -450,7 +450,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		if dataLossPrevention == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
-			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 
 			Eventually(func() bool {
@@ -475,7 +475,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyNumaflowControllerReady(Namespace)
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 
 	})
@@ -498,7 +498,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		if dataLossPrevention == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
-			verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 
 			Eventually(func() bool {
@@ -521,7 +521,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		verifyInProgressStrategy(Namespace, pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 
 	})
