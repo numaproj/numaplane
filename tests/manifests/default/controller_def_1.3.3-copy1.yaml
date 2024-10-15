@@ -578,7 +578,7 @@ data:
                   - controller
                   env:
                   - name: NUMAFLOW_IMAGE
-                    value: quay.io/numaproj/numaflow:v1.3.3-copy1
+                    value: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   - name: NAMESPACE
                     valueFrom:
                       fieldRef:
@@ -619,7 +619,7 @@ data:
                         key: controller.leader.election.lease.renew.period
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3-copy1
+                  image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
                   livenessProbe:
                     httpGet:
@@ -720,7 +720,7 @@ data:
                         key: server.base.href
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3-copy1
+                  image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
                   name: dex-init
                   volumeMounts:
@@ -835,7 +835,7 @@ data:
                         key: server.daemon.client.protocol
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3-copy1
+                  image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
                   livenessProbe:
                     httpGet:
@@ -871,7 +871,7 @@ data:
                         key: server.base.href
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3-copy1
+                  image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
                   name: server-init
                   volumeMounts:
@@ -890,7 +890,7 @@ data:
                         key: server.disable.auth
                         name: numaflow-cmd-params-config
                         optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3-copy1
+                  image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
                   name: server-secrets-init
                 securityContext:
