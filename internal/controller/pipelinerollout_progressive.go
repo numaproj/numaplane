@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -90,20 +92,25 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		}
 	}
 
-	pipelineStatus, err := kubernetes.ParseStatus(existingUpgradingPipelineDef)
+	pipelineStatus, err := parsePipelineStatus(existingUpgradingPipelineDef)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingUpgradingPipelineDef, err)
 	}
 
-	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+	pipelinePhase := pipelineStatus.Phase
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, "")
+		// Mark the failed new pipeline recyclable.
+		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
 		pipelineRollout.Status.MarkPipelineProgressiveUpgradeFailed("New Pipeline Failed", pipelineRollout.Generation)
 		return false, nil
 	} else if pipelinePhase == numaflowv1.PipelinePhaseRunning {
+		if !isPipelineReady(pipelineStatus.Status) {
+			//continue (re-enqueue)
+			return false, nil
+		}
 		// Label the new pipeline as promoted and then remove the label from the old pipeline,
 		// since per PipelineRollout is reconciled only once at a time, we do not
 		// need to worry about consistency issue.
@@ -197,20 +204,47 @@ func (r *PipelineRolloutReconciler) processRecyclablePipelineStatus(
 	ctx context.Context,
 	pipelineDef *kubernetes.GenericObject,
 ) error {
-	pipelineStatus, err := kubernetes.ParseStatus(pipelineDef)
+	pipelineStatus, err := parsePipelineStatus(pipelineDef)
 	if err != nil {
 		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
 	}
-	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+	pipelinePhase := pipelineStatus.Phase
 
 	// Only delete fully drained pipelines
 	if pipelinePhase == numaflowv1.PipelinePhasePaused {
-		// TODO: check if `pipelineStatus.DrainedOnPause` is true
-		err = kubernetes.DeleteCR(ctx, r.restConfig, pipelineDef, "pipelines")
-		if err != nil {
-			return err
+		// check if `pipelineStatus.DrainedOnPause` is true
+		if pipelineStatus.DrainedOnPause {
+			err = kubernetes.DeleteCR(ctx, r.restConfig, pipelineDef, "pipelines")
+			if err != nil {
+				return err
+			}
 		}
-
 	}
 	return nil
+}
+
+func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStatus, error) {
+	if obj == nil || len(obj.Status.Raw) == 0 {
+		return numaflowv1.PipelineStatus{}, nil
+	}
+
+	var status numaflowv1.PipelineStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return numaflowv1.PipelineStatus{}, err
+	}
+
+	return status, nil
+}
+
+func isPipelineReady(status numaflowv1.Status) bool {
+	if len(status.Conditions) == 0 {
+		return false
+	}
+	for _, c := range status.Conditions {
+		if c.Status != metav1.ConditionTrue {
+			return false
+		}
+	}
+	return true
 }
