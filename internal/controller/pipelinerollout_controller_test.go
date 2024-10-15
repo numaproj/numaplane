@@ -912,12 +912,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			// this updates everything but the Status subresource
 			existingPipelineDef := &tc.existingPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
-			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
-			assert.NoError(t, err)
-			// update Status subresource
-			pipeline.Status = tc.existingPipelineDef.Status
-			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
-			assert.NoError(t, err)
+			createPipelineInK8S(ctx, t, numaflowClientSet, &tc.existingPipelineDef)
 
 			// external pause requests
 			GetPauseModule().pauseRequests = map[string]*bool{}
