@@ -305,11 +305,11 @@ func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 }
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
-func GetResource(ctx context.Context, c client.Client, obj *GenericObject) (*GenericObject, error) {
+func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*GenericObject, error) {
 	unstructuredObj := &unstructured.Unstructured{}
-	unstructuredObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+	unstructuredObj.SetGroupVersionKind(gvk)
 
-	if err := c.Get(ctx, k8stypes.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, unstructuredObj); err != nil {
+	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
 		return nil, err
 	}
 
@@ -336,9 +336,9 @@ func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 }
 
 // ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
-func ListResources(ctx context.Context, c client.Client, obj *GenericObject, opts ...client.ListOption) ([]*GenericObject, error) {
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]*GenericObject, error) {
 	unstructuredList := &unstructured.UnstructuredList{}
-	unstructuredList.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+	unstructuredList.SetGroupVersionKind(gvk)
 
 	if err := c.List(ctx, unstructuredList, opts...); err != nil {
 		return nil, err

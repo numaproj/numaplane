@@ -382,7 +382,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Get the object to see if it exists
-	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef)
+	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Name: newPipelineDef.Name, Namespace: newPipelineDef.Namespace})
 	if err != nil {
 		// create an object as it doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -493,6 +494,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
+	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
+	// the most current version of the Pipeline just in case
 	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
 		existingPipelineDef, err = kubernetes.GetLiveResource(ctx, newPipelineDef, "pipelines")
 		if err != nil {

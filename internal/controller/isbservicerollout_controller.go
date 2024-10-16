@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -217,7 +218,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}
 
-	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef)
+	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: newISBServiceDef.Namespace, Name: newISBServiceDef.Name})
 	if err != nil {
 		// create an object as it doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -400,10 +402,12 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	obj := kubernetes.GenericObject{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"})
-	obj.SetNamespace(rolloutNamespace)
-	return kubernetes.ListResources(ctx, r.client, &obj, client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName}, client.HasLabels{common.LabelKeyPipelineRolloutForPipeline})
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	return kubernetes.ListResources(ctx, r.client, gvk,
+		client.InNamespace(rolloutNamespace),
+		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
+		client.HasLabels{common.LabelKeyPipelineRolloutForPipeline},
+	)
 }
 
 // Apply pod disruption budget for the ISBService

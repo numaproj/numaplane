@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -104,7 +105,8 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	fmt.Printf("Created CR, resource version=%s\n", version1)
 
 	// Get resource with cache
-	pipelineObject, err = GetResource(context.Background(), runtimeClient, pipelineObject)
+	pipelineObject, err = GetResource(context.Background(), runtimeClient, pipelineObject.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: pipelineObject.Namespace, Name: pipelineObject.Name})
 	assert.Nil(t, err)
 
 	// Updating should return the result Pipeline with the updated ResourceVersion
@@ -134,10 +136,8 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	assert.Len(t, pipelineList, 1)
 
 	// List resource with cache
-	obj := GenericObject{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"})
-	obj.SetNamespace(namespace)
-	pipelineList, err = ListResources(context.Background(), runtimeClient, &obj, client.MatchingLabels{"test": "value"})
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	pipelineList, err = ListResources(context.Background(), runtimeClient, gvk, client.InNamespace(namespace), client.MatchingLabels{"test": "value"})
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)
 }

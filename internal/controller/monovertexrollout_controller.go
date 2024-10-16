@@ -26,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -193,7 +194,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef)
+	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Name: newMonoVertexDef.Name, Namespace: newMonoVertexDef.Namespace})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
