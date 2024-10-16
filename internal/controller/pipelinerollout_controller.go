@@ -731,8 +731,8 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // getPipelineName retrieves the name of the current running pipeline managed by the given
-// pipelineRollout through the `promoted` label. Unless there is non such pipeline exist, then
-// construct the name by calculate the suffix and append to the PipelineRollout name.
+// pipelineRollout through the `promoted` label. Unless no such pipeline exists, then
+// construct the name by calculating the suffix and appending to the PipelineRollout name.
 func (r *PipelineRolloutReconciler) getPipelineName(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
