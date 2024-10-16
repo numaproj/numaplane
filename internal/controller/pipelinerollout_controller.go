@@ -351,9 +351,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
 		if pipelineRollout.Status.IsHealthy() {
-			r.customMetrics.PipelinesHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(1)
+			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(1)
 		} else {
-			r.customMetrics.PipelinesHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(0)
+			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(0)
 		}
 	}()
 
@@ -367,7 +367,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.PipelinesHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
+		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
 		return false, nil
 	}
 

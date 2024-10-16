@@ -228,9 +228,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	defer func() {
 		if controllerRollout.Status.IsHealthy() {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(1)
+			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(1)
 		} else {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(0)
+			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(0)
 		}
 	}()
 
@@ -246,7 +246,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
 		r.customMetrics.NumaflowControllerRunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.NumaflowControllersHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
+		r.customMetrics.NumaflowControllersRolloutHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
