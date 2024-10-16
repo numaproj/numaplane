@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -35,10 +36,14 @@ import (
 )
 
 const (
-	isbServiceRolloutName = "test-isbservice-rollout"
-	pipelineRolloutName   = "test-pipeline-rollout"
-	pipelineName          = "test-pipeline-rollout-0"
-	monoVertexRolloutName = "test-monovertex-rollout"
+	isbServiceRolloutName            = "test-isbservice-rollout"
+	pipelineRolloutName              = "test-pipeline-rollout"
+	pipelineName                     = "test-pipeline-rollout-0"
+	monoVertexRolloutName            = "test-monovertex-rollout"
+	initialNumaflowControllerVersion = "1.3.3"
+	updatedNumaflowControllerVersion = "1.3.3-copy1"
+	initialJetstreamVersion          = "2.9.6"
+	updatedJetstreamVersion          = "2.9.8"
 )
 
 var (
@@ -128,7 +133,7 @@ var (
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "2.9.6",
+			Version: initialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -439,7 +444,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new NumaflowController spec
 		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.3.3-copy1"},
+			Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
@@ -465,10 +470,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 			}, testTimeout).Should(BeTrue())
 		}
 
-		// TODO: update this controller image when Numaflow v1.3.1 is released
-		//       versions prior to v1.3.0 do not reconcile MonoVertex
 		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			return d.Spec.Template.Spec.Containers[0].Image == "quay.io/numaio/numaflow-rc:v1.3.3-copy1"
+			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
 		})
 
 		verifyNumaflowControllerRolloutReady()
@@ -486,7 +490,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new ISBService spec
 		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = "2.9.8"
+		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 		rawSpec, err := json.Marshal(updatedISBServiceSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -514,7 +518,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == "2.9.8"
+			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
@@ -726,7 +730,7 @@ func createNumaflowControllerRolloutSpec(name, namespace string) *apiv1.Numaflow
 			Namespace: namespace,
 		},
 		Spec: apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: "1.3.3"},
+			Controller: apiv1.Controller{Version: initialNumaflowControllerVersion},
 		},
 	}
 
