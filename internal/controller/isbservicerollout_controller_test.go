@@ -35,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 
@@ -273,8 +272,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 
-	ppndUpgradeStrategy := apiv1.UpgradeStrategyPPND
-
 	testCases := []struct {
 		name                    string
 		newISBSvcSpec           numaflowv1.InterStepBufferServiceSpec
@@ -438,14 +435,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 			// create ISBServiceRollout definition
 			rollout := createISBServiceRollout(tc.newISBSvcSpec)
-
-			if tc.existingInProgressStrategy != nil {
-				rollout.Status.UpgradeInProgress = *tc.existingInProgressStrategy
-				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultISBSvcRolloutName}, *tc.existingInProgressStrategy)
-			} else {
-				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
-				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultISBSvcRolloutName}, apiv1.UpgradeStrategyNoOp)
-			}
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
