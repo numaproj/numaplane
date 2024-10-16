@@ -594,7 +594,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// new MonoVertex spec
 		updatedMonoVertexSpec := monoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
+		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-python/simple-source:stable"
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -604,7 +604,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:v0.6.0"
+			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)

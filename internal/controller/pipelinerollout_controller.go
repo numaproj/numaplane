@@ -374,7 +374,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, finalizerName)
 	}
 
-	newPipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
+	newPipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, err
 	}
@@ -506,16 +506,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
-			numaLogger.Error(errors.New("Progressive not supported"), "Progressive not supported")
-			//TODO (just an idea of what it might look like below...)
-			//	done, err := r.processExistingPipelineWithProgressive(...)
-			//if err != nil {
-			//	return err
-			//}
-			//if done {
-			//	r.unsetInProgressStrategy(namespacedName)
-			//}
+			done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+			if err != nil {
+				return err
+			}
+			if done {
+				r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
+			}
 		}
+		// TODO: clean up old pipeline when drained
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
@@ -539,7 +538,7 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
 
-	pipelineDef, err := r.makePipelineDefinition(ctx, pipelineRollout)
+	pipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return err
 	}
@@ -705,7 +704,7 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
-func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
 	var pipelineSpec PipelineSpec
 	labelMapping := map[string]string{
 		common.LabelKeyISBServiceNameForPipeline: "default",
@@ -718,7 +717,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, 
 	}
 
 	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
-	labelMapping[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	labelMapping[common.LabelKeyUpgradeState] = upgradeState
 
 	return labelMapping, nil
 }
@@ -732,20 +731,24 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // getPipelineName retrieves the name of the current running pipeline managed by the given
-// pipelineRollout through the `promoted` label. If no such pipeline exists, then it
-// constructs the name by calculating the suffix and appending to the PipelineRollout name.
-func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
+// pipelineRollout through the `promoted` label. Unless no such pipeline exists, then
+// construct the name by calculating the suffix and appending to the PipelineRollout name.
+func (r *PipelineRolloutReconciler) getPipelineName(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	upgradeState string,
+) (string, error) {
 	pipelines, err := kubernetes.ListCR(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
-			common.LabelKeyUpgradeState, common.LabelValueUpgradePromoted,
+			common.LabelKeyUpgradeState, upgradeState,
 		), "")
 	if err != nil {
 		return "", err
 	}
 	if len(pipelines) > 1 {
-		return "", fmt.Errorf("there should only be one promoted pipeline")
+		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
 	} else if len(pipelines) == 0 {
 		suffixName, err := r.calPipelineNameSuffix(ctx, pipelineRollout)
 		if err != nil {
@@ -767,19 +770,34 @@ func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, p
 		}
 	}
 
-	return "-" + fmt.Sprint(*pipelineRollout.Status.NameCount), nil
+	preNameCount := *pipelineRollout.Status.NameCount
+	*pipelineRollout.Status.NameCount++
+
+	return "-" + fmt.Sprint(preNameCount), nil
 }
 
-func (r *PipelineRolloutReconciler) makePipelineDefinition(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (*kubernetes.GenericObject, error) {
-	labels, err := pipelineLabels(pipelineRollout)
-	if err != nil {
-		return nil, err
-	}
-	pipelineName, err := r.getPipelineName(ctx, pipelineRollout)
+func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) (*kubernetes.GenericObject, error) {
+	pipelineName, err := r.getPipelineName(ctx, pipelineRollout, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
 	}
 
+	labels, err := pipelineLabels(pipelineRollout, string(common.LabelValueUpgradePromoted))
+	if err != nil {
+		return nil, err
+	}
+
+	return r.makePipelineDefinition(pipelineRollout, pipelineName, labels)
+}
+
+func (r *PipelineRolloutReconciler) makePipelineDefinition(
+	pipelineRollout *apiv1.PipelineRollout,
+	pipelineName string,
+	labels map[string]string,
+) (*kubernetes.GenericObject, error) {
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
