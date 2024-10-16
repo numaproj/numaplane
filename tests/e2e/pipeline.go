@@ -112,7 +112,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	document("Verify that Pipeline is paused and fully drained")
 	verifyPipelineStatusEventually(namespace, pipelineName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused
+			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 
 		})
 	// this happens too fast to verify it:
