@@ -184,6 +184,43 @@ func CreateUnstructuredCR(
 	return nil
 }
 
+func DeleteCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) error {
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	return DeleteUnstructuredCR(ctx, restConfig, gvr, object.Namespace, object.Name)
+}
+
+func DeleteUnstructuredCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	gvr schema.GroupVersionResource,
+	namespace, name string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	err = client.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to delete resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	}
+
+	numaLogger.Infof("successfully deleted resource %s/%s of type %+v", namespace, name, gvr)
+	return nil
+}
+
 // update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateCR(
 	ctx context.Context,

@@ -44,7 +44,7 @@ func TestGetLabelWithInvalidData(t *testing.T) {
 	assert.Equal(t, "failed to get labels from target object /v1, Kind=Service /my-service: .metadata.labels accessor error: contains non-string value in the map under key \"invalid-label\": <nil> is of the type <nil>, expected string", err.Error())
 }
 
-func TestCreateUpdateGetListCR(t *testing.T) {
+func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
@@ -122,4 +122,10 @@ func TestCreateUpdateGetListCR(t *testing.T) {
 	pipelineList, err := ListCR(context.Background(), restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)
+
+	err = DeleteCR(context.Background(), restConfig, pipelineObject, "pipelines")
+	assert.Nil(t, err)
+	pipelineList, err = ListCR(context.Background(), restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	assert.Nil(t, err)
+	assert.Len(t, pipelineList, 0)
 }
