@@ -616,7 +616,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 
 func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout) {
 	timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
-	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Name).Set(timeElapsed.Seconds())
+	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(timeElapsed.Seconds())
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {

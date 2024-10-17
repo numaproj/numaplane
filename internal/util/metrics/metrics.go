@@ -128,7 +128,7 @@ var (
 		Name:        "numaflow_pipeline_paused_seconds",
 		Help:        "Duration a pipeline was paused for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelName})
+	}, []string{LabelNamespace, LabelName})
 
 	// pipelinesSynced Check the total number of pipeline synced
 	pipelinesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
