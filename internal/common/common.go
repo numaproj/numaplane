@@ -63,6 +63,10 @@ const (
 	// LabelValueUpgradeInProgress is the label value indicating that the resource managed by a NumaRollout is in progress
 	// of upgrade.
 	LabelValueUpgradeInProgress UpgradeState = "in-progress"
+
+	// LabelValueUpgradeRecyclable is the label value indicating that the resource managed by a NumaRollout is recyclable
+	// after an upgrade.
+	LabelValueUpgradeRecyclable UpgradeState = "recyclable"
 )
 
 var (

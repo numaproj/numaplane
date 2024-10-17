@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -90,20 +89,26 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		}
 	}
 
-	pipelineStatus, err := kubernetes.ParseStatus(existingUpgradingPipelineDef)
+	pipelineStatus, err := parsePipelineStatus(existingUpgradingPipelineDef)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingUpgradingPipelineDef, err)
 	}
 
-	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
+	pipelinePhase := pipelineStatus.Phase
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, "")
+		// Mark the failed new pipeline recyclable.
+		// TODO: pause the failed new pipeline so it can be drained.
+		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
 		pipelineRollout.Status.MarkPipelineProgressiveUpgradeFailed("New Pipeline Failed", pipelineRollout.Generation)
 		return false, nil
 	} else if pipelinePhase == numaflowv1.PipelinePhaseRunning {
+		if !isPipelineReady(pipelineStatus.Status) {
+			//continue (re-enqueue)
+			return false, nil
+		}
 		// Label the new pipeline as promoted and then remove the label from the old pipeline,
 		// since per PipelineRollout is reconciled only once at a time, we do not
 		// need to worry about consistency issue.
@@ -112,7 +117,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 			return false, err
 		}
 
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, "")
+		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
@@ -120,7 +125,10 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		pipelineRollout.Status.MarkPipelineProgressiveUpgradeSucceeded("New Pipeline Running", pipelineRollout.Generation)
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
-		// TODO: pause old pipeline
+		// Pause old pipeline
+		if err := r.setPipelineLifecycle(ctx, true, existingPipelineDef); err != nil {
+			return false, err
+		}
 		return true, nil
 	} else {
 		// Ensure the latest pipeline spec is applied
@@ -155,5 +163,60 @@ func (r *PipelineRolloutReconciler) updatePipelineLabel(
 		return err
 	}
 	return nil
+}
 
+func (r *PipelineRolloutReconciler) cleanUpPipelines(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) error {
+	recyclablePipelines, err := r.getRecyclablePipelines(ctx, pipelineRollout)
+	if err != nil {
+		return err
+	}
+
+	for _, recyclablePipeline := range recyclablePipelines {
+		err = r.processRecyclablePipelineStatus(ctx, recyclablePipeline)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// getRecyclablePipelines retrieves all the recyclable pipelines managed by the given
+// pipelineRollout through the `recyclable` label.
+func (r *PipelineRolloutReconciler) getRecyclablePipelines(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) ([]*kubernetes.GenericObject, error) {
+	return kubernetes.ListCR(
+		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		pipelineRollout.Namespace, fmt.Sprintf(
+			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
+			common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
+		), "")
+}
+
+func (r *PipelineRolloutReconciler) processRecyclablePipelineStatus(
+	ctx context.Context,
+	pipelineDef *kubernetes.GenericObject,
+) error {
+	pipelineStatus, err := parsePipelineStatus(pipelineDef)
+	if err != nil {
+		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
+	}
+	pipelinePhase := pipelineStatus.Phase
+
+	// Only delete fully drained pipelines
+	if pipelinePhase == numaflowv1.PipelinePhasePaused {
+		// check if `pipelineStatus.DrainedOnPause` is true
+		if pipelineStatus.DrainedOnPause {
+			err = kubernetes.DeleteCR(ctx, r.restConfig, pipelineDef, "pipelines")
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

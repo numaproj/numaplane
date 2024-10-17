@@ -514,13 +514,20 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				r.inProgressStrategyMgr.unsetStrategy(ctx, pipelineRollout)
 			}
 		}
-		// TODO: clean up old pipeline when drained
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+		}
+
+		// When progressive is the default strategy, clean up recyclable pipeline when drained
+		if userPreferredStrategy == config.ProgressiveStrategyID {
+			err = r.cleanUpPipelines(ctx, pipelineRollout)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -843,4 +850,30 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
+}
+
+func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStatus, error) {
+	if obj == nil || len(obj.Status.Raw) == 0 {
+		return numaflowv1.PipelineStatus{}, nil
+	}
+
+	var status numaflowv1.PipelineStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return numaflowv1.PipelineStatus{}, err
+	}
+
+	return status, nil
+}
+
+func isPipelineReady(status numaflowv1.Status) bool {
+	if len(status.Conditions) == 0 {
+		return false
+	}
+	for _, c := range status.Conditions {
+		if c.Status != metav1.ConditionTrue {
+			return false
+		}
+	}
+	return true
 }
