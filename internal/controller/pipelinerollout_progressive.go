@@ -2,10 +2,7 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -100,6 +97,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	pipelinePhase := pipelineStatus.Phase
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
 		// Mark the failed new pipeline recyclable.
+		// TODO: pause the failed new pipeline so it can be drained.
 		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
@@ -221,30 +219,4 @@ func (r *PipelineRolloutReconciler) processRecyclablePipelineStatus(
 		}
 	}
 	return nil
-}
-
-func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStatus, error) {
-	if obj == nil || len(obj.Status.Raw) == 0 {
-		return numaflowv1.PipelineStatus{}, nil
-	}
-
-	var status numaflowv1.PipelineStatus
-	err := json.Unmarshal(obj.Status.Raw, &status)
-	if err != nil {
-		return numaflowv1.PipelineStatus{}, err
-	}
-
-	return status, nil
-}
-
-func isPipelineReady(status numaflowv1.Status) bool {
-	if len(status.Conditions) == 0 {
-		return false
-	}
-	for _, c := range status.Conditions {
-		if c.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	return true
 }
