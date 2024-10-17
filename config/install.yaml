@@ -1268,6 +1268,7 @@ rules:
   - configmaps
   - serviceaccounts
   - secrets
+  - services
   verbs:
   - '*'
 - apiGroups:
@@ -1410,7 +1411,7 @@ data:
   config.yaml: |-
     logLevel: 3
     includedResources: "group=apps,kind=Deployment;\
-    group=,kind=ConfigMap;group=,kind=ServiceAccount;\
+    group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
 kind: ConfigMap
 metadata:
