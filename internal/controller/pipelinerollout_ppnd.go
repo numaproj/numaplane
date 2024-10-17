@@ -205,14 +205,14 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	if pause && !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelinePause", "pausing pipeline")
-		if err := GetPauseModule().pausePipeline(ctx, r.restConfig, existingPipelineDef); err != nil {
+		if err := GetPauseModule().pausePipeline(ctx, existingPipelineDef); err != nil {
 			return err
 		}
 	} else if !pause && lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
-		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.restConfig, existingPipelineDef)
+		run, err := GetPauseModule().runPipelineIfSafe(ctx, existingPipelineDef)
 		if err != nil {
 			return err
 		}

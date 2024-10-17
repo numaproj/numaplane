@@ -27,7 +27,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,7 +51,6 @@ const (
 type MonoVertexRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -61,7 +59,6 @@ type MonoVertexRolloutReconciler struct {
 func NewMonoVertexRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
@@ -69,7 +66,6 @@ func NewMonoVertexRolloutReconciler(
 	return &MonoVertexRolloutReconciler{
 		client,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 	}

@@ -745,7 +745,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder,
 	)
@@ -946,7 +945,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
 			}
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
@@ -966,7 +965,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 // process an existing pipeline in this test, the user preferred strategy is Progressive
 func Test_processExistingPipeline_Progressive(t *testing.T) {
-	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	_, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
@@ -986,7 +985,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 
@@ -1070,7 +1068,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
 			assert.NoError(t, err)
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:

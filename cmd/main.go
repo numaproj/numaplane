@@ -153,7 +153,6 @@ func main() {
 	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutPipeline),
 	)
@@ -183,7 +182,6 @@ func main() {
 	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutISBSvc),
 	)
@@ -195,7 +193,6 @@ func main() {
 	monoVertexRolloutReconciler := controller.NewMonoVertexRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertex),
 	)

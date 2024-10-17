@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/rest"
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
@@ -73,7 +72,7 @@ func (pm *PauseModule) getPauseRequest(requester string) (*bool, bool) {
 }
 
 // pause pipeline
-func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {
+func (pm *PauseModule) pausePipeline(ctx context.Context, pipeline *kubernetes.GenericObject) error {
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
@@ -85,7 +84,7 @@ func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Confi
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) (bool, error) {
+func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, pipeline *kubernetes.GenericObject) (bool, error) {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
