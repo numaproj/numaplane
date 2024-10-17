@@ -195,7 +195,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	pipelineRollout.Status.Init(pipelineRollout.Generation)
 
-	requeue, existingPipelineDef, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
+	requeue, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
 		r.ErrorHandler(pipelineRollout, err, "ReconcileFailed", "Failed to reconcile PipelineRollout")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
@@ -208,7 +208,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	}
 
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
-	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
+	err = r.processPipelineStatus(ctx, pipelineRollout)
 	if err != nil {
 		r.ErrorHandler(pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
@@ -343,7 +343,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 	syncStartTime time.Time,
-) (bool, *kubernetes.GenericObject, error) {
+) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
 		if pipelineRollout.Status.IsHealthy() {
@@ -364,7 +364,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
-		return false, nil, nil
+		return false, nil
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
@@ -374,7 +374,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	newPipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	// Get the object to see if it exists
@@ -388,14 +388,14 @@ func (r *PipelineRolloutReconciler) reconcile(
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 			if err != nil {
-				return false, existingPipelineDef, err
+				return false, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-			return false, existingPipelineDef, nil
+			return false, nil
 		}
 
-		return false, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
+		return false, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
 	// Object already exists
@@ -403,11 +403,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
 		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
 		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
-		return false, existingPipelineDef, errors.New(errStr)
+		return false, errors.New(errStr)
 	}
 	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
-	return false, existingPipelineDef, err
+	return false, err
 }
 
 // determine if this Pipeline is owned by this PipelineRollout
@@ -547,8 +547,23 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 
 // Set the Condition in the Status for child resource health
 
-func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *kubernetes.GenericObject) error {
+func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	numaLogger := logger.FromContext(ctx)
+
+	pipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
+	if err != nil {
+		return err
+	}
+
+	// Get existing Pipeline
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
+		} else {
+			return fmt.Errorf("error getting Pipeline for status processing: %v", err)
+		}
+	}
 
 	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {

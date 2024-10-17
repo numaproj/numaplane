@@ -945,7 +945,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
 			}
 
-			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
@@ -1068,7 +1068,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
 			assert.NoError(t, err)
 
-			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
