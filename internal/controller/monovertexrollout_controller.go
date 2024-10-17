@@ -21,17 +21,12 @@ import (
 	"fmt"
 	"time"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	"github.com/numaproj/numaplane/internal/util/logger"
-	"github.com/numaproj/numaplane/internal/util/metrics"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/rest"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +35,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 const (
@@ -50,7 +51,6 @@ const (
 type MonoVertexRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -59,7 +59,6 @@ type MonoVertexRolloutReconciler struct {
 func NewMonoVertexRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
@@ -67,7 +66,6 @@ func NewMonoVertexRolloutReconciler(
 	return &MonoVertexRolloutReconciler{
 		client,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 	}
@@ -156,9 +154,9 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	defer func() {
 		if monoVertexRollout.Status.IsHealthy() {
-			r.customMetrics.MonoVerticesHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name).Set(1)
+			r.customMetrics.MonoVerticesRolloutHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name).Set(1)
 		} else {
-			r.customMetrics.MonoVerticesHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name).Set(0)
+			r.customMetrics.MonoVerticesRolloutHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name).Set(0)
 		}
 	}()
 
@@ -171,7 +169,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		// generate metrics for MonoVertex deletion
 		r.customMetrics.DecMonoVertexMetrics(monoVertexRollout.Name, monoVertexRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.MonoVerticesHealth.DeleteLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name)
+		r.customMetrics.MonoVerticesRolloutHealth.DeleteLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -192,13 +190,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Name: newMonoVertexDef.Name, Namespace: newMonoVertexDef.Namespace})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices"); err != nil {
+			if err := kubernetes.CreateResource(ctx, r.client, newMonoVertexDef); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -248,7 +247,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
+func mergeMonoVertex(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 	return resultMonoVertex
@@ -290,7 +289,7 @@ func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRoll
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *kubernetes.GenericObject) error {
-	err := kubernetes.UpdateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
 	}

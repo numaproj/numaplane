@@ -31,9 +31,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -81,9 +82,8 @@ type lifecycle struct {
 
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	restConfig *rest.Config
+	client client.Client
+	scheme *runtime.Scheme
 
 	// queue contains the list of PipelineRollouts that currently need to be reconciled
 	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this queue to be processed as needed
@@ -103,7 +103,6 @@ type PipelineRolloutReconciler struct {
 func NewPipelineRolloutReconciler(
 	c client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *PipelineRolloutReconciler {
@@ -119,7 +118,6 @@ func NewPipelineRolloutReconciler(
 	r := &PipelineRolloutReconciler{
 		c,
 		s,
-		restConfig,
 		pipelineRolloutQueue,
 		&sync.WaitGroup{},
 		customMetrics,
@@ -349,9 +347,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
 		if pipelineRollout.Status.IsHealthy() {
-			r.customMetrics.PipelinesHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(1)
+			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(1)
 		} else {
-			r.customMetrics.PipelinesHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(0)
+			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(0)
 		}
 	}()
 
@@ -365,7 +363,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.PipelinesHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
+		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
 		return false, nil
 	}
 
@@ -380,15 +378,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Get the object to see if it exists
-	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, newPipelineDef, "pipelines")
+	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Name: newPipelineDef.Name, Namespace: newPipelineDef.Namespace})
 	if err != nil {
-		// create object as it doesn't exist
+		// create an object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-
 			pipelineRollout.Status.MarkPending()
 
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
-			err = kubernetes.CreateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
+			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 			if err != nil {
 				return false, err
 			}
@@ -427,7 +425,7 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 }
 
 // take the existing pipeline and merge anything needed from the new pipeline definition
-func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
+func mergePipeline(existingPipeline, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultPipeline := existingPipeline.DeepCopy()
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
 	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
@@ -435,7 +433,7 @@ func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kube
 }
 
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef *kubernetes.GenericObject, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+	existingPipelineDef, newPipelineDef *kubernetes.GenericObject, syncStartTime time.Time) error {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -492,6 +490,20 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
+	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
+	// the most current version of the Pipeline just in case
+	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		existingPipelineDef, err = kubernetes.GetLiveResource(ctx, newPipelineDef, "pipelines")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
+			} else {
+				return fmt.Errorf("error getting Pipeline for status processing: %v", err)
+			}
+		}
+		newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
+	}
+
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
@@ -517,7 +529,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		// TODO: clean up old pipeline when drained
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
-			if err := updatePipelineSpec(ctx, r.restConfig, newPipelineDef); err != nil {
+			if err := updatePipelineSpec(ctx, newPipelineDef); err != nil {
 				return err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -544,7 +556,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	}
 
 	// Get existing Pipeline
-	existingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, pipelineDef, "pipelines")
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
@@ -561,7 +573,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
-	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+	r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
 
 	return nil
 }
@@ -589,7 +601,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 
 }
 
-func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *kubernetes.GenericObject, pipelineStatus *kubernetes.GenericStatus) {
+func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 
@@ -633,7 +645,6 @@ func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	controller, err := runtimecontroller.New(ControllerPipelineRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -645,7 +656,13 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch Pipelines
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.Pipeline{}),
+	pipelineUns := &unstructured.Unstructured{}
+	pipelineUns.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind:    "Pipeline",
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
+	})
+	if err := controller.Watch(source.Kind(mgr.GetCache(), pipelineUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
@@ -655,7 +672,7 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // pipelineSpecNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+func pipelineSpecNeedsUpdating(ctx context.Context, a, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
 	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
@@ -700,8 +717,8 @@ func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
-func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kubernetes.GenericObject) error {
-	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
+func updatePipelineSpec(ctx context.Context, obj *kubernetes.GenericObject) error {
+	return kubernetes.UpdateCR(ctx, obj, "pipelines")
 }
 
 func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
@@ -733,13 +750,9 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 // getPipelineName retrieves the name of the current running pipeline managed by the given
 // pipelineRollout through the `promoted` label. Unless no such pipeline exists, then
 // construct the name by calculating the suffix and appending to the PipelineRollout name.
-func (r *PipelineRolloutReconciler) getPipelineName(
-	ctx context.Context,
-	pipelineRollout *apiv1.PipelineRollout,
-	upgradeState string,
-) (string, error) {
-	pipelines, err := kubernetes.ListCR(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+func (r *PipelineRolloutReconciler) getPipelineName(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState string) (string, error) {
+	pipelines, err := kubernetes.ListLiveResource(
+		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
 			common.LabelKeyUpgradeState, upgradeState,

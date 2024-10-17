@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/numaproj/numaplane/internal/util"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/numaproj/numaplane/internal/util/logger"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
 // this file contains utility functions for working with Unstructured types
@@ -50,83 +50,52 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
-func GetUnstructuredCR(
-	ctx context.Context,
-	restConfig *rest.Config,
-	object *GenericObject,
-	pluralName string,
-) (*unstructured.Unstructured, error) {
+func GetLiveUnstructuredResource(ctx context.Context, object *GenericObject, pluralName string) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
-	}
 
 	gvr, err := getGroupVersionResource(object, pluralName)
 	if err != nil {
 		return nil, err
 	}
 
-	unstruc, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
-	if unstruc != nil {
-		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, unstruc.Object)
+	uns, err := dynamicClient.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	if uns != nil {
+		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, uns.Object)
 	}
-	return unstruc, err
+	return uns, err
 }
 
-func ListUnstructuredCR(
-	ctx context.Context,
-	restConfig *rest.Config,
-	apiGroup string,
-	version string,
-	pluralName string,
-	namespace string,
-	labelSelector string, // set to empty string if none
-	fieldSelector string, // set to empty string if none
-) (*unstructured.UnstructuredList, error) {
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
+func ListLiveUnstructuredResource(ctx context.Context, apiGroup, version, pluralName, namespace, labelSelector,
+	fieldSelector string) (*unstructured.UnstructuredList, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    apiGroup,
 		Version:  version,
 		Resource: pluralName,
 	}
-	return client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
-// look up a Resource
-func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
-	unstruc, err := GetUnstructuredCR(ctx, restConfig, object, pluralName)
-	if unstruc != nil {
-		return UnstructuredToObject(unstruc)
+// GetLiveResource retrieves the data from Kubernetes API server instead of the cache
+func GetLiveResource(ctx context.Context, object *GenericObject, pluralName string) (*GenericObject, error) {
+	uns, err := GetLiveUnstructuredResource(ctx, object, pluralName)
+	if uns != nil {
+		return UnstructuredToObject(uns)
 	} else {
 		return nil, err
 	}
 }
 
-func ListCR(ctx context.Context,
-	restConfig *rest.Config,
-	apiGroup string,
-	version string,
-	pluralName string,
-	namespace string,
-	// set to empty string if none
-	labelSelector string,
-	// set to empty string if none
-	fieldSelector string) ([]*GenericObject, error) {
+func ListLiveResource(ctx context.Context, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector string) ([]*GenericObject, error) {
 	numaLogger := logger.FromContext(ctx)
-	unstrucList, err := ListUnstructuredCR(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	unsList, err := ListLiveUnstructuredResource(ctx, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, err
 	}
 
-	if unstrucList != nil {
-		numaLogger.Debugf("found %d %s", len(unstrucList.Items), pluralName)
-		objects := make([]*GenericObject, len(unstrucList.Items))
-		for i, unstruc := range unstrucList.Items {
+	if unsList != nil {
+		numaLogger.Debugf("found %d %s", len(unsList.Items), pluralName)
+		objects := make([]*GenericObject, len(unsList.Items))
+		for i, unstruc := range unsList.Items {
 			obj, err := UnstructuredToObject(&unstruc)
 			if err != nil {
 				return nil, err
@@ -141,11 +110,10 @@ func ListCR(ctx context.Context,
 
 func CreateCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) error {
-	unstruc, err := ObjectToUnstructured(object)
+	uns, err := ObjectToUnstructured(object)
 	if err != nil {
 		return err
 	}
@@ -155,12 +123,11 @@ func CreateCR(
 		return err
 	}
 
-	return CreateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name)
+	return CreateUnstructuredCR(ctx, uns, gvr, object.Namespace, object.Name)
 }
 
 func CreateUnstructuredCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	unstruc *unstructured.Unstructured,
 	gvr schema.GroupVersionResource,
 	namespace string,
@@ -169,12 +136,7 @@ func CreateUnstructuredCR(
 	numaLogger := logger.FromContext(ctx)
 	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
 
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	_, err = client.Resource(gvr).Namespace(namespace).Create(ctx, unstruc, metav1.CreateOptions{})
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(ctx, unstruc, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	}
@@ -184,10 +146,9 @@ func CreateUnstructuredCR(
 	return nil
 }
 
-// update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
+// UpdateCR update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) error {
@@ -202,7 +163,7 @@ func UpdateCR(
 		return err
 	}
 
-	if err = UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name); err != nil {
+	if err = UpdateUnstructuredCR(ctx, unstruc, gvr, object.Namespace, object.Name); err != nil {
 		return err
 	}
 	result, err := UnstructuredToObject(unstruc)
@@ -213,10 +174,9 @@ func UpdateCR(
 	return nil
 }
 
-// update the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
+// UpdateUnstructuredCR update the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateUnstructuredCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	unstruc *unstructured.Unstructured,
 	gvr schema.GroupVersionResource,
 	namespace string,
@@ -225,12 +185,7 @@ func UpdateUnstructuredCR(
 	numaLogger := logger.FromContext(ctx)
 	numaLogger.Debugf("will update resource %s/%s of type %+v", namespace, name, gvr)
 
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	result, err := client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
+	result, err := dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	} else {
@@ -338,4 +293,65 @@ func (obj *GenericObject) DeepCopy() *GenericObject {
 	result.Spec = *obj.Spec.DeepCopy()
 	result.Status = *obj.Status.DeepCopy()
 	return result
+}
+
+func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) error {
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+
+	return c.Create(ctx, unstructuredObj)
+}
+
+// GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
+func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*GenericObject, error) {
+	unstructuredObj := &unstructured.Unstructured{}
+	unstructuredObj.SetGroupVersionKind(gvk)
+
+	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
+		return nil, err
+	}
+
+	return UnstructuredToObject(unstructuredObj)
+}
+
+func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) error {
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+
+	if err = c.Update(ctx, unstructuredObj); err != nil {
+		return err
+	} else {
+		result, err := UnstructuredToObject(unstructuredObj)
+		if err != nil {
+			return err
+		}
+		*obj = *result
+	}
+
+	return nil
+}
+
+// ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]*GenericObject, error) {
+	unstructuredList := &unstructured.UnstructuredList{}
+	unstructuredList.SetGroupVersionKind(gvk)
+
+	if err := c.List(ctx, unstructuredList, opts...); err != nil {
+		return nil, err
+	}
+
+	objects := make([]*GenericObject, len(unstructuredList.Items))
+	for i, unstructuredObj := range unstructuredList.Items {
+		obj, err := UnstructuredToObject(&unstructuredObj)
+		if err != nil {
+			return nil, err
+		}
+		objects[i] = obj
+	}
+
+	return objects, nil
 }

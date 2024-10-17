@@ -143,15 +143,18 @@ var _ = BeforeSuite(func() {
 		customMetrics = metrics.RegisterCustomMetrics()
 	}
 
-	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+	err = kubernetes.SetDynamicClient(k8sManager.GetConfig())
+	Expect(err).ToNot(HaveOccurred())
+
+	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+	err = NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutISBSvc)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), cfg, customMetrics,
+	err = NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertex)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

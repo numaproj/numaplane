@@ -721,6 +721,8 @@ func pipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.Pip
 func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	err = kubernetes.SetDynamicClient(restConfig)
+	assert.Nil(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
 		DefaultUpgradeStrategy:    config.PPNDStrategyID,
@@ -743,9 +745,9 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
-		recorder)
+		recorder,
+	)
 
 	testCases := []struct {
 		name                           string
@@ -963,7 +965,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 // process an existing pipeline in this test, the user preferred strategy is Progressive
 func Test_processExistingPipeline_Progressive(t *testing.T) {
-	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	_, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
@@ -983,7 +985,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 

@@ -30,10 +30,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/client-go/rest"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,7 +64,6 @@ const (
 type ISBServiceRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -71,7 +72,6 @@ type ISBServiceRolloutReconciler struct {
 func NewISBServiceRolloutReconciler(
 	client client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
@@ -79,7 +79,6 @@ func NewISBServiceRolloutReconciler(
 	return &ISBServiceRolloutReconciler{
 		client,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 	}
@@ -168,9 +167,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	defer func() {
 		if isbServiceRollout.Status.IsHealthy() {
-			r.customMetrics.ISBServicesHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(1)
+			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(1)
 		} else {
-			r.customMetrics.ISBServicesHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(0)
+			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(0)
 		}
 	}()
 
@@ -187,7 +186,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.ISBServicesHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
+		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -215,15 +214,16 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}
 
-	existingISBServiceDef, err := kubernetes.GetCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
+	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: newISBServiceDef.Namespace, Name: newISBServiceDef.Name})
 	if err != nil {
 		// create an object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices"); err != nil {
-				return ctrl.Result{}, err
+			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 			}
 
 			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
@@ -235,11 +235,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-
 		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
 		}
 		if needsRequeue {
 			return common.DefaultDelayedRequeue, nil
@@ -259,7 +258,7 @@ func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
-func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
+func mergeISBService(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 	return resultISBService
@@ -270,7 +269,7 @@ func mergeISBService(existingISBService *kubernetes.GenericObject, newISBService
 // - true if needs a requeue
 // - error if any
 func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout,
-	existingISBServiceDef *kubernetes.GenericObject, newISBServiceDef *kubernetes.GenericObject, syncStartTime time.Time) (bool, error) {
+	existingISBServiceDef, newISBServiceDef *kubernetes.GenericObject, syncStartTime time.Time) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -280,7 +279,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// if I need to update or am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
 	isbServiceNeedsUpdating, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
 	}
 
 	numaLogger.Debugf("isbServiceNeedsUpdating=%t, isbServiceIsUpdating=%t", isbServiceNeedsUpdating, isbServiceIsUpdating)
@@ -297,17 +296,16 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine the Upgrade Strategy user prefers
 	upgradeStrategy, err := usde.GetUserStrategy(ctx, isbServiceRollout.Namespace)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error determining Upgrade Strategy: %v", err)
 	}
 
 	switch upgradeStrategy {
 	case config.PPNDStrategyID:
-
 		return processChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsUpdating, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
-				return err
+				return fmt.Errorf("error updating ISBService, PPNDStrategyID: %v", err)
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
@@ -317,7 +315,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// update ISBService
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
-				return false, err
+				return false, fmt.Errorf("error updating ISBService, NoStrategyID: %v", err)
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
@@ -331,8 +329,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *kubernetes.GenericObject) error {
-	err := kubernetes.UpdateCR(ctx, r.restConfig, newISBServiceDef, "interstepbufferservices")
-	if err != nil {
+	if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
 		return err
 	}
 
@@ -401,9 +398,12 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	// here
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace,
-		fmt.Sprintf("%s=%s,%s", common.LabelKeyISBServiceNameForPipeline, rolloutName, common.LabelKeyPipelineRolloutForPipeline), "")
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	return kubernetes.ListResources(ctx, r.client, gvk,
+		client.InNamespace(rolloutNamespace),
+		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
+		client.HasLabels{common.LabelKeyPipelineRolloutForPipeline},
+	)
 }
 
 // Apply pod disruption budget for the ISBService
@@ -547,7 +547,6 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	controller, err := runtimecontroller.New(ControllerISBSVCRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -559,7 +558,13 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch InterStepBufferServices
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.InterStepBufferService{}),
+	isbServiceUns := &unstructured.Unstructured{}
+	isbServiceUns.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind:    "InterStepBufferService",
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
+	})
+	if err := controller.Watch(source.Kind(mgr.GetCache(), isbServiceUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err

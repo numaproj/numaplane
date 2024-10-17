@@ -375,6 +375,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		recorder,
 	)
 
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+
 	trueValue := true
 	falseValue := false
 
