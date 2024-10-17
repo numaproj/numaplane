@@ -15,6 +15,7 @@ rules:
       - configmaps
       - serviceaccounts
       - secrets
+      - services
     verbs:
       - '*'
   - apiGroups: ["rbac.authorization.k8s.io"]
