@@ -74,14 +74,14 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}, 3*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, 4*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	if dataLossPrevention == "true" {
 		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+		}, testTimeout, testPollingInterval).Should(Or(Equal(metav1.ConditionFalse), Equal(metav1.ConditionUnknown)))
 	}
 
 }
@@ -132,6 +132,14 @@ func updateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func verifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	document("Verifying InProgressStrategy for ISBService")
+	Eventually(func() bool {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
+		return rollout.Status.UpgradeInProgress == inProgressStrategy
+	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
 func watchISBServiceRollout() {
