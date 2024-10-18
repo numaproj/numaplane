@@ -130,9 +130,10 @@ var (
 		},
 	}
 
-	volSize, _     = apiresource.ParseQuantity("10Mi")
-	memLimit, _    = apiresource.ParseQuantity("20Mi")
-	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	volSize, _         = apiresource.ParseQuantity("10Mi")
+	memLimit, _        = apiresource.ParseQuantity("1Gi")
+	updatedMemLimit, _ = apiresource.ParseQuantity("2Gi")
+	isbServiceSpec     = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
@@ -141,7 +142,7 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: volSize},
+					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
 				},
 			},
 		},
@@ -155,7 +156,7 @@ var (
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
 				},
 			},
 		},
@@ -585,7 +586,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == memLimit
+			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
