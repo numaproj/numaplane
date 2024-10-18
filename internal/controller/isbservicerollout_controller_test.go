@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"testing"
 	"time"
 
@@ -255,6 +256,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
 

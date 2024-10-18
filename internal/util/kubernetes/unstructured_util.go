@@ -15,8 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 )
 
 // this file contains utility functions for working with Unstructured types
@@ -54,22 +52,16 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 
 func GetLiveUnstructuredResource(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
 	gvr, err := getGroupVersionResource(object, pluralName)
 	if err != nil {
 		return nil, err
 	}
 
-	unstruc, err := client.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
+	unstruc, err := dynamicClient.Resource(gvr).Namespace(object.Namespace).Get(ctx, object.Name, metav1.GetOptions{})
 	if unstruc != nil {
 		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.Namespace, object.Name, gvr, unstruc.Object)
 	}
@@ -78,7 +70,6 @@ func GetLiveUnstructuredResource(
 
 func ListLiveUnstructuredResource(
 	ctx context.Context,
-	restConfig *rest.Config,
 	apiGroup string,
 	version string,
 	pluralName string,
@@ -86,31 +77,25 @@ func ListLiveUnstructuredResource(
 	labelSelector string, // set to empty string if none
 	fieldSelector string, // set to empty string if none
 ) (*unstructured.UnstructuredList, error) {
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
 	gvr := schema.GroupVersionResource{
 		Group:    apiGroup,
 		Version:  version,
 		Resource: pluralName,
 	}
-	return client.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
-// look up a Resource
-func GetLiveResource(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
-	unstruc, err := GetLiveUnstructuredResource(ctx, restConfig, object, pluralName)
-	if unstruc != nil {
-		return UnstructuredToObject(unstruc)
+// GetLiveResource converts the generic object to unstructured object and fetches the resource from the API server
+func GetLiveResource(ctx context.Context, object *GenericObject, pluralName string) (*GenericObject, error) {
+	uns, err := GetLiveUnstructuredResource(ctx, object, pluralName)
+	if uns != nil {
+		return UnstructuredToObject(uns)
 	} else {
 		return nil, err
 	}
 }
 
 func ListLiveResource(ctx context.Context,
-	restConfig *rest.Config,
 	apiGroup string,
 	version string,
 	pluralName string,
@@ -120,16 +105,16 @@ func ListLiveResource(ctx context.Context,
 	// set to empty string if none
 	fieldSelector string) ([]*GenericObject, error) {
 	numaLogger := logger.FromContext(ctx)
-	unstrucList, err := ListLiveUnstructuredResource(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	unsList, err := ListLiveUnstructuredResource(ctx, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, err
 	}
 
-	if unstrucList != nil {
-		numaLogger.Debugf("found %d %s", len(unstrucList.Items), pluralName)
-		objects := make([]*GenericObject, len(unstrucList.Items))
-		for i, unstruc := range unstrucList.Items {
-			obj, err := UnstructuredToObject(&unstruc)
+	if unsList != nil {
+		numaLogger.Debugf("found %d %s", len(unsList.Items), pluralName)
+		objects := make([]*GenericObject, len(unsList.Items))
+		for i, uns := range unsList.Items {
+			obj, err := UnstructuredToObject(&uns)
 			if err != nil {
 				return nil, err
 			}
@@ -143,11 +128,10 @@ func ListLiveResource(ctx context.Context,
 
 func CreateCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) error {
-	unstruc, err := ObjectToUnstructured(object)
+	uns, err := ObjectToUnstructured(object)
 	if err != nil {
 		return err
 	}
@@ -157,12 +141,11 @@ func CreateCR(
 		return err
 	}
 
-	return CreateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name)
+	return CreateUnstructuredCR(ctx, uns, gvr, object.Namespace, object.Name)
 }
 
 func CreateUnstructuredCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	unstruc *unstructured.Unstructured,
 	gvr schema.GroupVersionResource,
 	namespace string,
@@ -171,12 +154,7 @@ func CreateUnstructuredCR(
 	numaLogger := logger.FromContext(ctx)
 	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
 
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	_, err = client.Resource(gvr).Namespace(namespace).Create(ctx, unstruc, metav1.CreateOptions{})
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(ctx, unstruc, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	}
@@ -188,7 +166,6 @@ func CreateUnstructuredCR(
 
 func DeleteCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) error {
@@ -197,24 +174,18 @@ func DeleteCR(
 		return err
 	}
 
-	return DeleteUnstructuredCR(ctx, restConfig, gvr, object.Namespace, object.Name)
+	return DeleteUnstructuredCR(ctx, gvr, object.Namespace, object.Name)
 }
 
 func DeleteUnstructuredCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	gvr schema.GroupVersionResource,
 	namespace, name string,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
 
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	err = client.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	err := dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to delete resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	}
@@ -226,7 +197,6 @@ func DeleteUnstructuredCR(
 // update the CR in Kubernetes, and if successful, set the GenericObject to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	object *GenericObject,
 	pluralName string,
 ) error {
@@ -241,7 +211,7 @@ func UpdateCR(
 		return err
 	}
 
-	if err = UpdateUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name); err != nil {
+	if err = UpdateUnstructuredCR(ctx, unstruc, gvr, object.Namespace, object.Name); err != nil {
 		return err
 	}
 	result, err := UnstructuredToObject(unstruc)
@@ -255,7 +225,6 @@ func UpdateCR(
 // update the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
 func UpdateUnstructuredCR(
 	ctx context.Context,
-	restConfig *rest.Config,
 	unstruc *unstructured.Unstructured,
 	gvr schema.GroupVersionResource,
 	namespace string,
@@ -264,12 +233,7 @@ func UpdateUnstructuredCR(
 	numaLogger := logger.FromContext(ctx)
 	numaLogger.Debugf("will update resource %s/%s of type %+v", namespace, name, gvr)
 
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	result, err := client.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
+	result, err := dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, unstruc, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
 	} else {
