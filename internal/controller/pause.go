@@ -115,7 +115,7 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 		return err
 	}
 
-	err = kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
+	err = kubernetes.UpdateCR(ctx, pipeline, "pipelines")
 	if err != nil {
 		return err
 	}

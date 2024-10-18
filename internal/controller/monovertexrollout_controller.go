@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -193,13 +194,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetLiveResource(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: newMonoVertexDef.Namespace, Name: newMonoVertexDef.Name})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices"); err != nil {
+			if err := kubernetes.CreateResource(ctx, r.client, newMonoVertexDef); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -252,7 +254,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+func mergeMonoVertex(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 	// Use the same replicas as the existing MonoVertex
@@ -325,7 +327,7 @@ func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRoll
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *kubernetes.GenericObject) error {
-	err := kubernetes.UpdateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
 	}

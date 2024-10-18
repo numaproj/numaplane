@@ -498,7 +498,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
 	// the most current version of the Pipeline just in case
 	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
-		existingPipelineDef, err = kubernetes.GetLiveResource(ctx, r.restConfig, newPipelineDef, "pipelines")
+		existingPipelineDef, err = kubernetes.GetLiveResource(ctx, newPipelineDef, "pipelines")
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
@@ -569,7 +569,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	// Get existing Pipeline
 	// TODO: Eliminate the need for this call to GetLiveResource, instead use the existingPipelineDef from the reconcile
-	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, r.restConfig, pipelineDef, "pipelines")
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
@@ -732,7 +732,7 @@ func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 }
 
 func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kubernetes.GenericObject) error {
-	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
+	return kubernetes.UpdateCR(ctx, obj, "pipelines")
 }
 
 func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
@@ -770,7 +770,7 @@ func (r *PipelineRolloutReconciler) getPipelineName(
 	upgradeState string,
 ) (string, error) {
 	pipelines, err := kubernetes.ListLiveResource(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
 			common.LabelKeyUpgradeState, upgradeState,

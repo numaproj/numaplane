@@ -731,6 +731,7 @@ func pipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.Pip
 func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
 		DefaultUpgradeStrategy:    config.PPNDStrategyID,
@@ -977,6 +978,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 func Test_processExistingPipeline_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
 		DefaultUpgradeStrategy:    config.ProgressiveStrategyID,

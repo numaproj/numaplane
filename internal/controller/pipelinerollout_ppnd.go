@@ -64,7 +64,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 					return false, err
 				}
 			}
-			err = kubernetes.UpdateCR(ctx, r.restConfig, newPipelineDef, "pipelines")
+			err = kubernetes.UpdateCR(ctx, newPipelineDef, "pipelines")
 			if err != nil {
 				return false, err
 			}
