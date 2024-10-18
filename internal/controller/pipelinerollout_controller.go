@@ -21,13 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"maps"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -747,7 +748,7 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string)
 		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
 	}
 
-	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
+	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 	labelMapping[common.LabelKeyUpgradeState] = upgradeState
 
 	return labelMapping, nil
@@ -772,7 +773,7 @@ func (r *PipelineRolloutReconciler) getPipelineName(
 	pipelines, err := kubernetes.ListLiveResource(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
-			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
+			"%s=%s,%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name,
 			common.LabelKeyUpgradeState, upgradeState,
 		), "")
 	if err != nil {

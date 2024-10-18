@@ -457,7 +457,7 @@ func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rollo
 	return kubernetes.ListResources(ctx, r.client, gvk,
 		client.InNamespace(rolloutNamespace),
 		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
-		client.HasLabels{common.LabelKeyPipelineRolloutForPipeline},
+		client.HasLabels{common.LabelKeyParentRollout},
 	)
 }
 

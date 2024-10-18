@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -193,7 +194,7 @@ func (r *PipelineRolloutReconciler) getRecyclablePipelines(
 	return kubernetes.ListLiveResource(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
-			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
+			"%s=%s,%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name,
 			common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
 		), "")
 }
