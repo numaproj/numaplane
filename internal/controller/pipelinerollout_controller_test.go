@@ -754,7 +754,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 
@@ -996,7 +995,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 

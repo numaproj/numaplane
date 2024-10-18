@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,7 +63,6 @@ const (
 type ISBServiceRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -76,7 +74,6 @@ type ISBServiceRolloutReconciler struct {
 func NewISBServiceRolloutReconciler(
 	c client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
@@ -84,7 +81,6 @@ func NewISBServiceRolloutReconciler(
 	r := &ISBServiceRolloutReconciler{
 		c,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 		nil,

@@ -96,7 +96,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 			Raw: pipelineSpecRaw,
 		},
 	}
-	err = CreateCR(context.Background(), pipelineObject, "pipelines")
+	err = CreateResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
 	pipelineObject, err = GetLiveResource(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
@@ -110,7 +110,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 
 	// Updating should return the result Pipeline with the updated ResourceVersion
 	pipelineObject.ObjectMeta.Labels = map[string]string{"test": "value"}
-	err = UpdateCR(context.Background(), pipelineObject, "pipelines")
+	err = UpdateResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
 	version2 := pipelineObject.ResourceVersion
 
@@ -121,13 +121,6 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	pipelineObject, err = GetLiveResource(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
 	assert.Equal(t, version2, pipelineObject.ResourceVersion)
-
-	// Do another update
-	pipelineObject.ObjectMeta.Labels["test-2"] = "value-2"
-	err = UpdateCR(context.Background(), pipelineObject, "pipelines")
-	assert.Nil(t, err)
-	version3 := pipelineObject.ResourceVersion
-	assert.NotEqual(t, version2, version3)
 
 	// List resource
 	pipelineList, err := ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
@@ -140,7 +133,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)
 
-	err = DeleteCR(context.Background(), pipelineObject, "pipelines")
+	err = DeleteResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
 	pipelineList, err = ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)

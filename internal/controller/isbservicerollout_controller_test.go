@@ -20,15 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -43,9 +41,9 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
-
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
@@ -267,7 +265,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	r := NewISBServiceRolloutReconciler(numaplaneClient, scheme.Scheme, restConfig, customMetrics, recorder)
+	r := NewISBServiceRolloutReconciler(numaplaneClient, scheme.Scheme, customMetrics, recorder)
 
 	trueValue := true
 	falseValue := false
