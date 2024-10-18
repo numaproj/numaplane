@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -45,7 +46,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithProgressive(
 	if err != nil {
 		return false, err
 	}
-
 	return done, nil
 }
 
