@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/rest"
-
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // processExistingPipelineWithProgressive should be only called when determined there is
@@ -26,13 +24,13 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithProgressive(
 	}
 
 	// Get the object to see if it exists
-	_, err = kubernetes.GetLiveResource(ctx, r.restConfig, newUpgradingPipelineDef, "pipelines")
+	_, err = kubernetes.GetLiveResource(ctx, newUpgradingPipelineDef, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 
 			numaLogger.Debugf("Upgrading Pipeline %s/%s doesn't exist so creating", newUpgradingPipelineDef.Namespace, newUpgradingPipelineDef.Name)
-			err = kubernetes.CreateCR(ctx, r.restConfig, newUpgradingPipelineDef, "pipelines")
+			err = kubernetes.CreateResource(ctx, r.client, newUpgradingPipelineDef)
 			if err != nil {
 				return false, err
 			}
@@ -79,7 +77,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	}
 
 	// Get existing upgrading Pipeline
-	existingUpgradingPipelineDef, err := kubernetes.GetLiveResource(ctx, r.restConfig, pipelineDef, "pipelines")
+	existingUpgradingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("pipelineDefinition", *pipelineDef).
@@ -98,7 +96,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
 		// Mark the failed new pipeline recyclable.
 		// TODO: pause the failed new pipeline so it can be drained.
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
+		err = r.updatePipelineLabel(ctx, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
@@ -112,12 +110,12 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		// Label the new pipeline as promoted and then remove the label from the old pipeline,
 		// since per PipelineRollout is reconciled only once at a time, we do not
 		// need to worry about consistency issue.
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradePromoted))
+		err = r.updatePipelineLabel(ctx, existingUpgradingPipelineDef, string(common.LabelValueUpgradePromoted))
 		if err != nil {
 			return false, err
 		}
 
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
+		err = r.updatePipelineLabel(ctx, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
@@ -137,7 +135,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 			return false, err
 		}
 		if pipelineNeedsToUpdate {
-			err = kubernetes.UpdateCR(ctx, r.restConfig, pipelineDef, "pipelines")
+			err = kubernetes.UpdateResource(ctx, r.client, pipelineDef)
 			if err != nil {
 				return false, err
 			}
@@ -149,7 +147,6 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 
 func (r *PipelineRolloutReconciler) updatePipelineLabel(
 	ctx context.Context,
-	restConfig *rest.Config,
 	pipeline *kubernetes.GenericObject,
 	updateState string,
 ) error {
@@ -158,7 +155,7 @@ func (r *PipelineRolloutReconciler) updatePipelineLabel(
 	pipeline.Labels = labelMapping
 
 	// TODO: use patch instead
-	err := kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
+	err := kubernetes.UpdateResource(ctx, r.client, pipeline)
 	if err != nil {
 		return err
 	}
@@ -191,7 +188,7 @@ func (r *PipelineRolloutReconciler) getRecyclablePipelines(
 	pipelineRollout *apiv1.PipelineRollout,
 ) ([]*kubernetes.GenericObject, error) {
 	return kubernetes.ListLiveResource(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
 			common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
@@ -212,7 +209,7 @@ func (r *PipelineRolloutReconciler) processRecyclablePipelineStatus(
 	if pipelinePhase == numaflowv1.PipelinePhasePaused {
 		// check if `pipelineStatus.DrainedOnPause` is true
 		if pipelineStatus.DrainedOnPause {
-			err = kubernetes.DeleteCR(ctx, r.restConfig, pipelineDef, "pipelines")
+			err = kubernetes.DeleteResource(ctx, r.client, pipelineDef)
 			if err != nil {
 				return err
 			}
