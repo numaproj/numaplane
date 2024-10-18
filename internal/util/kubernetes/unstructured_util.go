@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
 	"github.com/numaproj/numaplane/internal/util"
@@ -50,7 +52,7 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
-func GetUnstructuredCR(
+func GetLiveUnstructuredResource(
 	ctx context.Context,
 	restConfig *rest.Config,
 	object *GenericObject,
@@ -74,7 +76,7 @@ func GetUnstructuredCR(
 	return unstruc, err
 }
 
-func ListUnstructuredCR(
+func ListLiveUnstructuredResource(
 	ctx context.Context,
 	restConfig *rest.Config,
 	apiGroup string,
@@ -98,8 +100,8 @@ func ListUnstructuredCR(
 }
 
 // look up a Resource
-func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
-	unstruc, err := GetUnstructuredCR(ctx, restConfig, object, pluralName)
+func GetLiveResource(ctx context.Context, restConfig *rest.Config, object *GenericObject, pluralName string) (*GenericObject, error) {
+	unstruc, err := GetLiveUnstructuredResource(ctx, restConfig, object, pluralName)
 	if unstruc != nil {
 		return UnstructuredToObject(unstruc)
 	} else {
@@ -107,7 +109,7 @@ func GetCR(ctx context.Context, restConfig *rest.Config, object *GenericObject, 
 	}
 }
 
-func ListCR(ctx context.Context,
+func ListLiveResource(ctx context.Context,
 	restConfig *rest.Config,
 	apiGroup string,
 	version string,
@@ -118,7 +120,7 @@ func ListCR(ctx context.Context,
 	// set to empty string if none
 	fieldSelector string) ([]*GenericObject, error) {
 	numaLogger := logger.FromContext(ctx)
-	unstrucList, err := ListUnstructuredCR(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
+	unstrucList, err := ListLiveUnstructuredResource(ctx, restConfig, apiGroup, version, pluralName, namespace, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +183,43 @@ func CreateUnstructuredCR(
 
 	numaLogger.Infof("successfully created resource %s/%s of type %+v", namespace, name, gvr)
 	numaLogger.Verbosef("successfully created resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
+	return nil
+}
+
+func DeleteCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+) error {
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	return DeleteUnstructuredCR(ctx, restConfig, gvr, object.Namespace, object.Name)
+}
+
+func DeleteUnstructuredCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	gvr schema.GroupVersionResource,
+	namespace, name string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will create resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	err = client.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to delete resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	}
+
+	numaLogger.Infof("successfully deleted resource %s/%s of type %+v", namespace, name, gvr)
 	return nil
 }
 
@@ -338,4 +377,65 @@ func (obj *GenericObject) DeepCopy() *GenericObject {
 	result.Spec = *obj.Spec.DeepCopy()
 	result.Status = *obj.Status.DeepCopy()
 	return result
+}
+
+func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) error {
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+
+	return c.Create(ctx, unstructuredObj)
+}
+
+// GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
+func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*GenericObject, error) {
+	unstructuredObj := &unstructured.Unstructured{}
+	unstructuredObj.SetGroupVersionKind(gvk)
+
+	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
+		return nil, err
+	}
+
+	return UnstructuredToObject(unstructuredObj)
+}
+
+func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) error {
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+
+	if err = c.Update(ctx, unstructuredObj); err != nil {
+		return err
+	} else {
+		result, err := UnstructuredToObject(unstructuredObj)
+		if err != nil {
+			return err
+		}
+		*obj = *result
+	}
+
+	return nil
+}
+
+// ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]*GenericObject, error) {
+	unstructuredList := &unstructured.UnstructuredList{}
+	unstructuredList.SetGroupVersionKind(gvk)
+
+	if err := c.List(ctx, unstructuredList, opts...); err != nil {
+		return nil, err
+	}
+
+	objects := make([]*GenericObject, len(unstructuredList.Items))
+	for i, unstructuredObj := range unstructuredList.Items {
+		obj, err := UnstructuredToObject(&unstructuredObj)
+		if err != nil {
+			return nil, err
+		}
+		objects[i] = obj
+	}
+
+	return objects, nil
 }

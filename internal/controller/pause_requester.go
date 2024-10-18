@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -27,7 +28,7 @@ type PauseRequester interface {
 
 // process a child object, pausing pipelines or resuming pipelines if needed
 // return:
-// - true if needs a requeue
+// - true if done with PPND
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
 func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, rollout client.Object, pauseRequester PauseRequester,
 	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
@@ -43,7 +44,7 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 		// request pause if we haven't already
 		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rollout, true)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error requesting Pipelines pause: %w", err)
 		}
 		// If we need to update the child, pause the pipelines
 		// Don't do this yet if we just made a request - it's too soon for anything to have happened
@@ -52,30 +53,30 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 			// check if the pipelines are all paused (or can't be paused)
 			allPaused, err := areAllPipelinesPausedOrWontPause(ctx, k8sclient, pauseRequester, rolloutNamespace, rolloutName)
 			if err != nil {
-				return false, err
+				return false, fmt.Errorf("error checking if all Pipelines are paused: %w", err)
 			}
 			if allPaused {
 				numaLogger.Infof("confirmed all Pipelines have paused (or can't pause) so %s can safely update", pauseRequester.getChildTypeString())
 				err = updateFunc()
 				if err != nil {
-					return false, err
+					return false, fmt.Errorf("error updating %s: %w", pauseRequester.getChildTypeString(), err)
 				}
 			} else {
 				numaLogger.Debugf("not all Pipelines have paused")
 			}
 
 		}
-		return true, nil
+		return false, nil
 
 	} else {
 		// remove any pause requirement if necessary
 		_, err := requestPipelinesPause(ctx, pauseRequester, rollout, false)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error requesting Pipelines resume: %w", err)
 		}
 	}
 
-	return false, nil
+	return true, nil
 }
 
 // request that the Pipelines corresponding to this Rollout pause
@@ -90,7 +91,7 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		numaLogger.Infof("updated pause request = %t", pause)
 		pipelines, err := pauseRequester.getPipelineList(ctx, rollout.GetNamespace(), rollout.GetName())
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error getting Pipelines: %w", err)
 		}
 		for _, pipeline := range pipelines {
 			pipelineRollout := getPipelineRolloutName(pipeline.Name)
@@ -98,8 +99,10 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		}
 	}
 
-	err := pauseRequester.markRolloutPaused(ctx, rollout, pause)
-	return updated, err
+	if err := pauseRequester.markRolloutPaused(ctx, rollout, pause); err != nil {
+		return updated, fmt.Errorf("error marking %s paused: %w", pauseRequester.getChildTypeString(), err)
+	}
+	return updated, nil
 }
 
 // check if all Pipelines corresponding to this Rollout have paused or are otherwise not pausible (contract with Numaflow is that this is Pipelines which are "Failed")

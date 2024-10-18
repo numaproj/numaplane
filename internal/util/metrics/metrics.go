@@ -9,8 +9,8 @@ import (
 )
 
 type CustomMetrics struct {
-	// PipelinesHealth is the gauge for the health of pipelines.
-	PipelinesHealth *prometheus.GaugeVec
+	// PipelinesRolloutHealth is the gauge for the health of pipelines.
+	PipelinesRolloutHealth *prometheus.GaugeVec
 	// PipelinesRunning is the gauge for the number of running pipelines.
 	PipelinesRunning *prometheus.GaugeVec
 	// PipelineCounterMap contains the information of all running pipelines.
@@ -21,8 +21,8 @@ type CustomMetrics struct {
 	PipelineRolloutQueueLength *prometheus.GaugeVec
 	// PipelinesSynced is the counter for the total number of pipelines synced.
 	PipelinesSynced *prometheus.CounterVec
-	// ISBServicesHealth is the gauge for the health of ISB services.
-	ISBServicesHealth *prometheus.GaugeVec
+	// ISBServicesRolloutHealth is the gauge for the health of ISB services.
+	ISBServicesRolloutHealth *prometheus.GaugeVec
 	// ISBServicesRunning is the gauge for the number of running ISB services.
 	ISBServicesRunning *prometheus.GaugeVec
 	// ISBServiceCounterMap contains the information of all running ISB services.
@@ -31,8 +31,8 @@ type CustomMetrics struct {
 	ISBServicesSyncFailed *prometheus.CounterVec
 	// ISBServicesSynced is the counter for the total number of ISB service synced.
 	ISBServicesSynced *prometheus.CounterVec
-	// MonoVerticesHealth is the gauge for the health of monovertices.
-	MonoVerticesHealth *prometheus.GaugeVec
+	// MonoVerticesRolloutHealth is the gauge for the health of monovertices.
+	MonoVerticesRolloutHealth *prometheus.GaugeVec
 	// MonoVerticesRunning is the gauge for the number of running monovertices.
 	MonoVerticesRunning *prometheus.GaugeVec
 	// MonoVerticesCounterMap contains the information of all running monovertices.
@@ -41,8 +41,8 @@ type CustomMetrics struct {
 	MonoVerticesSyncFailed *prometheus.CounterVec
 	// MonoVerticesSynced is the counter for the total number of monovertices synced.
 	MonoVerticesSynced *prometheus.CounterVec
-	// NumaflowControllersHealth is the gauge for the health of Numaflow controller.
-	NumaflowControllersHealth *prometheus.GaugeVec
+	// NumaflowControllersRolloutHealth is the gauge for the health of Numaflow controller.
+	NumaflowControllersRolloutHealth *prometheus.GaugeVec
 	// NumaflowControllerRunning is the gauge for the number of running numaflow controllers with a specific version.
 	NumaflowControllerRunning *prometheus.GaugeVec
 	// NumaflowControllersSyncFailed is the counter for the total number of Numaflow controller syncing failed.
@@ -89,29 +89,29 @@ var (
 	isbServiceLock sync.Mutex
 	monoVertexLock sync.Mutex
 
-	// pipelinesHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
-	pipelinesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
+	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_pipeline_rollout_health",
-		Help:        "A metric to indicate whether the pipeline is healthy. '1' means healthy, '0' means unhealthy",
+		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelPipeline})
 
-	// isbServicesHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
-	isbServicesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// isbServicesRolloutHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
+	isbServicesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_isb_services_rollout_health",
 		Help:        "A metric to indicate whether the isb services rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelISBService})
 
-	// numaflowControllersHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective).
-	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// numaflowControllersRolloutHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective).
+	numaflowControllersRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_controller_rollout_health",
 		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelNumaflowController})
 
-	// monoVerticesHealth indicates whether the mono vertices are healthy (from k8s resource perspective).
-	monoVerticesHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// monoVerticesRolloutHealth indicates whether the mono vertices are healthy (from k8s resource perspective).
+	monoVerticesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_monovertex_rollout_health",
 		Help:        "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
@@ -128,7 +128,7 @@ var (
 		Name:        "numaflow_pipeline_paused_seconds",
 		Help:        "Duration a pipeline was paused for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelName})
+	}, []string{LabelNamespace, LabelName})
 
 	// pipelinesSynced Check the total number of pipeline synced
 	pipelinesSynced = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -273,31 +273,31 @@ var (
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics() *CustomMetrics {
-	metrics.Registry.MustRegister(pipelinesHealth, pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength,
-		isbServicesHealth, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
-		monoVerticesHealth, monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
-		numaflowControllersHealth, numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
+	metrics.Registry.MustRegister(pipelinesRolloutHealth, pipelinesRunning, pipelinesSynced, pipelinesSyncFailed, pipelineRolloutQueueLength,
+		isbServicesRolloutHealth, isbServicesRunning, isbServicesSynced, isbServicesSyncFailed,
+		monoVerticesRolloutHealth, monoVerticesRunning, monoVerticesSynced, monoVerticesSyncFailed,
+		numaflowControllersRolloutHealth, numaflowControllerRunning, numaflowControllersSynced, numaflowControllersSyncFailed, reconciliationDuration, kubeRequestCounter,
 		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
 		pipelinePausedSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
 
 	return &CustomMetrics{
-		PipelinesHealth:                           pipelinesHealth,
+		PipelinesRolloutHealth:                    pipelinesRolloutHealth,
 		PipelinesRunning:                          pipelinesRunning,
 		PipelineCounterMap:                        make(map[string]map[string]struct{}),
 		PipelinesSynced:                           pipelinesSynced,
 		PipelinesSyncFailed:                       pipelinesSyncFailed,
 		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
-		ISBServicesHealth:                         isbServicesHealth,
+		ISBServicesRolloutHealth:                  isbServicesRolloutHealth,
 		ISBServicesRunning:                        isbServicesRunning,
 		ISBServiceCounterMap:                      make(map[string]map[string]struct{}),
 		ISBServicesSynced:                         isbServicesSynced,
 		ISBServicesSyncFailed:                     isbServicesSyncFailed,
-		MonoVerticesHealth:                        monoVerticesHealth,
+		MonoVerticesRolloutHealth:                 monoVerticesRolloutHealth,
 		MonoVerticesRunning:                       monoVerticesRunning,
 		MonoVerticesCounterMap:                    make(map[string]map[string]struct{}),
 		MonoVerticesSynced:                        monoVerticesSynced,
 		MonoVerticesSyncFailed:                    monoVerticesSyncFailed,
-		NumaflowControllersHealth:                 numaflowControllersHealth,
+		NumaflowControllersRolloutHealth:          numaflowControllersRolloutHealth,
 		NumaflowControllerRunning:                 numaflowControllerRunning,
 		NumaflowControllersSynced:                 numaflowControllersSynced,
 		NumaflowControllersSyncFailed:             numaflowControllersSyncFailed,

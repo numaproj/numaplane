@@ -228,9 +228,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	defer func() {
 		if controllerRollout.Status.IsHealthy() {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(1)
+			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(1)
 		} else {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(0)
+			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(controllerRollout.Namespace, controllerRollout.Name).Set(0)
 		}
 	}()
 
@@ -246,7 +246,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
 		r.customMetrics.NumaflowControllerRunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.NumaflowControllersHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
+		r.customMetrics.NumaflowControllersRolloutHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -292,7 +292,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		needsRequeue, err := processChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
+		done, err := processChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
@@ -309,7 +309,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if needsRequeue {
+		if !done {
 			return common.DefaultDelayedRequeue, nil
 		}
 
@@ -343,7 +343,7 @@ func (r *NumaflowControllerRolloutReconciler) getChildTypeString() string {
 }
 
 func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, _ string) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyPipelineRolloutForPipeline, "")
+	return kubernetes.ListLiveResource(ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyPipelineRolloutForPipeline, "")
 }
 
 func (r *NumaflowControllerRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
@@ -626,7 +626,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
 	}
 	imageNames := []string{DefaultNumaflowControllerImageName}
-	if c.NumaflowControllerImageNames != nil && len(c.NumaflowControllerImageNames) > 0 {
+	if len(c.NumaflowControllerImageNames) > 0 {
 		imageNames = c.NumaflowControllerImageNames
 	}
 

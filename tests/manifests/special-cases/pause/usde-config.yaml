@@ -10,3 +10,5 @@ data:
     - "lifecycle"
     - "limits"
     - "watermark"
+  isbServiceSpecExcludedPaths: |
+    - "jetstream.containerTemplate.resources.limits"

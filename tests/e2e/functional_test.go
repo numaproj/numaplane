@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -130,12 +131,32 @@ var (
 	}
 
 	volSize, _     = apiresource.ParseQuantity("10Mi")
+	memLimit, _    = apiresource.ParseQuantity("20Mi")
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: volSize},
+				},
+			},
+		},
+	}
+	ISBServiceSpecExcludedField = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: "2.9.8",
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &volSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+				},
 			},
 		},
 	}
@@ -502,6 +523,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		if dataLossPrevention == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
 
@@ -515,6 +537,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				}
 				return true
 			}, testTimeout).Should(BeTrue())
+
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
@@ -526,6 +549,49 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineRunning(Namespace, pipelineName, 3)
+
+	})
+
+	It("Should update the child ISBService with an excluded field", func() {
+
+		// new ISBService spec
+		rawSpec, err := json.Marshal(ISBServiceSpecExcludedField)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+			rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+
+		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+		verifyNotPausing := func() bool {
+			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
+			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+				return false
+			}
+			if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+				return false
+			}
+			return true
+		}
+
+		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == memLimit
+		})
+
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
+
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+
 		verifyPipelineRunning(Namespace, pipelineName, 3)
 
 	})
