@@ -12,3 +12,4 @@ data:
     - "watermark"
   isbServiceSpecExcludedPaths: |
     - "jetstream.containerTemplate.resources.limits"
+    - "jetstream.settings"

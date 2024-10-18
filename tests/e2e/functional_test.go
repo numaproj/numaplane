@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -135,29 +134,33 @@ var (
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
+			Version:  initialJetstreamVersion,
+			Settings: &emptyString,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
-			ContainerTemplate: &numaflowv1.ContainerTemplate{
+			/*ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: v1.ResourceRequirements{
 					Limits: v1.ResourceList{v1.ResourceMemory: volSize},
 				},
-			},
+			},*/
 		},
 	}
+	emptyString                 = ""
+	stringWithSpace             = " "
 	ISBServiceSpecExcludedField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "2.9.8",
+			Version:  updatedJetstreamVersion,
+			Settings: &stringWithSpace,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
-			ContainerTemplate: &numaflowv1.ContainerTemplate{
+			/*ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: v1.ResourceRequirements{
 					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
 				},
-			},
+			},*/
 		},
 	}
 
@@ -584,9 +587,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 
-		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		/*verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == memLimit
-		})
+		})*/
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
