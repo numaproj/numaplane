@@ -26,7 +26,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithProgressive(
 	}
 
 	// Get the object to see if it exists
-	_, err = kubernetes.GetCR(ctx, r.restConfig, newUpgradingPipelineDef, "pipelines")
+	_, err = kubernetes.GetLiveResource(ctx, r.restConfig, newUpgradingPipelineDef, "pipelines")
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -79,7 +79,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	}
 
 	// Get existing upgrading Pipeline
-	existingUpgradingPipelineDef, err := kubernetes.GetCR(ctx, r.restConfig, pipelineDef, "pipelines")
+	existingUpgradingPipelineDef, err := kubernetes.GetLiveResource(ctx, r.restConfig, pipelineDef, "pipelines")
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("pipelineDefinition", *pipelineDef).
@@ -190,7 +190,7 @@ func (r *PipelineRolloutReconciler) getRecyclablePipelines(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) ([]*kubernetes.GenericObject, error) {
-	return kubernetes.ListCR(
+	return kubernetes.ListLiveResource(
 		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		pipelineRollout.Namespace, fmt.Sprintf(
 			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
