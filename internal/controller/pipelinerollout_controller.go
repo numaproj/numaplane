@@ -845,6 +845,18 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	}, nil
 }
 
+func (r *PipelineRolloutReconciler) createBaseChild(pipelineRollout *apiv1.PipelineRollout, name string) (*kubernetes.GenericObject, error) {
+	return r.makePipelineDefinition(pipelineRollout, name, map[string]string{})
+}
+
+func (r *PipelineRolloutReconciler) addLabel(pipelineRollout *apiv1.PipelineRollout, key string, value string) {
+	pipelineRollout.ObjectMeta.Labels[key] = value
+}
+
+func (r *PipelineRolloutReconciler) removeLabel(pipelineRollout *apiv1.PipelineRollout, key string) {
+	delete(pipelineRollout.ObjectMeta.Labels, key)
+}
+
 // getPipelineRolloutName gets the PipelineRollout name from the pipeline
 // by locating the last index of '-' and trimming the suffix.
 func getPipelineRolloutName(pipeline string) string {
