@@ -524,7 +524,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
-			done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+			//done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+			done, err := processResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, r, r.restConfig)
 			if err != nil {
 				return err
 			}
@@ -542,7 +543,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 		// When progressive is the default strategy, clean up recyclable pipeline when drained
 		if userPreferredStrategy == config.ProgressiveStrategyID {
-			err = r.cleanUpPipelines(ctx, pipelineRollout)
+			//err = r.cleanUpPipelines(ctx, pipelineRollout)
+			err = garbageCollectChildren(ctx, pipelineRollout, r, r.restConfig)
 			if err != nil {
 				return err
 			}
@@ -684,23 +686,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return nil
-}
-
-// pipelineSpecNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
-	if err != nil {
-		return false, err
-	}
-	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
-	if err != nil {
-		return false, err
-	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
-
-	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
 }
 
 // remove 'lifecycle.desiredPhase' key/value pair from Pipeline spec
@@ -845,19 +830,64 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	}, nil
 }
 
-func (r *PipelineRolloutReconciler) createBaseChild(pipelineRollout RolloutObject, name string) (*kubernetes.GenericObject, error) {
-	pipelineRolloutResolved := pipelineRollout.(*apiv1.PipelineRollout)
-	return r.makePipelineDefinition(pipelineRolloutResolved, name, map[string]string{})
+// the following functions enable PipelineRolloutReconciler to implement progressiveController interface
+func (r *PipelineRolloutReconciler) listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	return kubernetes.ListLiveResource(
+		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		pipelineRollout.Namespace, labelSelector, fieldSelector)
 }
 
-//func (r *PipelineRolloutReconciler) listChildren()
-
-func (r *PipelineRolloutReconciler) addLabel(pipelineRollout *apiv1.PipelineRollout, key string, value string) {
-	pipelineRollout.ObjectMeta.Labels[key] = value
+func (r *PipelineRolloutReconciler) createBaseChild(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	return r.makePipelineDefinition(pipelineRollout, name, map[string]string{})
 }
 
-func (r *PipelineRolloutReconciler) removeLabel(pipelineRollout *apiv1.PipelineRollout, key string) {
-	delete(pipelineRollout.ObjectMeta.Labels, key)
+func (r *PipelineRolloutReconciler) getNameCount(rolloutObject RolloutObject) (int32, bool) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	if pipelineRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *pipelineRollout.Status.NameCount, true
+	}
+}
+
+func (r *PipelineRolloutReconciler) setNameCount(rolloutObject RolloutObject, nameCount int32) error {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	pipelineRollout.Status.NameCount = &nameCount
+	// TODO: do we need to update this in K8S?
+	return nil
+}
+
+func (r *PipelineRolloutReconciler) childIsDrained(ctx context.Context, pipelineDef *kubernetes.GenericObject) (bool, error) {
+	pipelineStatus, err := parsePipelineStatus(pipelineDef)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
+	}
+	pipelinePhase := pipelineStatus.Phase
+
+	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+}
+
+func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *kubernetes.GenericObject) error {
+	return r.setPipelineLifecycle(ctx, true, pipeline)
+}
+
+// childNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func (r *PipelineRolloutReconciler) childNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
+	if err != nil {
+		return false, err
+	}
+	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+
+	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
 }
 
 // getPipelineRolloutName gets the PipelineRollout name from the pipeline

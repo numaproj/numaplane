@@ -13,25 +13,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
-/*
-type controller[T apiv1.MonoVertexRollout | apiv1.PipelineRollout] interface {
-	listChildren(ctx context.Context, rolloutObject *T, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error)
-
-	createBaseChild(rolloutObject *T, name string) (*kubernetes.GenericObject, error)
-
-	updateMetadata(f func(*metav1.TypeMeta), rolloutObject *T)
-
-	getNameCount(rolloutObject *T) (int32, bool)
-
-	// don't only set it in memory but also update K8S
-	setNameCount(rolloutObject *T, nameCount int32) error
-
-	//addLabel(rolloutObject *T, key string, value string) *T
-
-	//removeLabel(rolloutObject *T, key string) *T
-}*/
-
-type controller interface {
+type progressiveController interface {
 	listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error)
 
 	createBaseChild(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error)
@@ -40,20 +22,16 @@ type controller interface {
 
 	// don't only set it in memory but also update K8S
 	setNameCount(rolloutObject RolloutObject, nameCount int32) error
+
+	childIsDrained(ctx context.Context, child *kubernetes.GenericObject) (bool, error)
+
+	drain(ctx context.Context, child *kubernetes.GenericObject) error
+
+	childNeedsUpdating(ctx context.Context, existingChild *kubernetes.GenericObject, newChildDefinition *kubernetes.GenericObject) (bool, error)
 }
 
-/*
-type progressiveRolloutObject interface {
-	rolloutObject
-
-
-}*/
-
-// func processResourceWithProgressive[T apiv1.MonoVertexRollout | apiv1.PipelineRollout](ctx context.Context, rolloutObject *T,
-//
-//	existingChildObject *kubernetes.GenericObject, controller controller[T]) (bool, error) {
 func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutObject,
-	existingChildObject *kubernetes.GenericObject, controller controller, restConfig *rest.Config) (bool, error) {
+	existingChildObject *kubernetes.GenericObject, controller progressiveController, restConfig *rest.Config) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -86,7 +64,7 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 	return done, nil
 }
 
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObject, controller controller) (*kubernetes.GenericObject, error) {
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (*kubernetes.GenericObject, error) {
 	childName, err := getChildName(ctx, rolloutObject, controller, string(common.LabelValueUpgradeInProgress))
 	if err != nil {
 		return nil, err
@@ -101,7 +79,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObj
 	return upgradingChild, nil
 }
 
-func getChildName(ctx context.Context, rolloutObject RolloutObject, controller controller, upgradeState string) (string, error) {
+func getChildName(ctx context.Context, rolloutObject RolloutObject, controller progressiveController, upgradeState string) (string, error) {
 	children, err := controller.listChildren(ctx, rolloutObject, fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
 		common.LabelKeyUpgradeState, upgradeState,
@@ -123,7 +101,7 @@ func getChildName(ctx context.Context, rolloutObject RolloutObject, controller c
 }
 
 // func calculateChildNameSuffix[T apiv1.MonoVertexRollout | apiv1.PipelineRollout](ctx context.Context, rolloutObject *T, controller controller[T]) (string, error) {
-func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, controller controller) (string, error) {
+func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (string, error) {
 	currentNameCount, found := controller.getNameCount(rolloutObject)
 	if !found {
 		err := controller.setNameCount(rolloutObject, int32(0))
@@ -144,22 +122,22 @@ func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, 
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject RolloutObject,
-	controller controller,
+	controller progressiveController,
 	currentPromotedChildDef *kubernetes.GenericObject,
 	restConfig *rest.Config,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	upgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+	desiredUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
 	if err != nil {
 		return false, err
 	}
 
 	// Get existing upgrading child
-	upgradingObject, err := kubernetes.GetLiveResource(ctx, restConfig, upgradingChildDef, rolloutObject.GetPluralName())
+	upgradingObject, err := kubernetes.GetLiveResource(ctx, restConfig, desiredUpgradingChildDef, rolloutObject.GetPluralName())
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.WithValues("childObjectDefinition", *upgradingChildDef).
+			numaLogger.WithValues("childObjectDefinition", *desiredUpgradingChildDef).
 				Warn("Child not found. Unable to process status during this reconciliation.")
 		} else {
 			return false, fmt.Errorf("error getting Child for status processing: %v", err)
@@ -205,12 +183,27 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkProgressiveUpgradeSucceeded("New Child Object Running", rolloutObject.GetObjectMeta().Generation)
 		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
 
-		if err := controller.Drain(currentPromotedChildDef); err != nil {
+		if err := controller.drain(ctx, currentPromotedChildDef); err != nil {
 			return false, err
 		}
 		return true, nil
 	default:
-		// TODO: complete this...
+		// Ensure the latest spec is applied
+		// TODO: this needs revisiting - a race condition means we could deem this "Running" prior to latest version
+		// being reconciled
+
+		childNeedsToUpdate, err := controller.childNeedsUpdating(ctx, upgradingObject, desiredUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+		if childNeedsToUpdate {
+			err = kubernetes.UpdateCR(ctx, restConfig, desiredUpgradingChildDef, "pipelines")
+			if err != nil {
+				return false, err
+			}
+		}
+		//continue (re-enqueue)
+		return false, nil
 	}
 }
 
@@ -224,4 +217,53 @@ func isNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 		}
 	}
 	return true
+}
+
+func garbageCollectChildren(
+	ctx context.Context,
+	rolloutObject RolloutObject,
+	controller progressiveController,
+	restConfig *rest.Config,
+) error {
+	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, controller)
+	if err != nil {
+		return err
+	}
+
+	for _, recyclableChild := range recyclableObjects {
+		err = recycle(ctx, recyclableChild, controller, restConfig)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func getRecyclableObjects(
+	ctx context.Context,
+	rolloutObject RolloutObject,
+	controller progressiveController,
+) ([]*kubernetes.GenericObject, error) {
+	return controller.listChildren(ctx, rolloutObject, fmt.Sprintf(
+		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
+		common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
+	), "")
+}
+
+func recycle(ctx context.Context,
+	childObject *kubernetes.GenericObject,
+	controller progressiveController,
+	restConfig *rest.Config,
+) error {
+	isDrained, err := controller.childIsDrained(ctx, childObject)
+	if err != nil {
+		return err
+	}
+	if isDrained {
+		err = kubernetes.DeleteCR(ctx, restConfig, childObject, "pipelines")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+
 }

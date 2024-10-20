@@ -133,7 +133,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		return true, nil
 	} else {
 		// Ensure the latest pipeline spec is applied
-		pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingUpgradingPipelineDef, pipelineDef)
+		pipelineNeedsToUpdate, err := r.childNeedsUpdating(ctx, existingUpgradingPipelineDef, pipelineDef)
 		if err != nil {
 			return false, err
 		}

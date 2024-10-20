@@ -31,7 +31,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
-	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	pipelineNeedsToUpdate, err := r.childNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, err
 	}
