@@ -99,11 +99,11 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	if pipelinePhase == numaflowv1.PipelinePhaseFailed {
 		// Mark the failed new pipeline recyclable.
 		// TODO: pause the failed new pipeline so it can be drained.
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
+		err = r.updatePipelineUpgradeLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
-		pipelineRollout.Status.MarkPipelineProgressiveUpgradeFailed("New Pipeline Failed", pipelineRollout.Generation)
+		pipelineRollout.Status.MarkProgressiveUpgradeFailed("New Pipeline Failed", pipelineRollout.Generation)
 		return false, nil
 	} else if pipelinePhase == numaflowv1.PipelinePhaseRunning {
 		if !isPipelineReady(pipelineStatus.Status) {
@@ -113,17 +113,17 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 		// Label the new pipeline as promoted and then remove the label from the old pipeline,
 		// since per PipelineRollout is reconciled only once at a time, we do not
 		// need to worry about consistency issue.
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradePromoted))
+		err = r.updatePipelineUpgradeLabel(ctx, r.restConfig, existingUpgradingPipelineDef, string(common.LabelValueUpgradePromoted))
 		if err != nil {
 			return false, err
 		}
 
-		err = r.updatePipelineLabel(ctx, r.restConfig, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
+		err = r.updatePipelineUpgradeLabel(ctx, r.restConfig, existingPipelineDef, string(common.LabelValueUpgradeRecyclable))
 		if err != nil {
 			return false, err
 		}
 
-		pipelineRollout.Status.MarkPipelineProgressiveUpgradeSucceeded("New Pipeline Running", pipelineRollout.Generation)
+		pipelineRollout.Status.MarkProgressiveUpgradeSucceeded("New Pipeline Running", pipelineRollout.Generation)
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 
 		// Pause old pipeline
@@ -148,7 +148,7 @@ func (r *PipelineRolloutReconciler) processUpgradingPipelineStatus(
 	}
 }
 
-func (r *PipelineRolloutReconciler) updatePipelineLabel(
+func (r *PipelineRolloutReconciler) updatePipelineUpgradeLabel(
 	ctx context.Context,
 	restConfig *rest.Config,
 	pipeline *kubernetes.GenericObject,
