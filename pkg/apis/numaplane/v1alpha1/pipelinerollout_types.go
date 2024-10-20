@@ -84,6 +84,22 @@ type PipelineRolloutList struct {
 	Items           []PipelineRollout `json:"items"`
 }
 
+// the following functions implement the rolloutObject interface:
+func (pipelineRollout *PipelineRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &pipelineRollout.TypeMeta
+}
+
+func (pipelineRollout *PipelineRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &pipelineRollout.ObjectMeta
+}
+
+func (pipelineRollout *PipelineRollout) GetStatus() *Status {
+	return &pipelineRollout.Status.Status
+}
+func (pipelineRollout *PipelineRollout) GetPluralName() string {
+	return "pipelines"
+}
+
 func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }

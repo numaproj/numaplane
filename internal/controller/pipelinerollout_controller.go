@@ -845,9 +845,12 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	}, nil
 }
 
-func (r *PipelineRolloutReconciler) createBaseChild(pipelineRollout *apiv1.PipelineRollout, name string) (*kubernetes.GenericObject, error) {
-	return r.makePipelineDefinition(pipelineRollout, name, map[string]string{})
+func (r *PipelineRolloutReconciler) createBaseChild(pipelineRollout RolloutObject, name string) (*kubernetes.GenericObject, error) {
+	pipelineRolloutResolved := pipelineRollout.(*apiv1.PipelineRollout)
+	return r.makePipelineDefinition(pipelineRolloutResolved, name, map[string]string{})
 }
+
+//func (r *PipelineRolloutReconciler) listChildren()
 
 func (r *PipelineRolloutReconciler) addLabel(pipelineRollout *apiv1.PipelineRollout, key string, value string) {
 	pipelineRollout.ObjectMeta.Labels[key] = value
