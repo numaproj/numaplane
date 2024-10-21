@@ -37,13 +37,13 @@ GCFLAGS="all=-N -l"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
 
-TEST_BASE_MANIFEST_DIR ?= tests/manifests/default
+TEST_MANIFEST_DIR ?= tests/manifests/default
 TEST_PAUSE_MANIFEST_DIR ?= tests/manifests/special-cases/pause 
 
 ifeq ($(PPND), true)
 TEST_MANIFEST_DIR := $(TEST_PAUSE_MANIFEST_DIR)
-else
-TEST_MANIFEST_DIR := $(TEST_BASE_MANIFEST_DIR)
+#else
+#TEST_MANIFEST_DIR := $(TEST_BASE_MANIFEST_DIR)
 endif
 
 

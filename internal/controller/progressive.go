@@ -30,6 +30,7 @@ type progressiveController interface {
 	childNeedsUpdating(ctx context.Context, existingChild *kubernetes.GenericObject, newChildDefinition *kubernetes.GenericObject) (bool, error)
 }
 
+// return whether we're done, and error if any
 func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutObject,
 	existingChildObject *kubernetes.GenericObject, controller progressiveController, restConfig *rest.Config) (bool, error) {
 
@@ -65,10 +66,14 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 }
 
 func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (*kubernetes.GenericObject, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
 	childName, err := getChildName(ctx, rolloutObject, controller, string(common.LabelValueUpgradeInProgress))
 	if err != nil {
 		return nil, err
 	}
+	numaLogger.Debugf("Upgrading child: %s", childName)
 	upgradingChild, err := controller.createBaseChild(rolloutObject, childName)
 	if err != nil {
 		return nil, err
@@ -119,6 +124,7 @@ func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, 
 	return "-" + fmt.Sprint(currentNameCount), nil
 }
 
+// return whether we're done, and error if any
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject RolloutObject,
@@ -147,6 +153,8 @@ func processUpgradingChild(
 	if err != nil {
 		return false, err
 	}
+
+	numaLogger.Debugf("Upgrading child %s/%s is in phase %s", upgradingObject.Namespace, upgradingObject.Name, upgradingObjectStatus.Phase)
 
 	switch string(upgradingObjectStatus.Phase) {
 	case "Failed":
@@ -184,7 +192,7 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
 
 		if err := controller.drain(ctx, currentPromotedChildDef); err != nil {
-			return false, err
+			return false, err // TODO: if this errors out, then we return false, but due to "if pipelineNeedsToUpdate" check in pipelinerollout_controller.go, we never come back here - can we move call to "drain()" into the garbage collection logic?
 		}
 		return true, nil
 	default:
@@ -197,6 +205,8 @@ func processUpgradingChild(
 			return false, err
 		}
 		if childNeedsToUpdate {
+			numaLogger.Debugf("Upgrading child %s/%s has a new update", upgradingObject.Namespace, upgradingObject.Name)
+
 			err = kubernetes.UpdateCR(ctx, restConfig, desiredUpgradingChildDef, "pipelines")
 			if err != nil {
 				return false, err

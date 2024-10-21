@@ -467,6 +467,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
 	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, pipelineRollout)
+	numaLogger.Debugf("current inProgressStrategy=%s", inProgressStrategy)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
@@ -523,8 +524,9 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 	case apiv1.UpgradeStrategyProgressive:
-		if pipelineNeedsToUpdate {
+		if pipelineNeedsToUpdate { // TODO: this seems to be necessary to prevent infinite new pipelines from being created - why?
 			//done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+			numaLogger.Debug("processing pipeline with Progressive")
 			done, err := processResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, r, r.restConfig)
 			if err != nil {
 				return err
