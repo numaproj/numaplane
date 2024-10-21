@@ -347,6 +347,77 @@ func Test_getControllerDeploymentVersion(t *testing.T) {
 
 }
 
+func Test_resolveManifestTemplate(t *testing.T) {
+	defaultInstanceID := "123"
+
+	defaultRollout := &apiv1.NumaflowControllerRollout{
+		Spec: apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{
+				InstanceID: defaultInstanceID,
+			},
+		},
+	}
+
+	testCases := []struct {
+		name             string
+		manifest         string
+		rollout          *apiv1.NumaflowControllerRollout
+		expectedManifest string
+		expectedError    error
+	}{
+		{
+			name:             "nil rollout",
+			manifest:         "",
+			rollout:          nil,
+			expectedManifest: "",
+			expectedError:    nil,
+		}, {
+			name:             "empty manifest",
+			manifest:         "",
+			rollout:          defaultRollout,
+			expectedManifest: "",
+			expectedError:    nil,
+		}, {
+			name:             "manifest with invalid template field",
+			manifest:         "this is {{.Invalid}} invalid",
+			rollout:          defaultRollout,
+			expectedManifest: "",
+			expectedError:    fmt.Errorf("unable to apply information to manifest: template: manifest:1:10: executing \"manifest\" at <.Invalid>: can't evaluate field Invalid in type struct { InstanceID string }"),
+		}, {
+			name:     "manifest with valid template and rollout without instanceID",
+			manifest: "valid-template-no-id{{.InstanceID}}",
+			rollout: &apiv1.NumaflowControllerRollout{
+				Spec: apiv1.NumaflowControllerRolloutSpec{
+					Controller: apiv1.Controller{},
+				},
+			},
+			expectedManifest: "valid-template-no-id",
+			expectedError:    nil,
+		}, {
+			name:             "manifest with valid template and rollout with instanceID",
+			manifest:         "valid-template-no-id{{.InstanceID}}",
+			rollout:          defaultRollout,
+			expectedManifest: fmt.Sprintf("valid-template-no-id%s", defaultInstanceID),
+			expectedError:    nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			manifestBytes, err := resolveManifestTemplate(tc.manifest, tc.rollout)
+
+			if tc.expectedError != nil {
+				assert.Error(t, err)
+				assert.EqualError(t, err, tc.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.expectedManifest, string(manifestBytes))
+		})
+	}
+}
+
 func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()

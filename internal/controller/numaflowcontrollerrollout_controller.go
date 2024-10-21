@@ -454,6 +454,10 @@ func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bo
 }
 
 func resolveManifestTemplate(manifest string, rollout *apiv1.NumaflowControllerRollout) ([]byte, error) {
+	if rollout == nil {
+		return []byte(manifest), nil
+	}
+
 	tmpl, err := template.New("manifest").Parse(manifest)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse manifest: %v", err)
