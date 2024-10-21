@@ -102,6 +102,17 @@ spec:
                 description: InterStepBufferService includes the spec of InterStepBufferService
                   in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -279,6 +290,17 @@ spec:
               monoVertex:
                 description: MonoVertex includes the spec of MonoVertex in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -682,6 +704,17 @@ spec:
               pipeline:
                 description: Pipeline includes the spec of Pipeline in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true

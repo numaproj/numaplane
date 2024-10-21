@@ -28,7 +28,8 @@ type MonoVertexRolloutSpec struct {
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
 type MonoVertex struct {
-	Spec runtime.RawExtension `json:"spec"`
+	Metadata `json:"metadata,omitempty"`
+	Spec     runtime.RawExtension `json:"spec"`
 }
 
 // MonoVertexRolloutStatus defines the observed state of MonoVertexRollout

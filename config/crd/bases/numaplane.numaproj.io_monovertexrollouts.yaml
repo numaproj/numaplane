@@ -50,6 +50,17 @@ spec:
               monoVertex:
                 description: MonoVertex includes the spec of MonoVertex in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
