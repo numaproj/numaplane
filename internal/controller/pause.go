@@ -110,7 +110,7 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 
 func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, phase string) error {
 
-	err := withDesiredPhase(pipeline, phase)
+	/*err := withDesiredPhase(pipeline, phase)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,8 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 	err = kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
 	if err != nil {
 		return err
-	}
+	}*/
+	err := kubernetes.PatchCR(ctx, restConfig)
 	return nil
 
 }

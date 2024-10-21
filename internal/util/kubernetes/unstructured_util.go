@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 
 	"github.com/numaproj/numaplane/internal/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -279,6 +280,34 @@ func UpdateUnstructuredCR(
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
 	numaLogger.Verbosef("successfully updated resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
 	return nil
+}
+
+func PatchCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	jsonPatch string,
+	patchType k8stypes.PatchType,
+	gvr schema.GroupVersionResource,
+	namespace string,
+	name string,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will patch resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	// TODO: check if this returns a new resource version number, in which case we can pass the Object into this function and return the revised instead
+	_, err = client.Resource(gvr).Namespace(namespace).Patch(ctx, name, patchType, []byte(jsonPatch), metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to patch resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	}
+
+	numaLogger.Infof("successfully patched resource %s/%s of type %+v with json patch %s", namespace, name, gvr, jsonPatch)
+	return nil
+
 }
 
 func parseApiVersion(apiVersion string) (string, string, error) {
