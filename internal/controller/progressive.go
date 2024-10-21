@@ -6,6 +6,8 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -159,10 +161,8 @@ func processUpgradingChild(
 	switch string(upgradingObjectStatus.Phase) {
 	case "Failed":
 		// Mark the failed child recyclable.
-		// TODO: pause the failed new pipeline so it can be drained.
-		upgradingObject.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeRecyclable)
-		// TODO: use patch for all of these calls instead
-		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetChildPluralName())
+		// TODO: pause the failed new child so it can be drained.
+		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, upgradingObject, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -176,14 +176,12 @@ func processUpgradingChild(
 			return false, nil
 		}
 		// Label the new child as promoted and then remove the label from the old one
-		upgradingObject.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
-		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetChildPluralName())
+		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradePromoted, upgradingObject, rolloutObject)
 		if err != nil {
 			return false, err
 		}
 
-		currentPromotedChildDef.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeRecyclable)
-		err = kubernetes.UpdateCR(ctx, restConfig, currentPromotedChildDef, rolloutObject.GetChildPluralName())
+		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, currentPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -215,6 +213,13 @@ func processUpgradingChild(
 		//continue (re-enqueue)
 		return false, nil
 	}
+}
+
+// update the in-memory object with the new Label and patch the object in K8S
+func updateUpgradeState(ctx context.Context, restConfig *rest.Config, upgradeState common.UpgradeState, childObject *kubernetes.GenericObject, rolloutObject RolloutObject) error {
+	childObject.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
+	return kubernetes.PatchCR(ctx, restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: childObject.GroupVersionKind().Group, Version: childObject.GroupVersionKind().Version, Resource: rolloutObject.GetChildPluralName()}, childObject.Namespace, childObject.Name)
 }
 
 func isNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {

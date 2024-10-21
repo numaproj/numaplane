@@ -112,16 +112,6 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 
 func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, phase string) error {
 
-	/*err := withDesiredPhase(pipeline, phase)
-	if err != nil {
-		return err
-	}
-
-	err = kubernetes.UpdateCR(ctx, restConfig, pipeline, "pipelines")
-	if err != nil {
-		return err
-	}*/
-
 	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
 	return kubernetes.PatchCR(ctx, restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
 
