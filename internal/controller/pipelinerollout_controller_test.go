@@ -47,8 +47,8 @@ import (
 
 var (
 	defaultPipelineRolloutName = "pipelinerollout-test"
-	defaultPipelineName        = defaultPipelineRolloutName + "-0"
-	newPipelineName            = defaultPipelineRolloutName + "-1"
+	defaultPipelineName        = defaultPipelineRolloutName + "0"
+	newPipelineName            = defaultPipelineRolloutName + "1"
 
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
@@ -187,7 +187,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 		Context("When applying a PipelineRollout spec where the Pipeline with same name already exists", func() {
 			It("Should be automatically create another one with different naming", func() {
 				pipelineRolloutName := "test"
-				pipelineName := pipelineRolloutName + "-0"
+				pipelineName := pipelineRolloutName + "0"
 				Expect(k8sClient.Create(ctx, &numaflowv1.Pipeline{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: defaultNamespace,

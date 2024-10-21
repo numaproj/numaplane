@@ -39,7 +39,7 @@ import (
 const (
 	isbServiceRolloutName            = "test-isbservice-rollout"
 	pipelineRolloutName              = "test-pipeline-rollout"
-	pipelineName                     = "test-pipeline-rollout-0"
+	pipelineName                     = "test-pipeline-rollout0"
 	monoVertexRolloutName            = "test-monovertex-rollout"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.3.3-copy1"
