@@ -851,7 +851,7 @@ func (r *PipelineRolloutReconciler) listChildren(ctx context.Context, rolloutObj
 		pipelineRollout.Namespace, labelSelector, fieldSelector)
 }
 
-func (r *PipelineRolloutReconciler) createBaseChild(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
+func (r *PipelineRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineLabels, err := basePipelineLabels(pipelineRollout)
 	if err != nil {

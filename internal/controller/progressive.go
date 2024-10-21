@@ -18,7 +18,7 @@ import (
 type progressiveController interface {
 	listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error)
 
-	createBaseChild(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error)
+	createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error)
 
 	getNameCount(rolloutObject RolloutObject) (int32, bool)
 
@@ -76,7 +76,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObj
 		return nil, err
 	}
 	numaLogger.Debugf("Upgrading child: %s", childName)
-	upgradingChild, err := controller.createBaseChild(rolloutObject, childName)
+	upgradingChild, err := controller.createBaseChildDefinition(rolloutObject, childName)
 	if err != nil {
 		return nil, err
 	}
