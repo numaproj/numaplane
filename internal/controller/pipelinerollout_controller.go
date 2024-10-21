@@ -721,7 +721,7 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
-func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
+func basePipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
 	var pipelineSpec PipelineSpec
 	labelMapping := map[string]string{
 		common.LabelKeyISBServiceNameForPipeline: "default",
@@ -734,6 +734,16 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string)
 	}
 
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
+
+	return labelMapping, nil
+}
+
+// TODO: may not end up needing this one
+func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
+	labelMapping, err := basePipelineLabels(pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
 	labelMapping[common.LabelKeyUpgradeState] = upgradeState
 
 	return labelMapping, nil
@@ -797,15 +807,16 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*kubernetes.GenericObject, error) {
-	pipelineName, err := r.getPipelineName(ctx, pipelineRollout, string(common.LabelValueUpgradePromoted))
+	pipelineName, err := getChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
 	}
 
-	labels, err := pipelineLabels(pipelineRollout, string(common.LabelValueUpgradePromoted))
+	labels, err := basePipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
 	return r.makePipelineDefinition(pipelineRollout, pipelineName, labels)
 }
@@ -840,7 +851,11 @@ func (r *PipelineRolloutReconciler) listChildren(ctx context.Context, rolloutObj
 
 func (r *PipelineRolloutReconciler) createBaseChild(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	return r.makePipelineDefinition(pipelineRollout, name, map[string]string{})
+	pipelineLabels, err := basePipelineLabels(pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
+	return r.makePipelineDefinition(pipelineRollout, name, pipelineLabels)
 }
 
 func (r *PipelineRolloutReconciler) getNameCount(rolloutObject RolloutObject) (int32, bool) {
@@ -852,11 +867,11 @@ func (r *PipelineRolloutReconciler) getNameCount(rolloutObject RolloutObject) (i
 	}
 }
 
-func (r *PipelineRolloutReconciler) setNameCount(rolloutObject RolloutObject, nameCount int32) error {
+func (r *PipelineRolloutReconciler) updateNameCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineRollout.Status.NameCount = &nameCount
 	// TODO: do we need to update this in K8S?
-	return nil
+	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
 func (r *PipelineRolloutReconciler) childIsDrained(ctx context.Context, pipelineDef *kubernetes.GenericObject) (bool, error) {

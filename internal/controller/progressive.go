@@ -21,7 +21,7 @@ type progressiveController interface {
 	getNameCount(rolloutObject RolloutObject) (int32, bool)
 
 	// don't only set it in memory but also update K8S
-	setNameCount(rolloutObject RolloutObject, nameCount int32) error
+	updateNameCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error
 
 	childIsDrained(ctx context.Context, child *kubernetes.GenericObject) (bool, error)
 
@@ -41,18 +41,18 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 	}
 
 	// Get the object to see if it exists
-	_, err = kubernetes.GetLiveResource(ctx, restConfig, upgradingChild, rolloutObject.GetPluralName())
+	_, err = kubernetes.GetLiveResource(ctx, restConfig, upgradingChild, rolloutObject.GetChildPluralName())
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 
-			numaLogger.Debugf("Upgrading Pipeline %s/%s doesn't exist so creating", upgradingChild.Namespace, upgradingChild.Name)
-			err = kubernetes.CreateCR(ctx, restConfig, upgradingChild, rolloutObject.GetPluralName())
+			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", upgradingChild.Kind, upgradingChild.Namespace, upgradingChild.Name)
+			err = kubernetes.CreateCR(ctx, restConfig, upgradingChild, rolloutObject.GetChildPluralName())
 			if err != nil {
 				return false, err
 			}
 		} else {
-			return false, fmt.Errorf("error getting Pipeline: %v", err)
+			return false, fmt.Errorf("error getting %s: %v", upgradingChild.Kind, err)
 		}
 	}
 
@@ -100,18 +100,18 @@ func getChildName(ctx context.Context, rolloutObject RolloutObject, controller p
 	return children[0].Name, nil
 }
 
-// func calculateChildNameSuffix[T apiv1.MonoVertexRollout | apiv1.PipelineRollout](ctx context.Context, rolloutObject *T, controller controller[T]) (string, error) {
 func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (string, error) {
 	currentNameCount, found := controller.getNameCount(rolloutObject)
 	if !found {
-		err := controller.setNameCount(rolloutObject, int32(0))
+		currentNameCount = int32(0)
+		err := controller.updateNameCount(ctx, rolloutObject, int32(0))
 		if err != nil {
 			return "", err
 		}
 	}
 
 	// TODO: why in PipelineRolloutReconciler.calPipelineName() do we only update the Status subresource when it's 0?
-	err := controller.setNameCount(rolloutObject, currentNameCount+1)
+	err := controller.updateNameCount(ctx, rolloutObject, currentNameCount+1)
 	if err != nil {
 		return "", err
 	}
@@ -134,7 +134,7 @@ func processUpgradingChild(
 	}
 
 	// Get existing upgrading child
-	upgradingObject, err := kubernetes.GetLiveResource(ctx, restConfig, desiredUpgradingChildDef, rolloutObject.GetPluralName())
+	upgradingObject, err := kubernetes.GetLiveResource(ctx, restConfig, desiredUpgradingChildDef, rolloutObject.GetChildPluralName())
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.WithValues("childObjectDefinition", *desiredUpgradingChildDef).
@@ -154,7 +154,7 @@ func processUpgradingChild(
 		// TODO: pause the failed new pipeline so it can be drained.
 		upgradingObject.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeRecyclable)
 		// TODO: use patch for all of these calls instead
-		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetPluralName())
+		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetChildPluralName())
 		if err != nil {
 			return false, err
 		}
@@ -169,13 +169,13 @@ func processUpgradingChild(
 		}
 		// Label the new child as promoted and then remove the label from the old one
 		upgradingObject.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
-		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetPluralName())
+		err := kubernetes.UpdateCR(ctx, restConfig, upgradingObject, rolloutObject.GetChildPluralName())
 		if err != nil {
 			return false, err
 		}
 
 		currentPromotedChildDef.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeRecyclable)
-		err = kubernetes.UpdateCR(ctx, restConfig, currentPromotedChildDef, rolloutObject.GetPluralName())
+		err = kubernetes.UpdateCR(ctx, restConfig, currentPromotedChildDef, rolloutObject.GetChildPluralName())
 		if err != nil {
 			return false, err
 		}

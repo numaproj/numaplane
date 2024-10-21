@@ -96,7 +96,7 @@ func (pipelineRollout *PipelineRollout) GetObjectMeta() *metav1.ObjectMeta {
 func (pipelineRollout *PipelineRollout) GetStatus() *Status {
 	return &pipelineRollout.Status.Status
 }
-func (pipelineRollout *PipelineRollout) GetPluralName() string {
+func (pipelineRollout *PipelineRollout) GetChildPluralName() string {
 	return "pipelines"
 }
 
