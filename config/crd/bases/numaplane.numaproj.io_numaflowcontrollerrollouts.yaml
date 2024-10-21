@@ -51,6 +51,8 @@ spec:
             properties:
               controller:
                 properties:
+                  instanceID:
+                    type: string
                   version:
                     type: string
                 required:
