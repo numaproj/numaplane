@@ -586,7 +586,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
 	}
 
-	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
+	numaLogger.Debugf("pipeline status: %v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
 	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
@@ -745,23 +745,6 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
 	pipelineRollout.Status.MarkFailed(err.Error())
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-}
-
-// calPipelineNameSuffix calculates the suffix of the pipeline name by utilizing the `NameCount`
-// field.
-func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
-	if pipelineRollout.Status.NameCount == nil {
-		pipelineRollout.Status.NameCount = new(int32)
-		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-		if statusUpdateErr != nil {
-			return "", statusUpdateErr
-		}
-	}
-
-	preNameCount := *pipelineRollout.Status.NameCount
-	*pipelineRollout.Status.NameCount++
-
-	return "-" + fmt.Sprint(preNameCount), nil
 }
 
 func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(

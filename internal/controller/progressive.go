@@ -145,14 +145,8 @@ func processUpgradingChild(
 
 	switch string(upgradingObjectStatus.Phase) {
 	case "Failed":
-		// Mark the failed child recyclable.
-		// TODO: pause the failed new child so it can be drained.
-		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, upgradingObject, rolloutObject)
-		if err != nil {
-			return false, err
-		}
 
-		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation)
+		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation) // TODO: consider that in order for user to be able to update this spec to fix it, we will need to allow that
 		return false, nil
 
 	case "Running":
