@@ -8,6 +8,8 @@ import (
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 )
 
@@ -119,8 +121,9 @@ func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *
 	if err != nil {
 		return err
 	}*/
-	err := kubernetes.PatchCR(ctx, restConfig)
-	return nil
+
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
+	return kubernetes.PatchCR(ctx, restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"}, pipeline.Namespace, pipeline.Name)
 
 }
 
