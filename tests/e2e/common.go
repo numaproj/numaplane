@@ -47,7 +47,7 @@ var (
 	wg     sync.WaitGroup
 	stopCh chan struct{}
 
-	dataLossPrevention   string
+	ppnd                 string
 	disableTestArtifacts string
 )
 

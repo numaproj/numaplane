@@ -76,7 +76,7 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, 4*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	if dataLossPrevention == "true" {
+	if ppnd == "true" {
 		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
