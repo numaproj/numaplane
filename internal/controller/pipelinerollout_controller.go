@@ -747,35 +747,6 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-// getPipelineName retrieves the name of the current running pipeline managed by the given
-// pipelineRollout through the `promoted` label. Unless no such pipeline exists, then
-// construct the name by calculating the suffix and appending to the PipelineRollout name.
-func (r *PipelineRolloutReconciler) getPipelineName(
-	ctx context.Context,
-	pipelineRollout *apiv1.PipelineRollout,
-	upgradeState string,
-) (string, error) {
-	pipelines, err := kubernetes.ListLiveResource(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
-		pipelineRollout.Namespace, fmt.Sprintf(
-			"%s=%s,%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name,
-			common.LabelKeyUpgradeState, upgradeState,
-		), "")
-	if err != nil {
-		return "", err
-	}
-	if len(pipelines) > 1 {
-		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
-	} else if len(pipelines) == 0 {
-		suffixName, err := r.calPipelineNameSuffix(ctx, pipelineRollout)
-		if err != nil {
-			return "", err
-		}
-		return pipelineRollout.Name + suffixName, nil
-	}
-	return pipelines[0].Name, nil
-}
-
 // calPipelineNameSuffix calculates the suffix of the pipeline name by utilizing the `NameCount`
 // field.
 func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
@@ -957,16 +928,4 @@ func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStat
 	}
 
 	return status, nil
-}
-
-func isPipelineReady(status numaflowv1.Status) bool {
-	if len(status.Conditions) == 0 {
-		return false
-	}
-	for _, c := range status.Conditions {
-		if c.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	return true
 }
