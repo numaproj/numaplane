@@ -282,36 +282,6 @@ func UpdateUnstructuredCR(
 	return nil
 }
 
-/*
-func PatchCR(
-	ctx context.Context,
-	restConfig *rest.Config,
-	jsonPatch string,
-	patchType k8stypes.PatchType,
-	gvr schema.GroupVersionResource,
-	namespace string,
-	name string,
-	obj *GenericObject, // TODO: don't include all of these redundant fields
-) error {
-	numaLogger := logger.FromContext(ctx)
-	numaLogger.Debugf("will patch resource %s/%s of type %+v", namespace, name, gvr)
-
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %v", err)
-	}
-
-	result, err := client.Resource(gvr).Namespace(namespace).Patch(ctx, name, patchType, []byte(jsonPatch), metav1.PatchOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to patch resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
-	}
-	fmt.Printf("deletethis: original spec=%s, new spec=%s\n", obj.ResourceVersion, result.Object)
-
-	numaLogger.Infof("successfully patched resource %s/%s of type %+v with json patch %s", namespace, name, gvr, jsonPatch)
-	return nil
-
-}*/
-
 func PatchCR(
 	ctx context.Context,
 	restConfig *rest.Config,
