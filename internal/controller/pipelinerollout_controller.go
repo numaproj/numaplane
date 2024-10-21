@@ -524,8 +524,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 	case apiv1.UpgradeStrategyProgressive:
-		if pipelineNeedsToUpdate { // TODO: this seems to be necessary to prevent infinite new pipelines from being created - why?
-			//done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+		if pipelineNeedsToUpdate {
 			numaLogger.Debug("processing pipeline with Progressive")
 			done, err := processResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, r, r.restConfig)
 			if err != nil {
@@ -545,7 +544,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 		// When progressive is the default strategy, clean up recyclable pipeline when drained
 		if userPreferredStrategy == config.ProgressiveStrategyID {
-			//err = r.cleanUpPipelines(ctx, pipelineRollout)
 			err = garbageCollectChildren(ctx, pipelineRollout, r, r.restConfig)
 			if err != nil {
 				return err
@@ -740,16 +738,6 @@ func basePipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]stri
 	return labelMapping, nil
 }
 
-// TODO: may not end up needing this one
-func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
-	labelMapping, err := basePipelineLabels(pipelineRollout)
-	if err != nil {
-		return nil, err
-	}
-	labelMapping[common.LabelKeyUpgradeState] = upgradeState
-
-	return labelMapping, nil
-}
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	return r.client.Status().Update(ctx, pipelineRollout)
 }
@@ -860,7 +848,7 @@ func (r *PipelineRolloutReconciler) createBaseChildDefinition(rolloutObject Roll
 	return r.makePipelineDefinition(pipelineRollout, name, pipelineLabels)
 }
 
-func (r *PipelineRolloutReconciler) getNameCount(rolloutObject RolloutObject) (int32, bool) {
+func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	if pipelineRollout.Status.NameCount == nil {
 		return int32(0), false
@@ -869,11 +857,29 @@ func (r *PipelineRolloutReconciler) getNameCount(rolloutObject RolloutObject) (i
 	}
 }
 
-func (r *PipelineRolloutReconciler) updateNameCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
+func (r *PipelineRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineRollout.Status.NameCount = &nameCount
-	// TODO: do we need to update this in K8S?
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+}
+
+// increment the child count for the Rollout and return the count to use
+func (r *PipelineRolloutReconciler) incrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	// TODO: why in PipelineRolloutReconciler.calPipelineName() do we only update the Status subresource when it's 0?
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
 }
 
 func (r *PipelineRolloutReconciler) childIsDrained(ctx context.Context, pipelineDef *kubernetes.GenericObject) (bool, error) {

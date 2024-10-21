@@ -15,20 +15,25 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
+// progressiveController describes a Controller that can progressively roll out a second child alongside the original child,
+// taking down the original child once the new one is healthy
 type progressiveController interface {
+	// listChildren lists all children of the Rollout identified by the selectors
 	listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error)
 
+	// createBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
 	createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error)
 
-	getNameCount(rolloutObject RolloutObject) (int32, bool)
+	// incrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
+	incrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error)
 
-	// don't only set it in memory but also update K8S
-	updateNameCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error
-
+	// childIsDrained checks to see if the child has been fully drained
 	childIsDrained(ctx context.Context, child *kubernetes.GenericObject) (bool, error)
 
+	// drain updates the child in Kubernetes to cause it to drain
 	drain(ctx context.Context, child *kubernetes.GenericObject) error
 
+	// childNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	childNeedsUpdating(ctx context.Context, existingChild *kubernetes.GenericObject, newChildDefinition *kubernetes.GenericObject) (bool, error)
 }
 
@@ -98,32 +103,14 @@ func getChildName(ctx context.Context, rolloutObject RolloutObject, controller p
 	if len(children) > 1 {
 		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
 	} else if len(children) == 0 {
-		suffixName, err := calculateChildNameSuffix(ctx, rolloutObject, controller)
+		index, err := controller.incrementChildCount(ctx, rolloutObject)
+		//suffixName, err := calculateChildNameSuffix(ctx, rolloutObject, controller)
 		if err != nil {
 			return "", err
 		}
-		return rolloutObject.GetObjectMeta().Name + suffixName, nil
+		return fmt.Sprintf("%s%d", rolloutObject.GetObjectMeta().Name, index), nil
 	}
 	return children[0].Name, nil
-}
-
-func calculateChildNameSuffix(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (string, error) {
-	currentNameCount, found := controller.getNameCount(rolloutObject)
-	if !found {
-		currentNameCount = int32(0)
-		err := controller.updateNameCount(ctx, rolloutObject, int32(0))
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// TODO: why in PipelineRolloutReconciler.calPipelineName() do we only update the Status subresource when it's 0?
-	err := controller.updateNameCount(ctx, rolloutObject, currentNameCount+1)
-	if err != nil {
-		return "", err
-	}
-
-	return "-" + fmt.Sprint(currentNameCount), nil
 }
 
 // return whether we're done, and error if any
