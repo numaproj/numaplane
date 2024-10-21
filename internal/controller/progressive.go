@@ -106,7 +106,7 @@ func getChildName(ctx context.Context, rolloutObject RolloutObject, controller p
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s%d", rolloutObject.GetObjectMeta().Name, index), nil
+		return fmt.Sprintf("%s-%d", rolloutObject.GetObjectMeta().Name, index), nil
 	}
 	return children[0].Name, nil
 }

@@ -490,7 +490,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.CoreV1().ConfigMaps(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().Roles(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s0", defaultPipelineRolloutName), metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s-0", defaultPipelineRolloutName), metav1.DeleteOptions{})
 			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}})
 			_ = numaplaneClient.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: NumaflowControllerDeploymentName}})
 
