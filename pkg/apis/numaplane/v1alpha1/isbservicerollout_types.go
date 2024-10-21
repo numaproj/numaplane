@@ -31,7 +31,8 @@ type ISBServiceRolloutSpec struct {
 
 // InterStepBufferService includes the spec of InterStepBufferService in Numaflow
 type InterStepBufferService struct {
-	Spec runtime.RawExtension `json:"spec"`
+	Metadata `json:"metadata,omitempty"`
+	Spec     runtime.RawExtension `json:"spec"`
 }
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
