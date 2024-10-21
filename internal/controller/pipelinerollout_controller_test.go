@@ -539,6 +539,19 @@ var yamlNoDesiredPhase = `
 `
 
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
+
+	restConfig, _, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewPipelineRolloutReconciler(
+		numaplaneClient,
+		scheme.Scheme,
+		restConfig,
+		customMetrics,
+		recorder)
+
 	testCases := []struct {
 		name                  string
 		specYaml1             string
@@ -582,7 +595,7 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 			obj1.Spec.Raw = []byte(tc.specYaml1)
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
-			needsUpdating, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
+			needsUpdating, err := r.childNeedsUpdating(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

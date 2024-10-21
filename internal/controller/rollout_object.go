@@ -7,7 +7,7 @@ import (
 )
 
 type RolloutObject interface {
-	GetPluralName() string
+	GetChildPluralName() string
 
 	GetTypeMeta() *metav1.TypeMeta
 
