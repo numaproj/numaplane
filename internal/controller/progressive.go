@@ -6,7 +6,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
@@ -104,7 +103,6 @@ func getChildName(ctx context.Context, rolloutObject RolloutObject, controller p
 		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
 	} else if len(children) == 0 {
 		index, err := controller.incrementChildCount(ctx, rolloutObject)
-		//suffixName, err := calculateChildNameSuffix(ctx, rolloutObject, controller)
 		if err != nil {
 			return "", err
 		}
@@ -168,6 +166,10 @@ func processUpgradingChild(
 			return false, err
 		}
 
+		// TODO: if any of the below items fail, then we return false which keeps us in UpgradeStrategyInProgress=Progressive, but due to "if pipelineNeedsToUpdate" check in pipelinerollout_controller.go, we never come back here
+		// to complete the below logic
+		// Consider upgrading to "promoted" as the last thing?
+
 		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, currentPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
@@ -177,7 +179,7 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
 
 		if err := controller.drain(ctx, currentPromotedChildDef); err != nil {
-			return false, err // TODO: if this errors out, then we return false, but due to "if pipelineNeedsToUpdate" check in pipelinerollout_controller.go, we never come back here - can we move call to "drain()" into the garbage collection logic?
+			return false, err
 		}
 		return true, nil
 	default:
@@ -206,7 +208,7 @@ func processUpgradingChild(
 func updateUpgradeState(ctx context.Context, restConfig *rest.Config, upgradeState common.UpgradeState, childObject *kubernetes.GenericObject, rolloutObject RolloutObject) error {
 	childObject.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
-	return kubernetes.PatchCR(ctx, restConfig, patchJson, k8stypes.MergePatchType, schema.GroupVersionResource{Group: childObject.GroupVersionKind().Group, Version: childObject.GroupVersionKind().Version, Resource: rolloutObject.GetChildPluralName()}, childObject.Namespace, childObject.Name)
+	return kubernetes.PatchCR(ctx, restConfig, childObject, rolloutObject.GetChildPluralName(), patchJson, k8stypes.MergePatchType)
 }
 
 func isNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
