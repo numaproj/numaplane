@@ -149,7 +149,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		expectedStrategy      apiv1.UpgradeStrategy
 	}{
 		{
-			name: "empty pipeline spec excluded paths",
+			name: "NoOp: empty pipeline spec excluded paths, and equivalent metadata",
 			newDefinition: func() kubernetes.GenericObject {
 				pipelineDef := pipelineDefn
 				pipelineDef.Annotations = map[string]string{"something": "a"}
