@@ -463,10 +463,16 @@ func resolveManifestTemplate(manifest string, rollout *apiv1.NumaflowControllerR
 		return nil, fmt.Errorf("unable to parse manifest: %v", err)
 	}
 
+	instanceID := rollout.Spec.Controller.InstanceID
+	instanceSuffix := ""
+	if strings.TrimSpace(instanceID) != "" {
+		instanceSuffix = fmt.Sprintf("-%s", instanceID)
+	}
+
 	data := struct {
-		InstanceID string
+		InstanceSuffix string
 	}{
-		InstanceID: rollout.Spec.Controller.InstanceID,
+		InstanceSuffix: instanceSuffix,
 	}
 
 	var buf bytes.Buffer
@@ -640,10 +646,13 @@ func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 // - error if any
 func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) (*appsv1.Deployment, bool, error) {
 	instanceID := controllerRollout.Spec.Controller.InstanceID
-	numaflowControllerDeploymentInstanceName := fmt.Sprintf("%s%s", NumaflowControllerDeploymentName, instanceID)
+	numaflowControllerDeploymentName := NumaflowControllerDeploymentName
+	if strings.TrimSpace(instanceID) != "" {
+		numaflowControllerDeploymentName = fmt.Sprintf("%s-%s", NumaflowControllerDeploymentName, instanceID)
+	}
 
 	deployment := &appsv1.Deployment{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: controllerRollout.Namespace, Name: numaflowControllerDeploymentInstanceName}, deployment); err != nil {
+	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: controllerRollout.Namespace, Name: numaflowControllerDeploymentName}, deployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, false, nil
 		} else {

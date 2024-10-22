@@ -382,10 +382,10 @@ func Test_resolveManifestTemplate(t *testing.T) {
 			manifest:         "this is {{.Invalid}} invalid",
 			rollout:          defaultRollout,
 			expectedManifest: "",
-			expectedError:    fmt.Errorf("unable to apply information to manifest: template: manifest:1:10: executing \"manifest\" at <.Invalid>: can't evaluate field Invalid in type struct { InstanceID string }"),
+			expectedError:    fmt.Errorf("unable to apply information to manifest: template: manifest:1:10: executing \"manifest\" at <.Invalid>: can't evaluate field Invalid in type struct { InstanceSuffix string }"),
 		}, {
 			name:     "manifest with valid template and rollout without instanceID",
-			manifest: "valid-template-no-id{{.InstanceID}}",
+			manifest: "valid-template-no-id{{.InstanceSuffix}}",
 			rollout: &apiv1.NumaflowControllerRollout{
 				Spec: apiv1.NumaflowControllerRolloutSpec{
 					Controller: apiv1.Controller{},
@@ -395,9 +395,9 @@ func Test_resolveManifestTemplate(t *testing.T) {
 			expectedError:    nil,
 		}, {
 			name:             "manifest with valid template and rollout with instanceID",
-			manifest:         "valid-template-no-id{{.InstanceID}}",
+			manifest:         "valid-template-no-id{{.InstanceSuffix}}",
 			rollout:          defaultRollout,
-			expectedManifest: fmt.Sprintf("valid-template-no-id%s", defaultInstanceID),
+			expectedManifest: fmt.Sprintf("valid-template-no-id-%s", defaultInstanceID),
 			expectedError:    nil,
 		},
 	}
