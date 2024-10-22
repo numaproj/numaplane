@@ -403,6 +403,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
+	// Object already exists
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
 		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
