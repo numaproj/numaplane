@@ -236,8 +236,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            isbServiceRollout.Name,
 			Namespace:       isbServiceRollout.Namespace,
-			Labels:          map[string]string{},
-			Annotations:     map[string]string{},
+			Labels:          isbServiceRollout.Spec.InterStepBufferService.Labels,
+			Annotations:     isbServiceRollout.Spec.InterStepBufferService.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
@@ -251,14 +251,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			// copy rollout annotations and labels to child resource
-			for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
-				newISBServiceDef.Annotations[val] = key
-			}
-			for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
-				newISBServiceDef.Labels[val] = key
-			}
-
 			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
 				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 			}
@@ -271,16 +263,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	} else {
 		// Object already exists
-		// copy rollout annotations and labels to child resource
-		newISBServiceDef.Annotations = existingISBServiceDef.Annotations
-		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
-			newISBServiceDef.Annotations[val] = key
-		}
-		newISBServiceDef.Labels = existingISBServiceDef.Labels
-		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
-			newISBServiceDef.Labels[val] = key
-		}
-
 		// perform logic related to updating
 		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
@@ -308,6 +290,14 @@ func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 func mergeISBService(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
+
+	for val, key := range newISBService.Annotations {
+		resultISBService.Annotations[val] = key
+	}
+	for val, key := range newISBService.Labels {
+		resultISBService.Labels[val] = key
+	}
+
 	return resultISBService
 }
 
