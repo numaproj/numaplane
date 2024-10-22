@@ -24,7 +24,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type Controller struct {
-	Version string `json:"version"`
+	InstanceID string `json:"instanceID,omitempty"`
+	Version    string `json:"version"`
 }
 
 // NumaflowControllerRolloutSpec defines the desired state of NumaflowControllerRollout
@@ -41,7 +42,7 @@ type NumaflowControllerRolloutStatus struct {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:validation:XValidation:rule=(self.metadata.name == "numaflow-controller"), message="The metadata name must be 'numaflow-controller'"
+// +kubebuilder:validation:XValidation:rule="matches(self.metadata.name, '^numaflow-controller.*')",message="The metadata name must start with 'numaflow-controller'"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
 // NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts API
