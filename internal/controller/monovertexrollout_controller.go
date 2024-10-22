@@ -188,6 +188,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			Name:            monoVertexRollout.Name,
 			Namespace:       monoVertexRollout.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
+			Annotations:     monoVertexRollout.Spec.MonoVertex.Annotations,
+			Labels:          monoVertexRollout.Spec.MonoVertex.Labels,
 		},
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}

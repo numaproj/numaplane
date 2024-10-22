@@ -237,6 +237,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			Name:            isbServiceRollout.Name,
 			Namespace:       isbServiceRollout.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
+			Annotations:     isbServiceRollout.Spec.InterStepBufferService.Annotations,
+			Labels:          isbServiceRollout.Spec.InterStepBufferService.Labels,
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}

@@ -21,13 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"maps"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -750,6 +751,11 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string)
 	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
 	labelMapping[common.LabelKeyUpgradeState] = upgradeState
 
+	// copy rollout annotations to child
+	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
+		labelMapping[val] = key
+	}
+
 	return labelMapping, nil
 }
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
@@ -829,6 +835,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineName string,
 	labels map[string]string,
 ) (*kubernetes.GenericObject, error) {
+
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",
@@ -838,6 +845,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 			Name:            pipelineName,
 			Namespace:       pipelineRollout.Namespace,
 			Labels:          labels,
+			Annotations:     pipelineRollout.Spec.Pipeline.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
