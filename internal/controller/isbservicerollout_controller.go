@@ -303,7 +303,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// update our Status with the ISBService's Status
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-	// if I am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
 	_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
@@ -321,7 +320,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// if isbServiceNeedsToUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
 	if isbServiceNeedsToUpdate {
 		isbServiceRollout.Status.MarkPending()

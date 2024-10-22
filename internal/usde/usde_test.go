@@ -387,3 +387,41 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		})
 	}
 }
+
+func TestGetMostConservativeStrategy(t *testing.T) {
+	tests := []struct {
+		name                   string
+		strategies             []apiv1.UpgradeStrategy
+		expectedStrategyRating int
+	}{
+		{
+			name: "Multiple Strategies",
+			strategies: []apiv1.UpgradeStrategy{
+				apiv1.UpgradeStrategyNoOp,
+				apiv1.UpgradeStrategyApply,
+				apiv1.UpgradeStrategyPPND,
+			},
+			expectedStrategyRating: 2,
+		},
+		{
+			name:                   "Empty List",
+			strategies:             []apiv1.UpgradeStrategy{},
+			expectedStrategyRating: 0,
+		},
+		{
+			name: "Same Rating",
+			strategies: []apiv1.UpgradeStrategy{
+				apiv1.UpgradeStrategyPPND,
+				apiv1.UpgradeStrategyProgressive,
+			},
+			expectedStrategyRating: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getMostConservativeStrategy(tt.strategies)
+			assert.Equal(t, tt.expectedStrategyRating, strategyRating[result])
+		})
+	}
+}

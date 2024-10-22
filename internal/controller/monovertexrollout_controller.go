@@ -22,6 +22,8 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -54,23 +56,47 @@ type MonoVertexRolloutReconciler struct {
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
+
+	// maintain inProgressStrategies in memory and in MonoVertexRollout Status
+	inProgressStrategyMgr *inProgressStrategyMgr
 }
 
 func NewMonoVertexRolloutReconciler(
-	client client.Client,
+	c client.Client,
 	s *runtime.Scheme,
 	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
 
-	return &MonoVertexRolloutReconciler{
-		client,
+	r := &MonoVertexRolloutReconciler{
+		c,
 		s,
 		restConfig,
 		customMetrics,
 		recorder,
+		nil,
 	}
+
+	r.inProgressStrategyMgr = newInProgressStrategyMgr(
+		// getRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
+			monoVertexRollout := rollout.(*apiv1.MonoVertexRollout)
+
+			if monoVertexRollout.Status.UpgradeInProgress != "" {
+				return (*apiv1.UpgradeStrategy)(&monoVertexRollout.Status.UpgradeInProgress)
+			} else {
+				return nil
+			}
+		},
+		// setRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object, strategy apiv1.UpgradeStrategy) {
+			monoVertexRollout := rollout.(*apiv1.MonoVertexRollout)
+			monoVertexRollout.Status.SetUpgradeInProgress(strategy)
+		},
+	)
+
+	return r
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts,verbs=get;list;watch;create;update;patch;delete
@@ -211,17 +237,75 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
 		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
-		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
+		needsRequeue, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
+		}
+		if needsRequeue {
+			return common.DefaultDelayedRequeue, nil
+		}
+
+		/*err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+		*/
 	}
 
 	// process status
 	r.processMonoVertexStatus(ctx, existingMonoVertexDef, monoVertexRollout)
 
 	return ctrl.Result{}, nil
+
+}
+
+// process an existing ISBService
+// return:
+// - true if needs a requeue
+// - error if any
+func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
+	existingMonoVertexDef, newMonoVertexDef *kubernetes.GenericObject, syncStartTime time.Time) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// determine if we're trying to update the MonoVertex spec
+	// if it's a simple change, direct apply
+	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
+	// and capability to rollback an unhealthy one
+	mvNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.
+		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		Debug("Upgrade decision result")
+
+	// set the Status appropriately to "Pending" or "Deployed"
+	// if mvNeedsToUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// Note that this will be reset to "Deployed" later on if a deployment occurs
+	if mvNeedsToUpdate {
+		monoVertexRollout.Status.MarkPending()
+	} else {
+		monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+	}
+
+	// is there currently an inProgressStrategy for the isbService? (This will override any new decision)
+	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, monoVertexRollout)
+	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
+
+	// if not, should we set one?
+	if !inProgressStrategySet {
+		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, inProgressStrategy)
+		} else {
+			numaLogger.Warnf("invalid inProgressStrategy=%v", inProgressStrategy)
+			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, apiv1.UpgradeStrategyNoOp)
+		}
+	}
+	switch inProgressStrategy {
+		case apiv1.UpgradeStrategyProgressive:
 
 }
 
