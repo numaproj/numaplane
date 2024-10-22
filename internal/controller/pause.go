@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
 
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
 var (

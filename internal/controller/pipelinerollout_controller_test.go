@@ -955,7 +955,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
 			}
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
@@ -1199,7 +1199,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
