@@ -85,8 +85,8 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 
 	pipelineObject := &GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pipeline",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowPipelineKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-pipeline",
@@ -128,7 +128,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	assert.Len(t, pipelineList, 1)
 
 	// List resource with cache
-	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	pipelineList, err = ListResources(context.Background(), runtimeClient, gvk, client.InNamespace(namespace), client.MatchingLabels{"test": "value"})
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList, 1)

@@ -226,8 +226,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	newISBServiceDef := &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "InterStepBufferService",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            isbServiceRollout.Name,
@@ -449,7 +449,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk,
 		client.InNamespace(rolloutNamespace),
 		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
@@ -611,7 +611,7 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch InterStepBufferServices
 	isbServiceUns := &unstructured.Unstructured{}
 	isbServiceUns.SetGroupVersionKind(schema.GroupVersionKind{
-		Kind:    "InterStepBufferService",
+		Kind:    common.NumaflowISBServiceKind,
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})

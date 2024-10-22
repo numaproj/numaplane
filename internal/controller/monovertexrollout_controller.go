@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -180,8 +182,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	newMonoVertexDef := &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "MonoVertex",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowMonoVertexKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            monoVertexRollout.Name,
@@ -242,7 +244,13 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch MonoVertices
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.MonoVertex{}),
+	monoVertexUns := &unstructured.Unstructured{}
+	monoVertexUns.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind:    common.NumaflowMonoVertexKind,
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
+	})
+	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err

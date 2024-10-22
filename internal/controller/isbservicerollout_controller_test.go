@@ -513,8 +513,8 @@ func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 	}
 	return &numaflowv1.InterStepBufferService{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "InterStepBufferService",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      defaultISBSvcRolloutName,

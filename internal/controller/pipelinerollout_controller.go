@@ -21,8 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"maps"
 	"reflect"
 	"strings"
@@ -33,7 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -668,7 +668,7 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch Pipelines
 	pipelineUns := &unstructured.Unstructured{}
 	pipelineUns.SetGroupVersionKind(schema.GroupVersionKind{
-		Kind:    "Pipeline",
+		Kind:    common.NumaflowPipelineKind,
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
@@ -827,8 +827,8 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 ) (*kubernetes.GenericObject, error) {
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pipeline",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowPipelineKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineName,
