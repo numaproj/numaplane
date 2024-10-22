@@ -17,15 +17,15 @@ import (
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
-// It returns the strategy to use and a boolean pointer indicating if the specs are different (if the specs were not compared, then nil will be returned).
-func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+// It returns whether an update is needed and the strategy to use
+func ResourceNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
 
-	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newSpec, existingSpec)
+	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
 
-	specNeedsUpdating, specUpgradeStrategy, err := resourceSpecNeedsUpdating(ctx, newSpec, existingSpec)
+	specNeedsUpdating, specUpgradeStrategy, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -36,7 +36,7 @@ func ResourceNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObjec
 
 }
 
-func resourceSpecNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -45,16 +45,16 @@ func resourceSpecNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericO
 
 	// Get apply paths based on the spec type (Pipeline, ISBS)
 	applyPaths := []string{}
-	if reflect.DeepEqual(newSpec.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
+	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
 		applyPaths = usdeConfig.PipelineSpecExcludedPaths
-	} else if reflect.DeepEqual(newSpec.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
+	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
 		applyPaths = usdeConfig.ISBServiceSpecExcludedPaths
 	}
 
 	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started deriving upgrade strategy")
 
-	// Split newSpec
-	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newSpec.Spec.Raw, applyPaths, []string{}, ".")
+	// Split newDef
+	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newDef.Spec.Raw, applyPaths, []string{}, ".")
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -64,8 +64,8 @@ func resourceSpecNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericO
 		"newSpecWithoutApplyPaths", newSpecWithoutApplyPaths,
 	).Debug("split new spec")
 
-	// Split existingSpec
-	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingSpec.Spec.Raw, applyPaths, []string{}, ".")
+	// Split existingDef
+	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingDef.Spec.Raw, applyPaths, []string{}, ".")
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -77,7 +77,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericO
 
 	// Compare specs without the apply fields and check user's strategy to return their preferred strategy
 	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newSpec.Namespace)
+		upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
@@ -127,20 +127,25 @@ var (
 	}
 )
 
-func resourceMetadataNeedsUpdating(ctx context.Context, newSpec *kubernetes.GenericObject, existingSpec *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newSpec.Namespace)
+func resourceMetadataNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
 
+	// First look for Label or Annotation changes that require PPND or Progressive strategy
 	// TODO: make this configurable to look for particular Labels and Annotations rather than this specific one
-	instanceIDNew := newSpec.Annotations[common.AnnotationKeyNumaflowInstanceID]
-	instanceIDExisting := existingSpec.Annotations[common.AnnotationKeyNumaflowInstanceID]
+	instanceIDNew := newDef.Annotations[common.AnnotationKeyNumaflowInstanceID]
+	instanceIDExisting := existingDef.Annotations[common.AnnotationKeyNumaflowInstanceID]
 	if instanceIDNew != instanceIDExisting {
 		return true, upgradeStrategy, nil
-	} else {
-		return false, apiv1.UpgradeStrategyNoOp, nil
 	}
+
+	// now see if any Labels or Annotations changed at all
+	if !reflect.DeepEqual(newDef.Labels, existingDef.Labels) || !reflect.DeepEqual(newDef.Annotations, existingDef.Annotations) {
+		return true, apiv1.UpgradeStrategyApply, nil
+	}
+	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss

@@ -33,6 +33,8 @@ type PipelineRolloutSpec struct {
 
 // Pipeline includes the spec of Pipeline in Numaflow
 type Pipeline struct {
+	Metadata `json:"metadata,omitempty"`
+
 	Spec runtime.RawExtension `json:"spec"`
 }
 

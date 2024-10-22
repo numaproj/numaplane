@@ -102,6 +102,17 @@ spec:
                 description: InterStepBufferService includes the spec of InterStepBufferService
                   in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -279,6 +290,17 @@ spec:
               monoVertex:
                 description: MonoVertex includes the spec of MonoVertex in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -504,6 +526,8 @@ spec:
             properties:
               controller:
                 properties:
+                  instanceID:
+                    type: string
                   version:
                     type: string
                 required:
@@ -619,8 +643,8 @@ spec:
             type: object
         type: object
         x-kubernetes-validations:
-        - message: The metadata name must be 'numaflow-controller'
-          rule: (self.metadata.name == "numaflow-controller")
+        - message: The metadata name must start with 'numaflow-controller'
+          rule: matches(self.metadata.name, '^numaflow-controller.*')
     served: true
     storage: true
     subresources:
@@ -682,6 +706,17 @@ spec:
               pipeline:
                 description: Pipeline includes the spec of Pipeline in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true

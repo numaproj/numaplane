@@ -149,9 +149,19 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		expectedStrategy      apiv1.UpgradeStrategy
 	}{
 		{
-			name:               "empty pipeline spec excluded paths",
-			newDefinition:      pipelineDefn,
-			existingDefinition: pipelineDefn,
+			name: "NoOp: empty pipeline spec excluded paths, and equivalent metadata",
+			newDefinition: func() kubernetes.GenericObject {
+				pipelineDef := pipelineDefn
+				pipelineDef.Annotations = map[string]string{"something": "a"}
+				pipelineDef.Labels = map[string]string{"something": "a"}
+				return pipelineDef
+			}(),
+			existingDefinition: func() kubernetes.GenericObject {
+				pipelineDef := pipelineDefn
+				pipelineDef.Annotations = map[string]string{"something": "a"}
+				pipelineDef.Labels = map[string]string{"something": "a"}
+				return pipelineDef
+			}(),
 			usdeConfig: config.USDEConfig{
 				DefaultUpgradeStrategy:    config.PPNDStrategyID,
 				PipelineSpecExcludedPaths: []string{},
@@ -371,13 +381,39 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-			name:          "test Annotation change plus spec change resulting in Direct Apply",
-			newDefinition: pipelineDefn,
+			name: "test Annotation changes resulting in Direct Apply",
+			newDefinition: func() kubernetes.GenericObject {
+				pipelineDef := pipelineDefn
+				pipelineDef.Annotations = map[string]string{"something": "a"}
+				return pipelineDef
+			}(),
+			existingDefinition: func() kubernetes.GenericObject {
+				pipelineDef := pipelineDefn
+				pipelineDef.Annotations = map[string]string{"something": "b"}
+				return pipelineDef
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:    config.PPNDStrategyID,
+				PipelineSpecExcludedPaths: []string{},
+			},
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
+		},
+		{
+			name: "test Annotation change which requires Progressive update, overriding spec change resulting in Direct Apply",
+			newDefinition: func() kubernetes.GenericObject {
+				pipelineDef := pipelineDefn
+				pipelineDef.Annotations = map[string]string{common.AnnotationKeyNumaflowInstanceID: "0"}
+				pipelineDef.Labels = map[string]string{"something": "a"}
+				return pipelineDef
+			}(),
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineSpec := defaultPipelineSpec.DeepCopy()
 				newPipelineSpec.InterStepBufferServiceName = "changed-isbsvc"
 				pipelineDef := makePipelineDefinition(*newPipelineSpec)
 				pipelineDef.Annotations = map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"}
+				pipelineDef.Labels = map[string]string{"something": "b"}
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
