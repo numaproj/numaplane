@@ -311,6 +311,7 @@ data:
           apiVersion: v1
           data:
             controller-config.yaml: |
+              instance: "{{ .InstanceID }}"
               defaults:
                 containerResources: |
                   requests:
