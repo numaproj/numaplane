@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/argoproj/gitops-engine/pkg/diff"
@@ -452,6 +453,37 @@ func ownerExists(existingRefs []interface{}, ownerRef map[string]interface{}) bo
 	return alreadyExists
 }
 
+func resolveManifestTemplate(manifest string, rollout *apiv1.NumaflowControllerRollout) ([]byte, error) {
+	if rollout == nil {
+		return []byte(manifest), nil
+	}
+
+	tmpl, err := template.New("manifest").Parse(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manifest: %v", err)
+	}
+
+	instanceID := rollout.Spec.Controller.InstanceID
+	instanceSuffix := ""
+	if strings.TrimSpace(instanceID) != "" {
+		instanceSuffix = fmt.Sprintf("-%s", instanceID)
+	}
+
+	data := struct {
+		InstanceSuffix string
+	}{
+		InstanceSuffix: instanceSuffix,
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return nil, fmt.Errorf("unable to apply information to manifest: %v", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func (r *NumaflowControllerRolloutReconciler) sync(
 	rollout *apiv1.NumaflowControllerRollout,
 	namespace string,
@@ -466,8 +498,14 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)
 	}
 
+	// Update templated manifest with information from the rollout
+	manifestBytes, err := resolveManifestTemplate(manifest, rollout)
+	if err != nil {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("unable to resolve manifest: %v", err)
+	}
+
 	// Applying ownership reference
-	manifests, err := SplitYAMLToString([]byte(manifest))
+	manifests, err := SplitYAMLToString(manifestBytes)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("can not parse file data, err: %v", err)
 	}
@@ -607,8 +645,14 @@ func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 // - whether it exists
 // - error if any
 func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) (*appsv1.Deployment, bool, error) {
+	instanceID := controllerRollout.Spec.Controller.InstanceID
+	numaflowControllerDeploymentName := NumaflowControllerDeploymentName
+	if strings.TrimSpace(instanceID) != "" {
+		numaflowControllerDeploymentName = fmt.Sprintf("%s-%s", NumaflowControllerDeploymentName, instanceID)
+	}
+
 	deployment := &appsv1.Deployment{}
-	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: controllerRollout.Namespace, Name: NumaflowControllerDeploymentName}, deployment); err != nil {
+	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: controllerRollout.Namespace, Name: numaflowControllerDeploymentName}, deployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, false, nil
 		} else {
