@@ -71,8 +71,8 @@ func createDefaultPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv1.Pi
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 			Labels: map[string]string{
-				common.LabelKeyISBServiceNameForPipeline:  defaultISBSvcRolloutName,
-				common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName},
+				common.LabelKeyISBServiceNameForPipeline: defaultISBSvcRolloutName,
+				common.LabelKeyParentRollout:             defaultPipelineRolloutName},
 		},
 		Spec: numaflowv1.PipelineSpec{
 			InterStepBufferServiceName: defaultISBSvcRolloutName,

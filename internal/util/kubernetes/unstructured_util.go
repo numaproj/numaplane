@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 
 	"github.com/numaproj/numaplane/internal/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -182,7 +183,7 @@ func CreateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully created resource %s/%s of type %+v", namespace, name, gvr)
-	numaLogger.Verbosef("successfully created resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
+	numaLogger.Verbosef("successfully created resource %s/%s of type %+v; result value: %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
@@ -277,7 +278,68 @@ func UpdateUnstructuredCR(
 	}
 
 	numaLogger.Infof("successfully updated resource %s/%s of type %+v", namespace, name, gvr)
-	numaLogger.Verbosef("successfully updated resource %s/%s of type %+v with value %+v", namespace, name, gvr, unstruc.Object)
+	numaLogger.Verbosef("successfully updated resource %s/%s of type %+v; result value %+v", namespace, name, gvr, unstruc.Object)
+	return nil
+}
+
+func PatchCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	object *GenericObject,
+	pluralName string,
+	patch string,
+	patchType k8stypes.PatchType,
+) error {
+
+	unstruc, err := ObjectToUnstructured(object)
+	if err != nil {
+		return err
+	}
+
+	gvr, err := getGroupVersionResource(object, pluralName)
+	if err != nil {
+		return err
+	}
+
+	if err = PatchUnstructuredCR(ctx, restConfig, unstruc, gvr, object.Namespace, object.Name, patch, patchType); err != nil {
+		return err
+	}
+	result, err := UnstructuredToObject(unstruc)
+	if err != nil {
+		return err
+	}
+	*object = *result
+	return nil
+}
+
+// patch the CR in Kubernetes, and if successful, set the unstruc to point to the result (i.e. goal is to have the right resourceVersion)
+func PatchUnstructuredCR(
+	ctx context.Context,
+	restConfig *rest.Config,
+	unstruc *unstructured.Unstructured,
+	gvr schema.GroupVersionResource,
+	namespace string,
+	name string,
+	patch string,
+	patchType k8stypes.PatchType,
+) error {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Debugf("will patch resource %s/%s of type %+v", namespace, name, gvr)
+
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	result, err := client.Resource(gvr).Namespace(namespace).Patch(ctx, name, patchType, []byte(patch), metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update resource %s/%s of type %+v, err=%v", namespace, name, gvr, err)
+	} else {
+		*unstruc = *result
+	}
+
+	numaLogger.Infof("successfully patched resource %s/%s of type %+v", namespace, name, gvr)
+	numaLogger.Verbosef("successfully patched resource %s/%s of type %+v; result value: %+v", namespace, name, gvr, unstruc.Object)
 	return nil
 }
 
