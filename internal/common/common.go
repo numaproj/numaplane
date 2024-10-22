@@ -67,6 +67,9 @@ const (
 	// LabelValueUpgradeRecyclable is the label value indicating that the resource managed by a NumaRollout is recyclable
 	// after an upgrade.
 	LabelValueUpgradeRecyclable UpgradeState = "recyclable"
+
+	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
+	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"
 )
 
 var (
