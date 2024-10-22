@@ -187,6 +187,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            monoVertexRollout.Name,
 			Namespace:       monoVertexRollout.Namespace,
+			Labels:          monoVertexRollout.Spec.MonoVertex.Labels,
+			Annotations:     monoVertexRollout.Spec.MonoVertex.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
 		},
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
@@ -208,6 +210,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			return ctrl.Result{}, fmt.Errorf("error getting MonoVertex: %v", err)
 		}
 	} else {
+		// object already exists
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
 		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
@@ -251,6 +254,14 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
+
+	for val, key := range newMonoVertex.Annotations {
+		resultMonoVertex.Annotations[val] = key
+	}
+	for val, key := range newMonoVertex.Labels {
+		resultMonoVertex.Labels[val] = key
+	}
+
 	return resultMonoVertex
 }
 
