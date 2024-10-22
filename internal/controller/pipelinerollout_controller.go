@@ -381,7 +381,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return false, err
 	}
-	newPipelineDef.Annotations = map[string]string{}
 
 	// Get the object to see if it exists
 	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
@@ -391,14 +390,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			pipelineRollout.Status.MarkPending()
-
-			// copy rollout annotations and labels to child resource
-			for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
-				newPipelineDef.Annotations[val] = key
-			}
-			for val, key := range pipelineRollout.Spec.Pipeline.Labels {
-				newPipelineDef.Labels[val] = key
-			}
 
 			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 			if err != nil {
@@ -410,17 +401,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 
 		return false, fmt.Errorf("error getting Pipeline: %v", err)
-	}
-
-	// Object already exists
-	// copy rollout annotations and labels to child resource
-	newPipelineDef.Annotations = existingPipelineDef.Annotations
-	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
-		newPipelineDef.Annotations[val] = key
-	}
-	newPipelineDef.Labels = existingPipelineDef.Labels
-	for val, key := range pipelineRollout.Spec.Pipeline.Labels {
-		newPipelineDef.Labels[val] = key
 	}
 
 	// if Pipeline is not owned by Rollout, fail and return
