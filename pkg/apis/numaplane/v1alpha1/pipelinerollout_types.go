@@ -24,9 +24,6 @@ import (
 const (
 	// ConditionPipelinePausingOrPaused indicates that the Pipeline is either pausing or paused.
 	ConditionPipelinePausingOrPaused ConditionType = "PipelinePausingOrPaused"
-
-	// ConditionPipelineProgressiveUpgradeSucceeded indicates that whether the progressive upgrade for the Pipeline succeeded.
-	ConditionPipelineProgressiveUpgradeSucceeded ConditionType = "PipelineProgressiveUpgradeSucceed"
 )
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
@@ -89,6 +86,22 @@ type PipelineRolloutList struct {
 	Items           []PipelineRollout `json:"items"`
 }
 
+// the following functions implement the rolloutObject interface:
+func (pipelineRollout *PipelineRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &pipelineRollout.TypeMeta
+}
+
+func (pipelineRollout *PipelineRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &pipelineRollout.ObjectMeta
+}
+
+func (pipelineRollout *PipelineRollout) GetStatus() *Status {
+	return &pipelineRollout.Status.Status
+}
+func (pipelineRollout *PipelineRollout) GetChildPluralName() string {
+	return "pipelines"
+}
+
 func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }
@@ -99,14 +112,6 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
-}
-
-func (status *PipelineRolloutStatus) MarkPipelineProgressiveUpgradeSucceeded(message string, generation int64) {
-	status.MarkTrueWithReason(ConditionPipelineProgressiveUpgradeSucceeded, "Succeeded", message, generation)
-}
-
-func (status *PipelineRolloutStatus) MarkPipelineProgressiveUpgradeFailed(message string, generation int64) {
-	status.MarkFalse(ConditionPipelineProgressiveUpgradeSucceeded, "Failed", message, generation)
 }
 
 func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {

@@ -50,6 +50,9 @@ const (
 	// ConditionPausingPipelines applies to ISBServiceRollout or NumaflowControllerRollout for when they are in the process
 	// of pausing pipelines
 	ConditionPausingPipelines ConditionType = "PausingPipelines"
+
+	// ConditionProgressiveUpgradeSucceeded indicates that whether the progressive upgrade succeeded.
+	ConditionProgressiveUpgradeSucceeded ConditionType = "ProgressiveUpgradeSucceed"
 )
 
 // Status is a common structure which can be used for Status field.
@@ -161,6 +164,14 @@ func (status *Status) MarkPausingPipelines(generation int64) {
 
 func (status *Status) MarkUnpausingPipelines(generation int64) {
 	status.MarkFalse(ConditionPausingPipelines, "NoPause", "no need for pause", generation)
+}
+
+func (status *Status) MarkProgressiveUpgradeSucceeded(message string, generation int64) {
+	status.MarkTrueWithReason(ConditionProgressiveUpgradeSucceeded, "Succeeded", message, generation)
+}
+
+func (status *Status) MarkProgressiveUpgradeFailed(message string, generation int64) {
+	status.MarkFalse(ConditionProgressiveUpgradeSucceeded, "Failed", message, generation)
 }
 
 // setCondition sets a condition

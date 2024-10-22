@@ -21,13 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"maps"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -466,6 +467,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
 	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, pipelineRollout)
+	numaLogger.Debugf("current inProgressStrategy=%s", inProgressStrategy)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
@@ -523,7 +525,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		if pipelineNeedsToUpdate {
-			done, err := r.processExistingPipelineWithProgressive(ctx, pipelineRollout, existingPipelineDef)
+			numaLogger.Debug("processing pipeline with Progressive")
+			done, err := processResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, r, r.restConfig)
 			if err != nil {
 				return err
 			}
@@ -541,7 +544,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 		// When progressive is the default strategy, clean up recyclable pipeline when drained
 		if userPreferredStrategy == config.ProgressiveStrategyID {
-			err = r.cleanUpPipelines(ctx, pipelineRollout)
+			err = garbageCollectChildren(ctx, pipelineRollout, r, r.restConfig)
 			if err != nil {
 				return err
 			}
@@ -583,7 +586,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
 	}
 
-	numaLogger.Debugf("pipeline status: %+v", pipelineStatus)
+	numaLogger.Debugf("pipeline status: %v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
 	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
@@ -685,23 +688,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-// pipelineSpecNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func pipelineSpecNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
-	if err != nil {
-		return false, err
-	}
-	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
-	if err != nil {
-		return false, err
-	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
-
-	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
-}
-
 // remove 'lifecycle.desiredPhase' key/value pair from Pipeline spec
 // also remove 'lifecycle' if it's an empty map
 func pipelineWithoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
@@ -735,7 +721,7 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
-func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string) (map[string]string, error) {
+func basePipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
 	var pipelineSpec PipelineSpec
 	labelMapping := map[string]string{
 		common.LabelKeyISBServiceNameForPipeline: "default",
@@ -747,11 +733,11 @@ func pipelineLabels(pipelineRollout *apiv1.PipelineRollout, upgradeState string)
 		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
 	}
 
-	labelMapping[common.LabelKeyPipelineRolloutForPipeline] = pipelineRollout.Name
-	labelMapping[common.LabelKeyUpgradeState] = upgradeState
+	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 
 	return labelMapping, nil
 }
+
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	return r.client.Status().Update(ctx, pipelineRollout)
 }
@@ -761,65 +747,20 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-// getPipelineName retrieves the name of the current running pipeline managed by the given
-// pipelineRollout through the `promoted` label. Unless no such pipeline exists, then
-// construct the name by calculating the suffix and appending to the PipelineRollout name.
-func (r *PipelineRolloutReconciler) getPipelineName(
-	ctx context.Context,
-	pipelineRollout *apiv1.PipelineRollout,
-	upgradeState string,
-) (string, error) {
-	pipelines, err := kubernetes.ListLiveResource(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
-		pipelineRollout.Namespace, fmt.Sprintf(
-			"%s=%s,%s=%s", common.LabelKeyPipelineRolloutForPipeline, pipelineRollout.Name,
-			common.LabelKeyUpgradeState, upgradeState,
-		), "")
-	if err != nil {
-		return "", err
-	}
-	if len(pipelines) > 1 {
-		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
-	} else if len(pipelines) == 0 {
-		suffixName, err := r.calPipelineNameSuffix(ctx, pipelineRollout)
-		if err != nil {
-			return "", err
-		}
-		return pipelineRollout.Name + suffixName, nil
-	}
-	return pipelines[0].Name, nil
-}
-
-// calPipelineNameSuffix calculates the suffix of the pipeline name by utilizing the `NameCount`
-// field.
-func (r *PipelineRolloutReconciler) calPipelineNameSuffix(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (string, error) {
-	if pipelineRollout.Status.NameCount == nil {
-		pipelineRollout.Status.NameCount = new(int32)
-		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-		if statusUpdateErr != nil {
-			return "", statusUpdateErr
-		}
-	}
-
-	preNameCount := *pipelineRollout.Status.NameCount
-	*pipelineRollout.Status.NameCount++
-
-	return "-" + fmt.Sprint(preNameCount), nil
-}
-
 func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*kubernetes.GenericObject, error) {
-	pipelineName, err := r.getPipelineName(ctx, pipelineRollout, string(common.LabelValueUpgradePromoted))
+	pipelineName, err := getChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
 	}
 
-	labels, err := pipelineLabels(pipelineRollout, string(common.LabelValueUpgradePromoted))
+	labels, err := basePipelineLabels(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
 	return r.makePipelineDefinition(pipelineRollout, pipelineName, labels)
 }
@@ -842,6 +783,88 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
 	}, nil
+}
+
+// the following functions enable PipelineRolloutReconciler to implement progressiveController interface
+func (r *PipelineRolloutReconciler) listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	return kubernetes.ListLiveResource(
+		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		pipelineRollout.Namespace, labelSelector, fieldSelector)
+}
+
+func (r *PipelineRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	pipelineLabels, err := basePipelineLabels(pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
+	return r.makePipelineDefinition(pipelineRollout, name, pipelineLabels)
+}
+
+func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	if pipelineRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *pipelineRollout.Status.NameCount, true
+	}
+}
+
+func (r *PipelineRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	pipelineRollout.Status.NameCount = &nameCount
+	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+}
+
+// increment the child count for the Rollout and return the count to use
+func (r *PipelineRolloutReconciler) incrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	// TODO: why in PipelineRolloutReconciler.calPipelineName() do we only update the Status subresource when it's 0?
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+func (r *PipelineRolloutReconciler) childIsDrained(ctx context.Context, pipelineDef *kubernetes.GenericObject) (bool, error) {
+	pipelineStatus, err := parsePipelineStatus(pipelineDef)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
+	}
+	pipelinePhase := pipelineStatus.Phase
+
+	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+}
+
+func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *kubernetes.GenericObject) error {
+	return r.setPipelineLifecycle(ctx, true, pipeline)
+}
+
+// childNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func (r *PipelineRolloutReconciler) childNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
+	if err != nil {
+		return false, err
+	}
+	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+
+	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
 }
 
 // getPipelineRolloutName gets the PipelineRollout name from the pipeline
@@ -888,16 +911,4 @@ func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStat
 	}
 
 	return status, nil
-}
-
-func isPipelineReady(status numaflowv1.Status) bool {
-	if len(status.Conditions) == 0 {
-		return false
-	}
-	for _, c := range status.Conditions {
-		if c.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	return true
 }

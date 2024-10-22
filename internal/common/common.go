@@ -44,9 +44,9 @@ const (
 	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
 	LabelKeyISBServiceNameForPipeline = "numaplane.numaproj.io/isbsvc-name"
 
-	// LabelKeyPipelineRolloutForPipeline is the label key used to identify the PipelineRollout a Pipeline is managed by
-	// This is useful as a Label to quickly locate all Pipelines of a given PipelineRollout
-	LabelKeyPipelineRolloutForPipeline = "numaplane.numaproj.io/pipeline-rollout-name"
+	// LabelKeyParentRollout is the label key used to identify the Rollout that a child Resource is managed by
+	// This is useful as a Label to quickly locate all children of a given Rollout
+	LabelKeyParentRollout = "numaplane.numaproj.io/parent-rollout-name"
 
 	// LabelKeyAllowDataLoss is the label key on a Pipeline to indicate that PPND strategy can skip the usual pausing required
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
