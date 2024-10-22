@@ -188,8 +188,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			Name:            monoVertexRollout.Name,
 			Namespace:       monoVertexRollout.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
-			Annotations:     monoVertexRollout.Spec.MonoVertex.Annotations,
-			Labels:          monoVertexRollout.Spec.MonoVertex.Labels,
 		},
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
 	}
@@ -199,6 +197,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
+
+			// copy rollout annotations and labels to child resource
+			for val, key := range monoVertexRollout.Spec.MonoVertex.Annotations {
+				newMonoVertexDef.Annotations[val] = key
+			}
+			for val, key := range monoVertexRollout.Spec.MonoVertex.Labels {
+				newMonoVertexDef.Labels[val] = key
+			}
 
 			if err := kubernetes.CreateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices"); err != nil {
 				return ctrl.Result{}, err
@@ -210,6 +216,17 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			return ctrl.Result{}, fmt.Errorf("error getting MonoVertex: %v", err)
 		}
 	} else {
+		// object already exists
+		// copy rollout annotations and labels to child resource
+		for val, key := range monoVertexRollout.Spec.MonoVertex.Annotations {
+			existingMonoVertexDef.Annotations[val] = key
+		}
+		newMonoVertexDef.Annotations = existingMonoVertexDef.Annotations
+		for val, key := range monoVertexRollout.Spec.MonoVertex.Labels {
+			existingMonoVertexDef.Labels[val] = key
+		}
+		newMonoVertexDef.Labels = existingMonoVertexDef.Labels
+
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
 		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)

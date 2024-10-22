@@ -237,8 +237,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			Name:            isbServiceRollout.Name,
 			Namespace:       isbServiceRollout.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
-			Annotations:     isbServiceRollout.Spec.InterStepBufferService.Annotations,
-			Labels:          isbServiceRollout.Spec.InterStepBufferService.Labels,
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
 	}
@@ -250,6 +248,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
+
+			// copy rollout annotations and labels to child resource
+			for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
+				newISBServiceDef.Annotations[val] = key
+			}
+			for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
+				newISBServiceDef.Labels[val] = key
+			}
 
 			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
 				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
@@ -263,6 +269,16 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	} else {
 		// Object already exists
+		// copy rollout annotations and labels to child resource
+		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
+			existingISBServiceDef.Annotations[val] = key
+		}
+		newISBServiceDef.Annotations = existingISBServiceDef.Annotations
+		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
+			existingISBServiceDef.Labels[val] = key
+		}
+		newISBServiceDef.Labels = existingISBServiceDef.Labels
+
 		// perform logic related to updating
 		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)

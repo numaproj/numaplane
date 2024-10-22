@@ -388,10 +388,17 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			pipelineRollout.Status.MarkPending()
 
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
+			// copy rollout annotations and labels to child resource
+			for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
+				newPipelineDef.Annotations[val] = key
+			}
+			for val, key := range pipelineRollout.Spec.Pipeline.Labels {
+				newPipelineDef.Labels[val] = key
+			}
+
 			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 			if err != nil {
 				return false, err
@@ -405,6 +412,16 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// Object already exists
+	// copy rollout annotations and labels to child resource
+	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
+		existingPipelineDef.Annotations[val] = key
+	}
+	newPipelineDef.Annotations = existingPipelineDef.Annotations
+	for val, key := range pipelineRollout.Spec.Pipeline.Labels {
+		existingPipelineDef.Labels[val] = key
+	}
+	newPipelineDef.Labels = existingPipelineDef.Labels
+
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
 		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.Name)
@@ -734,12 +751,6 @@ func basePipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]stri
 	}
 
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
-
-	// copy rollout annotations to child
-	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
-		labelMapping[val] = key
-	}
-
 	return labelMapping, nil
 }
 
@@ -784,8 +795,6 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineName,
 			Namespace:       pipelineRollout.Namespace,
-			Labels:          labels,
-			Annotations:     pipelineRollout.Spec.Pipeline.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
