@@ -60,6 +60,21 @@ type MonoVertexRolloutList struct {
 	Items           []MonoVertexRollout `json:"items"`
 }
 
+func (monoVertexRollout *MonoVertexRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &monoVertexRollout.TypeMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &monoVertexRollout.ObjectMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetStatus() *Status {
+	return &monoVertexRollout.Status.Status
+}
+func (monoVertexRollout *MonoVertexRollout) GetChildPluralName() string {
+	return "interstepbufferservices"
+}
+
 func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
 }
