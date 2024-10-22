@@ -639,8 +639,8 @@ func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 // - whether it exists
 // - error if any
 func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) (*appsv1.Deployment, bool, error) {
-	instaceID := controllerRollout.Spec.Controller.InstanceID
-	numaflowControllerDeploymentInstanceName := fmt.Sprintf("%s%s", NumaflowControllerDeploymentName, instaceID)
+	instanceID := controllerRollout.Spec.Controller.InstanceID
+	numaflowControllerDeploymentInstanceName := fmt.Sprintf("%s%s", NumaflowControllerDeploymentName, instanceID)
 
 	deployment := &appsv1.Deployment{}
 	if err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: controllerRollout.Namespace, Name: numaflowControllerDeploymentInstanceName}, deployment); err != nil {

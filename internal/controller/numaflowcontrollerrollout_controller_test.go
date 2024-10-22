@@ -99,7 +99,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			resource.Name = "test-numaflow-controller"
 			err := k8sClient.Create(ctx, &resource)
 			Expect(err).NotTo(Succeed())
-			Expect(err.Error()).To(ContainSubstring("The metadata name must be 'numaflow-controller'"))
+			Expect(err.Error()).To(ContainSubstring("The metadata name must start with 'numaflow-controller'"))
 		})
 
 		It("Should throw duplicate resource error", func() {
