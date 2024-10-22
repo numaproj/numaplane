@@ -187,6 +187,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            monoVertexRollout.Name,
 			Namespace:       monoVertexRollout.Namespace,
+			Labels:          map[string]string{},
+			Annotations:     map[string]string{},
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
 		},
 		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
@@ -218,14 +220,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// object already exists
 		// copy rollout annotations and labels to child resource
-		for val, key := range monoVertexRollout.Spec.MonoVertex.Annotations {
-			existingMonoVertexDef.Annotations[val] = key
-		}
 		newMonoVertexDef.Annotations = existingMonoVertexDef.Annotations
-		for val, key := range monoVertexRollout.Spec.MonoVertex.Labels {
-			existingMonoVertexDef.Labels[val] = key
+		for val, key := range monoVertexRollout.Spec.MonoVertex.Annotations {
+			newMonoVertexDef.Annotations[val] = key
 		}
 		newMonoVertexDef.Labels = existingMonoVertexDef.Labels
+		for val, key := range monoVertexRollout.Spec.MonoVertex.Labels {
+			newMonoVertexDef.Labels[val] = key
+		}
 
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex

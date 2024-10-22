@@ -381,6 +381,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return false, err
 	}
+	newPipelineDef.Annotations = map[string]string{}
 
 	// Get the object to see if it exists
 	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
@@ -413,14 +414,14 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// Object already exists
 	// copy rollout annotations and labels to child resource
-	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
-		existingPipelineDef.Annotations[val] = key
-	}
 	newPipelineDef.Annotations = existingPipelineDef.Annotations
-	for val, key := range pipelineRollout.Spec.Pipeline.Labels {
-		existingPipelineDef.Labels[val] = key
+	for val, key := range pipelineRollout.Spec.Pipeline.Annotations {
+		newPipelineDef.Annotations[val] = key
 	}
 	newPipelineDef.Labels = existingPipelineDef.Labels
+	for val, key := range pipelineRollout.Spec.Pipeline.Labels {
+		newPipelineDef.Labels[val] = key
+	}
 
 	// if Pipeline is not owned by Rollout, fail and return
 	if !checkOwnerRef(existingPipelineDef.OwnerReferences, pipelineRollout.UID) {
@@ -795,6 +796,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineName,
 			Namespace:       pipelineRollout.Namespace,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,

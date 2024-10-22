@@ -236,6 +236,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            isbServiceRollout.Name,
 			Namespace:       isbServiceRollout.Namespace,
+			Labels:          map[string]string{},
+			Annotations:     map[string]string{},
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
@@ -270,14 +272,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// copy rollout annotations and labels to child resource
-		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
-			existingISBServiceDef.Annotations[val] = key
-		}
 		newISBServiceDef.Annotations = existingISBServiceDef.Annotations
-		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
-			existingISBServiceDef.Labels[val] = key
+		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Annotations {
+			newISBServiceDef.Annotations[val] = key
 		}
 		newISBServiceDef.Labels = existingISBServiceDef.Labels
+		for val, key := range isbServiceRollout.Spec.InterStepBufferService.Labels {
+			newISBServiceDef.Labels[val] = key
+		}
 
 		// perform logic related to updating
 		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
