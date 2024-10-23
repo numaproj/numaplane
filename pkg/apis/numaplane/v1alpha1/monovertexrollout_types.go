@@ -38,6 +38,10 @@ type MonoVertexRolloutStatus struct {
 
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
+
+	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
+	// identify a pipeline.
+	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
 // +genclient
@@ -61,6 +65,22 @@ type MonoVertexRolloutList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []MonoVertexRollout `json:"items"`
+}
+
+// the following functions implement the rolloutObject interface:
+func (monoVertexRollout *MonoVertexRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &monoVertexRollout.TypeMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &monoVertexRollout.ObjectMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetStatus() *Status {
+	return &monoVertexRollout.Status.Status
+}
+func (monoVertexRollout *MonoVertexRollout) GetChildPluralName() string {
+	return "monovertices"
 }
 
 func init() {
