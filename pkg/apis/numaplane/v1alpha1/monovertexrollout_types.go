@@ -28,7 +28,7 @@ type MonoVertexRolloutSpec struct {
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
 type MonoVertex struct {
-	Metadata `json:"metadata,omitempty"`
+	Metadata Metadata             `json:"metadata,omitempty"`
 	Spec     runtime.RawExtension `json:"spec"`
 }
 
