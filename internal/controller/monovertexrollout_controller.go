@@ -263,7 +263,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if mvNeedsToUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// if mvNeedsToUpdate - this means there's a mismatch between the desired MonoVertex spec and actual MonoVertex spec
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
 	if mvNeedsToUpdate {
 		monoVertexRollout.Status.MarkPending()
@@ -271,7 +271,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 	}
 
-	// is there currently an inProgressStrategy for the isbService? (This will override any new decision)
+	// is there currently an inProgressStrategy for the MonoVertex? (This will override any new decision)
 	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, monoVertexRollout)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
