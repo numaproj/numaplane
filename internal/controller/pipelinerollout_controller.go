@@ -394,10 +394,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			pipelineRollout.Status.MarkPending()
 
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 			if err != nil {
 				return false, err
@@ -754,6 +753,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Spec.Pipeline.Annotations}, nil
+
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
@@ -788,6 +788,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineName string,
 	metadata apiv1.Metadata,
 ) (*kubernetes.GenericObject, error) {
+
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pipeline",

@@ -67,6 +67,21 @@ type ISBServiceRolloutList struct {
 	Items           []ISBServiceRollout `json:"items"`
 }
 
+func (isbServiceRollout *ISBServiceRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &isbServiceRollout.TypeMeta
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &isbServiceRollout.ObjectMeta
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetStatus() *Status {
+	return &isbServiceRollout.Status.Status
+}
+func (isbServiceRollout *ISBServiceRollout) GetChildPluralName() string {
+	return "interstepbufferservices"
+}
+
 func init() {
 	SchemeBuilder.Register(&ISBServiceRollout{}, &ISBServiceRolloutList{})
 }

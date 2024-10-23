@@ -255,11 +255,11 @@ func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 
-	for val, key := range newMonoVertex.Annotations {
-		resultMonoVertex.Annotations[val] = key
+	for key, val := range newMonoVertex.Annotations {
+		resultMonoVertex.Annotations[key] = val
 	}
-	for val, key := range newMonoVertex.Labels {
-		resultMonoVertex.Labels[val] = key
+	for key, val := range newMonoVertex.Labels {
+		resultMonoVertex.Labels[key] = val
 	}
 
 	return resultMonoVertex

@@ -236,6 +236,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            isbServiceRollout.Name,
 			Namespace:       isbServiceRollout.Namespace,
+			Labels:          isbServiceRollout.Spec.InterStepBufferService.Labels,
+			Annotations:     isbServiceRollout.Spec.InterStepBufferService.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
 		},
 		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
@@ -288,6 +290,14 @@ func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
+
+	for key, val := range newISBService.Annotations {
+		resultISBService.Annotations[key] = val
+	}
+	for key, val := range newISBService.Labels {
+		resultISBService.Labels[key] = val
+	}
+
 	return resultISBService
 }
 
