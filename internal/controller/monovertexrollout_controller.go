@@ -239,7 +239,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		if err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 		}
@@ -341,7 +341,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 	return resultMonoVertex
@@ -441,7 +441,9 @@ func (r *MonoVertexRolloutReconciler) listChildren(ctx context.Context, rolloutO
 }
 
 func (r *MonoVertexRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
-	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	//monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	// TODO: not implemented!!
+	return nil, nil
 }
 
 func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {

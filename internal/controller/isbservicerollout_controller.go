@@ -262,7 +262,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
@@ -285,7 +285,7 @@ func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
-func mergeISBService(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 	return resultISBService
