@@ -291,11 +291,11 @@ func mergeISBService(existingISBService, newISBService *kubernetes.GenericObject
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 
-	for val, key := range newISBService.Annotations {
-		resultISBService.Annotations[val] = key
+	for key, val := range newISBService.Annotations {
+		resultISBService.Annotations[key] = val
 	}
-	for val, key := range newISBService.Labels {
-		resultISBService.Labels[val] = key
+	for key, val := range newISBService.Labels {
+		resultISBService.Labels[key] = val
 	}
 
 	return resultISBService
