@@ -291,8 +291,14 @@ func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *k
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 
+	if resultISBService.Annotations == nil {
+		resultISBService.Annotations = map[string]string{}
+	}
 	for key, val := range newISBService.Annotations {
 		resultISBService.Annotations[key] = val
+	}
+	if resultISBService.Labels == nil {
+		resultISBService.Labels = map[string]string{}
 	}
 	for key, val := range newISBService.Labels {
 		resultISBService.Labels[key] = val
