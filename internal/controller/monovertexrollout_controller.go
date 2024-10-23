@@ -234,6 +234,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		newMonoVertexDef = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		if err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
+
 		}
 	}
 
@@ -338,6 +339,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
+
 	if resultMonoVertex.Annotations == nil {
 		resultMonoVertex.Annotations = map[string]string{}
 	}
