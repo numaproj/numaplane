@@ -675,16 +675,6 @@ func TestBasePipelineMetadata(t *testing.T) {
 				return
 			}
 			if err == nil {
-				/*if metadata.Labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
-				}
-
-				if metadata.Labels[common.LabelKeyParentRollout] != pipelineRolloutName {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyParentRollout, pipelineRolloutName)
-				}*/
-				/*if !reflect.DeepEqual(metadata.Labels, tt.expectedPipelineMetadata.Labels) {
-					t.Errorf("Pipeline Labels is different: expected")
-				}*/
 				assert.Equal(t, tt.expectedPipelineMetadata.Labels, metadata.Labels)
 				assert.Equal(t, tt.expectedPipelineMetadata.Annotations, metadata.Annotations)
 			}
