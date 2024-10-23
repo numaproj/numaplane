@@ -20,6 +20,8 @@ import (
 // It returns whether an update is needed and the strategy to use
 func ResourceNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
 
+	numaLogger := logger.FromContext(ctx)
+
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
@@ -29,9 +31,16 @@ func ResourceNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
+
+	numaLogger.WithValues(
+		"metadataUpgradeStrategy", metadataUpgradeStrategy,
+		"specUpgradeStrategy", specUpgradeStrategy,
+	).Debug("upgrade strategies")
+
 	if !metadataNeedsUpdating && !specNeedsUpdating {
 		return false, apiv1.UpgradeStrategyNoOp, nil
 	}
+
 	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy}), nil
 
 }
@@ -128,10 +137,19 @@ var (
 )
 
 func resourceMetadataNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
+
+	numaLogger.WithValues(
+		"new annotations", newDef.Annotations,
+		"existing annotations", existingDef.Annotations,
+		"new labels", newDef.Labels,
+		"existing labels", existingDef.Labels,
+	).Debug("metadata comparison")
 
 	// First look for Label or Annotation changes that require PPND or Progressive strategy
 	// TODO: make this configurable to look for particular Labels and Annotations rather than this specific one

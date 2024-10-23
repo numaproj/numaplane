@@ -440,8 +440,14 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 func (r *PipelineRolloutReconciler) merge(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultPipeline := existingPipeline.DeepCopy()
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
+	if resultPipeline.Labels == nil {
+		resultPipeline.Labels = map[string]string{}
+	}
 	for key, value := range newPipeline.Labels {
 		resultPipeline.Labels[key] = value
+	}
+	if resultPipeline.Annotations == nil {
+		resultPipeline.Annotations = map[string]string{}
 	}
 	for key, value := range newPipeline.Annotations {
 		resultPipeline.Annotations[key] = value
@@ -747,7 +753,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 	labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.getISBSvcName()
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 
-	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Annotations}, nil
+	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Spec.Pipeline.Annotations}, nil
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
