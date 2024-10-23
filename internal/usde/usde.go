@@ -160,10 +160,22 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef *kubernetes.Gener
 	}
 
 	// now see if any Labels or Annotations changed at all
-	if !reflect.DeepEqual(newDef.Labels, existingDef.Labels) || !reflect.DeepEqual(newDef.Annotations, existingDef.Annotations) {
+	if !checkMapsEqual(newDef.Labels, existingDef.Labels) || !checkMapsEqual(newDef.Annotations, existingDef.Annotations) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 	return false, apiv1.UpgradeStrategyNoOp, nil
+}
+
+func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
+	tempMap1 := map1
+	if tempMap1 == nil {
+		tempMap1 = map[string]string{}
+	}
+	tempMap2 := map2
+	if tempMap2 == nil {
+		tempMap2 = map[string]string{}
+	}
+	return reflect.DeepEqual(tempMap1, tempMap2)
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss

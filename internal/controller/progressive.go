@@ -55,12 +55,9 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-
 			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.Kind, newUpgradingChildDef.Namespace, newUpgradingChildDef.Name)
 			err = kubernetes.CreateCR(ctx, restConfig, newUpgradingChildDef, rolloutObject.GetChildPluralName())
-			//if err != nil {
 			return false, err
-			//}
 		} else {
 			return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.Kind, err)
 		}
@@ -120,7 +117,7 @@ func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	controller progressiveController,
-	currentPromotedChildDef, desiredUpgradingChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
+	existingPromotedChildDef, desiredUpgradingChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
 	restConfig *rest.Config,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -152,7 +149,7 @@ func processUpgradingChild(
 		// to complete the below logic
 		// Consider upgrading to "promoted" as the last thing?
 
-		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, currentPromotedChildDef, rolloutObject)
+		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -160,7 +157,7 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkProgressiveUpgradeSucceeded("New Child Object Running", rolloutObject.GetObjectMeta().Generation)
 		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
 
-		if err := controller.drain(ctx, currentPromotedChildDef); err != nil {
+		if err := controller.drain(ctx, existingPromotedChildDef); err != nil {
 			return false, err
 		}
 		return true, nil
