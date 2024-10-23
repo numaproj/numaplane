@@ -382,7 +382,7 @@ func Test_resolveManifestTemplate(t *testing.T) {
 			manifest:         "this is {{.Invalid}} invalid",
 			rollout:          defaultRollout,
 			expectedManifest: "",
-			expectedError:    fmt.Errorf("unable to apply information to manifest: template: manifest:1:10: executing \"manifest\" at <.Invalid>: can't evaluate field Invalid in type struct { InstanceSuffix string }"),
+			expectedError:    fmt.Errorf("unable to apply information to manifest: template: manifest:1:10: executing \"manifest\" at <.Invalid>: can't evaluate field Invalid in type struct { InstanceSuffix string; InstanceID string }"),
 		}, {
 			name:     "manifest with valid template and rollout without instanceID",
 			manifest: "valid-template-no-id{{.InstanceSuffix}}",

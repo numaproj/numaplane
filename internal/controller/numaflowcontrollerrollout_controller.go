@@ -471,8 +471,10 @@ func resolveManifestTemplate(manifest string, rollout *apiv1.NumaflowControllerR
 
 	data := struct {
 		InstanceSuffix string
+		InstanceID     string
 	}{
 		InstanceSuffix: instanceSuffix,
+		InstanceID:     instanceID,
 	}
 
 	var buf bytes.Buffer
