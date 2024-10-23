@@ -279,9 +279,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
 			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, inProgressStrategy)
-		} else {
-			numaLogger.Warnf("invalid inProgressStrategy=%v", inProgressStrategy)
-			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, apiv1.UpgradeStrategyNoOp)
 		}
 	}
 	switch inProgressStrategy {
@@ -297,7 +294,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-	case apiv1.UpgradeStrategyNoOp:
+	default:
 		if mvNeedsToUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 			if err != nil {
@@ -305,6 +302,11 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
+	}
+	// clean up recyclable monovertices
+	err = garbageCollectChildren(ctx, monoVertexRollout, r, r.restConfig)
+	if err != nil {
+		return err
 	}
 
 	return nil

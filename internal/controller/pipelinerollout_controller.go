@@ -557,14 +557,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
-
-		// When progressive is the default strategy, clean up recyclable pipeline when drained
-		if userPreferredStrategy == config.ProgressiveStrategyID {
-			err = garbageCollectChildren(ctx, pipelineRollout, r, r.restConfig)
-			if err != nil {
-				return err
-			}
-		}
+	}
+	// clean up recyclable pipelines
+	err = garbageCollectChildren(ctx, pipelineRollout, r, r.restConfig)
+	if err != nil {
+		return err
 	}
 
 	if pipelineNeedsToUpdate {

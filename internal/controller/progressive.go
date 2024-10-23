@@ -208,13 +208,16 @@ func garbageCollectChildren(
 	controller progressiveController,
 	restConfig *rest.Config,
 ) error {
+	numaLogger := logger.FromContext(ctx)
 	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, controller)
 	if err != nil {
 		return err
 	}
 
+	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
+
 	for _, recyclableChild := range recyclableObjects {
-		err = recycle(ctx, recyclableChild, controller, restConfig)
+		err = recycle(ctx, recyclableChild, rolloutObject.GetChildPluralName(), controller, restConfig)
 		if err != nil {
 			return err
 		}
@@ -234,6 +237,7 @@ func getRecyclableObjects(
 
 func recycle(ctx context.Context,
 	childObject *kubernetes.GenericObject,
+	childPluralName string,
 	controller progressiveController,
 	restConfig *rest.Config,
 ) error {
@@ -242,7 +246,7 @@ func recycle(ctx context.Context,
 		return err
 	}
 	if isDrained {
-		err = kubernetes.DeleteCR(ctx, restConfig, childObject, "pipelines")
+		err = kubernetes.DeleteCR(ctx, restConfig, childObject, childPluralName)
 		if err != nil {
 			return err
 		}

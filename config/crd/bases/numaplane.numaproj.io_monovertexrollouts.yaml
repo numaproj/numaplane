@@ -147,6 +147,12 @@ spec:
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed pipeline, to uniquely
+                  identify a pipeline.
+                format: int32
+                type: integer
               observedGeneration:
                 description: ObservedGeneration stores the generation value observed
                   when setting the current Phase
@@ -159,6 +165,11 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
+                type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
                 type: string
             type: object
         required:
