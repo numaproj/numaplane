@@ -95,7 +95,7 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}
-	isbsvcName := getISBSvcName(existingPipelineSpec)
+	isbsvcName := existingPipelineSpec.getISBSvcName()
 	isbsvcPauseRequest := pm.pauseRequests[pm.getISBServiceKey(pipeline.Namespace, isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run

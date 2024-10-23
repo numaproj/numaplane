@@ -34,36 +34,37 @@ type progressiveController interface {
 
 	// childNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	childNeedsUpdating(ctx context.Context, existingChild *kubernetes.GenericObject, newChildDefinition *kubernetes.GenericObject) (bool, error)
+
+	// merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
+	merge(existingObj *kubernetes.GenericObject, newObj *kubernetes.GenericObject) *kubernetes.GenericObject
 }
 
 // return whether we're done, and error if any
 func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutObject,
-	existingChildObject *kubernetes.GenericObject, controller progressiveController, restConfig *rest.Config) (bool, error) {
+	existingPromotedChild *kubernetes.GenericObject, controller progressiveController, restConfig *rest.Config) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	upgradingChild, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
 	if err != nil {
 		return false, err
 	}
 
-	// Get the object to see if it exists
-	_, err = kubernetes.GetLiveResource(ctx, restConfig, upgradingChild, rolloutObject.GetChildPluralName())
+	// Get the Upgrading object to see if it exists
+	existingUpgradingChildDef, err := kubernetes.GetLiveResource(ctx, restConfig, newUpgradingChildDef, rolloutObject.GetChildPluralName())
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
-
-			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", upgradingChild.Kind, upgradingChild.Namespace, upgradingChild.Name)
-			err = kubernetes.CreateCR(ctx, restConfig, upgradingChild, rolloutObject.GetChildPluralName())
-			if err != nil {
-				return false, err
-			}
+			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.Kind, newUpgradingChildDef.Namespace, newUpgradingChildDef.Name)
+			err = kubernetes.CreateCR(ctx, restConfig, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+			return false, err
 		} else {
-			return false, fmt.Errorf("error getting %s: %v", upgradingChild.Kind, err)
+			return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.Kind, err)
 		}
 	}
+	newUpgradingChildDef = controller.merge(existingUpgradingChildDef, newUpgradingChildDef)
 
-	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingChildObject, restConfig)
+	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, newUpgradingChildDef, existingUpgradingChildDef, restConfig)
 	if err != nil {
 		return false, err
 	}
@@ -116,32 +117,16 @@ func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	controller progressiveController,
-	currentPromotedChildDef *kubernetes.GenericObject,
+	existingPromotedChildDef, desiredUpgradingChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
 	restConfig *rest.Config,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	desiredUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 
-	// Get existing upgrading child
-	upgradingObject, err := kubernetes.GetLiveResource(ctx, restConfig, desiredUpgradingChildDef, rolloutObject.GetChildPluralName())
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			numaLogger.WithValues("childObjectDefinition", *desiredUpgradingChildDef).
-				Warn("Child not found. Unable to process status during this reconciliation.")
-		} else {
-			return false, fmt.Errorf("error getting Child for status processing: %v", err)
-		}
-	}
-	upgradingObjectStatus, err := kubernetes.ParseStatus(upgradingObject)
-	if err != nil {
-		return false, err
-	}
-
-	numaLogger.Debugf("Upgrading child %s/%s is in phase %s", upgradingObject.Namespace, upgradingObject.Name, upgradingObjectStatus.Phase)
+	numaLogger.Debugf("Upgrading child %s/%s is in phase %s", existingUpgradingChildDef.Namespace, existingUpgradingChildDef.Name, upgradingObjectStatus.Phase)
 
 	switch string(upgradingObjectStatus.Phase) {
 	case "Failed":
@@ -155,7 +140,7 @@ func processUpgradingChild(
 			return false, nil
 		}
 		// Label the new child as promoted and then remove the label from the old one
-		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradePromoted, upgradingObject, rolloutObject)
+		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradePromoted, existingUpgradingChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -164,7 +149,7 @@ func processUpgradingChild(
 		// to complete the below logic
 		// Consider upgrading to "promoted" as the last thing?
 
-		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, currentPromotedChildDef, rolloutObject)
+		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -172,7 +157,7 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkProgressiveUpgradeSucceeded("New Child Object Running", rolloutObject.GetObjectMeta().Generation)
 		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
 
-		if err := controller.drain(ctx, currentPromotedChildDef); err != nil {
+		if err := controller.drain(ctx, existingPromotedChildDef); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -181,12 +166,12 @@ func processUpgradingChild(
 		// TODO: this needs revisiting - a race condition means we could deem this "Running" prior to latest version
 		// being reconciled
 
-		childNeedsToUpdate, err := controller.childNeedsUpdating(ctx, upgradingObject, desiredUpgradingChildDef)
+		childNeedsToUpdate, err := controller.childNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef)
 		if err != nil {
 			return false, err
 		}
 		if childNeedsToUpdate {
-			numaLogger.Debugf("Upgrading child %s/%s has a new update", upgradingObject.Namespace, upgradingObject.Name)
+			numaLogger.Debugf("Upgrading child %s/%s has a new update", existingUpgradingChildDef.Namespace, existingUpgradingChildDef.Name)
 
 			err = kubernetes.UpdateCR(ctx, restConfig, desiredUpgradingChildDef, "pipelines")
 			if err != nil {

@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -69,13 +68,20 @@ var (
 	initTime             time.Time
 )
 
-// PipelineSpec keep track of minimum number of fields we need to know about
+// PipelineSpec keeps track of minimum number of fields we need to know about
 type PipelineSpec struct {
 	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
-	Lifecycle                  lifecycle `json:"lifecycle,omitempty"`
+	Lifecycle                  Lifecycle `json:"lifecycle,omitempty"`
 }
 
-type lifecycle struct {
+func (pipeline PipelineSpec) getISBSvcName() string {
+	if pipeline.InterStepBufferServiceName == "" {
+		return "default"
+	}
+	return pipeline.InterStepBufferServiceName
+}
+
+type Lifecycle struct {
 	// DesiredPhase used to bring the pipeline from current phase to desired phase
 	// +kubebuilder:default=Running
 	// +optional
@@ -410,7 +416,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
 		return false, errors.New(errStr)
 	}
-	newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
+	newPipelineDef = r.merge(existingPipelineDef, newPipelineDef)
 	err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, syncStartTime)
 	return false, err
 }
@@ -430,10 +436,21 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 }
 
 // take the existing pipeline and merge anything needed from the new pipeline definition
-func mergePipeline(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *PipelineRolloutReconciler) merge(existingPipeline *kubernetes.GenericObject, newPipeline *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultPipeline := existingPipeline.DeepCopy()
 	resultPipeline.Spec = *newPipeline.Spec.DeepCopy()
-	resultPipeline.Labels = maps.Clone(newPipeline.Labels)
+	if resultPipeline.Labels == nil {
+		resultPipeline.Labels = map[string]string{}
+	}
+	for key, value := range newPipeline.Labels {
+		resultPipeline.Labels[key] = value
+	}
+	if resultPipeline.Annotations == nil {
+		resultPipeline.Annotations = map[string]string{}
+	}
+	for key, value := range newPipeline.Annotations {
+		resultPipeline.Annotations[key] = value
+	}
 	return resultPipeline
 }
 
@@ -507,7 +524,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
 		}
-		newPipelineDef = mergePipeline(existingPipelineDef, newPipelineDef)
+		newPipelineDef = r.merge(existingPipelineDef, newPipelineDef)
 	}
 
 	// now do whatever the inProgressStrategy is
@@ -687,22 +704,22 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-// remove 'lifecycle.desiredPhase' key/value pair from Pipeline spec
+// remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
-func pipelineWithoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
-	var pipelineAsMap map[string]any
-	if err := json.Unmarshal(obj.Spec.Raw, &pipelineAsMap); err != nil {
+func withoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
+	var specAsMap map[string]any
+	if err := json.Unmarshal(obj.Spec.Raw, &specAsMap); err != nil {
 		return nil, err
 	}
 	// remove "lifecycle.desiredPhase"
 	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
-	util.RemovePaths(pipelineAsMap, comparisonExcludedPaths, ".")
+	util.RemovePaths(specAsMap, comparisonExcludedPaths, ".")
 	// if "lifecycle" is there and empty, remove it
-	lifecycleMap, found := pipelineAsMap["lifecycle"].(map[string]interface{})
+	lifecycleMap, found := specAsMap["lifecycle"].(map[string]interface{})
 	if found && len(lifecycleMap) == 0 {
-		util.RemovePaths(pipelineAsMap, []string{"lifecycle"}, ".")
+		util.RemovePaths(specAsMap, []string{"lifecycle"}, ".")
 	}
-	return pipelineAsMap, nil
+	return specAsMap, nil
 }
 
 func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
@@ -720,20 +737,23 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 	return kubernetes.UpdateCR(ctx, restConfig, obj, "pipelines")
 }
 
-func basePipelineLabels(pipelineRollout *apiv1.PipelineRollout) (map[string]string, error) {
+// take the Metadata (Labels and Annotations) specified in the PipelineRollout plus any others that apply to all Pipelines
+func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Metadata, error) {
+	labelMapping := map[string]string{}
+	for key, val := range pipelineRollout.Spec.Pipeline.Labels {
+		labelMapping[key] = val
+	}
 	var pipelineSpec PipelineSpec
-	labelMapping := map[string]string{
-		common.LabelKeyISBServiceNameForPipeline: "default",
-	}
+
 	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
-	}
-	if pipelineSpec.InterStepBufferServiceName != "" {
-		labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.InterStepBufferServiceName
+		return apiv1.Metadata{}, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 
+	labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.getISBSvcName()
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
-	return labelMapping, nil
+
+	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Spec.Pipeline.Annotations}, nil
+
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
@@ -754,19 +774,19 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 		return nil, err
 	}
 
-	labels, err := basePipelineLabels(pipelineRollout)
+	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	return r.makePipelineDefinition(pipelineRollout, pipelineName, labels)
+	return r.makePipelineDefinition(pipelineRollout, pipelineName, metadata)
 }
 
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
-	labels map[string]string,
+	metadata apiv1.Metadata,
 ) (*kubernetes.GenericObject, error) {
 
 	return &kubernetes.GenericObject{
@@ -777,7 +797,8 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pipelineName,
 			Namespace:       pipelineRollout.Namespace,
-			Labels:          labels,
+			Labels:          metadata.Labels,
+			Annotations:     metadata.Annotations,
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)},
 		},
 		Spec: pipelineRollout.Spec.Pipeline.Spec,
@@ -794,11 +815,11 @@ func (r *PipelineRolloutReconciler) listChildren(ctx context.Context, rolloutObj
 
 func (r *PipelineRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	pipelineLabels, err := basePipelineLabels(pipelineRollout)
+	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-	return r.makePipelineDefinition(pipelineRollout, name, pipelineLabels)
+	return r.makePipelineDefinition(pipelineRollout, name, metadata)
 }
 
 func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {
@@ -846,18 +867,19 @@ func (r *PipelineRolloutReconciler) childIsDrained(ctx context.Context, pipeline
 }
 
 func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *kubernetes.GenericObject) error {
-	return r.setPipelineLifecycle(ctx, true, pipeline)
+	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
+	return kubernetes.PatchCR(ctx, r.restConfig, pipeline, "pipelines", patchJson, k8stypes.MergePatchType)
 }
 
 // childNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func (r *PipelineRolloutReconciler) childNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := pipelineWithoutDesiredPhase(a)
+	pipelineWithoutDesiredPhaseA, err := withoutDesiredPhase(a)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutDesiredPhaseB, err := pipelineWithoutDesiredPhase(b)
+	pipelineWithoutDesiredPhaseB, err := withoutDesiredPhase(b)
 	if err != nil {
 		return false, err
 	}
@@ -871,13 +893,6 @@ func (r *PipelineRolloutReconciler) childNeedsUpdating(ctx context.Context, a *k
 func getPipelineRolloutName(pipeline string) string {
 	index := strings.LastIndex(pipeline, "-")
 	return pipeline[:index]
-}
-
-func getISBSvcName(pipeline PipelineSpec) string {
-	if pipeline.InterStepBufferServiceName == "" {
-		return "default"
-	}
-	return pipeline.InterStepBufferServiceName
 }
 
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {

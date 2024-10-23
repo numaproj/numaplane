@@ -264,7 +264,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef = mergeISBService(existingISBServiceDef, newISBServiceDef)
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
@@ -287,12 +287,18 @@ func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
-func mergeISBService(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Spec = *newISBService.Spec.DeepCopy()
 
+	if resultISBService.Annotations == nil {
+		resultISBService.Annotations = map[string]string{}
+	}
 	for key, val := range newISBService.Annotations {
 		resultISBService.Annotations[key] = val
+	}
+	if resultISBService.Labels == nil {
+		resultISBService.Labels = map[string]string{}
 	}
 	for key, val := range newISBService.Labels {
 		resultISBService.Labels[key] = val
@@ -313,7 +319,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// update our Status with the ISBService's Status
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-	// if I am in the middle of an update of the ISBService, then I need to make sure all the Pipelines are pausing
 	_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
 	if err != nil {
 		return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
@@ -331,7 +336,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if isbServiceNeedsUpdating - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// if isbServiceNeedsToUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
 	if isbServiceNeedsToUpdate {
 		isbServiceRollout.Status.MarkPending()

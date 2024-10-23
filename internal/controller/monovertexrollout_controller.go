@@ -213,7 +213,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		// object already exists
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -251,12 +251,19 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 
+	if resultMonoVertex.Annotations == nil {
+		resultMonoVertex.Annotations = map[string]string{}
+	}
 	for key, val := range newMonoVertex.Annotations {
 		resultMonoVertex.Annotations[key] = val
+	}
+
+	if resultMonoVertex.Labels == nil {
+		resultMonoVertex.Labels = map[string]string{}
 	}
 	for key, val := range newMonoVertex.Labels {
 		resultMonoVertex.Labels[key] = val
