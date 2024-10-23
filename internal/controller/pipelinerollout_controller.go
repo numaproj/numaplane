@@ -741,7 +741,7 @@ func updatePipelineSpec(ctx context.Context, restConfig *rest.Config, obj *kuber
 // take the Metadata (Labels and Annotations) specified in the PipelineRollout plus any others that apply to all Pipelines
 func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Metadata, error) {
 	labelMapping := map[string]string{}
-	for key, val := range pipelineRollout.Labels {
+	for key, val := range pipelineRollout.Spec.Pipeline.Labels {
 		labelMapping[key] = val
 	}
 	var pipelineSpec PipelineSpec

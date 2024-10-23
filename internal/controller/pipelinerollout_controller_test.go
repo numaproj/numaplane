@@ -607,37 +607,55 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	}
 }
 
-/*
-func TestBasePipelineLabels(t *testing.T) {
+func TestBasePipelineMetadata(t *testing.T) {
+
+	pipelineRolloutName := "my-pipeline"
+
 	tests := []struct {
-		name          string
-		jsonInput     string
-		expectedLabel string
-		expectError   bool
+		name                     string
+		jsonInput                string
+		rolloutSpecifiedMetadata apiv1.Metadata
+		expectedPipelineMetadata apiv1.Metadata
+		expectError              bool
 	}{
 		{
-			name:          "Valid Input",
-			jsonInput:     `{"interStepBufferServiceName": "buffer-service"}`,
-			expectedLabel: "buffer-service",
-			expectError:   false,
+			name:      "Valid Input",
+			jsonInput: `{"interStepBufferServiceName": "buffer-service"}`,
+			rolloutSpecifiedMetadata: apiv1.Metadata{
+				Labels:      map[string]string{"key": "val"},
+				Annotations: map[string]string{"key": "val"},
+			},
+			expectedPipelineMetadata: apiv1.Metadata{
+				Labels: map[string]string{
+					"key":                                    "val",
+					common.LabelKeyISBServiceNameForPipeline: "buffer-service",
+					common.LabelKeyParentRollout:             pipelineRolloutName,
+				},
+				Annotations: map[string]string{"key": "val"},
+			},
+			expectError: false,
 		},
 		{
-			name:          "Missing InterStepBufferServiceName",
-			jsonInput:     `{}`,
-			expectedLabel: "default",
-			expectError:   false,
+			name:                     "Unspecified InterStepBufferServiceName",
+			jsonInput:                `{}`,
+			rolloutSpecifiedMetadata: apiv1.Metadata{},
+			expectedPipelineMetadata: apiv1.Metadata{
+				Labels: map[string]string{
+					common.LabelKeyISBServiceNameForPipeline: "default",
+					common.LabelKeyParentRollout:             pipelineRolloutName,
+				},
+			},
+			expectError: false,
 		},
 		{
-			name:          "Invalid JSON",
-			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
-			expectedLabel: "",
-			expectError:   true,
+			name:        "Invalid JSON",
+			jsonInput:   `{"interStepBufferServiceName": "buffer-service"`,
+			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipelineRolloutName := "my-pipeline"
 			pipelineRollout := &apiv1.PipelineRollout{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: defaultNamespace,
@@ -645,28 +663,34 @@ func TestBasePipelineLabels(t *testing.T) {
 				},
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
-						Spec: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+						Spec:     runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+						Metadata: tt.rolloutSpecifiedMetadata,
 					},
 				},
 			}
 
-			labels, err := basePipelineLabels(pipelineRollout)
+			metadata, err := getBasePipelineMetadata(pipelineRollout)
 			if (err != nil) != tt.expectError {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
 			if err == nil {
-				if labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
+				/*if metadata.Labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
 					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
 				}
 
-				if labels[common.LabelKeyParentRollout] != pipelineRolloutName {
+				if metadata.Labels[common.LabelKeyParentRollout] != pipelineRolloutName {
 					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyParentRollout, pipelineRolloutName)
-				}
+				}*/
+				/*if !reflect.DeepEqual(metadata.Labels, tt.expectedPipelineMetadata.Labels) {
+					t.Errorf("Pipeline Labels is different: expected")
+				}*/
+				assert.Equal(t, tt.expectedPipelineMetadata.Labels, metadata.Labels)
+				assert.Equal(t, tt.expectedPipelineMetadata.Annotations, metadata.Annotations)
 			}
 		})
 	}
-}*/
+}
 
 func createPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec, annotations map[string]string, labels map[string]string) *apiv1.PipelineRollout {
 	pipelineRaw, _ := json.Marshal(isbsvcSpec)
