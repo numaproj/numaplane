@@ -413,7 +413,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
 			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseRunning),
 			existingPauseRequest:    &falseValue,
 			expectedPauseRequest:    &trueValue,
 			expectedRolloutPhase:    apiv1.PhasePending,
