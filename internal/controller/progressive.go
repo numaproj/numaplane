@@ -72,6 +72,7 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 	return done, nil
 }
 
+// create the definition for the child of the Rollout which is the one labeled "upgrading"
 func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject RolloutObject, controller progressiveController) (*kubernetes.GenericObject, error) {
 
 	numaLogger := logger.FromContext(ctx)

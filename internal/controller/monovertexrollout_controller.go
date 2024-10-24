@@ -442,6 +442,7 @@ func parseMonoVertexStatus(obj *kubernetes.GenericObject) (numaflowv1.MonoVertex
 	return status, nil
 }
 
+// create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
 func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
@@ -551,7 +552,7 @@ func (r *MonoVertexRolloutReconciler) childIsDrained(ctx context.Context, monoVe
 	}
 	monoVertexPhase := monoVertexStatus.Phase
 
-	return monoVertexPhase == numaflowv1.MonoVertexPhasePaused /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: Numaflow should implement?
+	return monoVertexPhase == numaflowv1.MonoVertexPhasePaused /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
 }
 
 func (r *MonoVertexRolloutReconciler) drain(ctx context.Context, monoVertexDef *kubernetes.GenericObject) error {
