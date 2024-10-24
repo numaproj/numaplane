@@ -144,12 +144,15 @@ func main() {
 		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
+	if err := kubernetes.SetDynamicClient(newRawConfig); err != nil {
+		numaLogger.Fatal(err, "Failed to set dynamic client")
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutPipeline),
 	)
@@ -179,7 +182,6 @@ func main() {
 	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutISBSvc),
 	)
@@ -191,7 +193,6 @@ func main() {
 	monoVertexRolloutReconciler := controller.NewMonoVertexRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertex),
 	)

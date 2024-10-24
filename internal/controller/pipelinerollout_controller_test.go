@@ -731,6 +731,7 @@ func pipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.Pip
 func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
 		DefaultUpgradeStrategy:    config.PPNDStrategyID,
@@ -753,7 +754,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 
@@ -955,7 +955,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				GetPauseModule().pauseRequests[GetPauseModule().getISBServiceKey(defaultNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
 			}
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
@@ -977,6 +977,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 func Test_processExistingPipeline_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
 		DefaultUpgradeStrategy:    config.ProgressiveStrategyID,
@@ -994,7 +995,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
 		scheme.Scheme,
-		restConfig,
 		customMetrics,
 		recorder)
 
@@ -1199,7 +1199,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
 			////// check results:
