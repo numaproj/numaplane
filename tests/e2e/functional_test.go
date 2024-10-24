@@ -41,6 +41,7 @@ const (
 	pipelineRolloutName              = "test-pipeline-rollout"
 	pipelineName                     = "test-pipeline-rollout-0"
 	monoVertexRolloutName            = "test-monovertex-rollout"
+	monoVertexName                   = "test-monovertex-rollout-0"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.3.3-copy1"
 	initialJetstreamVersion          = "2.9.6"
@@ -299,7 +300,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
-		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
 
@@ -313,7 +314,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
+		verifyMonoVertexReady(Namespace, monoVertexName)
 
 	})
 
@@ -610,13 +611,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
+		verifyMonoVertexReady(Namespace, monoVertexName)
 
 	})
 
@@ -677,7 +678,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying MonoVertex deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the MonoVertex: " + err.Error())
