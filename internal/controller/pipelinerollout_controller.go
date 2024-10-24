@@ -568,6 +568,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
+				return nil
 			} else {
 				return fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
