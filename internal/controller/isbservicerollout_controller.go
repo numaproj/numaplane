@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -380,7 +379,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// requeue if done with PPND is false
 			return true, nil
 		}
-	case apiv1.UpgradeStrategyNoOp:
+	case apiv1.UpgradeStrategyNoOp, apiv1.UpgradeStrategyProgressive:
 		if isbServiceNeedsToUpdate {
 			// update ISBService
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
@@ -389,8 +388,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-	case apiv1.UpgradeStrategyProgressive:
-		return false, errors.New("progressive Strategy not supported yet")
+	// case apiv1.UpgradeStrategyProgressive:
+	// 	return false, errors.New("progressive Strategy not supported yet")
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
