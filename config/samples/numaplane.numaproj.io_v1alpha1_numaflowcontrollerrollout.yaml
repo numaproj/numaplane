@@ -2,6 +2,7 @@ apiVersion: numaplane.numaproj.io/v1alpha1
 kind: NumaflowControllerRollout
 metadata:
   name: numaflow-controller # The Only support name is: numaflow-controller, to prevent having more than one controller in a namespace.
+  namespace: example-namespace
 spec:
   controller:
     version: "1.3.3" 
