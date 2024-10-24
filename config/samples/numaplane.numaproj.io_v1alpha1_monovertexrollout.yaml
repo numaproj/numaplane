@@ -18,3 +18,4 @@ spec:
         udsink:
           container:
             image: quay.io/numaio/numaflow-java/simple-sink:stable
+
