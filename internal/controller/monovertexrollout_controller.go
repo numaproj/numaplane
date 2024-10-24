@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -210,7 +211,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef, err = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -248,10 +252,41 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
+func mergeMonoVertex(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
-	return resultMonoVertex
+	// Use the same replicas as the existing MonoVertex
+	resultMonoVertex, err := withExistingMvtxReplicas(existingMonoVertex, resultMonoVertex)
+	return resultMonoVertex, err
+}
+
+// withExistingMvtxReplicas sets the replicas of the new MonoVertex to the existing MonoVertex's replicas if it exists.
+func withExistingMvtxReplicas(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+	unstrucExisting, err := kubernetes.ObjectToUnstructured(existingMonoVertex)
+	if err != nil {
+		return newMonoVertex, err
+	}
+	// Have to use float64 as it's  the type of the replicas field in the unstructured object
+	existingReplicas, existing, err := unstructured.NestedFloat64(unstrucExisting.Object, "spec", "replicas")
+	if err != nil {
+		return newMonoVertex, fmt.Errorf("failed to get replicas from existing MonoVertex: %w", err)
+	}
+	if existing {
+		unstrucNew, err := kubernetes.ObjectToUnstructured(newMonoVertex)
+		if err != nil {
+			return newMonoVertex, err
+		}
+		err = unstructured.SetNestedField(unstrucNew.Object, existingReplicas, "spec", "replicas")
+		if err != nil {
+			return newMonoVertex, fmt.Errorf("failed to set replicas in new MonoVertex: %w", err)
+		}
+
+		newMonoVertex, err = kubernetes.UnstructuredToObject(unstrucNew)
+		if err != nil {
+			return newMonoVertex, err
+		}
+	}
+	return newMonoVertex, nil
 }
 
 func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Context, monoVertex *kubernetes.GenericObject, rollout *apiv1.MonoVertexRollout) {
