@@ -748,7 +748,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 	falseValue := false
 	trueValue := true
-	ppndUpgradeStrategy := apiv1.UpgradeStrategyPPND
 
 	r := NewPipelineRolloutReconciler(
 		numaplaneClient,
@@ -763,7 +762,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		pipelineRolloutAnnotations     map[string]string
 		existingPipelineDef            numaflowv1.Pipeline
 		initialRolloutPhase            apiv1.Phase
-		initialInProgressStrategy      *apiv1.UpgradeStrategy
+		initialInProgressStrategy      apiv1.UpgradeStrategy
 		numaflowControllerPauseRequest *bool
 		isbServicePauseRequest         *bool
 
@@ -777,7 +776,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineSpec,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -791,7 +790,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -805,7 +804,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
@@ -819,7 +818,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineSpecWithWatermarkDisabled,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &trueValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
@@ -833,7 +832,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused),
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -850,7 +849,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				defaultPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
 				false, map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      nil,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -864,7 +863,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhaseRunning),
 			initialRolloutPhase:            apiv1.PhasePending,
-			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
@@ -881,7 +880,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				defaultPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
 				false, map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
-			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -896,7 +895,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			pipelineRolloutAnnotations:     map[string]string{common.LabelKeyAllowDataLoss: "true"},
 			existingPipelineDef:            *createDefaultPipeline(numaflowv1.PipelinePhasePausing),
 			initialRolloutPhase:            apiv1.PhasePending,
-			initialInProgressStrategy:      &ppndUpgradeStrategy,
+			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &trueValue,
 			isbServicePauseRequest:         &trueValue,
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
@@ -926,13 +925,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			_ = numaplaneClient.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
-			if tc.initialInProgressStrategy != nil {
-				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
-				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, *tc.initialInProgressStrategy)
-			} else {
-				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
-				r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
-			}
+			rollout.Status.UpgradeInProgress = tc.initialInProgressStrategy
+			r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}, tc.initialInProgressStrategy)
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
