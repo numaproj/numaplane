@@ -167,7 +167,7 @@ func processUpgradingChild(
 		// TODO: this needs revisiting - a race condition means we could deem this "Running" prior to latest version
 		// being reconciled
 
-		childNeedsToUpdate, err := controller.childNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef)
+		childNeedsToUpdate, err := controller.childNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef) // TODO: if we decide not to drain the upgrading one on failure, I think we can change this to DeepEqual() check
 		if err != nil {
 			return false, err
 		}
