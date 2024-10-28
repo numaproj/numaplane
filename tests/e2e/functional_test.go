@@ -509,18 +509,17 @@ var _ = Describe("Functional e2e", Serial, func() {
 		rawSpec, err := json.Marshal(currentMonoVertexSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// update the PipelineRollout
+		// update the MonoVertexRollout
 		updateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 			rollout.Spec.MonoVertex.Spec.Raw = rawSpec
 			return rollout, nil
 		})
-		document("verifying MonoVertexRollout spec deployed")
 
-		// verifyPipelineRolloutDeployed(pipelineRolloutName)
+		document("verifying MonoVertexRollout spec deployed")
+		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 		verifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
-		// verifyPipelineRunning(Namespace, pipelineName, 3)
 	})
 
 	time.Sleep(2 * time.Second)
