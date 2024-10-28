@@ -132,7 +132,7 @@ func processUpgradingChild(
 	switch string(upgradingObjectStatus.Phase) {
 	case "Failed":
 
-		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation) // TODO: consider that in order for user to be able to update this spec to fix it, we will need to allow that
+		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation)
 		return false, nil
 
 	case "Running":
