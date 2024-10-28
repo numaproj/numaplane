@@ -19,17 +19,21 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -227,3 +231,109 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 	})
 
 })
+
+func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {
+	t.Helper()
+	return numaflowv1.MonoVertexSpec{
+		Replicas: ptr.To(int32(1)),
+		Source: &numaflowv1.Source{
+			UDSource: &numaflowv1.UDSource{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
+				},
+			},
+			UDTransformer: &numaflowv1.UDTransformer{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+				},
+			},
+		},
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				UDSink: &numaflowv1.UDSink{
+					Container: &numaflowv1.Container{
+						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+					},
+				},
+			},
+		},
+	}
+}
+
+func fakeGenericMonoVertex(t *testing.T, s numaflowv1.MonoVertexSpec) *kubernetes.GenericObject {
+	t.Helper()
+	monoVertexSpecRaw, _ := json.Marshal(s)
+	return &kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MonoVertex",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test--mvtx",
+			Namespace: "test-ns",
+		},
+		Spec: runtime.RawExtension{
+			Raw: monoVertexSpecRaw,
+		},
+	}
+}
+
+func Test_withExistingMvtxReplicas(t *testing.T) {
+	tests := []struct {
+		name             string
+		existingReplicas *int32
+		newReplicas      *int32
+		expected         *int32
+	}{
+		{
+			name:             "nil existing replicas",
+			existingReplicas: nil,
+			newReplicas:      ptr.To(int32(2)),
+			expected:         ptr.To(int32(2)),
+		},
+		{
+			name:             "both nil",
+			existingReplicas: nil,
+			newReplicas:      nil,
+			expected:         nil,
+		},
+		{
+			name:             "existing replicas not nil, new replicas not nil",
+			existingReplicas: ptr.To(int32(2)),
+			newReplicas:      ptr.To(int32(1)),
+			expected:         ptr.To(int32(2)),
+		},
+		{
+			name:             "existing replicas not nil, new replicas nil",
+			existingReplicas: ptr.To(int32(2)),
+			newReplicas:      nil,
+			expected:         ptr.To(int32(2)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existingMvtxSpec := fakeMonoVertexSpec(t)
+			existingMvtxSpec.Replicas = tt.existingReplicas
+			existingGenericMvtx := fakeGenericMonoVertex(t, existingMvtxSpec)
+
+			newMvtxSpec := fakeMonoVertexSpec(t)
+			newMvtxSpec.Replicas = tt.newReplicas
+			newGenericMvtx := fakeGenericMonoVertex(t, newMvtxSpec)
+
+			result, err := withExistingMvtxReplicas(existingGenericMvtx, newGenericMvtx)
+			assert.NoError(t, err)
+
+			unstruc, err := kubernetes.ObjectToUnstructured(result)
+			assert.NoError(t, err)
+
+			expected, existing, err := unstructured.NestedFloat64(unstruc.Object, "spec", "replicas")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected != nil, existing)
+			if tt.expected != nil {
+				assert.Equal(t, *tt.expected, int32(expected))
+			}
+		})
+	}
+
+}
