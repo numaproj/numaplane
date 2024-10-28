@@ -286,3 +286,17 @@ func verifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
+
+func verifyMonoVertexRolloutDeployed(monoVertexRolloutName string) {
+	document("Verifying that the MonoVertexRollout is Deployed")
+	Eventually(func() bool {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return rollout.Status.Phase == apiv1.PhaseDeployed
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+
+}

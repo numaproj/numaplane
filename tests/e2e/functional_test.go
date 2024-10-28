@@ -478,7 +478,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 		document("verifying MonoVertexRollout spec deployed")
-		verifyMonoVertexRolloutReady(monoVertexRolloutName)
+		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused
 		verifyMonoVertexPaused(Namespace, pipelineRolloutName, pipelineName)
