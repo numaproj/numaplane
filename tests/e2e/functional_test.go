@@ -481,7 +481,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused
-		verifyMonoVertexPaused(Namespace, pipelineRolloutName, pipelineName)
+		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexRolloutName)
 		document("verifying MonoVertex stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
