@@ -21,6 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// ConditionMonoVertexPausingOrPaused indicates that the MonoVertex is either pausing or paused.
+	ConditionMonoVertexPausingOrPaused ConditionType = "MonoVertexPausingOrPaused"
+)
+
 // MonoVertexRolloutSpec defines the desired state of MonoVertexRollout
 type MonoVertexRolloutSpec struct {
 	MonoVertex MonoVertex `json:"monoVertex"`
@@ -61,6 +66,14 @@ type MonoVertexRolloutList struct {
 
 func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
+}
+
+func (status *MonoVertexRolloutStatus) MarkMonoVertexPaused(reason, message string, generation int64) {
+	status.MarkTrueWithReason(ConditionMonoVertexPausingOrPaused, reason, message, generation)
+}
+
+func (status *MonoVertexRolloutStatus) MarkMonoVertexUnpaused(generation int64) {
+	status.MarkFalse(ConditionMonoVertexPausingOrPaused, "Unpaused", "MonoVertex unpaused", generation)
 }
 
 // IsHealthy indicates whether the MonoVertexRollout is healthy.

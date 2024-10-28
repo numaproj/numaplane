@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -313,10 +314,38 @@ func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Contex
 		rollout.Status.MarkChildResourcesUnhealthy("Progressing", "MonoVertex Progressing", rollout.Generation)
 	} else if monoVertexPhase == numaflowv1.MonoVertexPhaseFailed || monoVertexChildResourceStatus == "False" {
 		rollout.Status.MarkChildResourcesUnhealthy("MonoVertexFailed", "MonoVertex Failed", rollout.Generation)
+	} else if monoVertexPhase == numaflowv1.MonoVertexPhasePaused {
+		rollout.Status.MarkChildResourcesHealthUnknown("MonoVertexUnknown", "MonoVertex Pausing - health unknown", rollout.Generation)
 	} else if monoVertexPhase == numaflowv1.MonoVertexPhaseUnknown || monoVertexChildResourceStatus == "Unknown" {
 		rollout.Status.MarkChildResourcesHealthUnknown("MonoVertexUnkown", "MonoVertex Phase Unknown", rollout.Generation)
 	} else {
 		rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
+	}
+
+	r.setChildResourcesPauseCondition(rollout, monoVertexPhase)
+
+}
+
+func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *apiv1.MonoVertexRollout, mvtxPhase numaflowv1.MonoVertexPhase) {
+
+	if mvtxPhase == numaflowv1.MonoVertexPhasePaused {
+		// TODO: METRICS
+		// if BeginTime hasn't been set yet, we must have just started pausing - set it
+		// if rollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !rollout.Status.PauseStatus.LastPauseBeginTime.After(rollout.Status.PauseStatus.LastPauseEndTime.Time) {
+		// 	rollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
+		// }
+		reason := fmt.Sprintf("MonoVertex%s", string(mvtxPhase))
+		msg := fmt.Sprintf("MonoVertex %s", strings.ToLower(string(mvtxPhase)))
+		// r.updatePauseMetric(rollout)
+		rollout.Status.MarkMonoVertexPaused(reason, msg, rollout.Generation)
+	} else {
+		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
+		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
+		// if (rollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !rollout.Status.PauseStatus.LastPauseEndTime.After(rollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+		// 	rollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
+		// 	r.updatePauseMetric(rollout)
+		// }
+		rollout.Status.MarkMonoVertexUnpaused(rollout.Generation)
 	}
 
 }
