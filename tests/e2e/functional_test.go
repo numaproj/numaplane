@@ -162,7 +162,8 @@ var (
 		},
 	}
 
-	monoVertexSpec = numaflowv1.MonoVertexSpec{
+	currentMonoVertexSpec numaflowv1.MonoVertexSpec
+	monoVertexSpec        = numaflowv1.MonoVertexSpec{
 		Replicas: ptr.To(int32(1)),
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -317,6 +318,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
+	currentMonoVertexSpec = monoVertexSpec
+
 	time.Sleep(2 * time.Second)
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
@@ -458,6 +461,66 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineName, 3)
+	})
+
+	It("Should pause the MonoVertex if user requests it", func() {
+
+		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
+
+		document("setting desiredPhase=Paused")
+
+		rawSpec, err := json.Marshal(currentMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// update the MonoVertexRollout
+		updateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+		document("verifying MonoVertexRollout spec deployed")
+		verifyMonoVertexRolloutReady(monoVertexRolloutName)
+
+		// Give it a little while to get to Paused and then verify that it stays in Paused
+		verifyMonoVertexPaused(Namespace, pipelineRolloutName, pipelineName)
+		document("verifying MonoVertex stays in paused or otherwise pausing")
+		Consistently(func() bool {
+			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexRolloutName)
+			if err != nil {
+				return false
+			}
+			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
+				(retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused)
+		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
+
+		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexRolloutName))
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should resume the MonoVertex if user requests it", func() {
+
+		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
+
+		document("setting desiredPhase=Running")
+
+		rawSpec, err := json.Marshal(currentMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// update the PipelineRollout
+		updateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+		document("verifying MonoVertexRollout spec deployed")
+
+		// verifyPipelineRolloutDeployed(pipelineRolloutName)
+		verifyMonoVertexRolloutHealthy(monoVertexRolloutName)
+
+		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+		// verifyPipelineRunning(Namespace, pipelineName, 3)
 	})
 
 	time.Sleep(2 * time.Second)

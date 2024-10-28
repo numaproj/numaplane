@@ -228,3 +228,61 @@ func watchMonoVertex() {
 	}
 
 }
+
+func verifyMonoVertexPaused(namespace string, monoVertexRolloutName string, monoVertexName string) {
+
+	document("Verify that MonoVertex Rollout condition is Pausing/Paused")
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused)
+	}, testTimeout).Should(Equal(metav1.ConditionTrue))
+
+	document("Verify that MonoVertex is paused")
+	verifyMonoVertexStatusEventually(namespace, monoVertexName,
+		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus) bool {
+			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused
+		})
+}
+
+func verifyMonoVertexStatusEventually(namespace string, monoVertexName string, f func(numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus) bool) {
+	Eventually(func() bool {
+		_, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(namespace, monoVertexName)
+		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
+	}, testTimeout).Should(BeTrue())
+}
+
+func getMonoVertexFromK8S(namespace string, monoVertexName string) (*unstructured.Unstructured, numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus, error) {
+	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
+	var retrievedMonoVertexStatus numaflowv1.MonoVertexStatus
+
+	unstruct, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
+	if err != nil {
+		return nil, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+	retrievedMonoVertexSpec, err = getMonoVertexSpec(unstruct)
+	if err != nil {
+		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+
+	retrievedMonoVertexStatus, err = getMonoVertexStatus(unstruct)
+
+	if err != nil {
+		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+	return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, nil
+}
+
+func getMonoVertexStatus(u *unstructured.Unstructured) (numaflowv1.MonoVertexStatus, error) {
+	statusMap := u.Object["status"]
+	var status numaflowv1.MonoVertexStatus
+	err := util.StructToStruct(&statusMap, &status)
+	return status, err
+}
+
+func verifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
+	document("Verifying that the MonoVertexRollout Child Condition is Healthy")
+	Eventually(func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+}
