@@ -846,7 +846,6 @@ func (r *PipelineRolloutReconciler) incrementChildCount(ctx context.Context, rol
 		}
 	}
 
-	// TODO: why in PipelineRolloutReconciler.calPipelineName() do we only update the Status subresource when it's 0?
 	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
 	if err != nil {
 		return int32(0), err
