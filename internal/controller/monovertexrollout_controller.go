@@ -325,8 +325,9 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch MonoVertexRollouts
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.MonoVertexRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.MonoVertexRollout{},
+		&handler.TypedEnqueueRequestForObject[*apiv1.MonoVertexRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.MonoVertexRollout]{})); err != nil {
+		return fmt.Errorf("failed to watch MonoVertexRollouts: %w", err)
 	}
 
 	// Watch MonoVertices
@@ -336,10 +337,10 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns,
+		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
+		return fmt.Errorf("failed to watch MonoVertices: %w", err)
 	}
 
 	return nil

@@ -19,8 +19,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,25 +37,17 @@ type NumaflowControllerRolloutLister interface {
 
 // numaflowControllerRolloutLister implements the NumaflowControllerRolloutLister interface.
 type numaflowControllerRolloutLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1alpha1.NumaflowControllerRollout]
 }
 
 // NewNumaflowControllerRolloutLister returns a new NumaflowControllerRolloutLister.
 func NewNumaflowControllerRolloutLister(indexer cache.Indexer) NumaflowControllerRolloutLister {
-	return &numaflowControllerRolloutLister{indexer: indexer}
-}
-
-// List lists all NumaflowControllerRollouts in the indexer.
-func (s *numaflowControllerRolloutLister) List(selector labels.Selector) (ret []*v1alpha1.NumaflowControllerRollout, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.NumaflowControllerRollout))
-	})
-	return ret, err
+	return &numaflowControllerRolloutLister{listers.New[*v1alpha1.NumaflowControllerRollout](indexer, v1alpha1.Resource("numaflowcontrollerrollout"))}
 }
 
 // NumaflowControllerRollouts returns an object that can list and get NumaflowControllerRollouts.
 func (s *numaflowControllerRolloutLister) NumaflowControllerRollouts(namespace string) NumaflowControllerRolloutNamespaceLister {
-	return numaflowControllerRolloutNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return numaflowControllerRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.NumaflowControllerRollout](s.ResourceIndexer, namespace)}
 }
 
 // NumaflowControllerRolloutNamespaceLister helps list and get NumaflowControllerRollouts.
@@ -73,26 +65,5 @@ type NumaflowControllerRolloutNamespaceLister interface {
 // numaflowControllerRolloutNamespaceLister implements the NumaflowControllerRolloutNamespaceLister
 // interface.
 type numaflowControllerRolloutNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all NumaflowControllerRollouts in the indexer for a given namespace.
-func (s numaflowControllerRolloutNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.NumaflowControllerRollout, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.NumaflowControllerRollout))
-	})
-	return ret, err
-}
-
-// Get retrieves the NumaflowControllerRollout from the indexer for a given namespace and name.
-func (s numaflowControllerRolloutNamespaceLister) Get(name string) (*v1alpha1.NumaflowControllerRollout, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1alpha1.Resource("numaflowcontrollerrollout"), name)
-	}
-	return obj.(*v1alpha1.NumaflowControllerRollout), nil
+	listers.ResourceIndexer[*v1alpha1.NumaflowControllerRollout]
 }

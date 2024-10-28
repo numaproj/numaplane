@@ -8,28 +8,28 @@ source $(dirname $0)/library.sh
 header "running codegen"
 
 ensure_vendor
-make_fake_paths
 
-export GOPATH="${FAKE_GOPATH}"
-export GO111MODULE="off"
+CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${REPO_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
-cd "${FAKE_REPOPATH}"
+source "${CODEGEN_PKG}/kube_codegen.sh"
 
-CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${FAKE_REPOPATH}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
+THIS_PKG="github.com/numaproj/numaplane"
 
-chmod +x ${CODEGEN_PKG}/*.sh
+subheader "running deepcopy gen"
 
+kube::codegen::gen_helpers \
+    --boilerplate "${REPO_ROOT}/hack/boilerplate.go.txt" \
+    "${REPO_ROOT}/pkg/apis"
 
-subheader "running codegen"
-bash -x ${CODEGEN_PKG}/kube_codegen.sh "deepcopy" \
-  github.com/numaproj/numaplane/pkg/client github.com/numaproj/numaplane/pkg/apis \
-  "numaplane:v1alpha1" \
-  --go-header-file hack/boilerplate.go.txt
+subheader "running clients gen"
 
-bash -x ${CODEGEN_PKG}/kube_codegen.sh "client,informer,lister" \
-  github.com/numaproj/numaplane/pkg/client github.com/numaproj/numaplane/pkg/apis \
-  "numaplane:v1alpha1" \
-  --go-header-file hack/boilerplate.go.txt
+kube::codegen::gen_client \
+    --with-watch \
+    --output-dir "${REPO_ROOT}/pkg/client" \
+    --output-pkg "${THIS_PKG}/pkg/client" \
+    --boilerplate "${REPO_ROOT}/hack/boilerplate.go.txt" \
+    --one-input-api "numaplane/v1alpha1" \
+    "${REPO_ROOT}/pkg/apis"
 
 # gofmt the tree
 subheader "running gofmt"

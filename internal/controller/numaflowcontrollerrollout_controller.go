@@ -794,21 +794,48 @@ func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(controllerRollou
 func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	controller, err := runtimecontroller.New(ControllerNumaflowControllerRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create controller: %w", err)
 	}
 
-	// Watch NumaflowControllerRollouts
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
-		return err
+	// Watch for changes to primary resource NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{},
+		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowControllerRollout]{})); err != nil {
+		return fmt.Errorf("failed to watch NumaflowControllerRollout: %w", err)
 	}
 
-	// Watch NumaflowControllerRollout child resources: numaflow-controller Deployment, ConfigMap, ServiceAccount, Role, RoleBinding
-	for _, kind := range []client.Object{&appsv1.Deployment{}, &corev1.ConfigMap{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
-		if err := controller.Watch(source.Kind(mgr.GetCache(), kind),
-			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()),
-			predicate.ResourceVersionChangedPredicate{}); err != nil {
-			return err
-		}
+	// Watch for changes to secondary resources(Deployment) so we can requeue the owner NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
+		handler.TypedEnqueueRequestForOwner[*appsv1.Deployment](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*appsv1.Deployment]{})); err != nil {
+		return fmt.Errorf("failed to watch Deployment: %w", err)
+	}
+
+	// Watch for changes to secondary resources(ConfigMap) so we can requeue the owner NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
+		handler.TypedEnqueueRequestForOwner[*corev1.ConfigMap](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*corev1.ConfigMap]{})); err != nil {
+		return fmt.Errorf("failed to watch ConfigMap: %w", err)
+	}
+
+	// Watch for changes to secondary resources(ServiceAccount) so we can requeue the owner NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ServiceAccount{},
+		handler.TypedEnqueueRequestForOwner[*corev1.ServiceAccount](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*corev1.ServiceAccount]{})); err != nil {
+		return fmt.Errorf("failed to watch ServiceAccount: %w", err)
+	}
+
+	// Watch for changes to secondary resources(Role) so we can requeue the owner NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.Role{},
+		handler.TypedEnqueueRequestForOwner[*rbacv1.Role](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*rbacv1.Role]{})); err != nil {
+		return fmt.Errorf("failed to watch Role: %w", err)
+	}
+
+	// Watch for changes to secondary resources(RoleBinding) so we can requeue the owner NumaflowControllerRollout
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.RoleBinding{},
+		handler.TypedEnqueueRequestForOwner[*rbacv1.RoleBinding](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*rbacv1.RoleBinding]{})); err != nil {
+		return fmt.Errorf("failed to watch RoleBinding: %w", err)
 	}
 
 	return nil

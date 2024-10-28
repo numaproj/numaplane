@@ -96,7 +96,7 @@ type PipelineRolloutReconciler struct {
 	// queue contains the list of PipelineRollouts that currently need to be reconciled
 	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this queue to be processed as needed
 	// a set of Workers is used to process this queue
-	queue workqueue.RateLimitingInterface
+	queue workqueue.TypedRateLimitingInterface[interface{}]
 	// shutdownWorkerWaitGroup is used when shutting down the workers processing the queue for them to indicate that they're done
 	shutdownWorkerWaitGroup *sync.WaitGroup
 	// customMetrics is used to generate the custom metrics for the Pipeline
@@ -686,8 +686,9 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch PipelineRollouts
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.PipelineRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.PipelineRollout{},
+		&handler.TypedEnqueueRequestForObject[*apiv1.PipelineRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.PipelineRollout]{})); err != nil {
+		return fmt.Errorf("failed to watch PipelineRollouts: %v", err)
 	}
 
 	// Watch Pipelines
@@ -697,10 +698,10 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), pipelineUns),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.PipelineRollout{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), pipelineUns,
+		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.PipelineRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
+		return fmt.Errorf("failed to watch Pipelines: %v", err)
 	}
 
 	return nil

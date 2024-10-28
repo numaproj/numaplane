@@ -26,7 +26,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.22.7'
+          go-version: '1.23'
 
       - name: Add bins to PATH
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.7'
+          go-version: '1.23'
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -76,7 +76,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.22.7'
+          go-version: '1.23'
         id: go
 
       - name: Install MockGen
@@ -128,7 +128,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.22.7'
+          go-version: '1.23'
 
       - name: Add bins to PATH
         run: |
@@ -153,9 +153,8 @@ jobs:
       - name: Install Numaplane
         env:
           GOPATH: /home/runner/go
-        run: 
+        run:
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true PPND=${{matrix.ppnd}} make start
-          
 
       - name: Run e2e tests
         env:

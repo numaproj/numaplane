@@ -11,22 +11,22 @@ import (
 // TODO: Note that this wrapper doesn't provide any added benefit beyond the RateLimitingInterface that it wraps, but we can add
 // metrics for queue length to this by imitating this: https://github.com/argoproj/argo-workflows/blob/main/workflow/metrics/work_queue.go
 type rateLimitingQueue struct {
-	workqueue.RateLimitingInterface
+	workqueue.TypedRateLimitingInterface[interface{}]
 	workerType string
 }
 
-func NewWorkQueue(queueName string) workqueue.RateLimitingInterface {
+func NewWorkQueue(queueName string) workqueue.TypedRateLimitingInterface[interface{}] {
 	return rateLimitingQueue{
-		RateLimitingInterface: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
-		workerType:            queueName,
+		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[interface{}]()),
+		workerType:                 queueName,
 	}
 }
 
 func (w rateLimitingQueue) Get() (interface{}, bool) {
-	item, shutdown := w.RateLimitingInterface.Get()
+	item, shutdown := w.TypedRateLimitingInterface.Get()
 	return item, shutdown
 }
 
 func (w rateLimitingQueue) Done(item interface{}) {
-	w.RateLimitingInterface.Done(item)
+	w.TypedRateLimitingInterface.Done(item)
 }

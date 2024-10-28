@@ -19,8 +19,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,25 +37,17 @@ type PipelineRolloutLister interface {
 
 // pipelineRolloutLister implements the PipelineRolloutLister interface.
 type pipelineRolloutLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1alpha1.PipelineRollout]
 }
 
 // NewPipelineRolloutLister returns a new PipelineRolloutLister.
 func NewPipelineRolloutLister(indexer cache.Indexer) PipelineRolloutLister {
-	return &pipelineRolloutLister{indexer: indexer}
-}
-
-// List lists all PipelineRollouts in the indexer.
-func (s *pipelineRolloutLister) List(selector labels.Selector) (ret []*v1alpha1.PipelineRollout, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.PipelineRollout))
-	})
-	return ret, err
+	return &pipelineRolloutLister{listers.New[*v1alpha1.PipelineRollout](indexer, v1alpha1.Resource("pipelinerollout"))}
 }
 
 // PipelineRollouts returns an object that can list and get PipelineRollouts.
 func (s *pipelineRolloutLister) PipelineRollouts(namespace string) PipelineRolloutNamespaceLister {
-	return pipelineRolloutNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return pipelineRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.PipelineRollout](s.ResourceIndexer, namespace)}
 }
 
 // PipelineRolloutNamespaceLister helps list and get PipelineRollouts.
@@ -73,26 +65,5 @@ type PipelineRolloutNamespaceLister interface {
 // pipelineRolloutNamespaceLister implements the PipelineRolloutNamespaceLister
 // interface.
 type pipelineRolloutNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all PipelineRollouts in the indexer for a given namespace.
-func (s pipelineRolloutNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.PipelineRollout, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.PipelineRollout))
-	})
-	return ret, err
-}
-
-// Get retrieves the PipelineRollout from the indexer for a given namespace and name.
-func (s pipelineRolloutNamespaceLister) Get(name string) (*v1alpha1.PipelineRollout, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1alpha1.Resource("pipelinerollout"), name)
-	}
-	return obj.(*v1alpha1.PipelineRollout), nil
+	listers.ResourceIndexer[*v1alpha1.PipelineRollout]
 }
