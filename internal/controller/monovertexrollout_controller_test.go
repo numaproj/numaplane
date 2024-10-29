@@ -41,6 +41,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 	const (
 		namespace             = "default"
 		monoVertexRolloutName = "monovertexrollout-test"
+		monoVertexName        = "monovertexrollout-test-0"
 	)
 
 	ctx := context.Background()
@@ -87,7 +88,8 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 		},
 	}
 
-	resourceLookupKey := types.NamespacedName{Name: monoVertexRolloutName, Namespace: namespace}
+	rolloutResourceLookupKey := types.NamespacedName{Name: monoVertexRolloutName, Namespace: namespace}
+	mvResourceLookupKey := types.NamespacedName{Name: monoVertexName, Namespace: namespace}
 
 	Context("When applying a MonoVertexRollout spec", func() {
 
@@ -97,7 +99,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 			createdResource := &apiv1.MonoVertexRollout{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, createdResource)
+				err := k8sClient.Get(ctx, rolloutResourceLookupKey, createdResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
@@ -111,7 +113,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 		It("Should have created a MonoVertex", func() {
 			createdMonoVertex := &numaflowv1.MonoVertex{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, createdMonoVertex)
+				err := k8sClient.Get(ctx, mvResourceLookupKey, createdMonoVertex)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
@@ -133,7 +135,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 			By("Updating the MonoVertexRollout")
 
 			currentMonoVertexRollout := &apiv1.MonoVertexRollout{}
-			Expect(k8sClient.Get(ctx, resourceLookupKey, currentMonoVertexRollout)).ToNot(HaveOccurred())
+			Expect(k8sClient.Get(ctx, rolloutResourceLookupKey, currentMonoVertexRollout)).ToNot(HaveOccurred())
 
 			newMonoVertexSpec := numaflowv1.MonoVertexSpec{
 				Replicas: ptr.To(int32(1)),
@@ -170,7 +172,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 			By("Verifying the content of the MonoVertexRollout")
 			Eventually(func() (numaflowv1.MonoVertexSpec, error) {
 				updatedResource := &apiv1.MonoVertexRollout{}
-				err := k8sClient.Get(ctx, resourceLookupKey, updatedResource)
+				err := k8sClient.Get(ctx, rolloutResourceLookupKey, updatedResource)
 				if err != nil {
 					return numaflowv1.MonoVertexSpec{}, err
 				}
@@ -187,7 +189,7 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 		It("Should auto heal the MonoVertex when the spec is directly changed", func() {
 			By("Updating the MonoVertex and verifying the changed field is the same")
-			verifyAutoHealing(ctx, numaflowv1.MonoVertexGroupVersionKind, namespace, monoVertexRolloutName, "spec.source.udsource.container.image", "wrong-image")
+			verifyAutoHealing(ctx, numaflowv1.MonoVertexGroupVersionKind, namespace, monoVertexName, "spec.source.udsource.container.image", "wrong-image")
 		})
 
 		It("Should delete the MonoVertexRollout and MonoVertex", func() {
@@ -197,13 +199,13 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 			deletedResource := &apiv1.MonoVertexRollout{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
+				err := k8sClient.Get(ctx, rolloutResourceLookupKey, deletedResource)
 				return errors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
 
 			deletingChildResource := &numaflowv1.MonoVertex{}
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
+				err := k8sClient.Get(ctx, mvResourceLookupKey, deletingChildResource)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 

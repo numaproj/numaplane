@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -41,6 +43,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -58,21 +61,45 @@ type MonoVertexRolloutReconciler struct {
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
+
+	// maintain inProgressStrategies in memory and in MonoVertexRollout Status
+	inProgressStrategyMgr *inProgressStrategyMgr
 }
 
 func NewMonoVertexRolloutReconciler(
-	client client.Client,
+	c client.Client,
 	s *runtime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
 
-	return &MonoVertexRolloutReconciler{
-		client,
+	r := &MonoVertexRolloutReconciler{
+		c,
 		s,
 		customMetrics,
 		recorder,
+		nil,
 	}
+
+	r.inProgressStrategyMgr = newInProgressStrategyMgr(
+		// getRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
+			monoVertexRollout := rollout.(*apiv1.MonoVertexRollout)
+
+			if monoVertexRollout.Status.UpgradeInProgress != "" {
+				return (*apiv1.UpgradeStrategy)(&monoVertexRollout.Status.UpgradeInProgress)
+			} else {
+				return nil
+			}
+		},
+		// setRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object, strategy apiv1.UpgradeStrategy) {
+			monoVertexRollout := rollout.(*apiv1.MonoVertexRollout)
+			monoVertexRollout.Status.SetUpgradeInProgress(strategy)
+		},
+	)
+
+	return r
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts,verbs=get;list;watch;create;update;patch;delete
@@ -181,17 +208,9 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, finalizerName)
 	}
 
-	newMonoVertexDef := &kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       common.NumaflowMonoVertexKind,
-			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            monoVertexRollout.Name,
-			Namespace:       monoVertexRollout.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
-		},
-		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
+	newMonoVertexDef, err := r.makeRunningMonoVertexDefinition(ctx, monoVertexRollout)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
@@ -213,15 +232,13 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef, err = mergeMonoVertex(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
-		if err != nil {
-			return ctrl.Result{}, err
+		if err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 		}
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
 	// process status
@@ -229,6 +246,74 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	return ctrl.Result{}, nil
 
+}
+
+func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
+	existingMonoVertexDef, newMonoVertexDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// determine if we're trying to update the MonoVertex spec
+	// if it's a simple change, direct apply
+	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
+	// and capability to rollback an unhealthy one
+	mvNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
+	if err != nil {
+		return err
+	}
+	numaLogger.
+		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		Debug("Upgrade decision result")
+
+	// set the Status appropriately to "Pending" or "Deployed"
+	// if mvNeedsToUpdate - this means there's a mismatch between the desired MonoVertex spec and actual MonoVertex spec
+	// Note that this will be reset to "Deployed" later on if a deployment occurs
+	if mvNeedsToUpdate {
+		monoVertexRollout.Status.MarkPending()
+	} else {
+		monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+	}
+
+	// is there currently an inProgressStrategy for the MonoVertex? (This will override any new decision)
+	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, monoVertexRollout)
+	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
+
+	// if not, should we set one?
+	if !inProgressStrategySet {
+		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, inProgressStrategy)
+		}
+	}
+	switch inProgressStrategy {
+	case apiv1.UpgradeStrategyProgressive:
+		if mvNeedsToUpdate {
+			numaLogger.Debug("processing MonoVertex with Progressive")
+			done, err := processResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
+			if err != nil {
+				return err
+			}
+			if done {
+				r.inProgressStrategyMgr.unsetStrategy(ctx, monoVertexRollout)
+			}
+		}
+
+	default:
+		if mvNeedsToUpdate {
+			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
+			if err != nil {
+				return err
+			}
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+		}
+	}
+	// clean up recyclable monovertices
+	err = garbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -260,9 +345,24 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mergeMonoVertex(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
+
+	if resultMonoVertex.Annotations == nil {
+		resultMonoVertex.Annotations = map[string]string{}
+	}
+	for key, val := range newMonoVertex.Annotations {
+		resultMonoVertex.Annotations[key] = val
+	}
+
+	if resultMonoVertex.Labels == nil {
+		resultMonoVertex.Labels = map[string]string{}
+	}
+	for key, val := range newMonoVertex.Labels {
+		resultMonoVertex.Labels[key] = val
+	}
+
 	// Use the same replicas as the existing MonoVertex
 	resultMonoVertex, err := withExistingMvtxReplicas(existingMonoVertex, resultMonoVertex)
 	return resultMonoVertex, err
@@ -295,6 +395,7 @@ func withExistingMvtxReplicas(existingMonoVertex, newMonoVertex *kubernetes.Gene
 		}
 	}
 	return newMonoVertex, nil
+
 }
 
 func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Context, monoVertex *kubernetes.GenericObject, rollout *apiv1.MonoVertexRollout) {
@@ -394,4 +495,153 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 		}
 	}
 	return "True", ""
+}
+
+func parseMonoVertexStatus(obj *kubernetes.GenericObject) (numaflowv1.MonoVertexStatus, error) {
+	if obj == nil || len(obj.Status.Raw) == 0 {
+		return numaflowv1.MonoVertexStatus{}, nil
+	}
+
+	var status numaflowv1.MonoVertexStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return numaflowv1.MonoVertexStatus{}, err
+	}
+
+	return status, nil
+}
+
+// create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
+func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+) (*kubernetes.GenericObject, error) {
+	monoVertexName, err := getChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
+	if err != nil {
+		return nil, err
+	}
+
+	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
+	if err != nil {
+		return nil, err
+	}
+	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+
+	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata)
+}
+
+func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	monoVertexName string,
+	metadata apiv1.Metadata,
+) (*kubernetes.GenericObject, error) {
+
+	return &kubernetes.GenericObject{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       common.NumaflowMonoVertexKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            monoVertexName,
+			Namespace:       monoVertexRollout.Namespace,
+			Labels:          metadata.Labels,
+			Annotations:     metadata.Annotations,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
+		},
+		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
+	}, nil
+}
+
+// take the Metadata (Labels and Annotations) specified in the MonoVertexRollout plus any others that apply to all MonoVertices
+func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv1.Metadata, error) {
+	labelMapping := map[string]string{}
+	for key, val := range monoVertexRollout.Spec.MonoVertex.Labels {
+		labelMapping[key] = val
+	}
+	labelMapping[common.LabelKeyParentRollout] = monoVertexRollout.Name
+
+	return apiv1.Metadata{Labels: labelMapping, Annotations: monoVertexRollout.Spec.MonoVertex.Annotations}, nil
+
+}
+
+// the following functions enable MonoVertexRolloutReconciler to implement progressiveController interface
+func (r *MonoVertexRolloutReconciler) listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	return kubernetes.ListLiveResource(
+		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
+		monoVertexRollout.Namespace, labelSelector, fieldSelector)
+}
+
+func (r *MonoVertexRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
+	if err != nil {
+		return nil, err
+	}
+	return r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
+}
+
+func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	if monoVertexRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *monoVertexRollout.Status.NameCount, true
+	}
+}
+
+func (r *MonoVertexRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	monoVertexRollout.Status.NameCount = &nameCount
+	return r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
+}
+
+// increment the child count for the Rollout and return the count to use
+func (r *MonoVertexRolloutReconciler) incrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+func (r *MonoVertexRolloutReconciler) childIsDrained(ctx context.Context, monoVertexDef *kubernetes.GenericObject) (bool, error) {
+	monoVertexStatus, err := parseMonoVertexStatus(monoVertexDef)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse MonoVertex Status from MonoVertex CR: %+v, %v", monoVertexDef, err)
+	}
+	monoVertexPhase := monoVertexStatus.Phase
+
+	return monoVertexPhase == numaflowv1.MonoVertexPhasePaused /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
+}
+
+func (r *MonoVertexRolloutReconciler) drain(ctx context.Context, monoVertexDef *kubernetes.GenericObject) error {
+	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
+	return kubernetes.PatchResource(ctx, r.client, monoVertexDef, patchJson, k8stypes.MergePatchType)
+}
+
+// childNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func (r *MonoVertexRolloutReconciler) childNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	mvWithoutDesiredPhaseA, err := withoutDesiredPhase(a)
+	if err != nil {
+		return false, err
+	}
+	mvWithoutDesiredPhaseB, err := withoutDesiredPhase(b)
+	if err != nil {
+		return false, err
+	}
+	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+
+	return !reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB), nil
 }

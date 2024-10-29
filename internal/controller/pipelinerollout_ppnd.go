@@ -31,7 +31,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
-	pipelineNeedsToUpdate, err := pipelineSpecNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	pipelineNeedsToUpdate, err := r.childNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -107,7 +107,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.getISBSvcName())
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, getISBSvcName(newPipelineSpec))
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.getISBSvcName())
 	if err != nil {
 		return nil, err
 	}

@@ -51,6 +51,17 @@ spec:
                 description: InterStepBufferService includes the spec of InterStepBufferService
                   in Numaflow
                 properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true

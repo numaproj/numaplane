@@ -38,7 +38,16 @@ GCFLAGS="all=-N -l"
 ENVTEST_K8S_VERSION = 1.28.0
 
 TEST_MANIFEST_DIR ?= tests/manifests/default
-TEST_PAUSE_MANIFEST_DIR ?= tests/manifests/special-cases/pause 
+TEST_PPND_MANIFEST_DIR ?= tests/manifests/special-cases/ppnd 
+TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive 
+
+ifeq ($(PPND), true)
+TEST_MANIFEST_DIR := $(TEST_PPND_MANIFEST_DIR)
+endif
+
+ifeq ($(PROGRESSIVE), true)
+TEST_MANIFEST_DIR := $(TEST_PROGRESSIVE_MANIFEST_DIR)
+endif
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -181,14 +190,12 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 ##@ Deployment
 
+
 .PHONY: start
 start: image
 	$(KUBECTL) apply -f tests/manifests/default/numaplane-ns.yaml
-ifeq ($(DATA_LOSS_PREVENTION), true)
-	$(KUBECTL) kustomize $(TEST_PAUSE_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
-else
-	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
-endif
+	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR)  | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
+
 
 ##@ Build Dependencies
 

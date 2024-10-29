@@ -41,6 +41,7 @@ const (
 	pipelineRolloutName              = "test-pipeline-rollout"
 	pipelineName                     = "test-pipeline-rollout-0"
 	monoVertexRolloutName            = "test-monovertex-rollout"
+	monoVertexName                   = "test-monovertex-rollout-0"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.3.3-copy1"
 	initialJetstreamVersion          = "2.9.6"
@@ -300,7 +301,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
-		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
 
@@ -314,7 +315,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
+		verifyMonoVertexReady(Namespace, monoVertexName)
 
 	})
 
@@ -332,7 +333,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return pipelineSpec, nil
 		})
 
-		if dataLossPrevention == "true" {
+		if ppnd == "true" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
 			verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
@@ -371,7 +372,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if dataLossPrevention == "true" {
+		if ppnd == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
@@ -481,11 +482,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused
-		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexRolloutName)
+		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexName)
 		document("verifying MonoVertex stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexRolloutName)
+			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexName)
 			if err != nil {
 				return false
 			}
@@ -495,7 +496,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexRolloutName))
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexName))
 	})
 
 	time.Sleep(2 * time.Second)
@@ -536,7 +537,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if dataLossPrevention == "true" {
+		if ppnd == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
@@ -583,7 +584,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if dataLossPrevention == "true" {
+		if ppnd == "true" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
@@ -672,13 +673,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
+		verifyMonoVertexReady(Namespace, monoVertexName)
 
 	})
 
@@ -739,7 +740,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying MonoVertex deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the MonoVertex: " + err.Error())

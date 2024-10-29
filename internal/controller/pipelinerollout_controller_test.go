@@ -170,7 +170,7 @@ var _ = Describe("PipelineRollout Controller", Ordered, func() {
 			Expect(createdResource.Spec).Should(Equal(pipelineSpec))
 
 			By("Verifying the label of the pipeline")
-			Expect(createdResource.Labels[common.LabelKeyPipelineRolloutForPipeline]).Should(Equal(pipelineRollout.Name))
+			Expect(createdResource.Labels[common.LabelKeyParentRollout]).Should(Equal(pipelineRollout.Name))
 			Expect(createdResource.Labels[common.LabelKeyUpgradeState]).Should(Equal(string(common.LabelValueUpgradePromoted)))
 		})
 
@@ -539,6 +539,18 @@ var yamlNoDesiredPhase = `
 `
 
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
+
+	_, _, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewPipelineRolloutReconciler(
+		numaplaneClient,
+		scheme.Scheme,
+		customMetrics,
+		recorder)
+
 	testCases := []struct {
 		name                  string
 		specYaml1             string
@@ -582,7 +594,7 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 			obj1.Spec.Raw = []byte(tc.specYaml1)
 			obj2 := &kubernetes.GenericObject{}
 			obj2.Spec.Raw = []byte(tc.specYaml2)
-			needsUpdating, err := pipelineSpecNeedsUpdating(context.Background(), obj1, obj2)
+			needsUpdating, err := r.childNeedsUpdating(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -594,40 +606,55 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 	}
 }
 
-func TestPipelineLabels(t *testing.T) {
+func TestBasePipelineMetadata(t *testing.T) {
+
+	pipelineRolloutName := "my-pipeline"
+
 	tests := []struct {
-		name          string
-		jsonInput     string
-		upgradeState  string
-		expectedLabel string
-		expectError   bool
+		name                     string
+		jsonInput                string
+		rolloutSpecifiedMetadata apiv1.Metadata
+		expectedPipelineMetadata apiv1.Metadata
+		expectError              bool
 	}{
 		{
-			name:          "Valid Input",
-			jsonInput:     `{"interStepBufferServiceName": "buffer-service"}`,
-			upgradeState:  string(common.LabelValueUpgradePromoted),
-			expectedLabel: "buffer-service",
-			expectError:   false,
+			name:      "Valid Input",
+			jsonInput: `{"interStepBufferServiceName": "buffer-service"}`,
+			rolloutSpecifiedMetadata: apiv1.Metadata{
+				Labels:      map[string]string{"key": "val"},
+				Annotations: map[string]string{"key": "val"},
+			},
+			expectedPipelineMetadata: apiv1.Metadata{
+				Labels: map[string]string{
+					"key":                                    "val",
+					common.LabelKeyISBServiceNameForPipeline: "buffer-service",
+					common.LabelKeyParentRollout:             pipelineRolloutName,
+				},
+				Annotations: map[string]string{"key": "val"},
+			},
+			expectError: false,
 		},
 		{
-			name:          "Missing InterStepBufferServiceName",
-			jsonInput:     `{}`,
-			upgradeState:  string(common.LabelValueUpgradePromoted),
-			expectedLabel: "default",
-			expectError:   false,
+			name:                     "Unspecified InterStepBufferServiceName",
+			jsonInput:                `{}`,
+			rolloutSpecifiedMetadata: apiv1.Metadata{},
+			expectedPipelineMetadata: apiv1.Metadata{
+				Labels: map[string]string{
+					common.LabelKeyISBServiceNameForPipeline: "default",
+					common.LabelKeyParentRollout:             pipelineRolloutName,
+				},
+			},
+			expectError: false,
 		},
 		{
-			name:          "Invalid JSON",
-			jsonInput:     `{"interStepBufferServiceName": "buffer-service"`,
-			upgradeState:  string(common.LabelValueUpgradeInProgress),
-			expectedLabel: "",
-			expectError:   true,
+			name:        "Invalid JSON",
+			jsonInput:   `{"interStepBufferServiceName": "buffer-service"`,
+			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipelineRolloutName := "my-pipeline"
 			pipelineRollout := &apiv1.PipelineRollout{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: defaultNamespace,
@@ -635,28 +662,20 @@ func TestPipelineLabels(t *testing.T) {
 				},
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
-						Spec: runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+						Spec:     runtime.RawExtension{Raw: []byte(tt.jsonInput)},
+						Metadata: tt.rolloutSpecifiedMetadata,
 					},
 				},
 			}
 
-			labels, err := pipelineLabels(pipelineRollout, tt.upgradeState)
+			metadata, err := getBasePipelineMetadata(pipelineRollout)
 			if (err != nil) != tt.expectError {
 				t.Errorf("pipelineLabels() error = %v, expectError %v", err, tt.expectError)
 				return
 			}
 			if err == nil {
-				if labels[common.LabelKeyISBServiceNameForPipeline] != tt.expectedLabel {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyISBServiceNameForPipeline, tt.expectedLabel)
-				}
-
-				if labels[common.LabelKeyPipelineRolloutForPipeline] != pipelineRolloutName {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyPipelineRolloutForPipeline, pipelineRolloutName)
-				}
-
-				if labels[common.LabelKeyUpgradeState] != tt.upgradeState {
-					t.Errorf("pipelineLabels() = %v, expected %v", common.LabelKeyUpgradeState, tt.upgradeState)
-				}
+				assert.Equal(t, tt.expectedPipelineMetadata.Labels, metadata.Labels)
+				assert.Equal(t, tt.expectedPipelineMetadata.Annotations, metadata.Annotations)
 			}
 		})
 	}
@@ -1018,8 +1037,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradePromoted),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef:           nil,
 			initialRolloutPhase:                  apiv1.PhaseDeployed,
@@ -1040,8 +1059,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradePromoted),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: createPipelineOfSpec(
 				pipelineSpecWithTopologyChange, newPipelineName,
@@ -1056,8 +1075,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			initialRolloutPhase:                  apiv1.PhasePending,
 			initialInProgressStrategy:            &progressiveUpgradeStrategy,
@@ -1077,8 +1096,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				true,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: createPipelineOfSpec(
 				pipelineSpecWithTopologyChange, newPipelineName,
@@ -1086,8 +1105,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradePromoted),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			initialRolloutPhase:                  apiv1.PhaseDeployed,
 			initialInProgressStrategy:            nil,
@@ -1107,8 +1126,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: createPipelineOfSpec(
 				pipelineSpecWithTopologyChange, newPipelineName,
@@ -1116,8 +1135,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:               string(common.LabelValueUpgradePromoted),
-					common.LabelKeyPipelineRolloutForPipeline: defaultPipelineRolloutName,
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: defaultPipelineRolloutName,
 				}),
 			initialRolloutPhase:                  apiv1.PhaseDeployed,
 			initialInProgressStrategy:            nil,

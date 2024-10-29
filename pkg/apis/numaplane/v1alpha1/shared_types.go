@@ -24,3 +24,8 @@ type ControllerDefinitions struct {
 	Version  string `json:"version" yaml:"version"`
 	FullSpec string `json:"fullSpec" yaml:"fullSpec"`
 }
+
+type Metadata struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+}

@@ -33,12 +33,20 @@ type MonoVertexRolloutSpec struct {
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
 type MonoVertex struct {
-	Spec runtime.RawExtension `json:"spec"`
+	Metadata `json:"metadata,omitempty"`
+	Spec     runtime.RawExtension `json:"spec"`
 }
 
 // MonoVertexRolloutStatus defines the observed state of MonoVertexRollout
 type MonoVertexRolloutStatus struct {
 	Status `json:",inline"`
+
+	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
+	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
+
+	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
+	// identify a pipeline.
+	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
 // +genclient
@@ -64,8 +72,32 @@ type MonoVertexRolloutList struct {
 	Items           []MonoVertexRollout `json:"items"`
 }
 
+// the following functions implement the rolloutObject interface:
+func (monoVertexRollout *MonoVertexRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &monoVertexRollout.TypeMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &monoVertexRollout.ObjectMeta
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetStatus() *Status {
+	return &monoVertexRollout.Status.Status
+}
+func (monoVertexRollout *MonoVertexRollout) GetChildPluralName() string {
+	return "monovertices"
+}
+
 func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
+}
+
+func (status *MonoVertexRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
+	status.UpgradeInProgress = upgradeStrategy
+}
+
+func (status *MonoVertexRolloutStatus) ClearUpgradeInProgress() {
+	status.UpgradeInProgress = ""
 }
 
 func (status *MonoVertexRolloutStatus) MarkMonoVertexPaused(reason, message string, generation int64) {

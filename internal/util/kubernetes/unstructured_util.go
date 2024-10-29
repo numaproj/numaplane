@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/numaproj/numaplane/internal/util"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/util"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/numaproj/numaplane/internal/util/logger"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -124,6 +125,31 @@ func ListLiveResource(ctx context.Context,
 	}
 
 	return nil, err
+}
+
+func PatchResource(
+	ctx context.Context,
+	c client.Client,
+	obj *GenericObject,
+	patch string,
+	patchType k8stypes.PatchType,
+) error {
+
+	unstructuredObj, err := ObjectToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	if err = c.Patch(ctx, unstructuredObj, client.RawPatch(patchType, []byte(patch))); err != nil {
+		return err
+	} else {
+		result, err := UnstructuredToObject(unstructuredObj)
+		if err != nil {
+			return err
+		}
+		*obj = *result
+	}
+
+	return nil
 }
 
 func parseApiVersion(apiVersion string) (string, string, error) {

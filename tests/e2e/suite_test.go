@@ -55,7 +55,7 @@ var _ = BeforeSuite(func() {
 
 	stopCh = make(chan struct{})
 
-	dataLossPrevention = os.Getenv("DATA_LOSS_PREVENTION")
+	ppnd = os.Getenv("PPND")
 
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 

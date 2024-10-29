@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -95,7 +96,7 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, c client.Client, p
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}
-	isbsvcName := getISBSvcName(existingPipelineSpec)
+	isbsvcName := existingPipelineSpec.getISBSvcName()
 	isbsvcPauseRequest := pm.pauseRequests[pm.getISBServiceKey(pipeline.Namespace, isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run
@@ -111,16 +112,8 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, c client.Client, p
 
 func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject, phase string) error {
 
-	err := withDesiredPhase(pipeline, phase)
-	if err != nil {
-		return err
-	}
-
-	err = kubernetes.UpdateResource(ctx, c, pipeline)
-	if err != nil {
-		return err
-	}
-	return nil
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
+	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 
 }
 

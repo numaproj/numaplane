@@ -31,7 +31,8 @@ type ISBServiceRolloutSpec struct {
 
 // InterStepBufferService includes the spec of InterStepBufferService in Numaflow
 type InterStepBufferService struct {
-	Spec runtime.RawExtension `json:"spec"`
+	Metadata `json:"metadata,omitempty"`
+	Spec     runtime.RawExtension `json:"spec"`
 }
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
@@ -64,6 +65,21 @@ type ISBServiceRolloutList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ISBServiceRollout `json:"items"`
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetTypeMeta() *metav1.TypeMeta {
+	return &isbServiceRollout.TypeMeta
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetObjectMeta() *metav1.ObjectMeta {
+	return &isbServiceRollout.ObjectMeta
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetStatus() *Status {
+	return &isbServiceRollout.Status.Status
+}
+func (isbServiceRollout *ISBServiceRollout) GetChildPluralName() string {
+	return "interstepbufferservices"
 }
 
 func init() {

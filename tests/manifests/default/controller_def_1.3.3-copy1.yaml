@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: numaflow-controller-definitions-1.3.3-copy1 
+  name: numaflow-controller-definitions-1.3.3-copy1
   namespace: numaplane-system
   labels:
     "numaplane.numaproj.io/config": numaflow-controller-definitions
@@ -13,26 +13,27 @@ data:
           apiVersion: v1
           kind: ServiceAccount
           metadata:
-            name: numaflow-dex-server
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
-            name: numaflow-sa
+            name: numaflow-sa{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
-            name: numaflow-server-sa
+            name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-dex-server
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           rules:
           - apiGroups:
             - ""
@@ -51,7 +52,8 @@ data:
               app.kubernetes.io/component: controller-manager
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-role
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-role{{ .InstanceSuffix }}
           rules:
           - apiGroups:
             - numaflow.numaproj.io
@@ -158,7 +160,8 @@ data:
               app.kubernetes.io/component: numaflow-ux
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-server-role
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-server-role{{ .InstanceSuffix }}
           rules:
           - apiGroups:
             - numaflow.numaproj.io
@@ -224,7 +227,8 @@ data:
               app.kubernetes.io/component: numaflow-ux
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-server-secrets-role
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-server-secrets-role{{ .InstanceSuffix }}
           rules:
           - apiGroups:
             - ""
@@ -241,16 +245,17 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-dex-server
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
-            name: numaflow-dex-server
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           subjects:
           - kind: ServiceAccount
-            name: numaflow-dex-server
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
@@ -259,14 +264,15 @@ data:
               app.kubernetes.io/component: controller-manager
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-role-binding
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-role-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
-            name: numaflow-role
+            name: numaflow-role{{ .InstanceSuffix }}
           subjects:
           - kind: ServiceAccount
-            name: numaflow-sa
+            name: numaflow-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
@@ -275,14 +281,15 @@ data:
               app.kubernetes.io/component: numaflow-ux
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-server-binding
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-server-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
-            name: numaflow-server-role
+            name: numaflow-server-role{{ .InstanceSuffix }}
           subjects:
           - kind: ServiceAccount
-            name: numaflow-server-sa
+            name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
@@ -291,14 +298,15 @@ data:
               app.kubernetes.io/component: numaflow-ux
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-            name: numaflow-server-secrets-binding
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
+            name: numaflow-server-secrets-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
-            name: numaflow-server-secrets-role
+            name: numaflow-server-secrets-role{{ .InstanceSuffix }}
           subjects:
           - kind: ServiceAccount
-            name: numaflow-server-sa
+            name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
@@ -306,11 +314,12 @@ data:
             server.disable.auth: "true"
           kind: ConfigMap
           metadata:
-            name: numaflow-cmd-params-config
+            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
             controller-config.yaml: |
+              instance: "{{ .InstanceID }}"
               defaults:
                 containerResources: |
                   requests:
@@ -464,7 +473,7 @@ data:
                     startCommand: /nats-server
           kind: ConfigMap
           metadata:
-            name: numaflow-controller-config
+            name: numaflow-controller-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
@@ -484,14 +493,14 @@ data:
                     - readonly
           kind: ConfigMap
           metadata:
-            name: numaflow-dex-server-config
+            name: numaflow-dex-server-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
             admin.enabled: "true"
           kind: ConfigMap
           metadata:
-            name: numaflow-server-local-user-config
+            name: numaflow-server-local-user-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
@@ -512,12 +521,12 @@ data:
               # g, my-github-org:my-github-team, role:readonly
           kind: ConfigMap
           metadata:
-            name: numaflow-server-rbac-config
+            name: numaflow-server-rbac-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: Secret
           metadata:
-            name: numaflow-dex-secrets
+            name: numaflow-dex-secrets{{ .InstanceSuffix }}
           stringData:
             dex-github-client-id: <GITHUB_CLIENT_ID>
             dex-github-client-secret: <GITHUB_CLIENT_SECRET>
@@ -525,26 +534,27 @@ data:
           apiVersion: v1
           kind: Secret
           metadata:
-            name: numaflow-server-secrets
+            name: numaflow-server-secrets{{ .InstanceSuffix }}
           type: Opaque
           ---
           apiVersion: v1
           kind: Service
           metadata:
-            name: numaflow-dex-server
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           spec:
             ports:
             - port: 5556
               targetPort: 5556
             selector:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
               app.kubernetes.io/part-of: numaflow
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
           ---
           apiVersion: v1
           kind: Service
           metadata:
-            name: numaflow-server
+            name: numaflow-server{{ .InstanceSuffix }}
           spec:
             ports:
             - port: 8443
@@ -553,12 +563,13 @@ data:
               app.kubernetes.io/component: numaflow-ux
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
+              app.kubernetes.io/instance: "{{ .InstanceID }}"
             type: ClusterIP
           ---
           apiVersion: apps/v1
           kind: Deployment
           metadata:
-            name: numaflow-controller
+            name: numaflow-controller{{ .InstanceSuffix }}
           spec:
             replicas: 1
             selector:
@@ -566,12 +577,14 @@ data:
                 app.kubernetes.io/component: controller-manager
                 app.kubernetes.io/name: controller-manager
                 app.kubernetes.io/part-of: numaflow
+                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: controller-manager
                   app.kubernetes.io/name: controller-manager
                   app.kubernetes.io/part-of: numaflow
+                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
                 - args:
@@ -587,37 +600,37 @@ data:
                     valueFrom:
                       configMapKeyRef:
                         key: namespaced
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
                     valueFrom:
                       configMapKeyRef:
                         key: managed.namespace
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_LEADER_ELECTION_DISABLED
                     valueFrom:
                       configMapKeyRef:
                         key: controller.leader.election.disabled
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
                     valueFrom:
                       configMapKeyRef:
                         key: controller.leader.election.lease.duration
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
                     valueFrom:
                       configMapKeyRef:
                         key: controller.leader.election.lease.renew.deadline
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
                     valueFrom:
                       configMapKeyRef:
                         key: controller.leader.election.lease.renew.period
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
@@ -650,28 +663,30 @@ data:
                 securityContext:
                   runAsNonRoot: true
                   runAsUser: 9737
-                serviceAccountName: numaflow-sa
+                serviceAccountName: numaflow-sa{{ .InstanceSuffix }}
                 volumes:
                 - configMap:
-                    name: numaflow-controller-config
+                    name: numaflow-controller-config{{ .InstanceSuffix }}
                   name: controller-config-volume
           ---
           apiVersion: apps/v1
           kind: Deployment
           metadata:
-            name: numaflow-dex-server
+            name: numaflow-dex-server{{ .InstanceSuffix }}
           spec:
             selector:
               matchLabels:
                 app.kubernetes.io/component: dex-server
-                app.kubernetes.io/name: numaflow-dex-server
+                app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
                 app.kubernetes.io/part-of: numaflow
+                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: dex-server
-                  app.kubernetes.io/name: numaflow-dex-server
+                  app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
                   app.kubernetes.io/part-of: numaflow
+                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
                 - command:
@@ -683,12 +698,12 @@ data:
                     valueFrom:
                       secretKeyRef:
                         key: dex-github-client-id
-                        name: numaflow-dex-secrets
+                        name: numaflow-dex-secrets{{ .InstanceSuffix }}
                   - name: GITHUB_CLIENT_SECRET
                     valueFrom:
                       secretKeyRef:
                         key: dex-github-client-secret
-                        name: numaflow-dex-secrets
+                        name: numaflow-dex-secrets{{ .InstanceSuffix }}
                   image: dexidp/dex:v2.37.0
                   imagePullPolicy: Always
                   name: dex
@@ -712,13 +727,13 @@ data:
                     valueFrom:
                       configMapKeyRef:
                         key: server.address
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_BASE_HREF
                     valueFrom:
                       configMapKeyRef:
                         key: server.base.href
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
@@ -730,13 +745,13 @@ data:
                     name: tls
                   - mountPath: /tmp
                     name: generated-dex-config
-                serviceAccountName: numaflow-dex-server
+                serviceAccountName: numaflow-dex-server{{ .InstanceSuffix }}
                 volumes:
                 - configMap:
                     items:
                     - key: config.yaml
                       path: config.yaml
-                    name: numaflow-dex-server-config
+                    name: numaflow-dex-server-config{{ .InstanceSuffix }}
                   name: connector-config
                 - emptyDir: {}
                   name: tls
@@ -746,7 +761,7 @@ data:
           apiVersion: apps/v1
           kind: Deployment
           metadata:
-            name: numaflow-server
+            name: numaflow-server{{ .InstanceSuffix }}
           spec:
             replicas: 1
             selector:
@@ -754,12 +769,14 @@ data:
                 app.kubernetes.io/component: numaflow-ux
                 app.kubernetes.io/name: numaflow-ux
                 app.kubernetes.io/part-of: numaflow
+                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: numaflow-ux
                   app.kubernetes.io/name: numaflow-ux
                   app.kubernetes.io/part-of: numaflow
+                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
                 - args:
@@ -773,67 +790,67 @@ data:
                     valueFrom:
                       configMapKeyRef:
                         key: server.insecure
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_PORT_NUMBER
                     valueFrom:
                       configMapKeyRef:
                         key: server.port
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_NAMESPACED
                     valueFrom:
                       configMapKeyRef:
                         key: namespaced
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_MANAGED_NAMESPACE
                     valueFrom:
                       configMapKeyRef:
                         key: managed.namespace
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_BASE_HREF
                     valueFrom:
                       configMapKeyRef:
                         key: server.base.href
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_READONLY
                     valueFrom:
                       configMapKeyRef:
                         key: server.readonly
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_DISABLE_AUTH
                     valueFrom:
                       configMapKeyRef:
                         key: server.disable.auth
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_DEX_SERVER_ADDR
                     valueFrom:
                       configMapKeyRef:
                         key: server.dex.server
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_ADDRESS
                     valueFrom:
                       configMapKeyRef:
                         key: server.address
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_CORS_ALLOWED_ORIGINS
                     valueFrom:
                       configMapKeyRef:
                         key: server.cors.allowed.origins
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   - name: NUMAFLOW_SERVER_DAEMON_CLIENT_PROTOCOL
                     valueFrom:
                       configMapKeyRef:
                         key: server.daemon.client.protocol
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
@@ -869,7 +886,7 @@ data:
                     valueFrom:
                       configMapKeyRef:
                         key: server.base.href
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
@@ -888,7 +905,7 @@ data:
                     valueFrom:
                       configMapKeyRef:
                         key: server.disable.auth
-                        name: numaflow-cmd-params-config
+                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                         optional: true
                   image: quay.io/numaio/numaflow-rc:v1.3.3-copy1
                   imagePullPolicy: Always
@@ -896,10 +913,10 @@ data:
                 securityContext:
                   runAsNonRoot: true
                   runAsUser: 9737
-                serviceAccountName: numaflow-server-sa
+                serviceAccountName: numaflow-server-sa{{ .InstanceSuffix }}
                 volumes:
                 - emptyDir: {}
                   name: env-volume
                 - configMap:
-                    name: numaflow-server-rbac-config
+                    name: numaflow-server-rbac-config{{ .InstanceSuffix }}
                   name: rbac-config
