@@ -2,7 +2,7 @@ module github.com/numaproj/numaplane
 
 go 1.22.7
 
-toolchain go1.22.8
+toolchain go1.23.2
 
 require (
 	github.com/argoproj/argo-cd/v2 v2.11.7
