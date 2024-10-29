@@ -40,22 +40,24 @@ var isbservicerolloutsKind = v1alpha1.SchemeGroupVersion.WithKind("ISBServiceRol
 
 // Get takes name of the iSBServiceRollout, and returns the corresponding iSBServiceRollout object, and an error if there is any.
 func (c *FakeISBServiceRollouts) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ISBServiceRollout, err error) {
+	emptyResult := &v1alpha1.ISBServiceRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(isbservicerolloutsResource, c.ns, name), &v1alpha1.ISBServiceRollout{})
+		Invokes(testing.NewGetActionWithOptions(isbservicerolloutsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.ISBServiceRollout), err
 }
 
 // List takes label and field selectors, and returns the list of ISBServiceRollouts that match those selectors.
 func (c *FakeISBServiceRollouts) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.ISBServiceRolloutList, err error) {
+	emptyResult := &v1alpha1.ISBServiceRolloutList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(isbservicerolloutsResource, isbservicerolloutsKind, c.ns, opts), &v1alpha1.ISBServiceRolloutList{})
+		Invokes(testing.NewListActionWithOptions(isbservicerolloutsResource, isbservicerolloutsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -74,40 +76,43 @@ func (c *FakeISBServiceRollouts) List(ctx context.Context, opts v1.ListOptions) 
 // Watch returns a watch.Interface that watches the requested iSBServiceRollouts.
 func (c *FakeISBServiceRollouts) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(isbservicerolloutsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(isbservicerolloutsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a iSBServiceRollout and creates it.  Returns the server's representation of the iSBServiceRollout, and an error, if there is any.
 func (c *FakeISBServiceRollouts) Create(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.CreateOptions) (result *v1alpha1.ISBServiceRollout, err error) {
+	emptyResult := &v1alpha1.ISBServiceRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(isbservicerolloutsResource, c.ns, iSBServiceRollout), &v1alpha1.ISBServiceRollout{})
+		Invokes(testing.NewCreateActionWithOptions(isbservicerolloutsResource, c.ns, iSBServiceRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.ISBServiceRollout), err
 }
 
 // Update takes the representation of a iSBServiceRollout and updates it. Returns the server's representation of the iSBServiceRollout, and an error, if there is any.
 func (c *FakeISBServiceRollouts) Update(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (result *v1alpha1.ISBServiceRollout, err error) {
+	emptyResult := &v1alpha1.ISBServiceRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(isbservicerolloutsResource, c.ns, iSBServiceRollout), &v1alpha1.ISBServiceRollout{})
+		Invokes(testing.NewUpdateActionWithOptions(isbservicerolloutsResource, c.ns, iSBServiceRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.ISBServiceRollout), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeISBServiceRollouts) UpdateStatus(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (*v1alpha1.ISBServiceRollout, error) {
+func (c *FakeISBServiceRollouts) UpdateStatus(ctx context.Context, iSBServiceRollout *v1alpha1.ISBServiceRollout, opts v1.UpdateOptions) (result *v1alpha1.ISBServiceRollout, err error) {
+	emptyResult := &v1alpha1.ISBServiceRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(isbservicerolloutsResource, "status", c.ns, iSBServiceRollout), &v1alpha1.ISBServiceRollout{})
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(isbservicerolloutsResource, "status", c.ns, iSBServiceRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.ISBServiceRollout), err
 }
@@ -122,7 +127,7 @@ func (c *FakeISBServiceRollouts) Delete(ctx context.Context, name string, opts v
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeISBServiceRollouts) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(isbservicerolloutsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(isbservicerolloutsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.ISBServiceRolloutList{})
 	return err
@@ -130,11 +135,12 @@ func (c *FakeISBServiceRollouts) DeleteCollection(ctx context.Context, opts v1.D
 
 // Patch applies the patch and returns the patched iSBServiceRollout.
 func (c *FakeISBServiceRollouts) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ISBServiceRollout, err error) {
+	emptyResult := &v1alpha1.ISBServiceRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(isbservicerolloutsResource, c.ns, name, pt, data, subresources...), &v1alpha1.ISBServiceRollout{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(isbservicerolloutsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.ISBServiceRollout), err
 }

@@ -40,22 +40,24 @@ var pipelinerolloutsKind = v1alpha1.SchemeGroupVersion.WithKind("PipelineRollout
 
 // Get takes name of the pipelineRollout, and returns the corresponding pipelineRollout object, and an error if there is any.
 func (c *FakePipelineRollouts) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.PipelineRollout, err error) {
+	emptyResult := &v1alpha1.PipelineRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(pipelinerolloutsResource, c.ns, name), &v1alpha1.PipelineRollout{})
+		Invokes(testing.NewGetActionWithOptions(pipelinerolloutsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.PipelineRollout), err
 }
 
 // List takes label and field selectors, and returns the list of PipelineRollouts that match those selectors.
 func (c *FakePipelineRollouts) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.PipelineRolloutList, err error) {
+	emptyResult := &v1alpha1.PipelineRolloutList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(pipelinerolloutsResource, pipelinerolloutsKind, c.ns, opts), &v1alpha1.PipelineRolloutList{})
+		Invokes(testing.NewListActionWithOptions(pipelinerolloutsResource, pipelinerolloutsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -74,40 +76,43 @@ func (c *FakePipelineRollouts) List(ctx context.Context, opts v1.ListOptions) (r
 // Watch returns a watch.Interface that watches the requested pipelineRollouts.
 func (c *FakePipelineRollouts) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(pipelinerolloutsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(pipelinerolloutsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a pipelineRollout and creates it.  Returns the server's representation of the pipelineRollout, and an error, if there is any.
 func (c *FakePipelineRollouts) Create(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.CreateOptions) (result *v1alpha1.PipelineRollout, err error) {
+	emptyResult := &v1alpha1.PipelineRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(pipelinerolloutsResource, c.ns, pipelineRollout), &v1alpha1.PipelineRollout{})
+		Invokes(testing.NewCreateActionWithOptions(pipelinerolloutsResource, c.ns, pipelineRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.PipelineRollout), err
 }
 
 // Update takes the representation of a pipelineRollout and updates it. Returns the server's representation of the pipelineRollout, and an error, if there is any.
 func (c *FakePipelineRollouts) Update(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.UpdateOptions) (result *v1alpha1.PipelineRollout, err error) {
+	emptyResult := &v1alpha1.PipelineRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(pipelinerolloutsResource, c.ns, pipelineRollout), &v1alpha1.PipelineRollout{})
+		Invokes(testing.NewUpdateActionWithOptions(pipelinerolloutsResource, c.ns, pipelineRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.PipelineRollout), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakePipelineRollouts) UpdateStatus(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.UpdateOptions) (*v1alpha1.PipelineRollout, error) {
+func (c *FakePipelineRollouts) UpdateStatus(ctx context.Context, pipelineRollout *v1alpha1.PipelineRollout, opts v1.UpdateOptions) (result *v1alpha1.PipelineRollout, err error) {
+	emptyResult := &v1alpha1.PipelineRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(pipelinerolloutsResource, "status", c.ns, pipelineRollout), &v1alpha1.PipelineRollout{})
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(pipelinerolloutsResource, "status", c.ns, pipelineRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.PipelineRollout), err
 }
@@ -122,7 +127,7 @@ func (c *FakePipelineRollouts) Delete(ctx context.Context, name string, opts v1.
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakePipelineRollouts) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(pipelinerolloutsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(pipelinerolloutsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.PipelineRolloutList{})
 	return err
@@ -130,11 +135,12 @@ func (c *FakePipelineRollouts) DeleteCollection(ctx context.Context, opts v1.Del
 
 // Patch applies the patch and returns the patched pipelineRollout.
 func (c *FakePipelineRollouts) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.PipelineRollout, err error) {
+	emptyResult := &v1alpha1.PipelineRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(pipelinerolloutsResource, c.ns, name, pt, data, subresources...), &v1alpha1.PipelineRollout{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(pipelinerolloutsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.PipelineRollout), err
 }

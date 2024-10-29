@@ -618,8 +618,9 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch ISBServiceRollouts
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.ISBServiceRollout{}), &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.ISBServiceRollout{},
+		&handler.TypedEnqueueRequestForObject[*apiv1.ISBServiceRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.ISBServiceRollout]{})); err != nil {
+		return fmt.Errorf("failed to watch ISBServiceRollout: %v", err)
 	}
 
 	// Watch InterStepBufferServices
@@ -629,10 +630,10 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), isbServiceUns),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{}); err != nil {
-		return err
+	if err := controller.Watch(source.Kind(mgr.GetCache(), isbServiceUns,
+		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.ISBServiceRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
+		return fmt.Errorf("failed to watch InterStepBufferService: %v", err)
 	}
 
 	return nil

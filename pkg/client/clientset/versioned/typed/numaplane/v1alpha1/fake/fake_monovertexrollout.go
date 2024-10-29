@@ -40,22 +40,24 @@ var monovertexrolloutsKind = v1alpha1.SchemeGroupVersion.WithKind("MonoVertexRol
 
 // Get takes name of the monoVertexRollout, and returns the corresponding monoVertexRollout object, and an error if there is any.
 func (c *FakeMonoVertexRollouts) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.MonoVertexRollout, err error) {
+	emptyResult := &v1alpha1.MonoVertexRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(monovertexrolloutsResource, c.ns, name), &v1alpha1.MonoVertexRollout{})
+		Invokes(testing.NewGetActionWithOptions(monovertexrolloutsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.MonoVertexRollout), err
 }
 
 // List takes label and field selectors, and returns the list of MonoVertexRollouts that match those selectors.
 func (c *FakeMonoVertexRollouts) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.MonoVertexRolloutList, err error) {
+	emptyResult := &v1alpha1.MonoVertexRolloutList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(monovertexrolloutsResource, monovertexrolloutsKind, c.ns, opts), &v1alpha1.MonoVertexRolloutList{})
+		Invokes(testing.NewListActionWithOptions(monovertexrolloutsResource, monovertexrolloutsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -74,40 +76,43 @@ func (c *FakeMonoVertexRollouts) List(ctx context.Context, opts v1.ListOptions) 
 // Watch returns a watch.Interface that watches the requested monoVertexRollouts.
 func (c *FakeMonoVertexRollouts) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(monovertexrolloutsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(monovertexrolloutsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a monoVertexRollout and creates it.  Returns the server's representation of the monoVertexRollout, and an error, if there is any.
 func (c *FakeMonoVertexRollouts) Create(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.CreateOptions) (result *v1alpha1.MonoVertexRollout, err error) {
+	emptyResult := &v1alpha1.MonoVertexRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(monovertexrolloutsResource, c.ns, monoVertexRollout), &v1alpha1.MonoVertexRollout{})
+		Invokes(testing.NewCreateActionWithOptions(monovertexrolloutsResource, c.ns, monoVertexRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.MonoVertexRollout), err
 }
 
 // Update takes the representation of a monoVertexRollout and updates it. Returns the server's representation of the monoVertexRollout, and an error, if there is any.
 func (c *FakeMonoVertexRollouts) Update(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (result *v1alpha1.MonoVertexRollout, err error) {
+	emptyResult := &v1alpha1.MonoVertexRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(monovertexrolloutsResource, c.ns, monoVertexRollout), &v1alpha1.MonoVertexRollout{})
+		Invokes(testing.NewUpdateActionWithOptions(monovertexrolloutsResource, c.ns, monoVertexRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.MonoVertexRollout), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeMonoVertexRollouts) UpdateStatus(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (*v1alpha1.MonoVertexRollout, error) {
+func (c *FakeMonoVertexRollouts) UpdateStatus(ctx context.Context, monoVertexRollout *v1alpha1.MonoVertexRollout, opts v1.UpdateOptions) (result *v1alpha1.MonoVertexRollout, err error) {
+	emptyResult := &v1alpha1.MonoVertexRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(monovertexrolloutsResource, "status", c.ns, monoVertexRollout), &v1alpha1.MonoVertexRollout{})
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(monovertexrolloutsResource, "status", c.ns, monoVertexRollout, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.MonoVertexRollout), err
 }
@@ -122,7 +127,7 @@ func (c *FakeMonoVertexRollouts) Delete(ctx context.Context, name string, opts v
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeMonoVertexRollouts) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(monovertexrolloutsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(monovertexrolloutsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.MonoVertexRolloutList{})
 	return err
@@ -130,11 +135,12 @@ func (c *FakeMonoVertexRollouts) DeleteCollection(ctx context.Context, opts v1.D
 
 // Patch applies the patch and returns the patched monoVertexRollout.
 func (c *FakeMonoVertexRollouts) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.MonoVertexRollout, err error) {
+	emptyResult := &v1alpha1.MonoVertexRollout{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(monovertexrolloutsResource, c.ns, name, pt, data, subresources...), &v1alpha1.MonoVertexRollout{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(monovertexrolloutsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.MonoVertexRollout), err
 }

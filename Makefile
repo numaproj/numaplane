@@ -103,9 +103,10 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(KUBECTL) kustomize config/default > config/install.yaml
 
 .PHONY: codegen
-codegen: manifests controller-gen
+codegen:
 ## Generate pkg/client directory
 	./hack/update-codegen.sh
+	$(MAKE) manifests
 	rm -rf ./vendor
 	go mod tidy
 ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

@@ -19,8 +19,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,25 +37,17 @@ type ISBServiceRolloutLister interface {
 
 // iSBServiceRolloutLister implements the ISBServiceRolloutLister interface.
 type iSBServiceRolloutLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1alpha1.ISBServiceRollout]
 }
 
 // NewISBServiceRolloutLister returns a new ISBServiceRolloutLister.
 func NewISBServiceRolloutLister(indexer cache.Indexer) ISBServiceRolloutLister {
-	return &iSBServiceRolloutLister{indexer: indexer}
-}
-
-// List lists all ISBServiceRollouts in the indexer.
-func (s *iSBServiceRolloutLister) List(selector labels.Selector) (ret []*v1alpha1.ISBServiceRollout, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.ISBServiceRollout))
-	})
-	return ret, err
+	return &iSBServiceRolloutLister{listers.New[*v1alpha1.ISBServiceRollout](indexer, v1alpha1.Resource("isbservicerollout"))}
 }
 
 // ISBServiceRollouts returns an object that can list and get ISBServiceRollouts.
 func (s *iSBServiceRolloutLister) ISBServiceRollouts(namespace string) ISBServiceRolloutNamespaceLister {
-	return iSBServiceRolloutNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return iSBServiceRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.ISBServiceRollout](s.ResourceIndexer, namespace)}
 }
 
 // ISBServiceRolloutNamespaceLister helps list and get ISBServiceRollouts.
@@ -73,26 +65,5 @@ type ISBServiceRolloutNamespaceLister interface {
 // iSBServiceRolloutNamespaceLister implements the ISBServiceRolloutNamespaceLister
 // interface.
 type iSBServiceRolloutNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ISBServiceRollouts in the indexer for a given namespace.
-func (s iSBServiceRolloutNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.ISBServiceRollout, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.ISBServiceRollout))
-	})
-	return ret, err
-}
-
-// Get retrieves the ISBServiceRollout from the indexer for a given namespace and name.
-func (s iSBServiceRolloutNamespaceLister) Get(name string) (*v1alpha1.ISBServiceRollout, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1alpha1.Resource("isbservicerollout"), name)
-	}
-	return obj.(*v1alpha1.ISBServiceRollout), nil
+	listers.ResourceIndexer[*v1alpha1.ISBServiceRollout]
 }

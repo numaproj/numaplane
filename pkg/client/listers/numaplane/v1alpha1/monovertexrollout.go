@@ -19,8 +19,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,25 +37,17 @@ type MonoVertexRolloutLister interface {
 
 // monoVertexRolloutLister implements the MonoVertexRolloutLister interface.
 type monoVertexRolloutLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1alpha1.MonoVertexRollout]
 }
 
 // NewMonoVertexRolloutLister returns a new MonoVertexRolloutLister.
 func NewMonoVertexRolloutLister(indexer cache.Indexer) MonoVertexRolloutLister {
-	return &monoVertexRolloutLister{indexer: indexer}
-}
-
-// List lists all MonoVertexRollouts in the indexer.
-func (s *monoVertexRolloutLister) List(selector labels.Selector) (ret []*v1alpha1.MonoVertexRollout, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.MonoVertexRollout))
-	})
-	return ret, err
+	return &monoVertexRolloutLister{listers.New[*v1alpha1.MonoVertexRollout](indexer, v1alpha1.Resource("monovertexrollout"))}
 }
 
 // MonoVertexRollouts returns an object that can list and get MonoVertexRollouts.
 func (s *monoVertexRolloutLister) MonoVertexRollouts(namespace string) MonoVertexRolloutNamespaceLister {
-	return monoVertexRolloutNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return monoVertexRolloutNamespaceLister{listers.NewNamespaced[*v1alpha1.MonoVertexRollout](s.ResourceIndexer, namespace)}
 }
 
 // MonoVertexRolloutNamespaceLister helps list and get MonoVertexRollouts.
@@ -73,26 +65,5 @@ type MonoVertexRolloutNamespaceLister interface {
 // monoVertexRolloutNamespaceLister implements the MonoVertexRolloutNamespaceLister
 // interface.
 type monoVertexRolloutNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all MonoVertexRollouts in the indexer for a given namespace.
-func (s monoVertexRolloutNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.MonoVertexRollout, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.MonoVertexRollout))
-	})
-	return ret, err
-}
-
-// Get retrieves the MonoVertexRollout from the indexer for a given namespace and name.
-func (s monoVertexRolloutNamespaceLister) Get(name string) (*v1alpha1.MonoVertexRollout, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1alpha1.Resource("monovertexrollout"), name)
-	}
-	return obj.(*v1alpha1.MonoVertexRollout), nil
+	listers.ResourceIndexer[*v1alpha1.MonoVertexRollout]
 }
