@@ -4,6 +4,7 @@ go 1.22.7
 
 toolchain go1.22.8
 
+
 require (
 	github.com/argoproj/argo-cd/v2 v2.11.7
 	github.com/argoproj/gitops-engine v0.7.1-0.20240718175351-6b2984ebc470
