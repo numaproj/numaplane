@@ -5,6 +5,10 @@ metadata:
   namespace: example-namespace
 spec:
   pipeline:
+    #uncomment for Progressive rollout to set Numaflow Controller instance:
+    #metadata:
+    #  annotations:
+    #    numaflow.numaproj.io/instance: "0"
     spec:
       interStepBufferServiceName: my-isbsvc
       vertices:

@@ -5,6 +5,10 @@ metadata:
   namespace: example-namespace
 spec:
   monoVertex:
+    #uncomment for Progressive rollout to set Numaflow Controller instance:
+    #metadata:
+    #  annotations:
+    #    numaflow.numaproj.io/instance: "0"
     spec:
       source:
         udsource:
