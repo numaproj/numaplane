@@ -482,11 +482,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused
-		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexRolloutName)
+		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexName)
 		document("verifying MonoVertex stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexRolloutName)
+			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexName)
 			if err != nil {
 				return false
 			}
@@ -496,7 +496,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexRolloutName))
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexName))
 	})
 
 	time.Sleep(2 * time.Second)
