@@ -19,9 +19,20 @@ const (
 	// EnvLogLevel log level that is defined by `--loglevel` option
 	EnvLogLevel = "NUMAPLANE_LOG_LEVEL"
 
+	// NumaflowAPIGroup is the group of the Numaflow API
 	NumaflowAPIGroup = "numaflow.numaproj.io"
 
+	// NumaflowAPIVersion is the version of the Numaflow API
 	NumaflowAPIVersion = "v1alpha1"
+
+	// NumaflowPipelineKind is the kind of the Numaflow Pipeline
+	NumaflowPipelineKind = "Pipeline"
+
+	// NumaflowMonoVertexKind is the kind of the Numaflow MonoVertex
+	NumaflowMonoVertexKind = "MonoVertex"
+
+	// NumaflowISBServiceKind is the kind of the Numaflow ISB Service
+	NumaflowISBServiceKind = "InterStepBufferService"
 
 	// LABELS:
 

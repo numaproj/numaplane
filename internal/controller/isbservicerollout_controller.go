@@ -35,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,7 +62,6 @@ const (
 type ISBServiceRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -75,7 +73,6 @@ type ISBServiceRolloutReconciler struct {
 func NewISBServiceRolloutReconciler(
 	c client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
@@ -83,7 +80,6 @@ func NewISBServiceRolloutReconciler(
 	r := &ISBServiceRolloutReconciler{
 		c,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 		nil,
@@ -229,8 +225,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	newISBServiceDef := &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "InterStepBufferService",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            isbServiceRollout.Name,
@@ -467,7 +463,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
-	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: "Pipeline"}
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk,
 		client.InNamespace(rolloutNamespace),
 		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
@@ -629,7 +625,7 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch InterStepBufferServices
 	isbServiceUns := &unstructured.Unstructured{}
 	isbServiceUns.SetGroupVersionKind(schema.GroupVersionKind{
-		Kind:    "InterStepBufferService",
+		Kind:    common.NumaflowISBServiceKind,
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})

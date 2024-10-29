@@ -23,20 +23,14 @@ import (
 	"reflect"
 	"time"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/usde"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	"github.com/numaproj/numaplane/internal/util/logger"
-	"github.com/numaproj/numaplane/internal/util/metrics"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,6 +39,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/usde"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 const (
@@ -55,7 +57,6 @@ const (
 type MonoVertexRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -67,7 +68,6 @@ type MonoVertexRolloutReconciler struct {
 func NewMonoVertexRolloutReconciler(
 	c client.Client,
 	s *runtime.Scheme,
-	restConfig *rest.Config,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
@@ -75,7 +75,6 @@ func NewMonoVertexRolloutReconciler(
 	r := &MonoVertexRolloutReconciler{
 		c,
 		s,
-		restConfig,
 		customMetrics,
 		recorder,
 		nil,
@@ -213,13 +212,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		return ctrl.Result{}, err
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetLiveResource(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: newMonoVertexDef.Namespace, Name: newMonoVertexDef.Name})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices"); err != nil {
+			if err := kubernetes.CreateResource(ctx, r.client, newMonoVertexDef); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -231,10 +231,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef = r.merge(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
-
 		}
 	}
 
@@ -286,7 +288,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	case apiv1.UpgradeStrategyProgressive:
 		if mvNeedsToUpdate {
 			numaLogger.Debug("processing MonoVertex with Progressive")
-			done, err := processResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.restConfig)
+			done, err := processResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
 			if err != nil {
 				return err
 			}
@@ -305,7 +307,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 	// clean up recyclable monovertices
-	err = garbageCollectChildren(ctx, monoVertexRollout, r, r.restConfig)
+	err = garbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
 		return err
 	}
@@ -327,7 +329,13 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch MonoVertices
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &numaflowv1.MonoVertex{}),
+	monoVertexUns := &unstructured.Unstructured{}
+	monoVertexUns.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind:    common.NumaflowMonoVertexKind,
+		Group:   common.NumaflowAPIGroup,
+		Version: common.NumaflowAPIVersion,
+	})
+	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
 		return err
@@ -336,7 +344,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex *kubernetes.GenericObject, newMonoVertex *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 
@@ -354,7 +362,39 @@ func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex *kubernetes.Gener
 		resultMonoVertex.Labels[key] = val
 	}
 
-	return resultMonoVertex
+	// Use the same replicas as the existing MonoVertex
+	resultMonoVertex, err := withExistingMvtxReplicas(existingMonoVertex, resultMonoVertex)
+	return resultMonoVertex, err
+}
+
+// withExistingMvtxReplicas sets the replicas of the new MonoVertex to the existing MonoVertex's replicas if it exists.
+func withExistingMvtxReplicas(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+	unstrucExisting, err := kubernetes.ObjectToUnstructured(existingMonoVertex)
+	if err != nil {
+		return newMonoVertex, err
+	}
+	// Have to use float64 as it's  the type of the replicas field in the unstructured object
+	existingReplicas, existing, err := unstructured.NestedFloat64(unstrucExisting.Object, "spec", "replicas")
+	if err != nil {
+		return newMonoVertex, fmt.Errorf("failed to get replicas from existing MonoVertex: %w", err)
+	}
+	if existing {
+		unstrucNew, err := kubernetes.ObjectToUnstructured(newMonoVertex)
+		if err != nil {
+			return newMonoVertex, err
+		}
+		err = unstructured.SetNestedField(unstrucNew.Object, existingReplicas, "spec", "replicas")
+		if err != nil {
+			return newMonoVertex, fmt.Errorf("failed to set replicas in new MonoVertex: %w", err)
+		}
+
+		newMonoVertex, err = kubernetes.UnstructuredToObject(unstrucNew)
+		if err != nil {
+			return newMonoVertex, err
+		}
+	}
+	return newMonoVertex, nil
+
 }
 
 func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Context, monoVertex *kubernetes.GenericObject, rollout *apiv1.MonoVertexRollout) {
@@ -393,7 +433,7 @@ func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRoll
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *kubernetes.GenericObject) error {
-	err := kubernetes.UpdateCR(ctx, r.restConfig, newMonoVertexDef, "monovertices")
+	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
 	}
@@ -469,8 +509,8 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 
 	return &kubernetes.GenericObject{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "MonoVertex",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
+			Kind:       common.NumaflowMonoVertexKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            monoVertexName,
@@ -499,7 +539,7 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 func (r *MonoVertexRolloutReconciler) listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	return kubernetes.ListLiveResource(
-		ctx, r.restConfig, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
+		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
 		monoVertexRollout.Namespace, labelSelector, fieldSelector)
 }
 
@@ -557,7 +597,7 @@ func (r *MonoVertexRolloutReconciler) childIsDrained(ctx context.Context, monoVe
 
 func (r *MonoVertexRolloutReconciler) drain(ctx context.Context, monoVertexDef *kubernetes.GenericObject) error {
 	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
-	return kubernetes.PatchCR(ctx, r.restConfig, monoVertexDef, "monovertices", patchJson, k8stypes.MergePatchType)
+	return kubernetes.PatchResource(ctx, r.client, monoVertexDef, patchJson, k8stypes.MergePatchType)
 }
 
 // childNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison

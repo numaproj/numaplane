@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
 var (
@@ -73,19 +74,19 @@ func (pm *PauseModule) getPauseRequest(requester string) (*bool, bool) {
 }
 
 // pause pipeline
-func (pm *PauseModule) pausePipeline(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) error {
+func (pm *PauseModule) pausePipeline(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) error {
 	var existingPipelineSpec PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
 
-	return pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Paused")
+	return pm.updatePipelineLifecycle(ctx, c, pipeline, "Paused")
 }
 
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject) (bool, error) {
+func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) (bool, error) {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
@@ -102,17 +103,17 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, restConfig *rest.C
 		return false, nil
 	}
 
-	err := pm.updatePipelineLifecycle(ctx, restConfig, pipeline, "Running")
+	err := pm.updatePipelineLifecycle(ctx, c, pipeline, "Running")
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, restConfig *rest.Config, pipeline *kubernetes.GenericObject, phase string) error {
+func (pm *PauseModule) updatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject, phase string) error {
 
 	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
-	return kubernetes.PatchCR(ctx, restConfig, pipeline, "pipelines", patchJson, k8stypes.MergePatchType)
+	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 
 }
 

@@ -7,7 +7,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -36,12 +36,12 @@ type progressiveController interface {
 	childNeedsUpdating(ctx context.Context, existingChild *kubernetes.GenericObject, newChildDefinition *kubernetes.GenericObject) (bool, error)
 
 	// merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
-	merge(existingObj *kubernetes.GenericObject, newObj *kubernetes.GenericObject) *kubernetes.GenericObject
+	merge(existingObj *kubernetes.GenericObject, newObj *kubernetes.GenericObject) (*kubernetes.GenericObject, error)
 }
 
 // return whether we're done, and error if any
 func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutObject,
-	existingPromotedChild *kubernetes.GenericObject, controller progressiveController, restConfig *rest.Config) (bool, error) {
+	existingPromotedChild *kubernetes.GenericObject, controller progressiveController, c client.Client) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -51,20 +51,23 @@ func processResourceWithProgressive(ctx context.Context, rolloutObject RolloutOb
 	}
 
 	// Get the Upgrading object to see if it exists
-	existingUpgradingChildDef, err := kubernetes.GetLiveResource(ctx, restConfig, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+	existingUpgradingChildDef, err := kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
 	if err != nil {
 		// create object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.Kind, newUpgradingChildDef.Namespace, newUpgradingChildDef.Name)
-			err = kubernetes.CreateCR(ctx, restConfig, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, err
 		} else {
 			return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.Kind, err)
 		}
 	}
-	newUpgradingChildDef = controller.merge(existingUpgradingChildDef, newUpgradingChildDef)
+	newUpgradingChildDef, err = controller.merge(existingUpgradingChildDef, newUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
 
-	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, newUpgradingChildDef, existingUpgradingChildDef, restConfig)
+	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, newUpgradingChildDef, existingUpgradingChildDef, c)
 	if err != nil {
 		return false, err
 	}
@@ -119,7 +122,7 @@ func processUpgradingChild(
 	rolloutObject RolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, desiredUpgradingChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
-	restConfig *rest.Config,
+	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
@@ -141,7 +144,7 @@ func processUpgradingChild(
 			return false, nil
 		}
 		// Label the new child as promoted and then remove the label from the old one
-		err := updateUpgradeState(ctx, restConfig, common.LabelValueUpgradePromoted, existingUpgradingChildDef, rolloutObject)
+		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -150,7 +153,7 @@ func processUpgradingChild(
 		// to complete the below logic
 		// Consider upgrading to "promoted" as the last thing?
 
-		err = updateUpgradeState(ctx, restConfig, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
+		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
 		}
@@ -174,7 +177,7 @@ func processUpgradingChild(
 		if childNeedsToUpdate {
 			numaLogger.Debugf("Upgrading child %s/%s has a new update", existingUpgradingChildDef.Namespace, existingUpgradingChildDef.Name)
 
-			err = kubernetes.UpdateCR(ctx, restConfig, desiredUpgradingChildDef, "pipelines")
+			err = kubernetes.UpdateResource(ctx, c, desiredUpgradingChildDef)
 			if err != nil {
 				return false, err
 			}
@@ -185,10 +188,10 @@ func processUpgradingChild(
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
-func updateUpgradeState(ctx context.Context, restConfig *rest.Config, upgradeState common.UpgradeState, childObject *kubernetes.GenericObject, rolloutObject RolloutObject) error {
+func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *kubernetes.GenericObject, rolloutObject RolloutObject) error {
 	childObject.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
-	return kubernetes.PatchCR(ctx, restConfig, childObject, rolloutObject.GetChildPluralName(), patchJson, k8stypes.MergePatchType)
+	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
 
 func isNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
@@ -207,7 +210,7 @@ func garbageCollectChildren(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	controller progressiveController,
-	restConfig *rest.Config,
+	c client.Client,
 ) error {
 	numaLogger := logger.FromContext(ctx)
 	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, controller)
@@ -218,7 +221,7 @@ func garbageCollectChildren(
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
 
 	for _, recyclableChild := range recyclableObjects {
-		err = recycle(ctx, recyclableChild, rolloutObject.GetChildPluralName(), controller, restConfig)
+		err = recycle(ctx, recyclableChild, rolloutObject.GetChildPluralName(), controller, c)
 		if err != nil {
 			return err
 		}
@@ -240,14 +243,14 @@ func recycle(ctx context.Context,
 	childObject *kubernetes.GenericObject,
 	childPluralName string,
 	controller progressiveController,
-	restConfig *rest.Config,
+	c client.Client,
 ) error {
 	isDrained, err := controller.childIsDrained(ctx, childObject)
 	if err != nil {
 		return err
 	}
 	if isDrained {
-		err = kubernetes.DeleteCR(ctx, restConfig, childObject, childPluralName)
+		err = kubernetes.DeleteResource(ctx, c, childObject)
 		if err != nil {
 			return err
 		}
