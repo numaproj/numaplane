@@ -254,7 +254,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	}
 
 	// generate the metrics for the Pipeline.
-	r.customMetrics.IncPipelinesRunningMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
@@ -369,7 +369,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			controllerutil.RemoveFinalizer(pipelineRollout, finalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
-		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+		r.customMetrics.DecPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
 		return false, nil, nil

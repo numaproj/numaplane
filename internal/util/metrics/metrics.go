@@ -13,8 +13,8 @@ type CustomMetrics struct {
 	PipelinesRolloutHealth *prometheus.GaugeVec
 	// PipelineRolloutsRunning is the gauge for the number of running pipelines.
 	PipelineRolloutsRunning *prometheus.GaugeVec
-	// PipelineCounterMap contains the information of all running pipelines.
-	PipelineCounterMap map[string]map[string]struct{}
+	// PipelineROCounterMap contains the information of all running pipelines.
+	PipelineROCounterMap map[string]map[string]struct{}
 	// PipelineROSyncErrors is the counter for the total number of failed synced.
 	PipelineROSyncErrors *prometheus.CounterVec
 	// PipelineRolloutQueueLength is the gauge for the length of pipeline rollout queue.
@@ -25,8 +25,8 @@ type CustomMetrics struct {
 	ISBServicesRolloutHealth *prometheus.GaugeVec
 	// ISBServiceRolloutsRunning is the gauge for the number of running ISB services.
 	ISBServiceRolloutsRunning *prometheus.GaugeVec
-	// ISBServiceCounterMap contains the information of all running ISB services.
-	ISBServiceCounterMap map[string]map[string]struct{}
+	// ISBServiceROCounterMap contains the information of all running ISB services.
+	ISBServiceROCounterMap map[string]map[string]struct{}
 	// ISBServicesROSyncErrors is the counter for the total number of ISB service syncing failed.
 	ISBServicesROSyncErrors *prometheus.CounterVec
 	// ISBServiceROSyncs is the counter for the total number of ISB service synced.
@@ -117,6 +117,7 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelMonoVertex})
 
+	// pipelineRolloutsRunning indicates the number of PipelineRollouts
 	pipelineRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_pipeline_rollouts_running",
 		Help:        "Number of Numaflow pipeline rollouts running",
@@ -130,14 +131,14 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelName})
 
-	// pipelineROSyncs Check the total number of pipeline rollout syncs
+	// pipelineROSyncs Check the total number of pipeline rollout reconciliations
 	pipelineROSyncs = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "pipeline_synced_total",
 		Help:        "The total number of pipeline synced",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// pipelineROSyncErrors Check the total number of pipeline rollout sync errors
+	// pipelineROSyncErrors Check the total number of pipeline rollout reconciliation errors
 	pipelineROSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "pipeline_sync_failed_total",
 		Help:        "The total number of pipeline sync failed",
@@ -283,13 +284,13 @@ func RegisterCustomMetrics() *CustomMetrics {
 	return &CustomMetrics{
 		PipelinesRolloutHealth:                    pipelinesRolloutHealth,
 		PipelineRolloutsRunning:                   pipelineRolloutsRunning,
-		PipelineCounterMap:                        make(map[string]map[string]struct{}),
+		PipelineROCounterMap:                      make(map[string]map[string]struct{}),
 		PipelineROSyncs:                           pipelineROSyncs,
 		PipelineROSyncErrors:                      pipelineROSyncErrors,
 		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
 		ISBServicesRolloutHealth:                  isbServicesRolloutHealth,
 		ISBServiceRolloutsRunning:                 isbServiceRolloutsRunning,
-		ISBServiceCounterMap:                      make(map[string]map[string]struct{}),
+		ISBServiceROCounterMap:                    make(map[string]map[string]struct{}),
 		ISBServiceROSyncs:                         isbServiceROSyncs,
 		ISBServicesROSyncErrors:                   isbServiceROSyncErrors,
 		MonoVerticesRolloutHealth:                 monoVerticesRolloutHealth,
@@ -313,54 +314,54 @@ func RegisterCustomMetrics() *CustomMetrics {
 	}
 }
 
-// IncPipelinesRunningMetrics increments the pipeline counter if it doesn't already know about the pipeline
-func (m *CustomMetrics) IncPipelinesRunningMetrics(name, namespace string) {
+// IncPipelineROsRunning increments the PipelineRollout counter if it doesn't already know about it
+func (m *CustomMetrics) IncPipelineROsRunning(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
-	if _, ok := m.PipelineCounterMap[namespace]; !ok {
-		m.PipelineCounterMap[namespace] = make(map[string]struct{})
+	if _, ok := m.PipelineROCounterMap[namespace]; !ok {
+		m.PipelineROCounterMap[namespace] = make(map[string]struct{})
 	}
-	m.PipelineCounterMap[namespace][name] = struct{}{}
-	for ns, pipelines := range m.PipelineCounterMap {
+	m.PipelineROCounterMap[namespace][name] = struct{}{}
+	for ns, pipelines := range m.PipelineROCounterMap {
 		m.PipelineRolloutsRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
 	}
 }
 
-// DecPipelineMetrics decrements the pipeline counter
-func (m *CustomMetrics) DecPipelineMetrics(name, namespace string) {
+// DecPipelineROsRunning decrements the PipelineRollout counter
+func (m *CustomMetrics) DecPipelineROsRunning(name, namespace string) {
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
-	delete(m.PipelineCounterMap[namespace], name)
-	for ns, pipelines := range m.PipelineCounterMap {
+	delete(m.PipelineROCounterMap[namespace], name)
+	for ns, pipelines := range m.PipelineROCounterMap {
 		m.PipelineRolloutsRunning.WithLabelValues(ns).Set(float64(len(pipelines)))
 	}
 }
 
-// IncISBServiceMetrics increments the ISBService counter if it doesn't already know about the ISBService
-func (m *CustomMetrics) IncISBServiceMetrics(name, namespace string) {
+// IncISBServiceRollouts increments the ISBServiceRollout counter if it doesn't already know about it
+func (m *CustomMetrics) IncISBServiceRollouts(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
-	if _, ok := m.ISBServiceCounterMap[namespace]; !ok {
-		m.ISBServiceCounterMap[namespace] = make(map[string]struct{})
+	if _, ok := m.ISBServiceROCounterMap[namespace]; !ok {
+		m.ISBServiceROCounterMap[namespace] = make(map[string]struct{})
 	}
-	m.ISBServiceCounterMap[namespace][name] = struct{}{}
-	for ns, isbServices := range m.ISBServiceCounterMap {
+	m.ISBServiceROCounterMap[namespace][name] = struct{}{}
+	for ns, isbServices := range m.ISBServiceROCounterMap {
 		m.ISBServiceRolloutsRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
 	}
 }
 
-// DecISBServiceMetrics decrements the ISBService counter
-func (m *CustomMetrics) DecISBServiceMetrics(name, namespace string) {
+// DecISBServiceRollouts decrements the ISBServiceRollout counter
+func (m *CustomMetrics) DecISBServiceRollouts(name, namespace string) {
 	isbServiceLock.Lock()
 	defer isbServiceLock.Unlock()
-	delete(m.ISBServiceCounterMap[namespace], name)
-	for ns, isbServices := range m.ISBServiceCounterMap {
+	delete(m.ISBServiceROCounterMap[namespace], name)
+	for ns, isbServices := range m.ISBServiceROCounterMap {
 		m.ISBServiceRolloutsRunning.WithLabelValues(ns).Set(float64(len(isbServices)))
 	}
 }
 
-// IncMonoVertexMetrics increments the MonoVertex counter if it doesn't already know about the MonoVertex
-func (m *CustomMetrics) IncMonoVertexMetrics(name, namespace string) {
+// IncMonoVertexRollouts increments the MonoVertexRollout counter if it doesn't already know about it
+func (m *CustomMetrics) IncMonoVertexRollouts(name, namespace string) {
 	monoVertexLock.Lock()
 	defer monoVertexLock.Unlock()
 	if _, ok := m.MonoVerticesCounterMap[namespace]; !ok {
@@ -372,8 +373,8 @@ func (m *CustomMetrics) IncMonoVertexMetrics(name, namespace string) {
 	}
 }
 
-// DecMonoVertexMetrics decrements the MonoVertex counter
-func (m *CustomMetrics) DecMonoVertexMetrics(name, namespace string) {
+// DecMonoVertexRollouts decrements the MonoVertexRollout counter
+func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	monoVertexLock.Lock()
 	defer monoVertexLock.Unlock()
 	delete(m.MonoVerticesCounterMap[namespace], name)

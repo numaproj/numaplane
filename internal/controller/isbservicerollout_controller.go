@@ -175,7 +175,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// generate metrics for ISB Service.
-	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+	r.customMetrics.IncISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
@@ -206,7 +206,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
 		// generate metrics for ISB Service deletion.
-		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+		r.customMetrics.DecISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
 		return ctrl.Result{}, nil
