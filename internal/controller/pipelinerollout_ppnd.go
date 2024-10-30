@@ -78,7 +78,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	doneWithPPND := !shouldBePaused
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
-	specBasedPause := newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing)
+	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
 	if specBasedPause && isPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
 		doneWithPPND = true
 	}
@@ -113,7 +113,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	}
 
 	// check to see if the PipelineRollout spec itself says to Pause
-	specBasedPause := (newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || newPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
+	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
 
 	wontPause := checkIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
 
@@ -162,6 +162,10 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	}
 
 	return &needPPND, nil
+}
+
+func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec PipelineSpec) bool {
+	return (pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 }
 
 // check for all pause requests for this Pipeline (i.e. both from Numaflow Controller and ISBService)

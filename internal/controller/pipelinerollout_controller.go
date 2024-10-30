@@ -661,8 +661,17 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 }
 
 func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout) {
+
+	var pipelineSpec PipelineSpec
+	_ = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
+
 	timeElapsed := time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time)
-	r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name).Set(timeElapsed.Seconds())
+	if r.isSpecBasedPause(pipelineSpec) {
+		r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name, "user_pause").Set(timeElapsed.Seconds())
+	} else {
+		r.customMetrics.PipelinePausedSeconds.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name, "system_pause").Set(timeElapsed.Seconds())
+	}
+
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
