@@ -154,8 +154,8 @@ var (
 
 	// isbServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	isbServiceRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_isb_service_rollouts_running",
-		Help:        "Number of Numaflow ISB Service Rollouts running",
+		Name:        "isb_service_rollouts_running",
+		Help:        "Number of ISB Service Rollouts running",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace})
 
@@ -182,8 +182,8 @@ var (
 
 	// monoVertexRolloutsRunning is the gauge for the number of MonoVertexRollouts.
 	monoVertexRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_monovertex_rollouts_running",
-		Help:        "Number of Numaflow MonoVertexRollouts running",
+		Name:        "monovertex_rollouts_running",
+		Help:        "Number of MonoVertexRollouts running",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace})
 
