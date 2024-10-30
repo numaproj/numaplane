@@ -81,6 +81,7 @@ const (
 	LabelISBService         = "isbservice"
 	LabelNumaflowController = "numaflowcontroller"
 	LabelMonoVertex         = "monovertex"
+	LabelPauseType          = "pause_type"
 )
 
 var (
@@ -129,7 +130,7 @@ var (
 		Name:        "numaflow_pipeline_paused_seconds",
 		Help:        "Duration a pipeline was paused for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName})
+	}, []string{LabelNamespace, LabelName, LabelPauseType})
 
 	// pipelineROSyncs Check the total number of pipeline rollout reconciliations
 	pipelineROSyncs = promauto.NewCounterVec(prometheus.CounterOpts{
