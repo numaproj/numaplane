@@ -11,8 +11,10 @@ cd $SCRIPT_DIR
 echo "Getting the latest Numaflow version tag..."
 NUMAFLOW_VERSION=$(git ls-remote --tags https://github.com/numaproj/numaflow | grep -v '{}' | tail -1 | sed 's/.*\///' | sed 's/^v//')
 
+OUTPUT_FILE=$TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml
+
 # Check if the latest version of the Numaflow Controller definitions is already available and, if so, skip the generation process
-if [ -f "$BASE_DIR/$TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml" ]; then
+if [ -f "$BASE_DIR/$OUTPUT_FILE" ]; then
   echo "The latest version of the Numaflow Controller definitions already exists, skipping generation"
   exit 0
 fi
@@ -29,7 +31,7 @@ fi
 echo "Generating Numaflow Controller definition file for Numaflow version v$NUMAFLOW_VERSION..."
 
 # Run kustomization to generate the new Numaflow controller definition file for the above NUMAFLOW_VERSION
-kubectl kustomize . > $BASE_DIR/$TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml
+kubectl kustomize . > $BASE_DIR/$OUTPUT_FILE
 
 # Install yq if not present
 if ! command -v yq 2>&1 >/dev/null
@@ -39,10 +41,10 @@ then
   echo "yq installed"
 fi
 
-
-
-# TTODO: ...
-# confwinstance=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' namespace-install.yaml) yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config") |= .data."controller-config.yaml" = strenv(confwinstance)' namespace-install.yaml > output.yaml
+# Use yq to modify/add the instance field of the string litteral yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
+# This is not possible via Kustomize yet. Follow https://github.com/kubernetes-sigs/kustomize/issues/4517 and https://github.com/kubernetes-sigs/kustomize/pull/5679 for future Kustomize updates.
+export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' $BASE_DIR/$OUTPUT_FILE)
+yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' $BASE_DIR/$OUTPUT_FILE > output.yaml
 
 # TTODO: all the above spec must be inside the following:
 # apiVersion: v1
@@ -59,19 +61,7 @@ fi
 #         fullSpec: |
 #           ...<spec goes here>...
 
-
-
-
-
-
-
-
-
-
-echo "Generated file $TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml"
+echo "Generated file $OUTPUT_FILE"
 
 # Cleanup
 rm namespace-install.yaml
-
-
-
