@@ -44,7 +44,8 @@ fi
 # Use yq to modify/add the instance field of the string litteral yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
 # This is not possible via Kustomize yet. Follow https://github.com/kubernetes-sigs/kustomize/issues/4517 and https://github.com/kubernetes-sigs/kustomize/pull/5679 for future Kustomize updates.
 export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' $BASE_DIR/$OUTPUT_FILE)
-yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' $BASE_DIR/$OUTPUT_FILE > output.yaml
+yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' $BASE_DIR/$OUTPUT_FILE > tmp_output.yaml
+cat tmp_output.yaml > $BASE_DIR/$OUTPUT_FILE
 
 # TTODO: all the above spec must be inside the following:
 # apiVersion: v1
@@ -64,4 +65,4 @@ yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-confi
 echo "Generated file $OUTPUT_FILE"
 
 # Cleanup
-rm namespace-install.yaml
+rm -f namespace-install.yaml tmp_output.yaml
