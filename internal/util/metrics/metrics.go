@@ -119,8 +119,8 @@ var (
 
 	// pipelineRolloutsRunning indicates the number of PipelineRollouts
 	pipelineRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_pipeline_rollouts_running",
-		Help:        "Number of Numaflow pipeline rollouts running",
+		Name:        "pipeline_rollouts_running",
+		Help:        "Number of pipeline rollouts running",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace})
 
