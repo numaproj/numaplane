@@ -11,43 +11,43 @@ import (
 type CustomMetrics struct {
 	// PipelinesRolloutHealth is the gauge for the health of pipelines.
 	PipelinesRolloutHealth *prometheus.GaugeVec
-	// PipelineRolloutsRunning is the gauge for the number of running pipelines.
+	// PipelineRolloutsRunning is the gauge for the number of running PipelineRollouts.
 	PipelineRolloutsRunning *prometheus.GaugeVec
-	// PipelineROCounterMap contains the information of all running pipelines.
+	// PipelineROCounterMap contains the information of all running PipelineRollouts.
 	PipelineROCounterMap map[string]map[string]struct{}
-	// PipelineROSyncErrors is the counter for the total number of failed synced.
+	// PipelineROSyncErrors is the counter for the total number of sync errors.
 	PipelineROSyncErrors *prometheus.CounterVec
 	// PipelineRolloutQueueLength is the gauge for the length of pipeline rollout queue.
 	PipelineRolloutQueueLength *prometheus.GaugeVec
-	// PipelineROSyncs is the counter for the total number of pipelines synced.
+	// PipelineROSyncs is the counter for the total number of PipelineRollout reconciliations
 	PipelineROSyncs *prometheus.CounterVec
-	// ISBServicesRolloutHealth is the gauge for the health of ISB services.
+	// ISBServicesRolloutHealth is the gauge for the health of ISBServiceRollouts.
 	ISBServicesRolloutHealth *prometheus.GaugeVec
-	// ISBServiceRolloutsRunning is the gauge for the number of running ISB services.
+	// ISBServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	ISBServiceRolloutsRunning *prometheus.GaugeVec
-	// ISBServiceROCounterMap contains the information of all running ISB services.
+	// ISBServiceROCounterMap contains the information of all running ISBServiceRollouts.
 	ISBServiceROCounterMap map[string]map[string]struct{}
-	// ISBServicesROSyncErrors is the counter for the total number of ISB service syncing failed.
+	// ISBServicesROSyncErrors is the counter for the total number of ISBServiceRollout reconciliation errors
 	ISBServicesROSyncErrors *prometheus.CounterVec
-	// ISBServiceROSyncs is the counter for the total number of ISB service synced.
+	// ISBServiceROSyncs is the counter for the total number of ISBServiceRollout reconciliations
 	ISBServiceROSyncs *prometheus.CounterVec
-	// MonoVerticesRolloutHealth is the gauge for the health of monovertices.
+	// MonoVerticesRolloutHealth is the gauge for the health of MonoVertexRollout.
 	MonoVerticesRolloutHealth *prometheus.GaugeVec
-	// MonoVertexRolloutsRunning is the gauge for the number of running monovertices.
+	// MonoVertexRolloutsRunning is the gauge for the number of running MonoVertexRollouts.
 	MonoVertexRolloutsRunning *prometheus.GaugeVec
-	// MonoVerticesCounterMap contains the information of all running monovertices.
+	// MonoVerticesCounterMap contains the information of all running MonoVertexRollouts.
 	MonoVerticesCounterMap map[string]map[string]struct{}
-	// MonoVertexROSyncErrors is the counter for the total number of monovertices syncing failed.
+	// MonoVertexROSyncErrors is the counter for the total number of MonoVertexRollout reconciliation errors
 	MonoVertexROSyncErrors *prometheus.CounterVec
-	// MonoVertexROSyncs is the counter for the total number of monovertices synced.
+	// MonoVertexROSyncs is the counter for the total number of MonoVertexRollout reconciliations
 	MonoVertexROSyncs *prometheus.CounterVec
-	// NumaflowControllersRolloutHealth is the gauge for the health of Numaflow controller.
+	// NumaflowControllersRolloutHealth is the gauge for the health of NumaflowControllerRollouts.
 	NumaflowControllersRolloutHealth *prometheus.GaugeVec
-	// NumaflowControlleRORunning is the gauge for the number of running numaflow controllers with a specific version.
+	// NumaflowControlleRORunning is the gauge for the number of running NumaflowControllerRollouts with a specific version.
 	NumaflowControlleRORunning *prometheus.GaugeVec
-	// NumaflowControllerROSyncErrors is the counter for the total number of Numaflow controller syncing failed.
+	// NumaflowControllerROSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerROSyncErrors *prometheus.CounterVec
-	// NumaflowControllersROSyncs in the counter for the total number of Numaflow controllers synced.
+	// NumaflowControllersROSyncs in the counter for the total number of NumaflowControllerRollout reconciliations
 	NumaflowControllersROSyncs *prometheus.CounterVec
 	// ReconciliationDuration is the histogram for the duration of pipeline, isb service, monovertex and numaflow controller reconciliation.
 	ReconciliationDuration *prometheus.HistogramVec
