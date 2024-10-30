@@ -184,7 +184,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.PipelinesSynced.WithLabelValues().Inc()
+	r.customMetrics.PipelineROSyncs.WithLabelValues().Inc()
 
 	// Get PipelineRollout CR
 	pipelineRollout := &apiv1.PipelineRollout{}
@@ -911,7 +911,7 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
-	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 

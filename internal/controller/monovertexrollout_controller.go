@@ -118,7 +118,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// update the context with this Logger
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.MonoVerticesSynced.WithLabelValues().Inc()
+	r.customMetrics.MonoVertexROSyncs.WithLabelValues().Inc()
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, monoVertexRollout); err != nil {
@@ -482,7 +482,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 }
 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
-	r.customMetrics.MonoVerticesSyncFailed.WithLabelValues().Inc()
+	r.customMetrics.MonoVertexROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
