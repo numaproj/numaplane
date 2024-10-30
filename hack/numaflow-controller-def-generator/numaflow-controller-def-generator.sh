@@ -21,7 +21,7 @@ fi
 
 # Download namespace-install.yaml for the Numaflow version NUMAFLOW_VERSION
 echo "Downloading Numaflow v$NUMAFLOW_VERSION numaspace-install.yaml file..."
-wget -nv https://raw.githubusercontent.com/numaproj/numaflow/refs/tags/v$NUMAFLOW_VERSION/config/namespace-install.yaml
+wget -nv -O namespace-install.yaml https://raw.githubusercontent.com/numaproj/numaflow/refs/tags/v$NUMAFLOW_VERSION/config/namespace-install.yaml
 
 if [ $? -ne 0 ]; then
   echo "Unable to download the Numaflow v$NUMAFLOW_VERSION numaspace-install.yaml file"
@@ -31,7 +31,7 @@ fi
 echo "Generating Numaflow Controller definition file for Numaflow version v$NUMAFLOW_VERSION..."
 
 # Run kustomization to generate the new Numaflow controller definition file for the above NUMAFLOW_VERSION
-kubectl kustomize . > $BASE_DIR/$OUTPUT_FILE
+kubectl kustomize . > tmp-kustomized-nfinstall.yaml
 
 # Install yq if not present
 if ! command -v yq 2>&1 >/dev/null
@@ -43,26 +43,19 @@ fi
 
 # Use yq to modify/add the instance field of the string litteral yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
 # This is not possible via Kustomize yet. Follow https://github.com/kubernetes-sigs/kustomize/issues/4517 and https://github.com/kubernetes-sigs/kustomize/pull/5679 for future Kustomize updates.
-export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' $BASE_DIR/$OUTPUT_FILE)
-yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' $BASE_DIR/$OUTPUT_FILE > tmp_output.yaml
-cat tmp_output.yaml > $BASE_DIR/$OUTPUT_FILE
+export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' tmp-kustomized-nfinstall.yaml)
+yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' tmp-kustomized-nfinstall.yaml > tmp-full-spec.yaml
 
-# TTODO: all the above spec must be inside the following:
-# apiVersion: v1
-# kind: ConfigMap
-# metadata:
-#   name: numaflow-controller-definitions-1.3.3 
-#   namespace: numaplane-system
-#   labels:
-#     "numaplane.numaproj.io/config": numaflow-controller-definitions
-# data:
-#   controller_definitions.yaml: |
-#     controllerDefinitions:
-#       - version: "1.3.3"
-#         fullSpec: |
-#           ...<spec goes here>...
+# Update the version on the base definitions configmap yaml
+export TMP_NFC_DEF_GEN_NUMAFLOW_VERSION=$NUMAFLOW_VERSION
+envsubst < def-configmap.yaml > tmp-versioned-def-cm.yaml
+
+# Using yq, append tmp-full-spec.yaml to tmp-versioned-def-cm.yaml as a string literal under the controllerDefinitions fullSpec field for the specified version
+export TMP_NFC_DEF_GEN_FULL_SPEC=$(cat tmp-full-spec.yaml | yq)
+export TMP_NFC_DEF_GEN_FULL_SPEC_PLUS=$(yq '.data."controller_definitions.yaml" | fromyaml | .controllerDefinitions[0].fullSpec = strenv(TMP_NFC_DEF_GEN_FULL_SPEC)' tmp-versioned-def-cm.yaml)
+yq '.data."controller_definitions.yaml" = strenv(TMP_NFC_DEF_GEN_FULL_SPEC_PLUS)' tmp-versioned-def-cm.yaml > $BASE_DIR/$OUTPUT_FILE
 
 echo "Generated file $OUTPUT_FILE"
 
 # Cleanup
-rm -f namespace-install.yaml tmp_output.yaml
+rm -f namespace-install.yaml tmp-kustomized-nfinstall.yaml tmp-full-spec.yaml tmp-versioned-def-cm.yaml
