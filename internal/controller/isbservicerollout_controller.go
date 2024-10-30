@@ -120,7 +120,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	numaLogger := logger.GetBaseLogger().WithName("isbservicerollout-reconciler").WithValues("isbservicerollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.ISBServicesSynced.WithLabelValues().Inc()
+	r.customMetrics.ISBServiceROSyncs.WithLabelValues().Inc()
 
 	isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
@@ -175,7 +175,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// generate metrics for ISB Service.
-	r.customMetrics.IncISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+	r.customMetrics.IncISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
@@ -206,7 +206,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
 		}
 		// generate metrics for ISB Service deletion.
-		r.customMetrics.DecISBServiceMetrics(isbServiceRollout.Name, isbServiceRollout.Namespace)
+		r.customMetrics.DecISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
 		return ctrl.Result{}, nil
@@ -649,7 +649,7 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 }
 
 func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
-	r.customMetrics.ISBServicesSyncFailed.WithLabelValues().Inc()
+	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
