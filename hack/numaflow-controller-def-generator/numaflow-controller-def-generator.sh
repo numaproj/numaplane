@@ -12,6 +12,9 @@ echo "Getting the latest Numaflow version tag..."
 NUMAFLOW_VERSION=$(git ls-remote --tags https://github.com/numaproj/numaflow | grep -v '{}' | tail -1 | sed 's/.*\///' | sed 's/^v//')
 
 OUTPUT_FILE=$TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml
+if [ ! -z "$1" ]; then
+  OUTPUT_FILE=$1
+fi
 
 # Check if the latest version of the Numaflow Controller definitions is already available and, if so, skip the generation process
 if [ -f "$BASE_DIR/$OUTPUT_FILE" ]; then
