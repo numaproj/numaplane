@@ -1,28 +1,34 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: numaflow-controller-definitions-1.3.3 
+  name: numaflow-controller-definitions-1.3.3
   namespace: numaplane-system
   labels:
     "numaplane.numaproj.io/config": numaflow-controller-definitions
 data:
-  controller_definitions.yaml: |
+  controller_definitions.yaml: |-
     controllerDefinitions:
       - version: "1.3.3"
-        fullSpec: |
+        fullSpec: |-
           apiVersion: v1
           kind: ServiceAccount
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-sa{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
@@ -30,283 +36,283 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-dex-server{{ .InstanceSuffix }}
           rules:
-          - apiGroups:
-            - ""
-            resources:
-            - secrets
-            - configmaps
-            verbs:
-            - get
-            - list
-            - watch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
           metadata:
             labels:
               app.kubernetes.io/component: controller-manager
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-role{{ .InstanceSuffix }}
           rules:
-          - apiGroups:
-            - numaflow.numaproj.io
-            resources:
-            - interstepbufferservices
-            - interstepbufferservices/finalizers
-            - interstepbufferservices/status
-            - pipelines
-            - pipelines/finalizers
-            - pipelines/status
-            - vertices
-            - vertices/finalizers
-            - vertices/status
-            - vertices/scale
-            - monovertices
-            - monovertices/finalizers
-            - monovertices/status
-            - monovertices/scale
-            verbs:
-            - create
-            - delete
-            - deletecollection
-            - get
-            - list
-            - patch
-            - update
-            - watch
-          - apiGroups:
-            - coordination.k8s.io
-            resources:
-            - leases
-            verbs:
-            - get
-            - list
-            - watch
-            - create
-            - update
-            - patch
-            - delete
-          - apiGroups:
-            - ""
-            resources:
-            - events
-            verbs:
-            - create
-            - patch
-          - apiGroups:
-            - ""
-            resources:
-            - pods
-            - pods/exec
-            - configmaps
-            - services
-            - persistentvolumeclaims
-            verbs:
-            - create
-            - get
-            - list
-            - watch
-            - update
-            - patch
-            - delete
-          - apiGroups:
-            - ""
-            resources:
-            - secrets
-            verbs:
-            - create
-            - get
-            - list
-            - update
-            - patch
-            - delete
-          - apiGroups:
-            - apps
-            resources:
-            - deployments
-            - statefulsets
-            verbs:
-            - create
-            - get
-            - list
-            - watch
-            - update
-            - patch
-            - delete
-          - apiGroups:
-            - batch
-            resources:
-            - jobs
-            verbs:
-            - create
-            - get
-            - list
-            - watch
-            - update
-            - patch
-            - delete
+            - apiGroups:
+                - numaflow.numaproj.io
+              resources:
+                - interstepbufferservices
+                - interstepbufferservices/finalizers
+                - interstepbufferservices/status
+                - pipelines
+                - pipelines/finalizers
+                - pipelines/status
+                - vertices
+                - vertices/finalizers
+                - vertices/status
+                - vertices/scale
+                - monovertices
+                - monovertices/finalizers
+                - monovertices/status
+                - monovertices/scale
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+                - pods/exec
+                - configmaps
+                - services
+                - persistentvolumeclaims
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - statefulsets
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-server-role{{ .InstanceSuffix }}
           rules:
-          - apiGroups:
-            - numaflow.numaproj.io
-            resources:
-            - interstepbufferservices
-            - interstepbufferservices/finalizers
-            - interstepbufferservices/status
-            - pipelines
-            - pipelines/finalizers
-            - pipelines/status
-            - vertices
-            - vertices/finalizers
-            - vertices/status
-            - vertices/scale
-            - monovertices
-            - monovertices/finalizers
-            - monovertices/status
-            - monovertices/scale
-            verbs:
-            - create
-            - delete
-            - deletecollection
-            - get
-            - list
-            - patch
-            - update
-            - watch
-          - apiGroups:
-            - ""
-            resources:
-            - events
-            - pods
-            - pods/log
-            - configmaps
-            - services
-            - persistentvolumeclaims
-            verbs:
-            - get
-            - list
-            - watch
-          - apiGroups:
-            - apps
-            resources:
-            - deployments
-            - statefulsets
-            verbs:
-            - get
-            - list
-            - watch
-          - apiGroups:
-            - metrics.k8s.io
-            resources:
-            - pods
-            verbs:
-            - get
-            - list
-            - watch
+            - apiGroups:
+                - numaflow.numaproj.io
+              resources:
+                - interstepbufferservices
+                - interstepbufferservices/finalizers
+                - interstepbufferservices/status
+                - pipelines
+                - pipelines/finalizers
+                - pipelines/status
+                - vertices
+                - vertices/finalizers
+                - vertices/status
+                - vertices/scale
+                - monovertices
+                - monovertices/finalizers
+                - monovertices/status
+                - monovertices/scale
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - events
+                - pods
+                - pods/log
+                - configmaps
+                - services
+                - persistentvolumeclaims
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - statefulsets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - metrics.k8s.io
+              resources:
+                - pods
+              verbs:
+                - get
+                - list
+                - watch
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-server-secrets-role{{ .InstanceSuffix }}
           rules:
-          - apiGroups:
-            - ""
-            resources:
-            - secrets
-            verbs:
-            - get
-            - list
-            - watch
-            - update
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - get
+                - list
+                - watch
+                - update
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-dex-server{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
             name: numaflow-dex-server{{ .InstanceSuffix }}
           subjects:
-          - kind: ServiceAccount
-            name: numaflow-dex-server{{ .InstanceSuffix }}
+            - kind: ServiceAccount
+              name: numaflow-dex-server{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
           metadata:
             labels:
               app.kubernetes.io/component: controller-manager
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-role-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
             name: numaflow-role{{ .InstanceSuffix }}
           subjects:
-          - kind: ServiceAccount
-            name: numaflow-sa{{ .InstanceSuffix }}
+            - kind: ServiceAccount
+              name: numaflow-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-server-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
             name: numaflow-server-role{{ .InstanceSuffix }}
           subjects:
-          - kind: ServiceAccount
-            name: numaflow-server-sa{{ .InstanceSuffix }}
+            - kind: ServiceAccount
+              name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             name: numaflow-server-secrets-binding{{ .InstanceSuffix }}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
             name: numaflow-server-secrets-role{{ .InstanceSuffix }}
           subjects:
-          - kind: ServiceAccount
-            name: numaflow-server-sa{{ .InstanceSuffix }}
+            - kind: ServiceAccount
+              name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
@@ -314,12 +320,13 @@ data:
             server.disable.auth: "true"
           kind: ConfigMap
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           data:
-            controller-config.yaml: |
-              instance: "{{ .InstanceID }}"
+            controller-config.yaml: |-
               defaults:
                 containerResources: |
                   requests:
@@ -350,16 +357,16 @@ data:
                       sentinel failover-timeout mymaster 2000
                       sentinel parallel-syncs mymaster 1
                   versions:
-                  - version: 7.0.11
-                    redisImage: bitnami/redis:7.0.11-debian-11-r3
-                    sentinelImage: bitnami/redis-sentinel:7.0.11-debian-11-r3
-                    redisExporterImage: bitnami/redis-exporter:1.50.0-debian-11-r4
-                    initContainerImage: debian:latest
-                  - version: 7.0.15
-                    redisImage: bitnami/redis:7.0.15-debian-11-r2
-                    sentinelImage: bitnami/redis-sentinel:7.0.15-debian-11-r2
-                    redisExporterImage: bitnami/redis-exporter:1.56.0-debian-11-r2
-                    initContainerImage: debian:latest
+                    - version: 7.0.11
+                      redisImage: bitnami/redis:7.0.11-debian-11-r3
+                      sentinelImage: bitnami/redis-sentinel:7.0.11-debian-11-r3
+                      redisExporterImage: bitnami/redis-exporter:1.50.0-debian-11-r4
+                      initContainerImage: debian:latest
+                    - version: 7.0.15
+                      redisImage: bitnami/redis:7.0.15-debian-11-r2
+                      sentinelImage: bitnami/redis-sentinel:7.0.15-debian-11-r2
+                      redisExporterImage: bitnami/redis-exporter:1.56.0-debian-11-r2
+                      initContainerImage: debian:latest
                 jetstream:
                   # Default JetStream settings, could be overridden by InterStepBufferService specs
                   settings: |
@@ -406,73 +413,76 @@ data:
                       storage: 0
                       replicas: 3
                   versions:
-                  - version: latest
-                    natsImage: nats:2.10.17
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.8.1
-                    natsImage: nats:2.8.1
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.8.1-alpine
-                    natsImage: nats:2.8.1-alpine
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: nats-server
-                  - version: 2.8.3
-                    natsImage: nats:2.8.3
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.8.3-alpine
-                    natsImage: nats:2.8.3-alpine
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: nats-server
-                  - version: 2.9.0
-                    natsImage: nats:2.9.0
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.9.0-alpine
-                    natsImage: nats:2.9.0-alpine
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: nats-server
-                  - version: 2.9.6
-                    natsImage: nats:2.9.6
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.9.8
-                    natsImage: nats:2.9.8
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.9.15
-                    natsImage: nats:2.9.15
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.10.3
-                    natsImage: nats:2.10.3
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.10.11
-                    natsImage: nats:2.10.11
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
-                  - version: 2.10.17
-                    natsImage: nats:2.10.17
-                    metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
-                    configReloaderImage: natsio/nats-server-config-reloader:0.7.0
-                    startCommand: /nats-server
+                    - version: latest
+                      natsImage: nats:2.10.17
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.1
+                      natsImage: nats:2.8.1
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.1-alpine
+                      natsImage: nats:2.8.1-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.8.3
+                      natsImage: nats:2.8.3
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.3-alpine
+                      natsImage: nats:2.8.3-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.9.0
+                      natsImage: nats:2.9.0
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.0-alpine
+                      natsImage: nats:2.9.0-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.9.6
+                      natsImage: nats:2.9.6
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.8
+                      natsImage: nats:2.9.8
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.15
+                      natsImage: nats:2.9.15
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.3
+                      natsImage: nats:2.10.3
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.11
+                      natsImage: nats:2.10.11
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.17
+                      natsImage: nats:2.10.17
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+              instance: '{{ .InstanceID }}'
           kind: ConfigMap
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-controller-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -493,6 +503,8 @@ data:
                     - readonly
           kind: ConfigMap
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -500,6 +512,8 @@ data:
             admin.enabled: "true"
           kind: ConfigMap
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-local-user-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -521,11 +535,15 @@ data:
               # g, my-github-org:my-github-team, role:readonly
           kind: ConfigMap
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-rbac-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: Secret
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-secrets{{ .InstanceSuffix }}
           stringData:
             dex-github-client-id: <GITHUB_CLIENT_ID>
@@ -534,389 +552,401 @@ data:
           apiVersion: v1
           kind: Secret
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-secrets{{ .InstanceSuffix }}
           type: Opaque
           ---
           apiVersion: v1
           kind: Service
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server{{ .InstanceSuffix }}
           spec:
             ports:
-            - port: 5556
-              targetPort: 5556
+              - port: 5556
+                targetPort: 5556
             selector:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
           ---
           apiVersion: v1
           kind: Service
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server{{ .InstanceSuffix }}
           spec:
             ports:
-            - port: 8443
-              targetPort: 8443
+              - port: 8443
+                targetPort: 8443
             selector:
               app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
-              app.kubernetes.io/instance: "{{ .InstanceID }}"
             type: ClusterIP
           ---
           apiVersion: apps/v1
           kind: Deployment
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-controller{{ .InstanceSuffix }}
           spec:
             replicas: 1
             selector:
               matchLabels:
                 app.kubernetes.io/component: controller-manager
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
                 app.kubernetes.io/name: controller-manager
                 app.kubernetes.io/part-of: numaflow
-                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: controller-manager
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
                   app.kubernetes.io/name: controller-manager
                   app.kubernetes.io/part-of: numaflow
-                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
-                - args:
-                  - controller
-                  env:
-                  - name: NUMAFLOW_IMAGE
-                    value: quay.io/numaproj/numaflow:v1.3.3
-                  - name: NAMESPACE
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: metadata.namespace
-                  - name: NUMAFLOW_CONTROLLER_NAMESPACED
-                    valueFrom:
-                      configMapKeyRef:
-                        key: namespaced
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
-                    valueFrom:
-                      configMapKeyRef:
-                        key: managed.namespace
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_LEADER_ELECTION_DISABLED
-                    valueFrom:
-                      configMapKeyRef:
-                        key: controller.leader.election.disabled
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
-                    valueFrom:
-                      configMapKeyRef:
-                        key: controller.leader.election.lease.duration
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
-                    valueFrom:
-                      configMapKeyRef:
-                        key: controller.leader.election.lease.renew.deadline
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
-                    valueFrom:
-                      configMapKeyRef:
-                        key: controller.leader.election.lease.renew.period
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3
-                  imagePullPolicy: Always
-                  livenessProbe:
-                    httpGet:
-                      path: /healthz
-                      port: 8081
-                    initialDelaySeconds: 3
-                    periodSeconds: 3
-                  name: controller-manager
-                  ports:
-                  - containerPort: 9090
-                    name: metrics
-                  readinessProbe:
-                    httpGet:
-                      path: /readyz
-                      port: 8081
-                    initialDelaySeconds: 3
-                    periodSeconds: 3
-                  resources:
-                    limits:
-                      cpu: 500m
-                      memory: 1024Mi
-                    requests:
-                      cpu: 100m
-                      memory: 200Mi
-                  volumeMounts:
-                  - mountPath: /etc/numaflow
-                    name: controller-config-volume
+                  - args:
+                      - controller
+                    env:
+                      - name: NUMAFLOW_IMAGE
+                        value: quay.io/numaproj/numaflow:v1.3.3
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_CONTROLLER_NAMESPACED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: namespaced
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: managed.namespace
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_DISABLED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.disabled
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.duration
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.renew.deadline
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.renew.period
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.3.3
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    name: controller-manager
+                    ports:
+                      - containerPort: 9090
+                        name: metrics
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 1024Mi
+                      requests:
+                        cpu: 100m
+                        memory: 200Mi
+                    volumeMounts:
+                      - mountPath: /etc/numaflow
+                        name: controller-config-volume
                 securityContext:
                   runAsNonRoot: true
                   runAsUser: 9737
                 serviceAccountName: numaflow-sa{{ .InstanceSuffix }}
                 volumes:
-                - configMap:
-                    name: numaflow-controller-config{{ .InstanceSuffix }}
-                  name: controller-config-volume
+                  - configMap:
+                      name: numaflow-controller-config{{ .InstanceSuffix }}
+                    name: controller-config-volume
           ---
           apiVersion: apps/v1
           kind: Deployment
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server{{ .InstanceSuffix }}
           spec:
             selector:
               matchLabels:
                 app.kubernetes.io/component: dex-server
-                app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
+                app.kubernetes.io/name: numaflow-dex-server
                 app.kubernetes.io/part-of: numaflow
-                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: dex-server
-                  app.kubernetes.io/name: numaflow-dex-server{{ .InstanceSuffix }}
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
+                  app.kubernetes.io/name: numaflow-dex-server
                   app.kubernetes.io/part-of: numaflow
-                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
-                - command:
-                  - /usr/local/bin/dex
-                  - serve
-                  - /etc/numaflow/dex/cfg/config.yaml
-                  env:
-                  - name: GITHUB_CLIENT_ID
-                    valueFrom:
-                      secretKeyRef:
-                        key: dex-github-client-id
-                        name: numaflow-dex-secrets{{ .InstanceSuffix }}
-                  - name: GITHUB_CLIENT_SECRET
-                    valueFrom:
-                      secretKeyRef:
-                        key: dex-github-client-secret
-                        name: numaflow-dex-secrets{{ .InstanceSuffix }}
-                  image: dexidp/dex:v2.37.0
-                  imagePullPolicy: Always
-                  name: dex
-                  ports:
-                  - containerPort: 5556
-                  volumeMounts:
-                  - mountPath: /etc/numaflow/dex/cfg/config.yaml
-                    name: generated-dex-config
-                    subPath: config.yaml
-                  - mountPath: /etc/numaflow/dex/tls/tls.crt
-                    name: tls
-                    subPath: tls.crt
-                  - mountPath: /etc/numaflow/dex/tls/tls.key
-                    name: tls
-                    subPath: tls.key
+                  - command:
+                      - /usr/local/bin/dex
+                      - serve
+                      - /etc/numaflow/dex/cfg/config.yaml
+                    env:
+                      - name: GITHUB_CLIENT_ID
+                        valueFrom:
+                          secretKeyRef:
+                            key: dex-github-client-id
+                            name: numaflow-dex-secrets{{ .InstanceSuffix }}
+                      - name: GITHUB_CLIENT_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            key: dex-github-client-secret
+                            name: numaflow-dex-secrets{{ .InstanceSuffix }}
+                    image: dexidp/dex:v2.37.0
+                    imagePullPolicy: Always
+                    name: dex
+                    ports:
+                      - containerPort: 5556
+                    volumeMounts:
+                      - mountPath: /etc/numaflow/dex/cfg/config.yaml
+                        name: generated-dex-config
+                        subPath: config.yaml
+                      - mountPath: /etc/numaflow/dex/tls/tls.crt
+                        name: tls
+                        subPath: tls.crt
+                      - mountPath: /etc/numaflow/dex/tls/tls.key
+                        name: tls
+                        subPath: tls.key
                 initContainers:
-                - args:
-                  - dex-server-init
-                  env:
-                  - name: NUMAFLOW_SERVER_ADDRESS
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.address
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_BASE_HREF
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.base.href
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3
-                  imagePullPolicy: Always
-                  name: dex-init
-                  volumeMounts:
-                  - mountPath: /cfg
-                    name: connector-config
-                  - mountPath: /tls
-                    name: tls
-                  - mountPath: /tmp
-                    name: generated-dex-config
+                  - args:
+                      - dex-server-init
+                    env:
+                      - name: NUMAFLOW_SERVER_ADDRESS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.address
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.3.3
+                    imagePullPolicy: Always
+                    name: dex-init
+                    volumeMounts:
+                      - mountPath: /cfg
+                        name: connector-config
+                      - mountPath: /tls
+                        name: tls
+                      - mountPath: /tmp
+                        name: generated-dex-config
                 serviceAccountName: numaflow-dex-server{{ .InstanceSuffix }}
                 volumes:
-                - configMap:
-                    items:
-                    - key: config.yaml
-                      path: config.yaml
-                    name: numaflow-dex-server-config{{ .InstanceSuffix }}
-                  name: connector-config
-                - emptyDir: {}
-                  name: tls
-                - emptyDir: {}
-                  name: generated-dex-config
+                  - configMap:
+                      items:
+                        - key: config.yaml
+                          path: config.yaml
+                      name: numaflow-dex-server-config{{ .InstanceSuffix }}
+                    name: connector-config
+                  - emptyDir: {}
+                    name: tls
+                  - emptyDir: {}
+                    name: generated-dex-config
           ---
           apiVersion: apps/v1
           kind: Deployment
           metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server{{ .InstanceSuffix }}
           spec:
             replicas: 1
             selector:
               matchLabels:
                 app.kubernetes.io/component: numaflow-ux
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
                 app.kubernetes.io/name: numaflow-ux
                 app.kubernetes.io/part-of: numaflow
-                app.kubernetes.io/instance: "{{ .InstanceID }}"
             template:
               metadata:
                 labels:
                   app.kubernetes.io/component: numaflow-ux
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
                   app.kubernetes.io/name: numaflow-ux
                   app.kubernetes.io/part-of: numaflow
-                  app.kubernetes.io/instance: "{{ .InstanceID }}"
               spec:
                 containers:
-                - args:
-                  - server
-                  env:
-                  - name: NAMESPACE
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: metadata.namespace
-                  - name: NUMAFLOW_SERVER_INSECURE
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.insecure
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_PORT_NUMBER
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.port
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_NAMESPACED
-                    valueFrom:
-                      configMapKeyRef:
-                        key: namespaced
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_MANAGED_NAMESPACE
-                    valueFrom:
-                      configMapKeyRef:
-                        key: managed.namespace
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_BASE_HREF
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.base.href
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_READONLY
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.readonly
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_DISABLE_AUTH
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.disable.auth
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_DEX_SERVER_ADDR
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.dex.server
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_ADDRESS
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.address
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_CORS_ALLOWED_ORIGINS
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.cors.allowed.origins
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  - name: NUMAFLOW_SERVER_DAEMON_CLIENT_PROTOCOL
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.daemon.client.protocol
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3
-                  imagePullPolicy: Always
-                  livenessProbe:
-                    httpGet:
-                      path: /livez
-                      port: 8443
-                      scheme: HTTPS
-                    initialDelaySeconds: 3
-                    periodSeconds: 3
-                  name: main
-                  resources:
-                    limits:
-                      cpu: 500m
-                      memory: 1024Mi
-                    requests:
-                      cpu: 100m
-                      memory: 200Mi
-                  volumeMounts:
-                  - mountPath: /ui/build/runtime-env.js
-                    name: env-volume
-                    subPath: runtime-env.js
-                  - mountPath: /ui/build/index.html
-                    name: env-volume
-                    subPath: index.html
-                  - mountPath: /etc/numaflow
-                    name: rbac-config
+                  - args:
+                      - server
+                    env:
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_SERVER_INSECURE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.insecure
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_PORT_NUMBER
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.port
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_NAMESPACED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: namespaced
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_MANAGED_NAMESPACE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: managed.namespace
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_READONLY
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.readonly
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DISABLE_AUTH
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.disable.auth
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DEX_SERVER_ADDR
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.dex.server
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_ADDRESS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.address
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_CORS_ALLOWED_ORIGINS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.cors.allowed.origins
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DAEMON_CLIENT_PROTOCOL
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.daemon.client.protocol
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.3.3
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /livez
+                        port: 8443
+                        scheme: HTTPS
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    name: main
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 1024Mi
+                      requests:
+                        cpu: 100m
+                        memory: 200Mi
+                    volumeMounts:
+                      - mountPath: /ui/build/runtime-env.js
+                        name: env-volume
+                        subPath: runtime-env.js
+                      - mountPath: /ui/build/index.html
+                        name: env-volume
+                        subPath: index.html
+                      - mountPath: /etc/numaflow
+                        name: rbac-config
                 initContainers:
-                - args:
-                  - server-init
-                  env:
-                  - name: NUMAFLOW_SERVER_BASE_HREF
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.base.href
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3
-                  imagePullPolicy: Always
-                  name: server-init
-                  volumeMounts:
-                  - mountPath: /opt/numaflow
-                    name: env-volume
-                - args:
-                  - server-secrets-init
-                  env:
-                  - name: NAMESPACE
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: metadata.namespace
-                  - name: NUMAFLOW_SERVER_DISABLE_AUTH
-                    valueFrom:
-                      configMapKeyRef:
-                        key: server.disable.auth
-                        name: numaflow-cmd-params-config{{ .InstanceSuffix }}
-                        optional: true
-                  image: quay.io/numaproj/numaflow:v1.3.3
-                  imagePullPolicy: Always
-                  name: server-secrets-init
+                  - args:
+                      - server-init
+                    env:
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.3.3
+                    imagePullPolicy: Always
+                    name: server-init
+                    volumeMounts:
+                      - mountPath: /opt/numaflow
+                        name: env-volume
+                  - args:
+                      - server-secrets-init
+                    env:
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_SERVER_DISABLE_AUTH
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.disable.auth
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.3.3
+                    imagePullPolicy: Always
+                    name: server-secrets-init
                 securityContext:
                   runAsNonRoot: true
                   runAsUser: 9737
                 serviceAccountName: numaflow-server-sa{{ .InstanceSuffix }}
                 volumes:
-                - emptyDir: {}
-                  name: env-volume
-                - configMap:
-                    name: numaflow-server-rbac-config{{ .InstanceSuffix }}
-                  name: rbac-config
+                  - emptyDir: {}
+                    name: env-volume
+                  - configMap:
+                      name: numaflow-server-rbac-config{{ .InstanceSuffix }}
+                    name: rbac-config
