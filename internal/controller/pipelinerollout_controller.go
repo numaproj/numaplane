@@ -184,7 +184,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	numaLogger := logger.FromContext(ctx).WithValues("pipelinerollout", namespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.PipelinesSynced.WithLabelValues().Inc()
+	r.customMetrics.PipelineROSyncs.WithLabelValues().Inc()
 
 	// Get PipelineRollout CR
 	pipelineRollout := &apiv1.PipelineRollout{}
@@ -254,7 +254,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	}
 
 	// generate the metrics for the Pipeline.
-	r.customMetrics.IncPipelinesRunningMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	if requeue {
 		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
@@ -369,7 +369,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			controllerutil.RemoveFinalizer(pipelineRollout, finalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
-		r.customMetrics.DecPipelineMetrics(pipelineRollout.Name, pipelineRollout.Namespace)
+		r.customMetrics.DecPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name)
 		return false, nil, nil
@@ -911,7 +911,7 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
-	r.customMetrics.PipelinesSyncFailed.WithLabelValues().Inc()
+	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 

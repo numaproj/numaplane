@@ -118,7 +118,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// update the context with this Logger
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.MonoVerticesSynced.WithLabelValues().Inc()
+	r.customMetrics.MonoVertexROSyncs.WithLabelValues().Inc()
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, monoVertexRollout); err != nil {
@@ -171,7 +171,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// generate metrics for MonoVertex
-	r.customMetrics.IncMonoVertexMetrics(monoVertexRollout.Name, monoVertexRollout.Namespace)
+	r.customMetrics.IncMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeNormal, "ReconciliationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
@@ -198,7 +198,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			controllerutil.RemoveFinalizer(monoVertexRollout, finalizerName)
 		}
 		// generate metrics for MonoVertex deletion
-		r.customMetrics.DecMonoVertexMetrics(monoVertexRollout.Name, monoVertexRollout.Namespace)
+		r.customMetrics.DecMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.MonoVerticesRolloutHealth.DeleteLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name)
 		return ctrl.Result{}, nil
@@ -482,7 +482,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 }
 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
-	r.customMetrics.MonoVerticesSyncFailed.WithLabelValues().Inc()
+	r.customMetrics.MonoVertexROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
