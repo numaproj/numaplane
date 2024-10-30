@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# This script uses Kustomize and yq to generate a templated Numaflow Controller definition manifest 
+# based on the latest version of the Numaflow numaspace-install manifest. The script can be called 
+# without arguments which will generate a file in the tests/manifests/default directory, or it 
+# can be called passing as argument a file path which will be used as the final output yaml.
+
 BASE_DIR=../..
 TEST_MANIFEST_DIR=tests/manifests/default
 SCRIPT_DIR=$(dirname "$0")
