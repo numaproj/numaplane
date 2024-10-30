@@ -203,7 +203,7 @@ var (
 
 	// numaflowControllerRORunning is the gauge for the number of running numaflow controllers.
 	numaflowControllerRORunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_controller_rollout_running",
+		Name:        "numaflow_controller_rollouts_running",
 		Help:        "Number of NumaflowControllerRollouts",
 		ConstLabels: defaultLabels,
 	}, []string{LabelName, LabelNamespace, LabelVersion})
