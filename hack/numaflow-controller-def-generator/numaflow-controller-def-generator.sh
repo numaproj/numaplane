@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # This script uses Kustomize and yq to generate a templated Numaflow Controller definition manifest 
-# based on the latest version of the Numaflow numaspace-install manifest. The script can be called 
-# without arguments which will generate a file in the tests/manifests/default directory, or it 
-# can be called passing as argument a file path which will be used as the final output yaml.
+# based on a version of the Numaflow numaspace-install manifest. The script can be called 
+# without arguments which will generate a file in the tests/manifests/default directory based on the latest Numaflow version,
+# or it can be called passing as arguments a Numaflow version and a file path which will be used as the final output yaml.
+# NOTE: the version argument should not include the 'v' character, only the semantic version numbers.
 
 BASE_DIR=../..
 TEST_MANIFEST_DIR=tests/manifests/default
@@ -12,13 +13,17 @@ SCRIPT_DIR=$(dirname "$0")
 # Change working directory
 cd $SCRIPT_DIR
 
-# Get the latest Numaflow Version from the remote repository
-echo "Getting the latest Numaflow version tag..."
-NUMAFLOW_VERSION=$(git ls-remote --tags https://github.com/numaproj/numaflow | grep -v '{}' | tail -1 | sed 's/.*\///' | sed 's/^v//')
+if [ ! -z "$1" ]; then
+  NUMAFLOW_VERSION=$1
+else
+  # Get the latest Numaflow Version from the remote repository
+  echo "Getting the latest Numaflow version tag..."
+  NUMAFLOW_VERSION=$(git ls-remote --tags https://github.com/numaproj/numaflow | grep -v '{}' | tail -1 | sed 's/.*\///' | sed 's/^v//')
+fi
 
 OUTPUT_FILE=$TEST_MANIFEST_DIR/controller_def_$NUMAFLOW_VERSION.yaml
-if [ ! -z "$1" ]; then
-  OUTPUT_FILE=$1
+if [ ! -z "$2" ]; then
+  OUTPUT_FILE=$2
 fi
 
 # Check if the latest version of the Numaflow Controller definitions is already available and, if so, skip the generation process
@@ -49,7 +54,7 @@ then
   echo "yq installed"
 fi
 
-# Use yq to modify/add the instance field of the string litteral yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
+# Use yq to modify/add the instance field of the string literal yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
 # This is not possible via Kustomize yet. Follow https://github.com/kubernetes-sigs/kustomize/issues/4517 and https://github.com/kubernetes-sigs/kustomize/pull/5679 for future Kustomize updates.
 export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' tmp-kustomized-nfinstall.yaml)
 yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' tmp-kustomized-nfinstall.yaml > tmp-full-spec.yaml
