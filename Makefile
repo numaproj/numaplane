@@ -38,8 +38,8 @@ GCFLAGS="all=-N -l"
 ENVTEST_K8S_VERSION = 1.28.0
 
 TEST_MANIFEST_DIR ?= tests/manifests/default
-TEST_PPND_MANIFEST_DIR ?= tests/manifests/special-cases/ppnd 
-TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive 
+TEST_PPND_MANIFEST_DIR ?= tests/manifests/special-cases/ppnd
+TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive
 
 ifeq ($(PPND), true)
 TEST_MANIFEST_DIR := $(TEST_PPND_MANIFEST_DIR)
