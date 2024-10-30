@@ -133,14 +133,14 @@ var (
 
 	// pipelineROSyncs Check the total number of pipeline rollout reconciliations
 	pipelineROSyncs = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "pipeline_synced_total",
+		Name:        "pipeline_rollout_syncs_total",
 		Help:        "The total number of pipeline synced",
 		ConstLabels: defaultLabels,
 	}, []string{})
 
 	// pipelineROSyncErrors Check the total number of pipeline rollout reconciliation errors
 	pipelineROSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name:        "pipeline_sync_failed_total",
+		Name:        "pipeline_rollout_sync_errors_total",
 		Help:        "The total number of pipeline sync failed",
 		ConstLabels: defaultLabels,
 	}, []string{})
