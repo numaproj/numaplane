@@ -194,7 +194,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 .PHONY: start
 start: image
-	$(KUBECTL) apply -f tests/manifests/default/numaplane-ns.yaml
+	./hack/numaflow-controller-def-generator/numaflow-controller-def-generator.sh
+	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR)/numaplane-ns.yaml
 	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR)  | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 
 
