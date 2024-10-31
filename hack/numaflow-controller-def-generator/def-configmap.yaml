@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: numaflow-controller-definitions-$TMP_NFC_DEF_GEN_NUMAFLOW_VERSION
+  namespace: numaplane-system
+  labels:
+    "numaplane.numaproj.io/config": numaflow-controller-definitions
+data:
+  controller_definitions.yaml: |
+    controllerDefinitions:
+      - version: "$TMP_NFC_DEF_GEN_NUMAFLOW_VERSION"
+        fullSpec: |

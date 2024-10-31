@@ -37,9 +37,11 @@ GCFLAGS="all=-N -l"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
 
-TEST_MANIFEST_DIR ?= tests/manifests/default
-TEST_PPND_MANIFEST_DIR ?= tests/manifests/special-cases/ppnd 
-TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive 
+TEST_MANIFEST_DIR_DEFAULT ?= tests/manifests/default
+TEST_PPND_MANIFEST_DIR ?= tests/manifests/special-cases/ppnd
+TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive
+
+TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_DEFAULT)
 
 ifeq ($(PPND), true)
 TEST_MANIFEST_DIR := $(TEST_PPND_MANIFEST_DIR)
@@ -194,8 +196,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 .PHONY: start
 start: image
-	$(KUBECTL) apply -f tests/manifests/default/numaplane-ns.yaml
-	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR)  | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
+	./hack/numaflow-controller-def-generator/numaflow-controller-def-generator.sh
+	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
+	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 
 
 ##@ Build Dependencies
