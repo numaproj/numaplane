@@ -23,6 +23,8 @@ func (cm *ConfigManager) UnsetUSDEConfig() {
 	defer cm.usdeConfigLock.Unlock()
 
 	cm.usdeConfig = USDEConfig{}
+
+	fmt.Println("USDE Config unset") // due to cyclical dependency, we can't call logger
 }
 
 func (cm *ConfigManager) GetUSDEConfig() USDEConfig {

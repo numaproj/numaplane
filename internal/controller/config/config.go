@@ -212,6 +212,7 @@ func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
 	defer cm.namespaceConfigMapLock.Unlock()
 
 	delete(cm.namespaceConfigMap, namespace)
+	fmt.Printf("Deleted Namespace ConfigMap for namespace %s\n", namespace)
 }
 
 func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
