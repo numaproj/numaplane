@@ -95,6 +95,8 @@ func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefiniti
 	// Add or update the controller definition config based on a version
 	for _, controller := range config.ControllerDefinitions {
 		cm.rolloutConfig[controller.Version] = controller.FullSpec
+
+		fmt.Printf("Added/Updated Controller definition Config, version: %s\n", controller.Version)
 	}
 }
 
@@ -104,6 +106,8 @@ func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefiniti
 
 	for _, controller := range config.ControllerDefinitions {
 		delete(cm.rolloutConfig, controller.Version)
+
+		fmt.Printf("Removed Controller definition Config, version: %s\n", controller.Version)
 	}
 }
 
@@ -163,6 +167,7 @@ func (cm *ConfigManager) loadGlobalConfig(
 			onErrorReloading(err)
 		}
 		cm.config = &newConfig
+		fmt.Printf("Global Config update: %+v\n", newConfig) // due to cyclical dependency, we can't call logger
 
 		// call any registered callbacks
 		for _, f := range cm.callbacks {
@@ -199,6 +204,7 @@ func (cm *ConfigManager) UpdateNamespaceConfig(namespace string, config Namespac
 	defer cm.namespaceConfigMapLock.Unlock()
 
 	cm.namespaceConfigMap[namespace] = config
+	fmt.Printf("Added Namespace ConfigMap for namespace %s\n", namespace)
 }
 
 func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
@@ -206,6 +212,7 @@ func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
 	defer cm.namespaceConfigMapLock.Unlock()
 
 	delete(cm.namespaceConfigMap, namespace)
+	fmt.Printf("Deleted Namespace ConfigMap for namespace %s\n", namespace)
 }
 
 func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
