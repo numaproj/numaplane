@@ -207,7 +207,11 @@ func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStra
 		if !namespaceConfig.UpgradeStrategy.IsValid() {
 			numaLogger.WithValues("upgrade strategy", namespaceConfig.UpgradeStrategy).Warnf("invalid Upgrade strategy for namespace %s", namespace)
 		} else {
-			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+			if namespaceConfig.UpgradeStrategy == "" {
+				userUpgradeStrategy = "no-strategy"
+			} else {
+				userUpgradeStrategy = namespaceConfig.UpgradeStrategy
+			}
 		}
 	}
 	return userUpgradeStrategy, nil
