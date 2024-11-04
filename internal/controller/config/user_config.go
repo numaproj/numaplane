@@ -10,7 +10,7 @@ type USDEUserStrategy string
 const (
 	ProgressiveStrategyID USDEUserStrategy = "progressive"
 	PPNDStrategyID        USDEUserStrategy = "pause-and-drain"
-	NoStrategyID          USDEUserStrategy = ""
+	NoStrategyID          USDEUserStrategy = "no-strategy"
 )
 
 func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
@@ -22,7 +22,7 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 	allowedValues := map[USDEUserStrategy]struct{}{
 		ProgressiveStrategyID: {},
 		PPNDStrategyID:        {},
-		NoStrategyID:          {}} // TODO: this will no longer be allowed in the future
+		NoStrategyID:          {}}
 
 	// Make sure the string is one of the possible strategy values
 	_, found := allowedValues[USDEUserStrategy(usdeUserStrategyStr)]
@@ -40,6 +40,8 @@ func (s USDEUserStrategy) IsValid() bool {
 	case ProgressiveStrategyID:
 		return true
 	case PPNDStrategyID:
+		return true
+	case NoStrategyID:
 		return true
 	default:
 		return false

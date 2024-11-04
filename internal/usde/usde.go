@@ -190,7 +190,7 @@ func getDataLossUpggradeStrategy(ctx context.Context, namespace string) (apiv1.U
 		return apiv1.UpgradeStrategyPPND, nil
 	case config.ProgressiveStrategyID:
 		return apiv1.UpgradeStrategyProgressive, nil
-	case config.NoStrategyID:
+	case config.NoStrategyID, "":
 		return apiv1.UpgradeStrategyApply, nil
 	default:
 		return apiv1.UpgradeStrategyError, fmt.Errorf("invalid Upgrade Strategy: %v", userUpgradeStrategy)
