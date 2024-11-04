@@ -1466,7 +1466,7 @@ metadata:
 ---
 apiVersion: v1
 data:
-  defaultUpgradeStrategy: ""
+  defaultUpgradeStrategy: pause-and-drain
   pipelineSpecExcludedPaths: |
     - "lifecycle"
     - "limits"
