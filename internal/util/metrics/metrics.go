@@ -63,6 +63,8 @@ type CustomMetrics struct {
 	ClusterCacheError *prometheus.CounterVec
 	// PipelinePausedSeconds counts the total time a Pipeline was paused.
 	PipelinePausedSeconds *prometheus.GaugeVec
+	// PipelinePausingSeconds counts the total time a Pipeline was pausing.
+	PipelinePausingSeconds *prometheus.GaugeVec
 	// ISBServicePausedSeconds counts the total time an ISBService requested resources be paused.
 	ISBServicePausedSeconds *prometheus.GaugeVec
 	// NumaflowControllerPausedSeconds counts the total time a Numaflow controller requested resources be paused.
@@ -81,7 +83,6 @@ const (
 	LabelISBService         = "isbservice"
 	LabelNumaflowController = "numaflowcontroller"
 	LabelMonoVertex         = "monovertex"
-	LabelPauseType          = "pause_type"
 )
 
 var (
@@ -127,10 +128,17 @@ var (
 
 	// pipelinePausedSeconds Check the total time a pipeline was paused
 	pipelinePausedSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_pipeline_paused_seconds",
-		Help:        "Duration a pipeline was paused for",
+		Name:        "numaflow_pipeline_system_paused_seconds",
+		Help:        "Duration a pipeline is paused for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelName, LabelPauseType})
+	}, []string{LabelNamespace, LabelName})
+
+	// pipelinePausingSeconds Check the total time a pipeline was pausing
+	pipelinePausingSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_pipeline_system_pausing_seconds",
+		Help:        "Duration a pipeline is pausing for",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelName})
 
 	// pipelineROSyncs Check the total number of pipeline rollout reconciliations
 	pipelineROSyncs = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -280,7 +288,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		monoVerticesRolloutHealth, monoVertexRolloutsRunning, monoVertexROSyncs, monoVertexROSyncErrors,
 		numaflowControllersRolloutHealth, numaflowControllerRORunning, numaflowControllerROSyncs, numaflowControllerROSyncErrors, reconciliationDuration, kubeRequestCounter,
 		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
-		pipelinePausedSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
+		pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
 
 	return &CustomMetrics{
 		PipelinesRolloutHealth:                    pipelinesRolloutHealth,
@@ -310,6 +318,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		KubeResourceCache:                         kubeResourceCache,
 		ClusterCacheError:                         clusterCacheError,
 		PipelinePausedSeconds:                     pipelinePausedSeconds,
+		PipelinePausingSeconds:                    pipelinePausingSeconds,
 		ISBServicePausedSeconds:                   isbServicePausedSeconds,
 		NumaflowControllerPausedSeconds:           numaflowControllerPausedSeconds,
 	}
