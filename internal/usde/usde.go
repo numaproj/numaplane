@@ -190,7 +190,7 @@ func getDataLossUpggradeStrategy(ctx context.Context, namespace string) (apiv1.U
 		return apiv1.UpgradeStrategyPPND, nil
 	case config.ProgressiveStrategyID:
 		return apiv1.UpgradeStrategyProgressive, nil
-	case config.NoStrategyID:
+	case config.NoStrategyID, "":
 		return apiv1.UpgradeStrategyApply, nil
 	default:
 		return apiv1.UpgradeStrategyError, fmt.Errorf("invalid Upgrade Strategy: %v", userUpgradeStrategy)
@@ -203,6 +203,9 @@ func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStra
 	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
 
 	var userUpgradeStrategy config.USDEUserStrategy = config.GetConfigManagerInstance().GetUSDEConfig().DefaultUpgradeStrategy
+	if userUpgradeStrategy == "" {
+		userUpgradeStrategy = config.NoStrategyID
+	}
 	if namespaceConfig != nil {
 		if !namespaceConfig.UpgradeStrategy.IsValid() {
 			numaLogger.WithValues("upgrade strategy", namespaceConfig.UpgradeStrategy).Warnf("invalid Upgrade strategy for namespace %s", namespace)

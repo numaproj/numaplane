@@ -5,8 +5,10 @@ metadata:
   labels:
     numaplane.numaproj.io/config: usde-config
 data:
-  defaultUpgradeStrategy: ""
+  defaultUpgradeStrategy: "pause-and-drain"
   pipelineSpecExcludedPaths: |
     - "lifecycle"
     - "limits"
     - "watermark"
+  isbServiceSpecExcludedPaths: |
+    - "jetstream.containerTemplate.resources.limits"
