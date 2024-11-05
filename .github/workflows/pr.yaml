@@ -1,12 +1,8 @@
 name: PR
 
 on:
-  pull_request_target:
-    types:
-      - opened
-      - edited
-      - reopened
-      - synchronize
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -18,4 +14,4 @@ jobs:
       - name: Check PR Title's semantic conformance
         uses: Slashgear/action-check-pr-title@v4.3.0
         with:
-          regexp: "(feat|fix|docs|chore): .++" # Regex the title should match.
+          regexp: "(feat|fix|docs|chore):.+" # Regex the title should match.
