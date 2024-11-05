@@ -14,4 +14,4 @@ jobs:
       - name: Check PR Title's semantic conformance
         uses: Slashgear/action-check-pr-title@v4.3.0
         with:
-          regexp: "(feat|fix|docs|chore): .++" # Regex the title should match.
+          regexp: "(feat|fix|docs|chore):.+" # Regex the title should match.
