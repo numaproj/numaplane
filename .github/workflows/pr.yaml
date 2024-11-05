@@ -16,6 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check PR Title's semantic conformance
-        uses: amannn/action-semantic-pull-request@e9fabac35e210fea40ca5b14c0da95a099eff26f # v5.4.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: Slashgear/action-check-pr-title@v4.3.0
+        with:
+          regexp: "(feat|fix|docs|chore): .++" # Regex the title should match.
