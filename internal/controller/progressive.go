@@ -125,7 +125,6 @@ func processUpgradingChild(
 	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
 	if err != nil {
 		return false, err
