@@ -1466,7 +1466,9 @@ metadata:
 ---
 apiVersion: v1
 data:
-  defaultUpgradeStrategy: ""
+  defaultUpgradeStrategy: pause-and-drain
+  isbServiceSpecExcludedPaths: |
+    - "jetstream.containerTemplate.resources.limits"
   pipelineSpecExcludedPaths: |
     - "lifecycle"
     - "limits"
