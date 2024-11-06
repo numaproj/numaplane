@@ -168,11 +168,16 @@ spec:
                   how long Pipelines are paused.
                 properties:
                   lastPauseBeginTime:
-                    description: The begin time for the last pause of the Pipeline.
+                    description: The begin timestamp for the last pause of the Pipeline.
                     format: date-time
                     type: string
                   lastPauseEndTime:
-                    description: The end time for the last pause of the Pipeline.
+                    description: The end timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPausePhaseChangeTime:
+                    description: The transition timestamp from Pausing to Paused for
+                      the last pause of the Pipeline.
                     format: date-time
                     type: string
                 type: object

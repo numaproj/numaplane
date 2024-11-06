@@ -402,6 +402,7 @@ func (in *NumaflowControllerRolloutStatus) DeepCopy() *NumaflowControllerRollout
 func (in *PauseStatus) DeepCopyInto(out *PauseStatus) {
 	*out = *in
 	in.LastPauseBeginTime.DeepCopyInto(&out.LastPauseBeginTime)
+	in.LastPauseTransitionTime.DeepCopyInto(&out.LastPauseTransitionTime)
 	in.LastPauseEndTime.DeepCopyInto(&out.LastPauseEndTime)
 }
 
