@@ -75,10 +75,13 @@ type Status struct {
 
 // PauseStatus is a common structure used to communicate how long Pipelines are paused.
 type PauseStatus struct {
-	// The begin time for the last pause of the Pipeline.
+	// The begin timestamp for the last pause of the Pipeline.
 	LastPauseBeginTime metav1.Time `json:"lastPauseBeginTime,omitempty"`
 
-	// The end time for the last pause of the Pipeline.
+	// The transition timestamp from Pausing to Paused for the last pause of the Pipeline.
+	LastPauseTransitionTime metav1.Time `json:"lastPausePhaseChangeTime,omitempty"`
+
+	// The end timestamp for the last pause of the Pipeline.
 	LastPauseEndTime metav1.Time `json:"lastPauseEndTime,omitempty"`
 }
 
