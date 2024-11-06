@@ -553,6 +553,9 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 			return fmt.Errorf("error getting Pipeline for status processing: %v", err)
 		}
 	}
+	if existingPipelineDef == nil {
+		return nil
+	}
 
 	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 	if err != nil {
