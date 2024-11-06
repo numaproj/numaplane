@@ -650,7 +650,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else if pipelinePhase == numaflowv1.PipelinePhasePaused {
 		// if LastPauseTransitionTime hasn't been set yet, we are just starting to enter paused phase - set it to denote end of pausing
-		if pipelineRollout.Status.PauseStatus.LastPauseTransitionTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
+		if pipelineRollout.Status.PauseStatus.LastPauseTransitionTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseTransitionTime = metav1.NewTime(time.Now())
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
@@ -674,13 +674,17 @@ func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.Pip
 	var pipelineSpec PipelineSpec
 	_ = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
 
+	// if pause is manual, set metrics back to 0
 	if r.isSpecBasedPause(pipelineSpec) {
 		r.setMetric(pipelineRollout.Namespace, pipelineRollout.Name, float64(0), float64(0))
 	} else if pipelinePhase == numaflowv1.PipelinePhasePaused {
+		// if pipeline is Paused, set Paused metric to time duration since last transition time
 		r.setMetric(pipelineRollout.Namespace, pipelineRollout.Name, time.Since(pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.Time).Seconds(), float64(0))
 	} else if pipelinePhase == numaflowv1.PipelinePhasePausing {
+		// if pipeline is Pausing, set Pausing metric to time duration since last pause begin time
 		r.setMetric(pipelineRollout.Namespace, pipelineRollout.Name, float64(0), time.Since(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time).Seconds())
 	} else {
+		// otherwise set both metrics back to 0
 		r.setMetric(pipelineRollout.Namespace, pipelineRollout.Name, float64(0), float64(0))
 	}
 
