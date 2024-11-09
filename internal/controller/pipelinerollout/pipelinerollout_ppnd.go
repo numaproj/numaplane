@@ -1,4 +1,4 @@
-package controller
+package pipelinerollout
 
 import (
 	"context"

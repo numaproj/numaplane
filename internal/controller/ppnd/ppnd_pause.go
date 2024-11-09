@@ -1,4 +1,4 @@
-package controller
+package ppnd
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
@@ -75,7 +76,7 @@ func (pm *PauseModule) getPauseRequest(requester string) (*bool, bool) {
 
 // pause pipeline
 func (pm *PauseModule) pausePipeline(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) error {
-	var existingPipelineSpec PipelineSpec
+	var existingPipelineSpec ctlrcommon.PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
@@ -92,11 +93,11 @@ func (pm *PauseModule) runPipelineIfSafe(ctx context.Context, c client.Client, p
 
 	// verify that all requests are still to pause, if not we can't run right now
 	controllerPauseRequest := pm.pauseRequests[pm.getNumaflowControllerKey(pipeline.Namespace)]
-	var existingPipelineSpec PipelineSpec
+	var existingPipelineSpec ctlrcommon.PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}
-	isbsvcName := existingPipelineSpec.getISBSvcName()
+	isbsvcName := existingPipelineSpec.GetISBSvcName()
 	isbsvcPauseRequest := pm.pauseRequests[pm.getISBServiceKey(pipeline.Namespace, isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run

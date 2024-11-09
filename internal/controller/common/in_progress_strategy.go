@@ -1,7 +1,8 @@
-package controller
+package common
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -10,11 +11,11 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-// inProgressStrategyMgr is responsible to maintain a Rollout's inProgressStrategy
+// InProgressStrategyMgr is responsible to maintain a Rollout's inProgressStrategy
 // state is maintained both in memory as well as in the Rollout's Status
 // in memory always gives us the latest state in case the Informer cache is out of date
 // the Rollout's Status is useful as a backup mechanism in case Numaplane has just restarted
-type inProgressStrategyMgr struct {
+type InProgressStrategyMgr struct {
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy
 	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)
 	store              *inProgressStrategyStore
@@ -26,11 +27,11 @@ type inProgressStrategyStore struct {
 	mutex                       sync.RWMutex
 }
 
-func newInProgressStrategyMgr(
+func NewInProgressStrategyMgr(
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy,
-	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)) *inProgressStrategyMgr {
+	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)) *InProgressStrategyMgr {
 
-	return &inProgressStrategyMgr{
+	return &InProgressStrategyMgr{
 		getRolloutStrategy: getRolloutStrategy,
 		setRolloutStrategy: setRolloutStrategy,
 		store:              newInProgressStrategyStore(),
@@ -43,14 +44,14 @@ func newInProgressStrategyStore() *inProgressStrategyStore {
 	}
 }
 
-func (mgr *inProgressStrategyMgr) getStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+func (mgr *InProgressStrategyMgr) GetStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	return mgr.synchronize(ctx, rollout)
 }
 
 // make sure in-memory value and Rollout Status value are synchronized
 // if in-memory value is set, make sure Rollout Status value gets set the same
 // if in-memory value isn't set, make sure in-memory value gets set to Rollout Status value
-func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+func (mgr *InProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	// first look for value in memory
@@ -75,15 +76,15 @@ func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 }
 
 // store in both memory and the Resource itself
-func (mgr *inProgressStrategyMgr) setStrategy(ctx context.Context, rollout client.Object, upgradeStrategy apiv1.UpgradeStrategy) {
+func (mgr *InProgressStrategyMgr) SetStrategy(ctx context.Context, rollout client.Object, upgradeStrategy apiv1.UpgradeStrategy) {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	mgr.store.setStrategy(namespacedName, upgradeStrategy)
 	mgr.setRolloutStrategy(ctx, rollout, upgradeStrategy)
 }
 
-func (mgr *inProgressStrategyMgr) unsetStrategy(ctx context.Context, rollout client.Object) {
-	mgr.setStrategy(ctx, rollout, apiv1.UpgradeStrategyNoOp)
+func (mgr *InProgressStrategyMgr) UnsetStrategy(ctx context.Context, rollout client.Object) {
+	mgr.SetStrategy(ctx, rollout, apiv1.UpgradeStrategyNoOp)
 }
 
 // return whether found, and if so, the value
@@ -100,4 +101,8 @@ func (store *inProgressStrategyStore) setStrategy(namespacedName k8stypes.Namesp
 	store.mutex.Lock()
 	store.inProgressUpgradeStrategies[key] = upgradeStrategy
 	store.mutex.Unlock()
+}
+
+func namespacedNameToKey(namespacedName k8stypes.NamespacedName) string {
+	return fmt.Sprintf("%s/%s", namespacedName.Namespace, namespacedName.Name)
 }

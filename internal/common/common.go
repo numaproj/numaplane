@@ -34,6 +34,8 @@ const (
 	// NumaflowISBServiceKind is the kind of the Numaflow ISB Service
 	NumaflowISBServiceKind = "InterStepBufferService"
 
+	FinalizerName = "numaplane.numaproj.io/numaplane-controller"
+
 	// LABELS:
 
 	// LabelKeyNumaplaneInstance Resource metadata labels (keys and values) used for tracking
