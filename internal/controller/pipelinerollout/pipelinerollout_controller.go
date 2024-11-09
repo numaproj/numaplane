@@ -66,7 +66,7 @@ const (
 )
 
 var (
-	pipelineROReconciler *PipelineRolloutReconciler
+	PipelineROReconciler *PipelineRolloutReconciler
 	initTime             time.Time
 )
 
@@ -114,9 +114,9 @@ func NewPipelineRolloutReconciler(
 		recorder,
 		nil, // defined below
 	}
-	pipelineROReconciler = r
+	PipelineROReconciler = r
 
-	pipelineROReconciler.inProgressStrategyMgr = ctlrcommon.NewInProgressStrategyMgr(
+	PipelineROReconciler.inProgressStrategyMgr = ctlrcommon.NewInProgressStrategyMgr(
 		// getRolloutStrategy function:
 		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
 			pipelineRollout := rollout.(*apiv1.PipelineRollout)
@@ -150,13 +150,13 @@ func NewPipelineRolloutReconciler(
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
-	r.enqueuePipeline(req.NamespacedName)
+	r.EnqueuePipeline(req.NamespacedName)
 	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
 	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineRolloutReconciler) enqueuePipeline(namespacedName k8stypes.NamespacedName) {
+func (r *PipelineRolloutReconciler) EnqueuePipeline(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
 	r.queue.Add(key)
 }
@@ -784,7 +784,7 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*kubernetes.GenericObject, error) {
-	pipelineName, err := getChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
+	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
 	}
@@ -900,13 +900,6 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *k
 	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
 
 	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
-}
-
-// getPipelineRolloutName gets the PipelineRollout name from the pipeline
-// by locating the last index of '-' and trimming the suffix.
-func getPipelineRolloutName(pipeline string) string {
-	index := strings.LastIndex(pipeline, "-")
-	return pipeline[:index]
 }
 
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {

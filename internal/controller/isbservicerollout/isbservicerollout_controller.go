@@ -51,6 +51,9 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
+
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
+	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -357,7 +360,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
-		done, err := processChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
+		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 			if err != nil {
@@ -365,7 +368,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 			return nil
-		})
+		},
+			pipelinerollout.PipelineROReconciler.EnqueuePipeline)
 		if err != nil {
 			return false, err
 		}

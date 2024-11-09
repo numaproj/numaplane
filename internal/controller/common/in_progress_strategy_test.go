@@ -59,7 +59,7 @@ func Test_inProgressStrategyMgr_getStrategy(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			inProgressStrategyMgr := newInProgressStrategyMgr(
+			inProgressStrategyMgr := NewInProgressStrategyMgr(
 				// getRolloutStrategy function:
 				func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
 					return tc.rolloutStatusStrategy
@@ -72,7 +72,7 @@ func Test_inProgressStrategyMgr_getStrategy(t *testing.T) {
 			if tc.inMemoryStrategy != nil {
 				inProgressStrategyMgr.store.setStrategy(namespacedName, *tc.inMemoryStrategy)
 			}
-			upgradeStrategyResult := inProgressStrategyMgr.getStrategy(context.Background(), pipelineRollout)
+			upgradeStrategyResult := inProgressStrategyMgr.GetStrategy(context.Background(), pipelineRollout)
 			assert.Equal(t, tc.resultStrategy, upgradeStrategyResult)
 		})
 	}

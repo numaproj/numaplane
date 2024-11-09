@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/numaproj/numaplane/internal/controller/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -30,8 +32,8 @@ type PauseRequester interface {
 // return:
 // - true if done with PPND
 // - error if any (note we'll automatically reuqueue if there's an error anyway)
-func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, rollout client.Object, pauseRequester PauseRequester,
-	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error) (bool, error) {
+func ProcessChildObjectWithPPND(ctx context.Context, k8sclient client.Client, rollout client.Object, pauseRequester PauseRequester,
+	resourceNeedsUpdating bool, resourceIsUpdating bool, updateFunc func() error, enqueuePipelineFunc func(k8stypes.NamespacedName)) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	rolloutNamespace := rollout.GetNamespace()
@@ -42,7 +44,7 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 		// TODO: maybe only pause if the update requires pausing
 
 		// request pause if we haven't already
-		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rollout, true)
+		pauseRequestUpdated, err := requestPipelinesPause(ctx, pauseRequester, rollout, true, enqueuePipelineFunc)
 		if err != nil {
 			return false, fmt.Errorf("error requesting Pipelines pause: %w", err)
 		}
@@ -70,7 +72,7 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 
 	} else {
 		// remove any pause requirement if necessary
-		_, err := requestPipelinesPause(ctx, pauseRequester, rollout, false)
+		_, err := requestPipelinesPause(ctx, pauseRequester, rollout, false, enqueuePipelineFunc)
 		if err != nil {
 			return false, fmt.Errorf("error requesting Pipelines resume: %w", err)
 		}
@@ -81,12 +83,12 @@ func processChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 
 // request that the Pipelines corresponding to this Rollout pause
 // return whether an update was made
-func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rollout client.Object, pause bool) (bool, error) {
+func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rollout client.Object, pause bool, enqueuePipelineFunc func(k8stypes.NamespacedName)) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pm := GetPauseModule()
 
-	updated := pm.updatePauseRequest(pauseRequester.getRolloutKey(rollout.GetNamespace(), rollout.GetName()), pause)
+	updated := pm.UpdatePauseRequest(pauseRequester.getRolloutKey(rollout.GetNamespace(), rollout.GetName()), pause)
 	if updated { // if the value is different from what it was then make sure we queue the pipelines to be processed
 		numaLogger.Infof("updated pause request = %t", pause)
 		pipelines, err := pauseRequester.getPipelineList(ctx, rollout.GetNamespace(), rollout.GetName())
@@ -94,8 +96,12 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 			return false, fmt.Errorf("error getting Pipelines: %w", err)
 		}
 		for _, pipeline := range pipelines {
-			pipelineRollout := getPipelineRolloutName(pipeline.Name)
-			pipelineROReconciler.enqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipelineRollout})
+			pipelineRollout, err := ctlrcommon.GetRolloutParentName(pipeline.Name)
+			if err != nil {
+				return false, fmt.Errorf("error getting PipelineRolloutName: %w", err)
+			}
+			enqueuePipelineFunc(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipelineRollout})
+
 		}
 	}
 
@@ -116,13 +122,16 @@ func areAllPipelinesPausedOrWontPause(ctx context.Context, k8sClient client.Clie
 	for _, pipeline := range pipelines {
 
 		// Get PipelineRollout CR
-		pipelineRolloutName := getPipelineRolloutName(pipeline.Name)
+		pipelineRolloutName, err := ctlrcommon.GetRolloutParentName(pipeline.Name)
+		if err != nil {
+			return false, err
+		}
 		pipelineRollout := &apiv1.PipelineRollout{}
 		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: pipelineRolloutName}, pipelineRollout); err != nil {
 			return false, err
 		}
 
-		if !isPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
+		if !common.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
 			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.Name)
 			return false, nil
 		}

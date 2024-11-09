@@ -37,8 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/controller"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/isbservicerollout"
+	"github.com/numaproj/numaplane/internal/controller/monovertexrollout"
+	"github.com/numaproj/numaplane/internal/controller/numaflowcontrollerrollout"
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -150,7 +153,7 @@ func main() {
 
 	//+kubebuilder:scaffold:builder
 
-	pipelineRolloutReconciler := controller.NewPipelineRolloutReconciler(
+	pipelineRolloutReconciler := pipelinerollout.NewPipelineRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,
@@ -163,7 +166,7 @@ func main() {
 	defer pipelineRolloutReconciler.Shutdown(ctx)
 
 	kubectl := kubernetes.NewKubectl()
-	numaflowControllerRolloutReconciler, err := controller.NewNumaflowControllerRolloutReconciler(
+	numaflowControllerRolloutReconciler, err := numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		newRawConfig,
@@ -179,7 +182,7 @@ func main() {
 		numaLogger.Fatal(err, "Unable to set up NumaflowControllerRollout controller")
 	}
 
-	isbServiceRolloutReconciler := controller.NewISBServiceRolloutReconciler(
+	isbServiceRolloutReconciler := isbservicerollout.NewISBServiceRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,
@@ -190,7 +193,7 @@ func main() {
 		numaLogger.Fatal(err, "Unable to set up ISBServiceRollout controller")
 	}
 
-	monoVertexRolloutReconciler := controller.NewMonoVertexRolloutReconciler(
+	monoVertexRolloutReconciler := monovertexrollout.NewMonoVertexRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,

@@ -81,7 +81,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := getChildName(ctx, rolloutObject, controller, string(common.LabelValueUpgradeInProgress))
+	childName, err := GetChildName(ctx, rolloutObject, controller, string(common.LabelValueUpgradeInProgress))
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 	return upgradingChild, nil
 }
 
-func getChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState string) (string, error) {
+func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState string) (string, error) {
 	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
 		common.LabelKeyUpgradeState, upgradeState,
