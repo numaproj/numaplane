@@ -38,11 +38,6 @@ import (
 )
 
 var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
-	const (
-		namespace             = "default"
-		monoVertexRolloutName = "monovertexrollout-test"
-		monoVertexName        = "monovertexrollout-test-0"
-	)
 
 	ctx := context.Background()
 

@@ -17,33 +17,31 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/isbservicerollout"
+	"github.com/numaproj/numaplane/internal/controller/monovertexrollout"
+	"github.com/numaproj/numaplane/internal/controller/numaflowcontrollerrollout"
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -54,18 +52,10 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-const (
-	timeout  = 15 * time.Second
-	duration = 10 * time.Second
-	interval = 250 * time.Millisecond
-)
-
 var (
 	cfg             *rest.Config
-	k8sClient       client.Client
 	testEnv         *envtest.Environment
 	externalCRDsDir string
-	customMetrics   *metrics.CustomMetrics
 )
 
 func TestControllers(t *testing.T) {
@@ -76,9 +66,6 @@ func TestControllers(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	//cfg, _, _, _, err := commontest.PrepareK8SEnvironment()
-	//Expect(err).NotTo(HaveOccurred())
 
 	// Download Numaflow CRDs
 	crdsURLs := []string{
@@ -135,29 +122,29 @@ var _ = BeforeSuite(func() {
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 
-	k8sClient = k8sManager.GetClient()
-	Expect(k8sClient).ToNot(BeNil())
+	ctlrcommon.TestK8sClient = k8sManager.GetClient()
+	Expect(ctlrcommon.TestK8sClient).ToNot(BeNil())
 
 	// other tests may call this, but it fails if called more than once
-	if customMetrics == nil {
-		customMetrics = metrics.RegisterCustomMetrics()
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
 	}
 
 	Expect(kubernetes.SetDynamicClient(k8sManager.GetConfig())).To(Succeed())
 
-	err = NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
+	err = pipelinerollout.NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipeline)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
+	err = isbservicerollout.NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutISBSvc)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), customMetrics,
+	err = monovertexrollout.NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertex)).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	stateCache := sync.NewLiveStateCache(cfg, customMetrics)
+	stateCache := sync.NewLiveStateCache(cfg, ctlrcommon.TestCustomMetrics)
 	err = stateCache.Init(nil)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -166,12 +153,12 @@ var _ = BeforeSuite(func() {
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.NoStrategyID})
 
 	Expect(err).ToNot(HaveOccurred())
-	definitions, err := getNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
+	definitions, err := ctlrcommon.GetNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions)
 
-	numaflowControllerReconciler, err := NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
-		cfg, kubernetes.NewKubectl(), customMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowController))
+	numaflowControllerReconciler, err := numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
+		cfg, kubernetes.NewKubectl(), ctlrcommon.TestCustomMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowController))
 	Expect(err).ToNot(HaveOccurred())
 	err = numaflowControllerReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
@@ -214,86 +201,4 @@ func downloadCRD(url string, downloadDir string) {
 	// Write the response body to file
 	_, err = io.Copy(out, resp.Body)
 	Expect(err).ToNot(HaveOccurred())
-}
-
-// verifyAutoHealing tests the auto healing feature
-func verifyAutoHealing(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, pathToValue string, newValue any) {
-	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
-
-	// Get current resource
-	currentResource := unstructured.Unstructured{}
-	currentResource.SetGroupVersionKind(gvk)
-	Eventually(func() error {
-		return k8sClient.Get(ctx, lookupKey, &currentResource)
-	}, timeout, interval).Should(Succeed())
-	Expect(currentResource.Object).ToNot(BeEmpty())
-
-	// Get the original value at the specified path (pathToValue)
-	pathSlice := strings.Split(pathToValue, ".")
-	originalValue, found, err := unstructured.NestedFieldNoCopy(currentResource.Object, pathSlice...)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(found).To(BeTrue())
-
-	// Set new value and update resource
-	err = unstructured.SetNestedField(currentResource.Object, newValue, pathSlice...)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(k8sClient.Update(ctx, &currentResource)).ToNot(HaveOccurred())
-
-	// Get updated resource and the value at the specified path (pathToValue)
-	e := Eventually(func() (any, error) {
-		updatedResource := unstructured.Unstructured{}
-		updatedResource.SetGroupVersionKind(gvk)
-		if err := k8sClient.Get(ctx, lookupKey, &updatedResource); err != nil {
-			return nil, err
-		}
-
-		currentValue, found, err := unstructured.NestedFieldNoCopy(updatedResource.Object, pathSlice...)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(found).To(BeTrue())
-
-		return currentValue, nil
-	}, timeout, interval)
-
-	// Verify that the value matches the original value and not the new value
-	e.Should(Equal(originalValue))
-	e.ShouldNot(Equal(newValue))
-}
-
-func verifyStatusPhase(ctx context.Context, gvk schema.GroupVersionKind, namespace string, resourceName string, desiredPhase apiv1.Phase) {
-	lookupKey := types.NamespacedName{Name: resourceName, Namespace: namespace}
-
-	currentResource := unstructured.Unstructured{}
-	currentResource.SetGroupVersionKind(gvk)
-	Eventually(func() (bool, error) {
-		err := k8sClient.Get(ctx, lookupKey, &currentResource)
-		if err != nil {
-			return false, err
-		}
-
-		phase, found, err := unstructured.NestedString(currentResource.Object, "status", "phase")
-		if err != nil {
-			return false, err
-		}
-		if !found {
-			return false, nil
-		}
-
-		observedGeneration, found, err := unstructured.NestedInt64(currentResource.Object, "status", "observedGeneration")
-		if err != nil {
-			return false, err
-		}
-		if !found {
-			return false, nil
-		}
-
-		generation, found, err := unstructured.NestedInt64(currentResource.Object, "metadata", "generation")
-		if err != nil {
-			return false, err
-		}
-		if !found {
-			return false, nil
-		}
-
-		return apiv1.Phase(phase) == desiredPhase && observedGeneration == generation, nil
-	}, timeout, interval).Should(BeTrue())
 }

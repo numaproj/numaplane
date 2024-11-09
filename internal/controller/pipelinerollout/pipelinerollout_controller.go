@@ -719,24 +719,6 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-// remove 'lifecycle.desiredPhase' key/value pair from spec
-// also remove 'lifecycle' if it's an empty map
-func withoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
-	var specAsMap map[string]any
-	if err := json.Unmarshal(obj.Spec.Raw, &specAsMap); err != nil {
-		return nil, err
-	}
-	// remove "lifecycle.desiredPhase"
-	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
-	util.RemovePaths(specAsMap, comparisonExcludedPaths, ".")
-	// if "lifecycle" is there and empty, remove it
-	lifecycleMap, found := specAsMap["lifecycle"].(map[string]interface{})
-	if found && len(lifecycleMap) == 0 {
-		util.RemovePaths(specAsMap, []string{"lifecycle"}, ".")
-	}
-	return specAsMap, nil
-}
-
 func updatePipelineSpec(ctx context.Context, c client.Client, obj *kubernetes.GenericObject) error {
 	return kubernetes.UpdateResource(ctx, c, obj)
 }
@@ -878,11 +860,11 @@ func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *kuberne
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := withoutDesiredPhase(a)
+	pipelineWithoutDesiredPhaseA, err := ctlrcommon.WithoutDesiredPhase(a)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutDesiredPhaseB, err := withoutDesiredPhase(b)
+	pipelineWithoutDesiredPhaseB, err := ctlrcommon.WithoutDesiredPhase(b)
 	if err != nil {
 		return false, err
 	}
