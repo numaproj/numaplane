@@ -18,7 +18,7 @@ import (
 type InProgressStrategyMgr struct {
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy
 	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)
-	store              *inProgressStrategyStore
+	Store              *inProgressStrategyStore
 }
 
 // in memory storage of UpgradeStrategy in progress for a given Rollout
@@ -34,7 +34,7 @@ func NewInProgressStrategyMgr(
 	return &InProgressStrategyMgr{
 		getRolloutStrategy: getRolloutStrategy,
 		setRolloutStrategy: setRolloutStrategy,
-		store:              newInProgressStrategyStore(),
+		Store:              newInProgressStrategyStore(),
 	}
 }
 
@@ -55,7 +55,7 @@ func (mgr *InProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	// first look for value in memory
-	foundInMemory, inMemoryStrategy := mgr.store.getStrategy(namespacedName)
+	foundInMemory, inMemoryStrategy := mgr.Store.GetStrategy(namespacedName)
 
 	// now look for the value in the Resource
 	crDefinedStrategy := mgr.getRolloutStrategy(ctx, rollout)
@@ -67,7 +67,7 @@ func (mgr *InProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 	} else {
 		// make sure in-memory value gets set to Rollout Status value
 		if crDefinedStrategy != nil {
-			mgr.store.setStrategy(namespacedName, *crDefinedStrategy)
+			mgr.Store.SetStrategy(namespacedName, *crDefinedStrategy)
 			return *crDefinedStrategy
 		} else {
 			return apiv1.UpgradeStrategyNoOp
@@ -79,7 +79,7 @@ func (mgr *InProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 func (mgr *InProgressStrategyMgr) SetStrategy(ctx context.Context, rollout client.Object, upgradeStrategy apiv1.UpgradeStrategy) {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
-	mgr.store.setStrategy(namespacedName, upgradeStrategy)
+	mgr.Store.SetStrategy(namespacedName, upgradeStrategy)
 	mgr.setRolloutStrategy(ctx, rollout, upgradeStrategy)
 }
 
@@ -88,7 +88,7 @@ func (mgr *InProgressStrategyMgr) UnsetStrategy(ctx context.Context, rollout cli
 }
 
 // return whether found, and if so, the value
-func (store *inProgressStrategyStore) getStrategy(namespacedName k8stypes.NamespacedName) (bool, apiv1.UpgradeStrategy) {
+func (store *inProgressStrategyStore) GetStrategy(namespacedName k8stypes.NamespacedName) (bool, apiv1.UpgradeStrategy) {
 	key := namespacedNameToKey(namespacedName)
 	store.mutex.RLock()
 	strategy, found := store.inProgressUpgradeStrategies[key]
@@ -96,7 +96,7 @@ func (store *inProgressStrategyStore) getStrategy(namespacedName k8stypes.Namesp
 	return found, strategy
 }
 
-func (store *inProgressStrategyStore) setStrategy(namespacedName k8stypes.NamespacedName, upgradeStrategy apiv1.UpgradeStrategy) {
+func (store *inProgressStrategyStore) SetStrategy(namespacedName k8stypes.NamespacedName, upgradeStrategy apiv1.UpgradeStrategy) {
 	key := namespacedNameToKey(namespacedName)
 	store.mutex.Lock()
 	store.inProgressUpgradeStrategies[key] = upgradeStrategy

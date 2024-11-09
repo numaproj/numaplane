@@ -70,7 +70,7 @@ func Test_inProgressStrategyMgr_getStrategy(t *testing.T) {
 			pipelineRollout := &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "my-pipeline"}}
 			namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
 			if tc.inMemoryStrategy != nil {
-				inProgressStrategyMgr.store.setStrategy(namespacedName, *tc.inMemoryStrategy)
+				inProgressStrategyMgr.Store.SetStrategy(namespacedName, *tc.inMemoryStrategy)
 			}
 			upgradeStrategyResult := inProgressStrategyMgr.GetStrategy(context.Background(), pipelineRollout)
 			assert.Equal(t, tc.resultStrategy, upgradeStrategyResult)

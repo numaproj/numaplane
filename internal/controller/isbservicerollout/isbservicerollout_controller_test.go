@@ -430,7 +430,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.DeleteOptions{})
 			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName), metav1.DeleteOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestPipelineName, metav1.DeleteOptions{})
-			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: defaultPipelineRolloutName}})
+			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -463,10 +463,10 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
 
 			pm := ppnd.GetPauseModule()
-			pm.pauseRequests[pm.getISBServiceKey(ctlrcommon.DefaultTestNamespace, ctlrcommon.DefaultTestISBSvcRolloutName)] = tc.existingPauseRequest
+			pm.PauseRequests[pm.GetISBServiceKey(ctlrcommon.DefaultTestNamespace, ctlrcommon.DefaultTestISBSvcRolloutName)] = tc.existingPauseRequest
 
 			rollout.Status.UpgradeInProgress = tc.initialInProgressStrategy
-			r.inProgressStrategyMgr.store.setStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: defaultPipelineRolloutName}, tc.initialInProgressStrategy)
+			r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, tc.initialInProgressStrategy)
 
 			// call reconcile()
 			_, err = r.reconcile(ctx, rollout, time.Now())
@@ -475,7 +475,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			////// check results:
 
 			// Check in-memory pause request:
-			assert.Equal(t, tc.expectedPauseRequest, (pm.pauseRequests[pm.getISBServiceKey(ctlrcommon.DefaultTestNamespace, ctlrcommon.DefaultTestISBSvcRolloutName)]))
+			assert.Equal(t, tc.expectedPauseRequest, (pm.PauseRequests[pm.GetISBServiceKey(ctlrcommon.DefaultTestNamespace, ctlrcommon.DefaultTestISBSvcRolloutName)]))
 
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)

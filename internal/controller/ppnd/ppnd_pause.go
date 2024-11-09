@@ -20,7 +20,7 @@ var (
 
 func GetPauseModule() *PauseModule {
 	once.Do(func() {
-		pauseModuleInstance = &PauseModule{pauseRequests: make(map[string]*bool)}
+		pauseModuleInstance = &PauseModule{PauseRequests: make(map[string]*bool)}
 	})
 
 	return pauseModuleInstance
@@ -29,29 +29,29 @@ func GetPauseModule() *PauseModule {
 type PauseModule struct {
 	lock sync.RWMutex
 	// map of pause requester to Pause Request
-	pauseRequests map[string]*bool // having *bool gives us 3 states: [true=pause-required, false=pause-not-required, nil=unknown]
+	PauseRequests map[string]*bool // having *bool gives us 3 states: [true=pause-required, false=pause-not-required, nil=unknown]
 }
 
 func (pm *PauseModule) NewPauseRequest(requester string) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
-	_, alreadyThere := pm.pauseRequests[requester]
+	_, alreadyThere := pm.PauseRequests[requester]
 	if !alreadyThere {
-		pm.pauseRequests[requester] = nil
+		pm.PauseRequests[requester] = nil
 	}
 }
 
 func (pm *PauseModule) DeletePauseRequest(requester string) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
-	delete(pm.pauseRequests, requester)
+	delete(pm.PauseRequests, requester)
 }
 
 // update and return whether the value changed
 func (pm *PauseModule) UpdatePauseRequest(requester string, pause bool) bool {
 	// first check to see if the same using read lock
 	pm.lock.RLock()
-	entry := pm.pauseRequests[requester]
+	entry := pm.PauseRequests[requester]
 	if entry != nil && *entry == pause {
 		// nothing to do
 		pm.lock.RUnlock()
@@ -62,14 +62,14 @@ func (pm *PauseModule) UpdatePauseRequest(requester string, pause bool) bool {
 	// if not the same, use write lock to modify
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
-	pm.pauseRequests[requester] = &pause
+	pm.PauseRequests[requester] = &pause
 	return true
 }
 
 func (pm *PauseModule) GetPauseRequest(requester string) (*bool, bool) {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
-	entry, exists := pm.pauseRequests[requester]
+	entry, exists := pm.PauseRequests[requester]
 	return entry, exists
 }
 
@@ -91,13 +91,13 @@ func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, p
 	defer pm.lock.RUnlock()
 
 	// verify that all requests are still to pause, if not we can't run right now
-	controllerPauseRequest := pm.pauseRequests[pm.GetNumaflowControllerKey(pipeline.Namespace)]
+	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.Namespace)]
 	var existingPipelineSpec ctlrcommon.PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}
 	isbsvcName := existingPipelineSpec.GetISBSvcName()
-	isbsvcPauseRequest := pm.pauseRequests[pm.GetISBServiceKey(pipeline.Namespace, isbsvcName)]
+	isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.Namespace, isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run
 		return false, nil
