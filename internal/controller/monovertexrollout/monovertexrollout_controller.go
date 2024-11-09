@@ -43,6 +43,8 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -63,7 +65,7 @@ type MonoVertexRolloutReconciler struct {
 	recorder record.EventRecorder
 
 	// maintain inProgressStrategies in memory and in MonoVertexRollout Status
-	inProgressStrategyMgr *inProgressStrategyMgr
+	inProgressStrategyMgr *ctlrcommon.InProgressStrategyMgr
 }
 
 func NewMonoVertexRolloutReconciler(
@@ -81,7 +83,7 @@ func NewMonoVertexRolloutReconciler(
 		nil,
 	}
 
-	r.inProgressStrategyMgr = newInProgressStrategyMgr(
+	r.inProgressStrategyMgr = ctlrcommon.NewInProgressStrategyMgr(
 		// getRolloutStrategy function:
 		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
 			monoVertexRollout := rollout.(*apiv1.MonoVertexRollout)
@@ -194,8 +196,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	// remove finalizers if monoVertexRollout is being deleted
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting MonoVertexRollout")
-		if controllerutil.ContainsFinalizer(monoVertexRollout, finalizerName) {
-			controllerutil.RemoveFinalizer(monoVertexRollout, finalizerName)
+		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
 		}
 		// generate metrics for MonoVertex deletion
 		r.customMetrics.DecMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
@@ -204,8 +206,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(monoVertexRollout, finalizerName) {
-		controllerutil.AddFinalizer(monoVertexRollout, finalizerName)
+	if !controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
 	newMonoVertexDef, err := r.makeRunningMonoVertexDefinition(ctx, monoVertexRollout)
@@ -275,26 +277,26 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	}
 
 	// is there currently an inProgressStrategy for the MonoVertex? (This will override any new decision)
-	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, monoVertexRollout)
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
 	if !inProgressStrategySet {
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
-			r.inProgressStrategyMgr.setStrategy(ctx, monoVertexRollout, inProgressStrategy)
+			r.inProgressStrategyMgr.SetStrategy(ctx, monoVertexRollout, inProgressStrategy)
 		}
 	}
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
 		if mvNeedsToUpdate {
 			numaLogger.Debug("processing MonoVertex with Progressive")
-			done, err := processResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
+			done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
 			if err != nil {
 				return err
 			}
 			if done {
-				r.inProgressStrategyMgr.unsetStrategy(ctx, monoVertexRollout)
+				r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 			}
 		}
 
@@ -308,7 +310,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 	// clean up recyclable monovertices
-	err = garbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	err = progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
 		return err
 	}
@@ -517,7 +519,7 @@ func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*kubernetes.GenericObject, error) {
-	monoVertexName, err := getChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
+	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
 	}
@@ -566,14 +568,14 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 }
 
 // the following functions enable MonoVertexRolloutReconciler to implement progressiveController interface
-func (r *MonoVertexRolloutReconciler) listChildren(ctx context.Context, rolloutObject RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) listChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	return kubernetes.ListLiveResource(
 		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
 		monoVertexRollout.Namespace, labelSelector, fieldSelector)
 }
 
-func (r *MonoVertexRolloutReconciler) createBaseChildDefinition(rolloutObject RolloutObject, name string) (*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) createBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*kubernetes.GenericObject, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
 	if err != nil {
@@ -582,7 +584,7 @@ func (r *MonoVertexRolloutReconciler) createBaseChildDefinition(rolloutObject Ro
 	return r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
 }
 
-func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject RolloutObject) (int32, bool) {
+func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	if monoVertexRollout.Status.NameCount == nil {
 		return int32(0), false
@@ -591,14 +593,14 @@ func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject Rollout
 	}
 }
 
-func (r *MonoVertexRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject RolloutObject, nameCount int32) error {
+func (r *MonoVertexRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	monoVertexRollout.Status.NameCount = &nameCount
 	return r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
 }
 
 // increment the child count for the Rollout and return the count to use
-func (r *MonoVertexRolloutReconciler) incrementChildCount(ctx context.Context, rolloutObject RolloutObject) (int32, error) {
+func (r *MonoVertexRolloutReconciler) incrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
 	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
 	if !found {
 		currentNameCount = int32(0)

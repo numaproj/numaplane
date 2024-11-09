@@ -737,17 +737,6 @@ func withoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{},
 	return specAsMap, nil
 }
 
-func checkPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
-	numaLogger := logger.FromContext(ctx)
-	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
-	if err != nil {
-		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
-		return false
-	}
-
-	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
-}
-
 func updatePipelineSpec(ctx context.Context, c client.Client, obj *kubernetes.GenericObject) error {
 	return kubernetes.UpdateResource(ctx, c, obj)
 }

@@ -52,6 +52,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -70,7 +71,7 @@ type ISBServiceRolloutReconciler struct {
 	recorder record.EventRecorder
 
 	// maintain inProgressStrategies in memory and in ISBServiceRollout Status
-	inProgressStrategyMgr *inProgressStrategyMgr
+	inProgressStrategyMgr *ctlrcommon.InProgressStrategyMgr
 }
 
 func NewISBServiceRolloutReconciler(
@@ -88,7 +89,7 @@ func NewISBServiceRolloutReconciler(
 		nil,
 	}
 
-	r.inProgressStrategyMgr = newInProgressStrategyMgr(
+	r.inProgressStrategyMgr = ctlrcommon.NewInProgressStrategyMgr(
 		// getRolloutStrategy function:
 		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
 			isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
@@ -198,15 +199,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 	}()
 
-	isbsvcKey := GetPauseModule().getISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
+	isbsvcKey := ppnd.GetPauseModule().GetISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
 
 	// is isbServiceRollout being deleted? need to remove the finalizer so it can
 	// (OwnerReference will delete the underlying ISBService through Cascading deletion)
 	if !isbServiceRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting ISBServiceRollout")
-		if controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
-			GetPauseModule().deletePauseRequest(isbsvcKey)
-			controllerutil.RemoveFinalizer(isbServiceRollout, finalizerName)
+		if controllerutil.ContainsFinalizer(isbServiceRollout, common.FinalizerName) {
+			ppnd.GetPauseModule().DeletePauseRequest(isbsvcKey)
+			controllerutil.RemoveFinalizer(isbServiceRollout, common.FinalizerName)
 		}
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
@@ -216,14 +217,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
-	if !controllerutil.ContainsFinalizer(isbServiceRollout, finalizerName) {
-		controllerutil.AddFinalizer(isbServiceRollout, finalizerName)
+	if !controllerutil.ContainsFinalizer(isbServiceRollout, common.FinalizerName) {
+		controllerutil.AddFinalizer(isbServiceRollout, common.FinalizerName)
 	}
 
-	_, pauseRequestExists := GetPauseModule().getPauseRequest(isbsvcKey)
+	_, pauseRequestExists := ppnd.GetPauseModule().GetPauseRequest(isbsvcKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		GetPauseModule().newPauseRequest(isbsvcKey)
+		ppnd.GetPauseModule().NewPauseRequest(isbsvcKey)
 	}
 
 	newISBServiceDef := &kubernetes.GenericObject{
@@ -280,7 +281,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 }
 
 // for the purpose of logging
-func (r *ISBServiceRolloutReconciler) getChildTypeString() string {
+func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 	return "interstepbufferservice"
 }
 
@@ -343,18 +344,18 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	}
 
 	// is there currently an inProgressStrategy for the isbService? (This will override any new decision)
-	inProgressStrategy := r.inProgressStrategyMgr.getStrategy(ctx, isbServiceRollout)
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
 	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
 
 	// if not, should we set one?
 	if !inProgressStrategySet {
 		if upgradeStrategyType == apiv1.UpgradeStrategyPPND {
 			inProgressStrategy = apiv1.UpgradeStrategyPPND
-			r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
+			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
-			r.inProgressStrategyMgr.setStrategy(ctx, isbServiceRollout, inProgressStrategy)
+			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 	}
 
@@ -374,7 +375,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return false, err
 		}
 		if done {
-			r.inProgressStrategyMgr.unsetStrategy(ctx, isbServiceRollout)
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
 			// requeue if done with PPND is false
 			return true, nil
@@ -406,13 +407,15 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+func (r *ISBServiceRolloutReconciler) MarkRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
 
 	isbServiceRollout := rollout.(*apiv1.ISBServiceRollout)
 
+	uninitialized := metav1.NewTime(time.Time{})
+
 	if paused {
 		// if BeginTime hasn't been set yet, we must have just started pausing - set it
-		if isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
+		if isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime == uninitialized || !isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
 			isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(isbServiceRollout)
@@ -420,7 +423,7 @@ func (r *ISBServiceRolloutReconciler) markRolloutPaused(ctx context.Context, rol
 	} else {
 		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
 		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
-		if (isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
+		if (isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime != uninitialized) && !isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime.After(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
 			isbServiceRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(isbServiceRollout)
 		}
@@ -435,8 +438,8 @@ func (r *ISBServiceRolloutReconciler) updatePauseMetric(isbServiceRollout *apiv1
 	r.customMetrics.ISBServicePausedSeconds.WithLabelValues(isbServiceRollout.Name).Set(timeElapsed.Seconds())
 }
 
-func (r *ISBServiceRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
-	return GetPauseModule().getISBServiceKey(rolloutNamespace, rolloutName)
+func (r *ISBServiceRolloutReconciler) GetRolloutKey(rolloutNamespace string, rolloutName string) string {
+	return ppnd.GetPauseModule().GetISBServiceKey(rolloutNamespace, rolloutName)
 }
 
 // return:
@@ -466,7 +469,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
-func (r *ISBServiceRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
+func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk,
 		client.InNamespace(rolloutNamespace),

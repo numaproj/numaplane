@@ -159,6 +159,7 @@ func main() {
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutPipeline),
 	)
+	ctlrcommon.PipelineROReconciler = pipelineRolloutReconciler
 
 	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
