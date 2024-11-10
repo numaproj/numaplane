@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -27,7 +27,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec ctlrcommon.PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
@@ -55,12 +55,12 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && ctlrcommon.CheckPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)) {
+		if !shouldBePaused || (shouldBePaused && numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
 			if shouldBePaused {
-				err = ctlrcommon.WithDesiredPhase(newPipelineDef, "Paused")
+				err = numaflowtypes.WithDesiredPhase(newPipelineDef, "Paused")
 				if err != nil {
 					return false, err
 				}
@@ -80,7 +80,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
-	if specBasedPause && ctlrcommon.IsPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
+	if specBasedPause && numaflowtypes.IsPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
 		doneWithPPND = true
 	}
 
@@ -98,11 +98,11 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec ctlrcommon.PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
-	var existingPipelineSpec ctlrcommon.PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
@@ -116,7 +116,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
 
-	wontPause := ctlrcommon.CheckIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
+	wontPause := numaflowtypes.CheckIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
 
 	ppndPause := (pipelineNeedsToUpdate || externalPauseRequest) && !wontPause
 	shouldBePaused := ppndPause || specBasedPause
@@ -141,7 +141,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec ctlrcommon.PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
@@ -165,7 +165,7 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	return &needPPND, nil
 }
 
-func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec ctlrcommon.PipelineSpec) bool {
+func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec numaflowtypes.PipelineSpec) bool {
 	return (pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 }
 
@@ -201,7 +201,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 // make sure our Pipeline's Lifecycle is what we need it to be
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *kubernetes.GenericObject) error {
 	numaLogger := logger.FromContext(ctx)
-	var existingPipelineSpec ctlrcommon.PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}

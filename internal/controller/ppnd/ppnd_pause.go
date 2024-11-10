@@ -9,7 +9,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
@@ -75,7 +75,7 @@ func (pm *PauseModule) GetPauseRequest(requester string) (*bool, bool) {
 
 // pause pipeline
 func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) error {
-	var existingPipelineSpec ctlrcommon.PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, p
 
 	// verify that all requests are still to pause, if not we can't run right now
 	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.Namespace)]
-	var existingPipelineSpec ctlrcommon.PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
 		return false, err
 	}

@@ -49,6 +49,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -653,7 +654,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 
 func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.PipelineRollout, pipelinePhase numaflowv1.PipelinePhase) {
 
-	var pipelineSpec ctlrcommon.PipelineSpec
+	var pipelineSpec numaflowtypes.PipelineSpec
 	_ = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
 
 	// if pause is manual, set metrics back to 0
@@ -729,7 +730,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 	for key, val := range pipelineRollout.Spec.Pipeline.Labels {
 		labelMapping[key] = val
 	}
-	var pipelineSpec ctlrcommon.PipelineSpec
+	var pipelineSpec numaflowtypes.PipelineSpec
 
 	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
 		return apiv1.Metadata{}, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
@@ -842,7 +843,7 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 }
 
 func (r *PipelineRolloutReconciler) ChildIsDrained(ctx context.Context, pipelineDef *kubernetes.GenericObject) (bool, error) {
-	pipelineStatus, err := parsePipelineStatus(pipelineDef)
+	pipelineStatus, err := numaflowtypes.ParsePipelineStatus(pipelineDef)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
 	}
@@ -860,11 +861,11 @@ func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *kuberne
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := ctlrcommon.WithoutDesiredPhase(a)
+	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(a)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutDesiredPhaseB, err := ctlrcommon.WithoutDesiredPhase(b)
+	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(b)
 	if err != nil {
 		return false, err
 	}
@@ -889,18 +890,4 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
-}
-
-func parsePipelineStatus(obj *kubernetes.GenericObject) (numaflowv1.PipelineStatus, error) {
-	if obj == nil || len(obj.Status.Raw) == 0 {
-		return numaflowv1.PipelineStatus{}, nil
-	}
-
-	var status numaflowv1.PipelineStatus
-	err := json.Unmarshal(obj.Status.Raw, &status)
-	if err != nil {
-		return numaflowv1.PipelineStatus{}, err
-	}
-
-	return status, nil
 }

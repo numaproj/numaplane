@@ -23,17 +23,14 @@ import (
 	"reflect"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -45,14 +42,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 
+	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -507,29 +505,6 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 	return nil
 }
 
-// Each ISBService has one underlying StatefulSet
-func (r *ISBServiceRolloutReconciler) getStatefulSet(ctx context.Context, isbsvc *kubernetes.GenericObject) (*appsv1.StatefulSet, error) {
-	statefulSetSelector := labels.NewSelector()
-	requirement, err := labels.NewRequirement(numaflowv1.KeyISBSvcName, selection.Equals, []string{isbsvc.Name})
-	if err != nil {
-		return nil, err
-	}
-	statefulSetSelector = statefulSetSelector.Add(*requirement)
-
-	var statefulSetList appsv1.StatefulSetList
-	err = r.client.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.Namespace, LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
-	if err != nil {
-		return nil, err
-	}
-	if len(statefulSetList.Items) > 1 {
-		return nil, fmt.Errorf("unexpected: isbsvc %s/%s has multiple StatefulSets: %+v", isbsvc.Namespace, isbsvc.Name, statefulSetList.Items)
-	} else if len(statefulSetList.Items) == 0 {
-		return nil, nil
-	} else {
-		return &(statefulSetList.Items[0]), nil
-	}
-}
-
 // determine if the ISBService, including its underlying StatefulSet, has been reconciled
 // so, this requires:
 // 1. ISBService.Status.ObservedGeneration == ISBService.Generation
@@ -543,7 +518,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	}
 	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
 
-	statefulSet, err := r.getStatefulSet(ctx, isbsvc)
+	statefulSet, err := numaflowtypes.GetISBSvcStatefulSetFromK8s(ctx, r.client, isbsvc)
 	if err != nil {
 		return false, "", err
 	}
@@ -580,7 +555,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
 
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
-	isbsvcChildResourceStatus, isbsvcChildResourceReason := getISBServiceChildResourceHealth(isbsvcStatus.Conditions)
+	isbsvcChildResourceStatus, isbsvcChildResourceReason := ctlrcommon.GetISBServiceChildResourceHealth(isbsvcStatus.Conditions)
 
 	if isbsvcChildResourceReason == "Progressing" {
 		rollout.Status.MarkChildResourcesUnhealthy("Progressing", "ISBService Progressing", rollout.Generation)
@@ -658,13 +633,4 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
 	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
-}
-
-func getISBServiceChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
-	for _, cond := range conditions {
-		if cond.Type == "ChildrenResourcesHealthy" && cond.Status != "True" {
-			return cond.Status, cond.Reason
-		}
-	}
-	return "True", ""
 }

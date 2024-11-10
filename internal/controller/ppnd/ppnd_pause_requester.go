@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/numaproj/numaplane/internal/controller/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -131,7 +131,7 @@ func areAllPipelinesPausedOrWontPause(ctx context.Context, k8sClient client.Clie
 			return false, err
 		}
 
-		if !common.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
+		if !numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
 			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.Name)
 			return false, nil
 		}

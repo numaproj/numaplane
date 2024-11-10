@@ -18,7 +18,6 @@ package monovertexrollout
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -44,6 +43,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -500,20 +500,6 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 	return "True", ""
 }
 
-func parseMonoVertexStatus(obj *kubernetes.GenericObject) (numaflowv1.MonoVertexStatus, error) {
-	if obj == nil || len(obj.Status.Raw) == 0 {
-		return numaflowv1.MonoVertexStatus{}, nil
-	}
-
-	var status numaflowv1.MonoVertexStatus
-	err := json.Unmarshal(obj.Status.Raw, &status)
-	if err != nil {
-		return numaflowv1.MonoVertexStatus{}, err
-	}
-
-	return status, nil
-}
-
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
 func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
@@ -618,13 +604,13 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 }
 
 func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVertexDef *kubernetes.GenericObject) (bool, error) {
-	monoVertexStatus, err := parseMonoVertexStatus(monoVertexDef)
+	monoVertexStatus, err := numaflowtypes.ParseMonoVertexStatus(monoVertexDef)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse MonoVertex Status from MonoVertex CR: %+v, %v", monoVertexDef, err)
 	}
 	monoVertexPhase := monoVertexStatus.Phase
 
-	return monoVertexPhase == numaflowv1.MonoVertexPhasePaused /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
+	return monoVertexPhase == "Paused" /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
 }
 
 func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *kubernetes.GenericObject) error {
@@ -636,11 +622,11 @@ func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	mvWithoutDesiredPhaseA, err := ctlrcommon.WithoutDesiredPhase(a)
+	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(a)
 	if err != nil {
 		return false, err
 	}
-	mvWithoutDesiredPhaseB, err := ctlrcommon.WithoutDesiredPhase(b)
+	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(b)
 	if err != nil {
 		return false, err
 	}

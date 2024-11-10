@@ -1,4 +1,4 @@
-package common
+package numaflowtypes
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -34,9 +35,31 @@ type Lifecycle struct {
 	DesiredPhase string `json:"desiredPhase,omitempty"`
 }
 
-func CheckPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
+type PipelineStatus struct {
+	Phase              numaflowv1.PipelinePhase `json:"phase,omitempty"`
+	Conditions         []metav1.Condition       `json:"conditions,omitempty"`
+	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
+	DrainedOnPause     bool                     `json:"drainedOnPause,omitempty" protobuf:"bytes,12,opt,name=drainedOnPause"`
+}
+
+func ParsePipelineStatus(obj *kubernetes.GenericObject) (PipelineStatus, error) {
+	if obj == nil || len(obj.Status.Raw) == 0 {
+		return PipelineStatus{}, nil
+	}
+
+	var status PipelineStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return PipelineStatus{}, err
+	}
+
+	return status, nil
+}
+
+// TODO: verify this is still working
+func CheckPipelinePhase(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
 	numaLogger := logger.FromContext(ctx)
-	pipelineStatus, err := kubernetes.ParseStatus(pipeline)
+	pipelineStatus, err := ParsePipelineStatus(pipeline)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
 		return false
@@ -52,7 +75,7 @@ func CheckPipelineStatus(ctx context.Context, pipeline *kubernetes.GenericObject
 func IsPipelinePausedOrWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
 	wontPause := CheckIfPipelineWontPause(ctx, pipeline, pipelineRollout)
 
-	paused := CheckPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+	paused := CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 	return paused || wontPause
 }
 
@@ -61,7 +84,7 @@ func CheckIfPipelineWontPause(ctx context.Context, pipeline *kubernetes.GenericO
 
 	allowDataLossAnnotation := pipelineRollout.Annotations[common.LabelKeyAllowDataLoss]
 	allowDataLoss := allowDataLossAnnotation == "true"
-	failed := CheckPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
+	failed := CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
 	wontPause := allowDataLoss || failed
 	numaLogger.Debugf("wontPause=%t, allowDataLoss=%t, failed=%t", wontPause, allowDataLoss, failed)
 
@@ -91,6 +114,8 @@ func WithDesiredPhase(pipeline *kubernetes.GenericObject, phase string) error {
 	return nil
 }
 
+// TODO: make this and the WithDesiredPhase() signature from above similar to each other
+// (this may naturally happen after refactoring)
 // remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
 func WithoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
