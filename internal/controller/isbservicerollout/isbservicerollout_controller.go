@@ -555,7 +555,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
 
 	isbSvcPhase := numaflowv1.ISBSvcPhase(isbsvcStatus.Phase)
-	isbsvcChildResourceStatus, isbsvcChildResourceReason := ctlrcommon.GetISBServiceChildResourceHealth(isbsvcStatus.Conditions)
+	isbsvcChildResourceStatus, isbsvcChildResourceReason := numaflowtypes.GetISBServiceChildResourceHealth(isbsvcStatus.Conditions)
 
 	if isbsvcChildResourceReason == "Progressing" {
 		rollout.Status.MarkChildResourcesUnhealthy("Progressing", "ISBService Progressing", rollout.Generation)
