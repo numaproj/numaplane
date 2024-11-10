@@ -56,7 +56,6 @@ func ParsePipelineStatus(obj *kubernetes.GenericObject) (PipelineStatus, error) 
 	return status, nil
 }
 
-// TODO: verify this is still working
 func CheckPipelinePhase(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
 	numaLogger := logger.FromContext(ctx)
 	pipelineStatus, err := ParsePipelineStatus(pipeline)

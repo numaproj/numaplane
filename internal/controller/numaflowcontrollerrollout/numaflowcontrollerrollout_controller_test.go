@@ -119,7 +119,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 
 		It("Should reconcile the Numaflow Controller Rollout", func() {
 			By("Verifying the phase of the NumaflowControllerRollout resource")
-			// Loop until the API call returns the desired response or a ctlrcommon.TestDefaultTimeout occurs
+			// Loop until the API call returns the desired response or a timeout occurs
 			Eventually(func() (apiv1.Phase, error) {
 				createdResource := &apiv1.NumaflowControllerRollout{}
 				Expect(ctlrcommon.TestK8sClient.Get(ctx, resourceLookupKey, createdResource)).To(Succeed())
