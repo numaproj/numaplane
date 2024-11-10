@@ -268,7 +268,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	trueValue := true
 	falseValue := false
 
-	//pipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
 	pipelinerollout.PipelineROReconciler = pipelinerollout.NewPipelineRolloutReconciler(numaplaneClient, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
 
 	testCases := []struct {
