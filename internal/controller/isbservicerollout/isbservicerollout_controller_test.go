@@ -44,6 +44,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -268,7 +269,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	trueValue := true
 	falseValue := false
 
-	pipelinerollout.PipelineROReconciler = pipelinerollout.NewPipelineRolloutReconciler(numaplaneClient, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
 		name                      string

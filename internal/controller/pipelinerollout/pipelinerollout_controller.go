@@ -76,10 +76,10 @@ type PipelineRolloutReconciler struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	// queue contains the list of PipelineRollouts that currently need to be reconciled
-	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this queue to be processed as needed
-	// a set of Workers is used to process this queue
-	queue workqueue.TypedRateLimitingInterface[interface{}]
+	// Queue contains the list of PipelineRollouts that currently need to be reconciled
+	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this Queue to be processed as needed
+	// a set of Workers is used to process this Queue
+	Queue workqueue.TypedRateLimitingInterface[interface{}]
 	// shutdownWorkerWaitGroup is used when shutting down the workers processing the queue for them to indicate that they're done
 	shutdownWorkerWaitGroup *sync.WaitGroup
 	// customMetrics is used to generate the custom metrics for the Pipeline
@@ -153,13 +153,13 @@ func (r *PipelineRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	numaLogger := logger.GetBaseLogger().WithName(loggerName).WithValues("pipelinerollout", req.NamespacedName)
 	r.EnqueuePipeline(req.NamespacedName)
 	numaLogger.Debugf("PipelineRollout Reconciler added PipelineRollout %v to queue", req.NamespacedName)
-	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.queue.Len()))
+	r.customMetrics.PipelineRolloutQueueLength.WithLabelValues().Set(float64(r.Queue.Len()))
 	return ctrl.Result{}, nil
 }
 
 func (r *PipelineRolloutReconciler) EnqueuePipeline(namespacedName k8stypes.NamespacedName) {
 	key := namespacedNameToKey(namespacedName)
-	r.queue.Add(key)
+	r.Queue.Add(key)
 }
 
 func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, namespacedName k8stypes.NamespacedName) (ctrl.Result, error) {
@@ -253,7 +253,7 @@ func (r *PipelineRolloutReconciler) Shutdown(ctx context.Context) {
 	numaLogger := logger.FromContext(ctx)
 
 	numaLogger.Info("shutting down PipelineRollout queue")
-	r.queue.ShutDown()
+	r.Queue.ShutDown()
 
 	// wait for all the workers to have stopped
 	r.shutdownWorkerWaitGroup.Wait()
@@ -273,14 +273,14 @@ func (r *PipelineRolloutReconciler) runWorker(ctx context.Context) {
 	numaLogger := logger.FromContext(ctx)
 
 	for {
-		key, quit := r.queue.Get()
+		key, quit := r.Queue.Get()
 		if quit {
 			numaLogger.Info("PipelineRollout worker done")
 			r.shutdownWorkerWaitGroup.Done()
 			return
 		}
 		r.processQueueKey(ctx, key.(string))
-		r.queue.Done(key)
+		r.Queue.Done(key)
 	}
 
 }
@@ -302,14 +302,14 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 	// based on result, may need to add this back to the queue
 	if err != nil {
 		numaLogger.Errorf(err, "PipelineRollout %v reconcile returned error: %v", namespacedName, err)
-		r.queue.AddRateLimited(key)
+		r.Queue.AddRateLimited(key)
 	} else {
 		if result.Requeue {
 			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue", namespacedName)
-			r.queue.AddRateLimited(key)
+			r.Queue.AddRateLimited(key)
 		} else if result.RequeueAfter > 0 {
 			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %d seconds", namespacedName, result.RequeueAfter)
-			r.queue.AddAfter(key, result.RequeueAfter)
+			r.Queue.AddAfter(key, result.RequeueAfter)
 		} else {
 			numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
 		}

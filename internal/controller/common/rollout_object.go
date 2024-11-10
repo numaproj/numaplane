@@ -26,7 +26,7 @@ func GetRolloutParentName(childName string) (string, error) {
 	index := strings.LastIndex(childName, "-")
 	if index > 0 && index < len(childName)-1 {
 		_, err := strconv.Atoi(childName[index+1:])
-		if err != nil {
+		if err == nil {
 			return childName[:index], nil
 		}
 	}
