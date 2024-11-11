@@ -123,19 +123,19 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	assert.Equal(t, version2, pipelineObject.ResourceVersion)
 
 	// List resource
-	pipelineList, err := ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	pipelineList, err := ListLiveUnstructuredResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
-	assert.Len(t, pipelineList, 1)
+	assert.Len(t, pipelineList.Items, 1)
 
 	// List resource with cache
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	pipelineList, err = ListResources(context.Background(), runtimeClient, gvk, client.InNamespace(namespace), client.MatchingLabels{"test": "value"})
 	assert.Nil(t, err)
-	assert.Len(t, pipelineList, 1)
+	assert.Len(t, pipelineList.Items, 1)
 
 	err = DeleteResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
-	pipelineList, err = ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	pipelineList, err = ListLiveUnstructuredResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
-	assert.Len(t, pipelineList, 0)
+	assert.Len(t, pipelineList.Items, 0)
 }
