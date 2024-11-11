@@ -9,11 +9,26 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
+
+// ResourceNeedsUpdatingUnstructured calculates the upgrade strategy to use during the resource reconciliation process based on configuration and user preference.
+// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
+func ResourceNeedsUpdatingUnstructured(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
+	newDefObject, err := kubernetes.UnstructuredToObject(newDef)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
+	}
+	existingDefObject, err := kubernetes.UnstructuredToObject(existingDef)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
+	}
+	return ResourceNeedsUpdating(ctx, newDefObject, existingDefObject)
+}
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).

@@ -18,7 +18,6 @@ package isbservicerollout
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
@@ -225,30 +224,16 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ppnd.GetPauseModule().NewPauseRequest(isbsvcKey)
 	}
 
-	newISBServiceDef := &kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       common.NumaflowISBServiceKind,
-			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            isbServiceRollout.Name,
-			Namespace:       isbServiceRollout.Namespace,
-			Labels:          isbServiceRollout.Spec.InterStepBufferService.Labels,
-			Annotations:     isbServiceRollout.Spec.InterStepBufferService.Annotations,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
-		},
-		Spec: isbServiceRollout.Spec.InterStepBufferService.Spec,
-	}
-
-	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newISBServiceDef.Namespace, Name: newISBServiceDef.Name})
+	newISBServiceDef := generateNewISBServiceDef(isbServiceRollout)
+	existingISBServiceDef, err := kubernetes.GetResourceUnstructured(ctx, r.client, newISBServiceDef.GroupVersionKind(),
+		k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
 	if err != nil {
 		// create an object as it doesn't exist
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+			if err = kubernetes.CreateResourceUnstructured(ctx, r.client, newISBServiceDef); err != nil {
 				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 			}
 
@@ -284,22 +269,11 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
-func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *kubernetes.GenericObject) *kubernetes.GenericObject {
+func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
 	resultISBService := existingISBService.DeepCopy()
-	resultISBService.Spec = *newISBService.Spec.DeepCopy()
-
-	if resultISBService.Annotations == nil {
-		resultISBService.Annotations = map[string]string{}
-	}
-	for key, val := range newISBService.Annotations {
-		resultISBService.Annotations[key] = val
-	}
-	if resultISBService.Labels == nil {
-		resultISBService.Labels = map[string]string{}
-	}
-	for key, val := range newISBService.Labels {
-		resultISBService.Labels[key] = val
-	}
+	resultISBService.Object["spec"] = newISBService.Object["spec"]
+	resultISBService.SetAnnotations(newISBService.GetAnnotations())
+	resultISBService.SetLabels(newISBService.GetLabels())
 
 	return resultISBService
 }
@@ -309,7 +283,7 @@ func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *k
 // - true if needs a requeue
 // - error if any
 func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout,
-	existingISBServiceDef, newISBServiceDef *kubernetes.GenericObject, syncStartTime time.Time) (bool, error) {
+	existingISBServiceDef, newISBServiceDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -324,7 +298,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	isbServiceNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	isbServiceNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdatingUnstructured(ctx, newISBServiceDef, existingISBServiceDef)
 	if err != nil {
 		return false, err
 	}
@@ -396,8 +370,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *kubernetes.GenericObject) error {
-	if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
+func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
+	if err := kubernetes.UpdateResourceUnstructured(ctx, r.client, newISBServiceDef); err != nil {
 		return err
 	}
 
@@ -444,18 +418,18 @@ func (r *ISBServiceRolloutReconciler) GetRolloutKey(rolloutNamespace string, rol
 // - whether ISBService needs to update
 // - whether it's in the process of being updated
 // - error if any
-func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *kubernetes.GenericObject) (bool, bool, error) {
+func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *unstructured.Unstructured) (bool, bool, error) {
 
 	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
 	if err != nil {
 		return false, false, err
 	}
 
-	existingSpecAsMap := make(map[string]interface{})
-	err = json.Unmarshal(existingISBSVCDef.Spec.Raw, &existingSpecAsMap)
-	if err != nil {
+	existingSpecAsMap, found, err := unstructured.NestedMap(existingISBSVCDef.Object, "spec")
+	if err != nil || !found {
 		return false, false, err
 	}
+
 	newSpecAsMap := make(map[string]interface{})
 	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
 	if err != nil {
@@ -467,7 +441,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
-func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error) {
+func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk,
 		client.InNamespace(rolloutNamespace),
@@ -510,9 +484,9 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 // 1. ISBService.Status.ObservedGeneration == ISBService.Generation
 // 2. StatefulSet.Status.ObservedGeneration == StatefulSet.Generation
 // 3. StatefulSet.Status.UpdatedReplicas == StatefulSet.Spec.Replicas
-func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *kubernetes.GenericObject) (bool, string, error) {
+func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *unstructured.Unstructured) (bool, string, error) {
 	numaLogger := logger.FromContext(ctx)
-	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
+	isbsvcStatus, err := kubernetes.ParseStatusUnstructured(isbsvc)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to parse Status from InterstepBufferService CR: %+v, %v", isbsvc, err)
 	}
@@ -523,7 +497,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 		return false, "", err
 	}
 
-	isbsvcReconciled := isbsvc.Generation <= isbsvcStatus.ObservedGeneration
+	isbsvcReconciled := isbsvc.GetGeneration() <= isbsvcStatus.ObservedGeneration
 
 	if !isbsvcReconciled {
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
@@ -544,9 +518,9 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	return true, "", nil
 }
 
-func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Context, isbsvc *kubernetes.GenericObject, rollout *apiv1.ISBServiceRollout) {
+func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Context, isbsvc *unstructured.Unstructured, rollout *apiv1.ISBServiceRollout) {
 	numaLogger := logger.FromContext(ctx)
-	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
+	isbsvcStatus, err := kubernetes.ParseStatusUnstructured(isbsvc)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to parse Status from InterstepBuffer CR: %+v, %v", isbsvc, err)
 		return
@@ -633,4 +607,18 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
 	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
+}
+
+func generateNewISBServiceDef(isbServiceRollout *apiv1.ISBServiceRollout) *unstructured.Unstructured {
+	newISBServiceDef := &unstructured.Unstructured{}
+	newISBServiceDef.SetName(isbServiceRollout.Name)
+	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
+	newISBServiceDef.SetLabels(isbServiceRollout.Spec.InterStepBufferService.Labels)
+	newISBServiceDef.SetAnnotations(isbServiceRollout.Spec.InterStepBufferService.Annotations)
+	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
+	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
+	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
+	newISBServiceDef.Object["spec"] = isbServiceRollout.Spec.InterStepBufferService.Spec
+
+	return newISBServiceDef
 }

@@ -23,6 +23,8 @@ import (
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -32,7 +34,7 @@ import (
 // PauseRequester interface manages the safe update of Rollouts by requesting Pipelines to pause
 type PauseRequester interface {
 	// get the list of Pipelines corresponding to a Rollout
-	GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]*kubernetes.GenericObject, error)
+	GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error)
 
 	// mark this Rollout paused
 	MarkRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error
@@ -111,13 +113,12 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		if err != nil {
 			return false, fmt.Errorf("error getting Pipelines: %w", err)
 		}
-		for _, pipeline := range pipelines {
-			pipelineRollout, err := ctlrcommon.GetRolloutParentName(pipeline.Name)
+		for _, pipeline := range pipelines.Items {
+			pipelineRollout, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
 			if err != nil {
 				return false, fmt.Errorf("error getting PipelineRolloutName: %w", err)
 			}
-			enqueuePipelineFunc(k8stypes.NamespacedName{Namespace: pipeline.Namespace, Name: pipelineRollout})
-
+			enqueuePipelineFunc(k8stypes.NamespacedName{Namespace: pipeline.GetNamespace(), Name: pipelineRollout})
 		}
 	}
 
@@ -135,20 +136,26 @@ func areAllPipelinesPausedOrWontPause(ctx context.Context, k8sClient client.Clie
 	if err != nil {
 		return false, err
 	}
-	for _, pipeline := range pipelines {
+	for _, pipeline := range pipelines.Items {
 
 		// Get PipelineRollout CR
-		pipelineRolloutName, err := ctlrcommon.GetRolloutParentName(pipeline.Name)
+		pipelineRolloutName, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
 		if err != nil {
 			return false, err
 		}
 		pipelineRollout := &apiv1.PipelineRollout{}
-		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: pipelineRolloutName}, pipelineRollout); err != nil {
+		if err = k8sClient.Get(ctx, k8stypes.NamespacedName{Namespace: rolloutNamespace, Name: pipelineRolloutName}, pipelineRollout); err != nil {
 			return false, err
 		}
 
-		if !numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout) {
-			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.Name)
+		// TODO: This is temporary conversion until all controllers are migrated to use unstructured objects
+		pipelineObj, err := kubernetes.UnstructuredToObject(&pipeline)
+		if err != nil {
+			return false, err
+		}
+
+		if !numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipelineObj, pipelineRollout) {
+			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.GetName())
 			return false, nil
 		}
 	}

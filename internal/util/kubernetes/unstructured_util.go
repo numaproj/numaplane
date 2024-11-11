@@ -51,6 +51,26 @@ func ParseStatus(obj *GenericObject) (GenericStatus, error) {
 	return status, nil
 }
 
+// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
+func ParseStatusUnstructured(obj *unstructured.Unstructured) (GenericStatus, error) {
+	statusRaw, found, err := unstructured.NestedFieldNoCopy(obj.Object, "status")
+	if !found || err != nil {
+		return GenericStatus{}, nil
+	}
+
+	var status GenericStatus
+	objByte, err := json.Marshal(statusRaw)
+	if err != nil {
+		return GenericStatus{}, err
+	}
+	err = json.Unmarshal(objByte, &status)
+	if err != nil {
+		return GenericStatus{}, err
+	}
+
+	return status, nil
+}
+
 func GetLiveUnstructuredResource(
 	ctx context.Context,
 	object *GenericObject,
@@ -261,6 +281,12 @@ func CreateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 	return c.Create(ctx, unstructuredObj)
 }
 
+// CreateResourceUnstructured creates the resource in the kubernetes cluster
+// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
+func CreateResourceUnstructured(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
+	return c.Create(ctx, obj)
+}
+
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
 func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*GenericObject, error) {
 	unstructuredObj := &unstructured.Unstructured{}
@@ -271,6 +297,19 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 	}
 
 	return UnstructuredToObject(unstructuredObj)
+}
+
+// GetResourceUnstructured retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
+// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
+func GetResourceUnstructured(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*unstructured.Unstructured, error) {
+	unstructuredObj := &unstructured.Unstructured{}
+	unstructuredObj.SetGroupVersionKind(gvk)
+
+	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
+		return nil, err
+	}
+
+	return unstructuredObj, nil
 }
 
 // UpdateResource updates the resource in the kubernetes cluster
@@ -293,8 +332,14 @@ func UpdateResource(ctx context.Context, c client.Client, obj *GenericObject) er
 	return nil
 }
 
+// UpdateResourceUnstructured updates the resource in the kubernetes cluster
+// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
+func UpdateResourceUnstructured(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
+	return c.Update(ctx, obj)
+}
+
 // ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
-func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]*GenericObject, error) {
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
 	unstructuredList := &unstructured.UnstructuredList{}
 	unstructuredList.SetGroupVersionKind(gvk)
 
@@ -302,16 +347,7 @@ func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersion
 		return nil, err
 	}
 
-	objects := make([]*GenericObject, len(unstructuredList.Items))
-	for i, unstructuredObj := range unstructuredList.Items {
-		obj, err := UnstructuredToObject(&unstructuredObj)
-		if err != nil {
-			return nil, err
-		}
-		objects[i] = obj
-	}
-
-	return objects, nil
+	return unstructuredList, nil
 }
 
 // DeleteResource deletes the resource from the kubernetes cluster
