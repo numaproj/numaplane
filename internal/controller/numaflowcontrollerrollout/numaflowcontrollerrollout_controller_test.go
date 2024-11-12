@@ -14,32 +14,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package numaflowcontrollerrollout
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
+	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -71,237 +67,6 @@ func createNumaflowControllerRolloutDef(namespace string, version string, phase 
 		},
 	}
 }
-
-var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
-	const namespace = "default"
-
-	Context("When creating a NumaflowControllerRollout resource", func() {
-		ctx := context.Background()
-
-		resourceLookupKey := types.NamespacedName{
-			Name:      NumaflowControllerDeploymentName,
-			Namespace: namespace,
-		}
-
-		numaflowControllerResource := apiv1.NumaflowControllerRollout{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      NumaflowControllerDeploymentName,
-				Namespace: namespace,
-			},
-			Spec: apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{Version: "1.2.0"},
-			},
-		}
-
-		It("Should throw a CR validation error", func() {
-			By("Creating a NumaflowControllerRollout resource with an invalid name")
-			resource := numaflowControllerResource
-			resource.Name = "test-numaflow-controller"
-			err := k8sClient.Create(ctx, &resource)
-			Expect(err).NotTo(Succeed())
-			Expect(err.Error()).To(ContainSubstring("The metadata name must start with 'numaflow-controller'"))
-		})
-
-		It("Should throw duplicate resource error", func() {
-			By("Creating duplicate NumaflowControllerRollout resource with the same name")
-			resource := numaflowControllerResource
-			err := k8sClient.Create(ctx, &resource)
-			Expect(err).To(Succeed())
-
-			resource.ResourceVersion = "" // Reset the resource version to create a new resource
-			err = k8sClient.Create(ctx, &resource)
-			Expect(err).NotTo(Succeed())
-			Expect(err.Error()).To(ContainSubstring("numaflowcontrollerrollouts.numaplane.numaproj.io \"numaflow-controller\" already exists"))
-		})
-
-		It("Should reconcile the Numaflow Controller Rollout", func() {
-			By("Verifying the phase of the NumaflowControllerRollout resource")
-			// Loop until the API call returns the desired response or a timeout occurs
-			Eventually(func() (apiv1.Phase, error) {
-				createdResource := &apiv1.NumaflowControllerRollout{}
-				Expect(k8sClient.Get(ctx, resourceLookupKey, createdResource)).To(Succeed())
-				return createdResource.Status.Phase, nil
-			}, timeout, interval).Should(Equal(apiv1.PhaseDeployed))
-
-			By("Verifying the numaflow controller deployment")
-			Eventually(func() bool {
-				numaflowDeployment := &appsv1.Deployment{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-		})
-
-		It("Should reconcile the Numaflow Controller Rollout update", func() {
-			By("Reconciling the updated resource")
-			// Fetch the resource and update the spec
-			resource := numaflowControllerResource
-			resource.Spec.Controller.Version = "1.2.1"
-			Expect(k8sClient.Patch(ctx, &resource, client.Merge)).To(Succeed())
-
-			// Validate the resource status after the update
-			By("Verifying the numaflow controller deployment image version")
-			Eventually(func() bool {
-				numaflowDeployment := &appsv1.Deployment{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
-				if err == nil {
-					return numaflowDeployment.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.2.1"
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-		})
-
-		It("Should have the metrics updated", func() {
-			By("Verifying the Numaflow Controller metric")
-			Expect(testutil.ToFloat64(customMetrics.NumaflowControllersROSyncs.WithLabelValues())).Should(BeNumerically(">", 1))
-			Expect(testutil.ToFloat64(customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
-		})
-
-		It("Should auto heal the Numaflow Controller Deployment with the spec based on the NumaflowControllerRollout version field value when the Deployment spec is changed", func() {
-			By("updating the Numaflow Controller Deployment and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, appsv1.SchemeGroupVersion.WithKind("Deployment"), namespace, "numaflow-controller", "spec.template.spec.serviceAccountName", "someothersaname")
-		})
-
-		It("Should auto heal the numaflow-cmd-params-config ConfigMap with the spec based on the NumaflowControllerRollout version field value when the ConfigMap spec is changed", func() {
-			By("updating the numaflow-cmd-params-config ConfigMap and verifying the changed field is the same as the original and not the modified version")
-			verifyAutoHealing(ctx, corev1.SchemeGroupVersion.WithKind("ConfigMap"), namespace, "numaflow-cmd-params-config", "data.namespaced", "false")
-		})
-
-		AfterAll(func() {
-			// Cleanup the resource after the tests
-			Expect(k8sClient.Delete(ctx, &apiv1.NumaflowControllerRollout{
-				ObjectMeta: numaflowControllerResource.ObjectMeta,
-			})).Should(Succeed())
-
-			deletedResource := &apiv1.NumaflowControllerRollout{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, deletedResource)
-				return errors.IsNotFound(err)
-			}, timeout, interval).Should(BeTrue())
-
-			deletingChildResource := &appsv1.Deployment{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, resourceLookupKey, deletingChildResource)
-				return err == nil
-			}, timeout, interval).Should(BeTrue())
-
-			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
-			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
-
-		})
-	})
-})
-
-var _ = Describe("Apply Ownership Reference", func() {
-	Context("ownership reference", func() {
-		const resourceName = "test-resource"
-		manifests := []string{
-			`
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: example-deployment
-  labels:
-    app: example
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: example
-  template:
-    metadata:
-      labels:
-        app: example
-    spec:
-      containers:
-      - name: example-container
-        image: nginx:1.14.2
-        ports:
-        - containerPort: 80
-`,
-			`
-apiVersion: v1
-kind: Service
-metadata:
-  name: example-service
-spec:
-  selector:
-    app: example
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 9376
-`}
-		emanifests := []string{
-			`apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: example
-  name: example-deployment
-  ownerReferences:
-  - apiVersion: ""
-    blockOwnerDeletion: true
-    controller: true
-    kind: ""
-    name: test-resource
-    uid: ""
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: example
-  template:
-    metadata:
-      labels:
-        app: example
-    spec:
-      containers:
-      - image: nginx:1.14.2
-        name: example-container
-        ports:
-        - containerPort: 80`,
-			`apiVersion: v1
-kind: Service
-metadata:
-  name: example-service
-  ownerReferences:
-  - apiVersion: ""
-    blockOwnerDeletion: true
-    controller: true
-    kind: ""
-    name: test-resource
-    uid: ""
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 9376
-  selector:
-    app: example`,
-		}
-
-		resource := &apiv1.NumaflowControllerRollout{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: "default",
-			},
-		}
-		It("should apply ownership reference correctly", func() {
-
-			manifests, err := applyOwnershipToManifests(manifests, resource)
-			Expect(err).To(BeNil())
-			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
-			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
-		})
-		It("should not apply ownership if it already exists", func() {
-			manifests, err := applyOwnershipToManifests(emanifests, resource)
-			Expect(err).To(BeNil())
-			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
-			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
-
-		})
-	})
-})
 
 func Test_getControllerDeploymentVersion(t *testing.T) {
 	testCases := []struct {
@@ -425,15 +190,15 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
-	controllerDefinitions, err := getNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
+	controllerDefinitions, err := ctlrcommon.GetNumaflowControllerDefinitions("../../../tests/config/controller-definitions-config.yaml")
 	assert.Nil(t, err)
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*controllerDefinitions)
 
 	ctx := context.Background()
 
 	// other tests may call this, but it fails if called more than once
-	if customMetrics == nil {
-		customMetrics = metrics.RegisterCustomMetrics()
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
 	}
 
 	recorder := record.NewFakeRecorder(64)
@@ -443,14 +208,14 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		scheme.Scheme,
 		restConfig,
 		kubernetes.NewKubectl(),
-		customMetrics,
+		ctlrcommon.TestCustomMetrics,
 		recorder,
 	)
 
 	trueValue := true
 	falseValue := false
 
-	pipelineROReconciler = &PipelineRolloutReconciler{queue: util.NewWorkQueue("fake_queue")}
+	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
 		name                    string
@@ -484,8 +249,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                    "new Controller version, pipelines not yet paused",
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
-			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing), // could be pausing for another reason such as Pipeline updating
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:        ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePausing), // could be pausing for another reason such as Pipeline updating
 			existingPauseRequest:    &falseValue,
 			expectedPauseRequest:    &trueValue,
 			expectedRolloutPhase:    apiv1.PhasePending,
@@ -498,8 +263,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                    "new Controller version, pipelines paused",
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
-			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:        ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePaused),
 			existingPauseRequest:    &trueValue,
 			expectedPauseRequest:    &trueValue,
 			expectedRolloutPhase:    apiv1.PhaseDeployed,
@@ -513,8 +278,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                    "new Controller version done reconciling",
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.1", false),
-			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePaused),
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:        ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePaused),
 			existingPauseRequest:    &trueValue,
 			expectedPauseRequest:    &falseValue,
 			expectedRolloutPhase:    apiv1.PhaseDeployed,
@@ -526,8 +291,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                    "new Controller version, pipelines not paused but failed",
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
-			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName}, map[string]string{}, map[string]string{}),
+			existingPipeline:        ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhaseFailed),
 			existingPauseRequest:    &trueValue,
 			expectedPauseRequest:    &trueValue,
 			expectedRolloutPhase:    apiv1.PhaseDeployed,
@@ -541,8 +306,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			name:                    "new Controller version, pipelines not paused but set to allow data loss",
 			newControllerVersion:    "1.2.1",
 			existingController:      createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
-			existingPipelineRollout: createPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: defaultISBSvcRolloutName}, map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}),
-			existingPipeline:        createDefaultPipelineOfPhase(numaflowv1.PipelinePhasePausing),
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName}, map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}),
+			existingPipeline:        ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePausing),
 			existingPauseRequest:    &trueValue,
 			expectedPauseRequest:    &trueValue,
 			expectedRolloutPhase:    apiv1.PhaseDeployed,
@@ -558,40 +323,40 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete previous resources in case they already exist, in Kubernetes
-			_ = k8sClientSet.AppsV1().Deployments(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = k8sClientSet.CoreV1().ConfigMaps(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = k8sClientSet.RbacV1().Roles(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = k8sClientSet.RbacV1().RoleBindings(defaultNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(defaultNamespace).Delete(ctx, fmt.Sprintf("%s-0", defaultPipelineRolloutName), metav1.DeleteOptions{})
-			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: defaultPipelineRolloutName}})
-			_ = numaplaneClient.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: defaultNamespace, Name: NumaflowControllerDeploymentName}})
+			_ = k8sClientSet.AppsV1().Deployments(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = k8sClientSet.CoreV1().ConfigMaps(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = k8sClientSet.RbacV1().Roles(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = k8sClientSet.RbacV1().RoleBindings(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, fmt.Sprintf("%s-0", ctlrcommon.DefaultTestPipelineRolloutName), metav1.DeleteOptions{})
+			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
+			_ = numaplaneClient.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: NumaflowControllerDeploymentName}})
 
 			// create NumaflowControllerRollout definition
-			rollout := createNumaflowControllerRolloutDef(defaultNamespace, tc.newControllerVersion, "", []metav1.Condition{})
+			rollout := createNumaflowControllerRolloutDef(ctlrcommon.DefaultTestNamespace, tc.newControllerVersion, "", []metav1.Condition{})
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
 
 			if tc.existingController != nil {
 				// create the already-existing Deployment in Kubernetes
-				createDeploymentInK8S(ctx, t, k8sClientSet, tc.existingController)
+				ctlrcommon.CreateDeploymentInK8S(ctx, t, k8sClientSet, tc.existingController)
 
 			}
 
 			if tc.existingPipelineRollout != nil {
-				createPipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
+				ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
 
 			}
 			if tc.existingPipeline != nil {
 				// create the Pipeline beforehand in Kubernetes
-				createPipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
+				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
 			}
 
-			pm := GetPauseModule()
-			pm.pauseRequests[pm.getNumaflowControllerKey(defaultNamespace)] = tc.existingPauseRequest
+			pm := ppnd.GetPauseModule()
+			pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)] = tc.existingPauseRequest
 
 			// call reconcile()
-			_, err = r.reconcile(ctx, rollout, defaultNamespace, time.Now())
+			_, err = r.reconcile(ctx, rollout, ctlrcommon.DefaultTestNamespace, time.Now())
 			if tc.expectedReconcileError {
 				assert.Error(t, err)
 			} else {
@@ -601,13 +366,13 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			////// check results:
 
 			// Check in-memory pause request:
-			assert.Equal(t, tc.expectedPauseRequest, (pm.pauseRequests[pm.getNumaflowControllerKey(defaultNamespace)]))
+			assert.Equal(t, tc.expectedPauseRequest, (pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)]))
 
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			if tc.expectedResultControllerVersion != "" {
 				// Check Deployment
-				deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(defaultNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
+				deploymentRetrieved, err := k8sClientSet.AppsV1().Deployments(ctlrcommon.DefaultTestNamespace).Get(ctx, "numaflow-controller", metav1.GetOptions{})
 				assert.NoError(t, err)
 				assert.Equal(t, fmt.Sprintf("quay.io/numaproj/numaflow:v%s", tc.expectedResultControllerVersion), deploymentRetrieved.Spec.Template.Spec.Containers[0].Image)
 			}
@@ -642,7 +407,7 @@ func createDeploymentDefinition(imagePath string, stillReconciling bool) *appsv1
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  defaultNamespace,
+			Namespace:  ctlrcommon.DefaultTestNamespace,
 			Name:       NumaflowControllerDeploymentName,
 			Generation: int64(generation),
 		},

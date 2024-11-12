@@ -14,30 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package numaflowtypes
 
-type options struct {
-	configsPath    string
-	configFileName string
-	fileType       string
-}
+import (
+	"encoding/json"
 
-type Option func(*options)
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+)
 
-func defaultOptions() *options {
-	return &options{
-		fileType: "yaml",
+type MonoVertexStatus = kubernetes.GenericStatus
+
+func ParseMonoVertexStatus(obj *kubernetes.GenericObject) (MonoVertexStatus, error) {
+	if obj == nil || len(obj.Status.Raw) == 0 {
+		return MonoVertexStatus{}, nil
 	}
-}
 
-func WithConfigsPath(configsPath string) Option {
-	return func(o *options) {
-		o.configsPath = configsPath
+	var status MonoVertexStatus
+	err := json.Unmarshal(obj.Status.Raw, &status)
+	if err != nil {
+		return MonoVertexStatus{}, err
 	}
-}
 
-func WithConfigFileName(configFileName string) Option {
-	return func(o *options) {
-		o.configFileName = configFileName
-	}
+	return status, nil
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package numaflowcontrollerrollout
 
 import (
 	"bytes"
@@ -53,6 +53,8 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
+	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -235,13 +237,13 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 	}()
 
-	controllerKey := GetPauseModule().getNumaflowControllerKey(namespace)
+	controllerKey := ppnd.GetPauseModule().GetNumaflowControllerKey(namespace)
 
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-			GetPauseModule().deletePauseRequest(controllerKey)
+			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
@@ -256,10 +258,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(controllerRollout, finalizerName)
 	}
 
-	_, pauseRequestExists := GetPauseModule().getPauseRequest(controllerKey)
+	_, pauseRequestExists := ppnd.GetPauseModule().GetPauseRequest(controllerKey)
 	if !pauseRequestExists {
 		// this is just creating an entry in the map if it doesn't already exist
-		GetPauseModule().newPauseRequest(controllerKey)
+		ppnd.GetPauseModule().NewPauseRequest(controllerKey)
 	}
 
 	deployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controllerRollout)
@@ -293,7 +295,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
-		done, err := processChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
+		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
 				phase, err := r.sync(controllerRollout, namespace, numaLogger)
@@ -306,7 +308,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 					return fmt.Errorf("sync operation is not successful")
 				}
 				return nil
-			})
+			},
+			pipelinerollout.PipelineROReconciler.EnqueuePipeline)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -339,16 +342,16 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 }
 
 // for the purpose of logging
-func (r *NumaflowControllerRolloutReconciler) getChildTypeString() string {
+func (r *NumaflowControllerRolloutReconciler) GetChildTypeString() string {
 	return "Numaflow Controller"
 }
 
-func (r *NumaflowControllerRolloutReconciler) getPipelineList(ctx context.Context, rolloutNamespace string, _ string) (*unstructured.UnstructuredList, error) {
+func (r *NumaflowControllerRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, _ string) (*unstructured.UnstructuredList, error) {
 	return kubernetes.ListLiveUnstructuredResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyParentRollout, "")
 }
 
-func (r *NumaflowControllerRolloutReconciler) getRolloutKey(rolloutNamespace string, rolloutName string) string {
-	return GetPauseModule().getNumaflowControllerKey(rolloutNamespace)
+func (r *NumaflowControllerRolloutReconciler) GetRolloutKey(rolloutNamespace string, rolloutName string) string {
+	return ppnd.GetPauseModule().GetNumaflowControllerKey(rolloutNamespace)
 }
 
 // determine if it needs to update or is already in the middle of an update (waiting for Reconciliation)
@@ -761,13 +764,15 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(co
 	return nil
 }
 
-func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
+func (r *NumaflowControllerRolloutReconciler) MarkRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error {
 
 	controllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
 
+	uninitialized := metav1.NewTime(time.Time{})
+
 	if paused {
 		// if BeginTime hasn't been set yet, we must have just started pausing - set it
-		if controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
+		if controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime == uninitialized || !controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.Time) {
 			controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
 		}
 		r.updatePauseMetric(controllerRollout)
@@ -775,7 +780,7 @@ func (r *NumaflowControllerRolloutReconciler) markRolloutPaused(ctx context.Cont
 	} else {
 		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
 		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
-		if (controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
+		if (controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime != uninitialized) && !controllerRollout.Status.PauseRequestStatus.LastPauseEndTime.After(controllerRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time) {
 			controllerRollout.Status.PauseRequestStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 			r.updatePauseMetric(controllerRollout)
 		}

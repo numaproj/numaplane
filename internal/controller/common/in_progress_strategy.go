@@ -1,7 +1,24 @@
-package controller
+/*
+Copyright 2023.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package common
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -10,14 +27,14 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-// inProgressStrategyMgr is responsible to maintain a Rollout's inProgressStrategy
+// InProgressStrategyMgr is responsible to maintain a Rollout's inProgressStrategy
 // state is maintained both in memory as well as in the Rollout's Status
 // in memory always gives us the latest state in case the Informer cache is out of date
 // the Rollout's Status is useful as a backup mechanism in case Numaplane has just restarted
-type inProgressStrategyMgr struct {
+type InProgressStrategyMgr struct {
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy
 	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)
-	store              *inProgressStrategyStore
+	Store              *inProgressStrategyStore
 }
 
 // in memory storage of UpgradeStrategy in progress for a given Rollout
@@ -26,14 +43,14 @@ type inProgressStrategyStore struct {
 	mutex                       sync.RWMutex
 }
 
-func newInProgressStrategyMgr(
+func NewInProgressStrategyMgr(
 	getRolloutStrategy func(context.Context, client.Object) *apiv1.UpgradeStrategy,
-	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)) *inProgressStrategyMgr {
+	setRolloutStrategy func(context.Context, client.Object, apiv1.UpgradeStrategy)) *InProgressStrategyMgr {
 
-	return &inProgressStrategyMgr{
+	return &InProgressStrategyMgr{
 		getRolloutStrategy: getRolloutStrategy,
 		setRolloutStrategy: setRolloutStrategy,
-		store:              newInProgressStrategyStore(),
+		Store:              newInProgressStrategyStore(),
 	}
 }
 
@@ -43,18 +60,18 @@ func newInProgressStrategyStore() *inProgressStrategyStore {
 	}
 }
 
-func (mgr *inProgressStrategyMgr) getStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+func (mgr *InProgressStrategyMgr) GetStrategy(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	return mgr.synchronize(ctx, rollout)
 }
 
 // make sure in-memory value and Rollout Status value are synchronized
 // if in-memory value is set, make sure Rollout Status value gets set the same
 // if in-memory value isn't set, make sure in-memory value gets set to Rollout Status value
-func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
+func (mgr *InProgressStrategyMgr) synchronize(ctx context.Context, rollout client.Object) apiv1.UpgradeStrategy {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
 	// first look for value in memory
-	foundInMemory, inMemoryStrategy := mgr.store.getStrategy(namespacedName)
+	foundInMemory, inMemoryStrategy := mgr.Store.GetStrategy(namespacedName)
 
 	// now look for the value in the Resource
 	crDefinedStrategy := mgr.getRolloutStrategy(ctx, rollout)
@@ -66,7 +83,7 @@ func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 	} else {
 		// make sure in-memory value gets set to Rollout Status value
 		if crDefinedStrategy != nil {
-			mgr.store.setStrategy(namespacedName, *crDefinedStrategy)
+			mgr.Store.SetStrategy(namespacedName, *crDefinedStrategy)
 			return *crDefinedStrategy
 		} else {
 			return apiv1.UpgradeStrategyNoOp
@@ -75,19 +92,19 @@ func (mgr *inProgressStrategyMgr) synchronize(ctx context.Context, rollout clien
 }
 
 // store in both memory and the Resource itself
-func (mgr *inProgressStrategyMgr) setStrategy(ctx context.Context, rollout client.Object, upgradeStrategy apiv1.UpgradeStrategy) {
+func (mgr *InProgressStrategyMgr) SetStrategy(ctx context.Context, rollout client.Object, upgradeStrategy apiv1.UpgradeStrategy) {
 	namespacedName := k8stypes.NamespacedName{Namespace: rollout.GetNamespace(), Name: rollout.GetName()}
 
-	mgr.store.setStrategy(namespacedName, upgradeStrategy)
+	mgr.Store.SetStrategy(namespacedName, upgradeStrategy)
 	mgr.setRolloutStrategy(ctx, rollout, upgradeStrategy)
 }
 
-func (mgr *inProgressStrategyMgr) unsetStrategy(ctx context.Context, rollout client.Object) {
-	mgr.setStrategy(ctx, rollout, apiv1.UpgradeStrategyNoOp)
+func (mgr *InProgressStrategyMgr) UnsetStrategy(ctx context.Context, rollout client.Object) {
+	mgr.SetStrategy(ctx, rollout, apiv1.UpgradeStrategyNoOp)
 }
 
 // return whether found, and if so, the value
-func (store *inProgressStrategyStore) getStrategy(namespacedName k8stypes.NamespacedName) (bool, apiv1.UpgradeStrategy) {
+func (store *inProgressStrategyStore) GetStrategy(namespacedName k8stypes.NamespacedName) (bool, apiv1.UpgradeStrategy) {
 	key := namespacedNameToKey(namespacedName)
 	store.mutex.RLock()
 	strategy, found := store.inProgressUpgradeStrategies[key]
@@ -95,9 +112,13 @@ func (store *inProgressStrategyStore) getStrategy(namespacedName k8stypes.Namesp
 	return found, strategy
 }
 
-func (store *inProgressStrategyStore) setStrategy(namespacedName k8stypes.NamespacedName, upgradeStrategy apiv1.UpgradeStrategy) {
+func (store *inProgressStrategyStore) SetStrategy(namespacedName k8stypes.NamespacedName, upgradeStrategy apiv1.UpgradeStrategy) {
 	key := namespacedNameToKey(namespacedName)
 	store.mutex.Lock()
 	store.inProgressUpgradeStrategies[key] = upgradeStrategy
 	store.mutex.Unlock()
+}
+
+func namespacedNameToKey(namespacedName k8stypes.NamespacedName) string {
+	return fmt.Sprintf("%s/%s", namespacedName.Namespace, namespacedName.Name)
 }

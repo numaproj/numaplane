@@ -1,4 +1,20 @@
-package controller
+/*
+Copyright 2023.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package common
 
 import (
 	"context"
@@ -59,7 +75,7 @@ func Test_inProgressStrategyMgr_getStrategy(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			inProgressStrategyMgr := newInProgressStrategyMgr(
+			inProgressStrategyMgr := NewInProgressStrategyMgr(
 				// getRolloutStrategy function:
 				func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
 					return tc.rolloutStatusStrategy
@@ -70,9 +86,9 @@ func Test_inProgressStrategyMgr_getStrategy(t *testing.T) {
 			pipelineRollout := &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "my-pipeline"}}
 			namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
 			if tc.inMemoryStrategy != nil {
-				inProgressStrategyMgr.store.setStrategy(namespacedName, *tc.inMemoryStrategy)
+				inProgressStrategyMgr.Store.SetStrategy(namespacedName, *tc.inMemoryStrategy)
 			}
-			upgradeStrategyResult := inProgressStrategyMgr.getStrategy(context.Background(), pipelineRollout)
+			upgradeStrategyResult := inProgressStrategyMgr.GetStrategy(context.Background(), pipelineRollout)
 			assert.Equal(t, tc.resultStrategy, upgradeStrategyResult)
 		})
 	}

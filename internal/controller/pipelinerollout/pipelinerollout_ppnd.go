@@ -1,4 +1,20 @@
-package controller
+/*
+Copyright 2023.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package pipelinerollout
 
 import (
 	"context"
@@ -7,7 +23,8 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -26,12 +43,12 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
-	pipelineNeedsToUpdate, err := r.childNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	pipelineNeedsToUpdate, err := r.ChildNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -54,12 +71,12 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
 		pipelineRollout.Status.MarkPending()
-		if !shouldBePaused || (shouldBePaused && checkPipelineStatus(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)) {
+		if !shouldBePaused || (shouldBePaused && numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)) {
 			numaLogger.Infof("it's safe to update Pipeline so updating now")
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
 			if shouldBePaused {
-				err = withDesiredPhase(newPipelineDef, "Paused")
+				err = numaflowtypes.WithDesiredPhase(newPipelineDef, "Paused")
 				if err != nil {
 					return false, err
 				}
@@ -79,7 +96,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
-	if specBasedPause && isPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
+	if specBasedPause && numaflowtypes.IsPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
 		doneWithPPND = true
 	}
 
@@ -97,17 +114,17 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
-	var existingPipelineSpec PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.getISBSvcName())
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.GetISBSvcName())
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +132,7 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
 
-	wontPause := checkIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
+	wontPause := numaflowtypes.CheckIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
 
 	ppndPause := (pipelineNeedsToUpdate || externalPauseRequest) && !wontPause
 	shouldBePaused := ppndPause || specBasedPause
@@ -140,13 +157,13 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	var newPipelineSpec PipelineSpec
+	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.getISBSvcName())
+	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, newPipelineSpec.GetISBSvcName())
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +181,7 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	return &needPPND, nil
 }
 
-func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec PipelineSpec) bool {
+func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec numaflowtypes.PipelineSpec) bool {
 	return (pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused) || pipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePausing))
 }
 
@@ -176,10 +193,10 @@ func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec PipelineSpec) 
 func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, isbsvcName string) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	pm := GetPauseModule()
+	pm := ppnd.GetPauseModule()
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
-	controllerPauseRequest, found := pm.getPauseRequest(pm.getNumaflowControllerKey(pipelineRollout.Namespace))
+	controllerPauseRequest, found := pm.GetPauseRequest(pm.GetNumaflowControllerKey(pipelineRollout.Namespace))
 	if !found {
 		numaLogger.Debugf("No pause request found for numaflow controller on namespace %q", pipelineRollout.Namespace)
 		return false, false, nil
@@ -187,7 +204,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	}
 	controllerRequestsPause := controllerPauseRequest != nil && *controllerPauseRequest
 
-	isbsvcPauseRequest, found := pm.getPauseRequest(pm.getISBServiceKey(pipelineRollout.Namespace, isbsvcName))
+	isbsvcPauseRequest, found := pm.GetPauseRequest(pm.GetISBServiceKey(pipelineRollout.Namespace, isbsvcName))
 	if !found {
 		numaLogger.Debugf("No pause request found for isbsvc %q on namespace %q", isbsvcName, pipelineRollout.Namespace)
 		return false, false, nil
@@ -200,7 +217,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 // make sure our Pipeline's Lifecycle is what we need it to be
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *kubernetes.GenericObject) error {
 	numaLogger := logger.FromContext(ctx)
-	var existingPipelineSpec PipelineSpec
+	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
 		return err
 	}
@@ -209,14 +226,14 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	if pause && !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelinePause", "pausing pipeline")
-		if err := GetPauseModule().pausePipeline(ctx, r.client, existingPipelineDef); err != nil {
+		if err := ppnd.GetPauseModule().PausePipeline(ctx, r.client, existingPipelineDef); err != nil {
 			return err
 		}
 	} else if !pause && lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
-		run, err := GetPauseModule().runPipelineIfSafe(ctx, r.client, existingPipelineDef)
+		run, err := ppnd.GetPauseModule().RunPipelineIfSafe(ctx, r.client, existingPipelineDef)
 		if err != nil {
 			return err
 		}
@@ -226,27 +243,4 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 		}
 	}
 	return nil
-}
-
-// either pipeline must be:
-//   - Paused
-//   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
-//   - PipelineRollout parent Annotated to allow data loss
-func isPipelinePausedOrWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
-	wontPause := checkIfPipelineWontPause(ctx, pipeline, pipelineRollout)
-
-	paused := checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhasePaused)
-	return paused || wontPause
-}
-
-func checkIfPipelineWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
-	numaLogger := logger.FromContext(ctx)
-
-	allowDataLossAnnotation := pipelineRollout.Annotations[common.LabelKeyAllowDataLoss]
-	allowDataLoss := allowDataLossAnnotation == "true"
-	failed := checkPipelineStatus(ctx, pipeline, numaflowv1.PipelinePhaseFailed)
-	wontPause := allowDataLoss || failed
-	numaLogger.Debugf("wontPause=%t, allowDataLoss=%t, failed=%t", wontPause, allowDataLoss, failed)
-
-	return wontPause
 }
