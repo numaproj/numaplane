@@ -135,14 +135,14 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 			return fmt.Errorf("error unmarshalling USDE DefaultUpgradeStrategy: %v", err)
 		}
 
-		err = yaml.Unmarshal([]byte(configMap.Data["pipelineSpecExcludedPaths"]), &usdeConfig.PipelineSpecExcludedPaths)
+		err = yaml.Unmarshal([]byte(configMap.Data["pipelineSpecDataLossFields"]), &usdeConfig.PipelineSpecDataLossFields)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE PipelineSpecExcludedPaths: %v", err)
+			return fmt.Errorf("error unmarshalling USDE PipelineSpecDataLossFields: %v", err)
 		}
 
-		err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecExcludedPaths"]), &usdeConfig.ISBServiceSpecExcludedPaths)
+		err = yaml.Unmarshal([]byte(configMap.Data["isbServiceSpecDataLossFields"]), &usdeConfig.ISBServiceSpecDataLossFields)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE ISBServiceSpecExcludedPaths: %v", err)
+			return fmt.Errorf("error unmarshalling USDE ISBServiceSpecDataLossFields: %v", err)
 		}
 
 		config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
