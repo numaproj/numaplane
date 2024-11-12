@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
   - ../../../config/default
   - ./controller_def_1.3.3.yaml
-  - ./controller_def_1.3.3-copy1.yaml
+  - ./controller_def_1.4.0.yaml
 
 patches:
   - patch: |-
