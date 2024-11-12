@@ -6,9 +6,10 @@ metadata:
     numaplane.numaproj.io/config: usde-config
 data:
   defaultUpgradeStrategy: "pause-and-drain"
-  pipelineSpecExcludedPaths: |
-    - "lifecycle"
-    - "limits"
-    - "watermark"
-  isbServiceSpecExcludedPaths: |
-    - "jetstream.containerTemplate.resources.limits"
+  pipelineSpecDataLossPaths:
+    - path: spec.interstepBufferServiceName
+    - path: spec.vertices.source
+    - path: spec.vertices.source.generator.rpu
+  isbServiceSpecDataLossPaths:
+    - path: spec
+      includeSubfields: true

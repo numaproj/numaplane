@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -67,61 +67,87 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
-	// Get apply paths based on the spec type (Pipeline, ISBS)
-	applyPaths := []string{}
+	// Get data loss fields config based on the spec type (Pipeline, ISBS)
+	dataLossFields := []config.SpecDataLossField{}
 	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
-		applyPaths = usdeConfig.PipelineSpecExcludedPaths
+		dataLossFields = usdeConfig.PipelineSpecDataLossFields
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
-		applyPaths = usdeConfig.ISBServiceSpecExcludedPaths
+		dataLossFields = usdeConfig.ISBServiceSpecDataLossFields
 	}
 
-	numaLogger.WithValues("usdeConfig", usdeConfig, "applyPaths", applyPaths).Debug("started deriving upgrade strategy")
+	newDefUnstr, err := kubernetes.ObjectToUnstructured(newDef)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
+	}
 
-	// Split newDef
-	newSpecOnlyApplyPaths, newSpecWithoutApplyPaths, err := util.SplitObject(newDef.Spec.Raw, applyPaths, []string{}, ".")
+	existingDefUnstr, err := kubernetes.ObjectToUnstructured(existingDef)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
+	}
+
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
 
 	numaLogger.WithValues(
-		"newSpecOnlyApplyPaths", newSpecOnlyApplyPaths,
-		"newSpecWithoutApplyPaths", newSpecWithoutApplyPaths,
-	).Debug("split new spec")
+		"usdeConfig", usdeConfig,
+		"dataLossFields", dataLossFields,
+		"upgradeStrategy", upgradeStrategy,
+		"newDefUnstr", newDefUnstr,
+		"existingDefUnstr", existingDefUnstr,
+	).Debug("started deriving upgrade strategy")
 
-	// Split existingDef
-	existingSpecOnlyApplyPaths, existingSpecWithoutApplyPaths, err := util.SplitObject(existingDef.Spec.Raw, applyPaths, []string{}, ".")
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
+	// Loop through all the data loss fields from config to see if any changes based on those fields require a data loss prevention strategy
+	for _, dataLossField := range dataLossFields {
+		newDefField, newDefFieldFound, err := unstructured.NestedFieldNoCopy(newDefUnstr.Object, strings.Split(dataLossField.Path, ".")...)
+		if err != nil {
+			return false, apiv1.UpgradeStrategyError, err
+		}
 
-	numaLogger.WithValues(
-		"existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths,
-		"existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths,
-	).Debug("split existing spec")
-
-	// Compare specs without the apply fields and check user's strategy to return their preferred strategy
-	if !reflect.DeepEqual(newSpecWithoutApplyPaths, existingSpecWithoutApplyPaths) {
-		upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
+		existingDefField, existingDefFieldFound, err := unstructured.NestedFieldNoCopy(existingDefUnstr.Object, strings.Split(dataLossField.Path, ".")...)
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
 
 		numaLogger.WithValues(
-			"upgradeStrategy", upgradeStrategy,
-			"newSpecWithoutApplyPaths", newSpecWithoutApplyPaths,
-			"existingSpecWithoutApplyPaths", existingSpecWithoutApplyPaths,
-		).Debug("the specs without the 'apply' paths are different")
+			"dataLossField", dataLossField,
+			"newDefField", newDefField,
+			"newDefFieldFound", newDefFieldFound,
+			"existingDefField", existingDefField,
+			"existingDefFieldFound", existingDefFieldFound,
+		).Debug("checking data loss field differences")
 
-		return true, upgradeStrategy, nil
+		// If both specs (new and existing) have the data loss field, compare them based on their config IncludeSubfields and based on if they are a map or a primitive
+		if newDefFieldFound && existingDefFieldFound {
+			// Only check the type of the existing spec field (no need to also check the new spec)
+			_, isExistingDefFieldMap := existingDefField.(map[any]any)
+
+			numaLogger.WithValues(
+				"dataLossField", dataLossField,
+				"isExistingDefFieldMap", isExistingDefFieldMap,
+			).Debug("new and existing specs have data loss field")
+
+			// If the current field is not a map or if it is (assumed from the config if IncludeSubfields is true) and the config
+			// says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
+			// a data loss prevention strategy is needed
+			if (dataLossField.IncludeSubfields || !isExistingDefFieldMap) && !reflect.DeepEqual(newDefField, existingDefField) {
+				return true, upgradeStrategy, nil
+			}
+		} else if !newDefFieldFound && !existingDefFieldFound {
+			// Nothing to do since the field is missing from both new and existing specs
+			continue
+		} else {
+			// The specs are different since one has the field while the other does not. Therefore, a data loss prevention strategy is needed
+			return true, upgradeStrategy, nil
+		}
 	}
 
-	// Compare specs with the apply fields
-	if !reflect.DeepEqual(newSpecOnlyApplyPaths, existingSpecOnlyApplyPaths) {
-		numaLogger.WithValues(
-			"newSpecOnlyApplyPaths", newSpecOnlyApplyPaths,
-			"existingSpecOnlyApplyPaths", existingSpecOnlyApplyPaths,
-		).Debug("the specs with only the 'apply' paths are different")
+	numaLogger.Debug("no data loss field changes detected, comparing specs for any Apply-type of changes")
 
+	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
+	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
+	if !reflect.DeepEqual(newDefUnstr, existingDefUnstr) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 
@@ -129,7 +155,6 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 
 	// Return NoOp if no differences were found between the new and existing specs
 	return false, apiv1.UpgradeStrategyNoOp, nil
-
 }
 
 func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.UpgradeStrategy {

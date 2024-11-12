@@ -6,9 +6,5 @@ metadata:
     numaplane.numaproj.io/config: usde-config
 data:
   defaultUpgradeStrategy: "progressive"
-  pipelineSpecExcludedPaths: |
-    - "lifecycle"
-    - "limits"
-    - "watermark"
-  isbServiceSpecExcludedPaths: |
-    - "jetstream.containerTemplate.resources.limits"
+  pipelineSpecDataLossPaths:
+  isbServiceSpecDataLossPaths:
