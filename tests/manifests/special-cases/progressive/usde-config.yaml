@@ -5,11 +5,11 @@ metadata:
   labels:
     numaplane.numaproj.io/config: usde-config
 data:
-  defaultUpgradeStrategy: "pause-and-drain"
-  pipelineSpecDataLossPaths: |
+  defaultUpgradeStrategy: "progressive"
+  pipelineSpecDataLossFields: |
     - path: spec.interstepBufferServiceName
     - path: spec.vertices.source
     - path: spec.vertices.source.generator.rpu
-  isbServiceSpecDataLossPaths: |
+  isbServiceSpecDataLossFields: |
     - path: spec
       includeSubfields: true

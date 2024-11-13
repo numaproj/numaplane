@@ -121,7 +121,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 		// If both specs (new and existing) have the data loss field, compare them based on their config IncludeSubfields and based on if they are a map or a primitive
 		if newDefFieldFound && existingDefFieldFound {
 			// Only check the type of the existing spec field (no need to also check the new spec)
-			_, isExistingDefFieldMap := existingDefField.(map[any]any)
+			isExistingDefFieldMap := reflect.TypeOf(existingDefField).Kind() == reflect.Map
 
 			numaLogger.WithValues(
 				"dataLossField", dataLossField,

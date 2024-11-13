@@ -19,8 +19,8 @@ package config
 import "fmt"
 
 type SpecDataLossField struct {
-	Path             string `json:"path" mapstructure:"path"`
-	IncludeSubfields bool   `json:"includeSubfields,omitempty" mapstructure:"includeSubfields,omitempty"`
+	Path             string `json:"path" yaml:"path"`
+	IncludeSubfields bool   `json:"includeSubfields,omitempty" yaml:"includeSubfields,omitempty"`
 }
 
 type USDEConfig struct {
