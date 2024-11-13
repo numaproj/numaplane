@@ -17,17 +17,15 @@ limitations under the License.
 package monovertexrollout
 
 import (
-	"encoding/json"
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util"
 )
 
 func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {
@@ -58,22 +56,18 @@ func fakeMonoVertexSpec(t *testing.T) numaflowv1.MonoVertexSpec {
 	}
 }
 
-func fakeGenericMonoVertex(t *testing.T, s numaflowv1.MonoVertexSpec) *kubernetes.GenericObject {
+func fakeGenericMonoVertex(t *testing.T, s numaflowv1.MonoVertexSpec) *unstructured.Unstructured {
 	t.Helper()
-	monoVertexSpecRaw, _ := json.Marshal(s)
-	return &kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MonoVertex",
-			APIVersion: "numaflow.numaproj.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test--mvtx",
-			Namespace: "test-ns",
-		},
-		Spec: runtime.RawExtension{
-			Raw: monoVertexSpecRaw,
-		},
+	monoVertexDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	monoVertexDef.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
+	monoVertexDef.SetName("test--mvtx")
+	monoVertexDef.SetNamespace("test-ns")
+	var monoVertexSpec map[string]interface{}
+	if err := util.StructToStruct(s, &monoVertexSpec); err != nil {
+		log.Fatal(err)
 	}
+	monoVertexDef.Object["spec"] = monoVertexSpec
+	return monoVertexDef
 }
 
 func Test_withExistingMvtxReplicas(t *testing.T) {
@@ -122,10 +116,7 @@ func Test_withExistingMvtxReplicas(t *testing.T) {
 			result, err := withExistingMvtxReplicas(existingGenericMvtx, newGenericMvtx)
 			assert.NoError(t, err)
 
-			unstruc, err := kubernetes.ObjectToUnstructured(result)
-			assert.NoError(t, err)
-
-			expected, existing, err := unstructured.NestedFloat64(unstruc.Object, "spec", "replicas")
+			expected, existing, err := unstructured.NestedFloat64(result.Object, "spec", "replicas")
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected != nil, existing)
 			if tt.expected != nil {

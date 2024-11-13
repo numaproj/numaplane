@@ -18,13 +18,9 @@ package numaflowtypes
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,13 +54,13 @@ type PipelineStatus struct {
 	DrainedOnPause     bool                     `json:"drainedOnPause,omitempty" protobuf:"bytes,12,opt,name=drainedOnPause"`
 }
 
-func ParsePipelineStatus(obj *kubernetes.GenericObject) (PipelineStatus, error) {
-	if obj == nil || len(obj.Status.Raw) == 0 {
+func ParsePipelineStatus(obj *unstructured.Unstructured) (PipelineStatus, error) {
+	if obj == nil || len(obj.Object) == 0 {
 		return PipelineStatus{}, nil
 	}
 
 	var status PipelineStatus
-	err := json.Unmarshal(obj.Status.Raw, &status)
+	err := util.StructToStruct(obj.Object["status"], &status)
 	if err != nil {
 		return PipelineStatus{}, err
 	}
@@ -72,7 +68,7 @@ func ParsePipelineStatus(obj *kubernetes.GenericObject) (PipelineStatus, error) 
 	return status, nil
 }
 
-func CheckPipelinePhase(ctx context.Context, pipeline *kubernetes.GenericObject, phase numaflowv1.PipelinePhase) bool {
+func CheckPipelinePhase(ctx context.Context, pipeline *unstructured.Unstructured, phase numaflowv1.PipelinePhase) bool {
 	numaLogger := logger.FromContext(ctx)
 	pipelineStatus, err := ParsePipelineStatus(pipeline)
 	if err != nil {
@@ -87,14 +83,14 @@ func CheckPipelinePhase(ctx context.Context, pipeline *kubernetes.GenericObject,
 //   - Paused
 //   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
 //   - PipelineRollout parent Annotated to allow data loss
-func IsPipelinePausedOrWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+func IsPipelinePausedOrWontPause(ctx context.Context, pipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout) bool {
 	wontPause := CheckIfPipelineWontPause(ctx, pipeline, pipelineRollout)
 
 	paused := CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 	return paused || wontPause
 }
 
-func CheckIfPipelineWontPause(ctx context.Context, pipeline *kubernetes.GenericObject, pipelineRollout *apiv1.PipelineRollout) bool {
+func CheckIfPipelineWontPause(ctx context.Context, pipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout) bool {
 	numaLogger := logger.FromContext(ctx)
 
 	allowDataLossAnnotation := pipelineRollout.Annotations[common.LabelKeyAllowDataLoss]
@@ -106,26 +102,12 @@ func CheckIfPipelineWontPause(ctx context.Context, pipeline *kubernetes.GenericO
 	return wontPause
 }
 
-func WithDesiredPhase(pipeline *kubernetes.GenericObject, phase string) error {
-	unstruc, err := kubernetes.ObjectToUnstructured(pipeline)
-	if err != nil {
-		return err
-	}
-
+func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
-	err = unstructured.SetNestedField(unstruc.Object, phase, "spec", "lifecycle", "desiredPhase")
+	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
 	}
-
-	resultObj, err := kubernetes.UnstructuredToObject(unstruc)
-	if err != nil {
-		return err
-	}
-	if pipeline == nil {
-		return fmt.Errorf("error converting unstructured %+v to object, result is nil?", unstruc.Object)
-	}
-	*pipeline = *resultObj
 	return nil
 }
 
@@ -133,9 +115,9 @@ func WithDesiredPhase(pipeline *kubernetes.GenericObject, phase string) error {
 // (this may naturally happen after refactoring)
 // remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
-func WithoutDesiredPhase(obj *kubernetes.GenericObject) (map[string]interface{}, error) {
+func WithoutDesiredPhase(obj *unstructured.Unstructured) (map[string]interface{}, error) {
 	var specAsMap map[string]any
-	if err := json.Unmarshal(obj.Spec.Raw, &specAsMap); err != nil {
+	if err := util.StructToStruct(obj.Object["spec"], &specAsMap); err != nil {
 		return nil, err
 	}
 	// remove "lifecycle.desiredPhase"

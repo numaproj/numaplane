@@ -17,20 +17,21 @@ limitations under the License.
 package numaflowtypes
 
 import (
-	"encoding/json"
+	"github.com/numaproj/numaplane/internal/util"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
 type MonoVertexStatus = kubernetes.GenericStatus
 
-func ParseMonoVertexStatus(obj *kubernetes.GenericObject) (MonoVertexStatus, error) {
-	if obj == nil || len(obj.Status.Raw) == 0 {
+func ParseMonoVertexStatus(obj *unstructured.Unstructured) (MonoVertexStatus, error) {
+	if obj == nil || len(obj.Object) == 0 {
 		return MonoVertexStatus{}, nil
 	}
 
 	var status MonoVertexStatus
-	err := json.Unmarshal(obj.Status.Raw, &status)
+	err := util.StructToStruct(obj.Object["status"], &status)
 	if err != nil {
 		return MonoVertexStatus{}, err
 	}
