@@ -24,9 +24,9 @@ func StructToStruct(src any, dst any) error {
 
 // SplitObject returns 2 maps from a given object as bytes array and a slice of paths.
 // One of the 2 output maps will include only the paths from the slice while the second returned map will include all other paths.
-func SplitObject(obj []byte, paths []string, excludedPaths []string, pathSeparator string) (map[string]any, map[string]any, error) {
+func SplitObject(obj any, paths []string, excludedPaths []string, pathSeparator string) (map[string]any, map[string]any, error) {
 	var objAsMap map[string]any
-	if err := json.Unmarshal(obj, &objAsMap); err != nil {
+	if err := StructToStruct(obj, &objAsMap); err != nil {
 		return nil, nil, err
 	}
 

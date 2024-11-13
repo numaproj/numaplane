@@ -18,6 +18,7 @@ package pipelinerollout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -385,10 +387,18 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			obj1 := &kubernetes.GenericObject{}
-			obj1.Spec.Raw = []byte(tc.specYaml1)
-			obj2 := &kubernetes.GenericObject{}
-			obj2.Spec.Raw = []byte(tc.specYaml2)
+			obj1 := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var yaml1Spec map[string]interface{}
+			err := json.Unmarshal([]byte(tc.specYaml1), &yaml1Spec)
+			assert.NoError(t, err)
+			obj1.Object["spec"] = yaml1Spec
+
+			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var yaml2Spec map[string]interface{}
+			err = json.Unmarshal([]byte(tc.specYaml2), &yaml2Spec)
+			assert.NoError(t, err)
+			obj2.Object["spec"] = yaml2Spec
+
 			needsUpdating, err := r.ChildNeedsUpdating(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)

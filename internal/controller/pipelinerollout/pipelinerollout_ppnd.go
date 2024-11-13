@@ -18,13 +18,15 @@ package pipelinerollout
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -39,13 +41,13 @@ import (
 // - as long as there's no other requirement to pause, set desiredPhase=Running
 // return boolean for whether we can stop the PPND process
 func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
-	existingPipelineDef, newPipelineDef *kubernetes.GenericObject) (bool, error) {
+	existingPipelineDef, newPipelineDef *unstructured.Unstructured) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", newPipelineDef.Object, err)
 	}
 
 	pipelineNeedsToUpdate, err := r.ChildNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
@@ -66,7 +68,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	}
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
-	newPipelineDef.ResourceVersion = existingPipelineDef.ResourceVersion
+	newPipelineDef.SetResourceVersion(existingPipelineDef.GetResourceVersion())
 
 	// if it's safe to Update and we need to, do it now
 	if pipelineNeedsToUpdate {
@@ -111,16 +113,16 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 //	spec says to pause
 //
 // return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *kubernetes.GenericObject, pipelineNeedsToUpdate bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *unstructured.Unstructured, pipelineNeedsToUpdate bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object["spec"], err)
 	}
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert existing Pipeline spec %q into PipelineSpec type, err=%v", string(existingPipelineDef.Spec.Raw), err)
+	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to convert existing Pipeline spec %v into PipelineSpec type, err=%v", existingPipelineDef.Object["spec"], err)
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
@@ -154,12 +156,12 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 //
 //	there's any difference in spec between PipelineRollout and Pipeline
 //	any pause request coming from isbsvc or Numaflow Controller
-func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *kubernetes.GenericObject, pipelineUpdateRequiringPPND bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(newPipelineDef.Spec.Raw, &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", string(newPipelineDef.Spec.Raw), err)
+	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object, err)
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
@@ -215,10 +217,10 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 }
 
 // make sure our Pipeline's Lifecycle is what we need it to be
-func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *kubernetes.GenericObject) error {
+func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(existingPipelineDef.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
 		return err
 	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
