@@ -42,8 +42,8 @@ const (
 	pipelineName                     = "test-pipeline-rollout-0"
 	monoVertexRolloutName            = "test-monovertex-rollout"
 	monoVertexName                   = "test-monovertex-rollout-0"
-	initialNumaflowControllerVersion = "1.3.3"
-	updatedNumaflowControllerVersion = "1.4.0"
+	initialNumaflowControllerVersion = "1.4.0"
+	updatedNumaflowControllerVersion = "1.4.0-copy"
 	initialJetstreamVersion          = "2.9.6"
 	updatedJetstreamVersion          = "2.9.8"
 )
