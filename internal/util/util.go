@@ -212,7 +212,7 @@ func removePath(m map[string]any, pathTokens []string) {
 //   - path: A slice of strings representing the path to the desired fields.
 //
 // It returns three values:
-//   - any: The extracted data, which can be a map, a slice, or a single value.
+//   - any: The extracted data, which can be a map, a slice, or a single value (including nil).
 //   - bool: A boolean indicating whether last field in the path is a map.
 //   - error: An error if any occurred during the extraction process.
 //
