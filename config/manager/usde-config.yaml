@@ -7,9 +7,8 @@ metadata:
 data:
   defaultUpgradeStrategy: "pause-and-drain"
   pipelineSpecDataLossFields: |
-    - path: spec.interstepBufferServiceName
-    - path: spec.vertices.source
-    - path: spec.vertices.source.generator.rpu
+    - path: spec
+      includeSubfields: true
   isbServiceSpecDataLossFields: |
     - path: spec
       includeSubfields: true

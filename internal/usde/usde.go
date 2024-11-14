@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -100,12 +101,12 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 
 	// Loop through all the data loss fields from config to see if any changes based on those fields require a data loss prevention strategy
 	for _, dataLossField := range dataLossFields {
-		newDefField, newDefFieldFound, err := unstructured.NestedFieldNoCopy(newDefUnstr.Object, strings.Split(dataLossField.Path, ".")...)
+		newDefField, newIsMap, err := util.ExtractPath(newDefUnstr.Object, strings.Split(dataLossField.Path, "."))
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
 
-		existingDefField, existingDefFieldFound, err := unstructured.NestedFieldNoCopy(existingDefUnstr.Object, strings.Split(dataLossField.Path, ".")...)
+		existingDefField, existingIsMap, err := util.ExtractPath(existingDefUnstr.Object, strings.Split(dataLossField.Path, "."))
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
@@ -113,32 +114,17 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 		numaLogger.WithValues(
 			"dataLossField", dataLossField,
 			"newDefField", newDefField,
-			"newDefFieldFound", newDefFieldFound,
 			"existingDefField", existingDefField,
-			"existingDefFieldFound", existingDefFieldFound,
+			"newIsMap", newIsMap,
+			"existingIsMap", existingIsMap,
 		).Debug("checking data loss field differences")
 
-		// If both specs (new and existing) have the data loss field, compare them based on their config IncludeSubfields and based on if they are a map or a primitive
-		if newDefFieldFound && existingDefFieldFound {
-			// Only check the type of the existing spec field (no need to also check the new spec)
-			isExistingDefFieldMap := reflect.TypeOf(existingDefField).Kind() == reflect.Map
+		areDefFieldsMap := newIsMap && existingIsMap
 
-			numaLogger.WithValues(
-				"dataLossField", dataLossField,
-				"isExistingDefFieldMap", isExistingDefFieldMap,
-			).Debug("new and existing specs have data loss field")
-
-			// If the current field is not a map or if it is (assumed from the config if IncludeSubfields is true) and the config
-			// says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
-			// a data loss prevention strategy is needed
-			if (dataLossField.IncludeSubfields || !isExistingDefFieldMap) && !reflect.DeepEqual(newDefField, existingDefField) {
-				return true, upgradeStrategy, nil
-			}
-		} else if !newDefFieldFound && !existingDefFieldFound {
-			// Nothing to do since the field is missing from both new and existing specs
-			continue
-		} else {
-			// The specs are different since one has the field while the other does not. Therefore, a data loss prevention strategy is needed
+		// If the current field is not a map or if it is (assumed from the config if IncludeSubfields is true) and the config
+		// says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
+		// a data loss prevention strategy is needed
+		if (dataLossField.IncludeSubfields || !areDefFieldsMap) && !reflect.DeepEqual(newDefField, existingDefField) {
 			return true, upgradeStrategy, nil
 		}
 	}

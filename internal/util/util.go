@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -201,5 +202,65 @@ func removePath(m map[string]any, pathTokens []string) {
 			}
 
 		}
+	}
+}
+
+// ExtractPath extracts the fields specified by the path (given as slice of strings) from the given data.
+//
+// The function takes two arguments:
+//   - data: The input data, which can be a map, a slice, or a nested combination of both.
+//   - path: A slice of strings representing the path to the desired fields.
+//
+// It returns three values:
+//   - any: The extracted data, which can be a map, a slice, or a single value.
+//   - bool: A boolean indicating whether last field in the path is a map.
+//   - error: An error if any occurred during the extraction process.
+//
+// The function works by recursively traversing the input data according to the
+// provided path. It handles maps and slices, extracting the corresponding values
+// at each level. If the path leads to a value that is neither a map nor a slice,
+// it returns that value.
+func ExtractPath(data any, path []string) (any, bool, error) {
+	if len(path) == 0 {
+		return data, reflect.TypeOf(data).Kind() == reflect.Map, nil
+	}
+
+	v := reflect.ValueOf(data)
+	key := path[0]
+
+	switch v.Kind() {
+	case reflect.Map:
+		m := make(map[string]any)
+		for _, k := range v.MapKeys() {
+			if k.String() == key {
+				extracted, isMap, err := ExtractPath(v.MapIndex(k).Interface(), path[1:])
+				if err != nil {
+					return nil, false, err
+				}
+				m[key] = extracted
+				return m, isMap, nil
+			}
+		}
+		return nil, false, nil
+
+	case reflect.Slice:
+		s := make([]any, v.Len())
+		atLeastOneIsMap := false
+		for i := 0; i < v.Len(); i++ {
+			extracted, isMap, err := ExtractPath(v.Index(i).Interface(), path)
+			if err != nil {
+				return nil, false, err
+			}
+
+			s[i] = extracted
+
+			if isMap {
+				atLeastOneIsMap = isMap
+			}
+		}
+		return s, atLeastOneIsMap, nil
+
+	default:
+		return nil, false, fmt.Errorf("invalid type encountered: %s", v.Kind())
 	}
 }
