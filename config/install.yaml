@@ -1482,12 +1482,12 @@ metadata:
 apiVersion: v1
 data:
   defaultUpgradeStrategy: pause-and-drain
-  isbServiceSpecExcludedPaths: |
-    - "jetstream.containerTemplate.resources.limits"
-  pipelineSpecExcludedPaths: |
-    - "lifecycle"
-    - "limits"
-    - "watermark"
+  isbServiceSpecDataLossFields: |
+    - path: spec
+      includeSubfields: true
+  pipelineSpecDataLossFields: |
+    - path: spec
+      includeSubfields: true
 kind: ConfigMap
 metadata:
   labels:
