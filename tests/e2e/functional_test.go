@@ -151,7 +151,7 @@ var (
 	ISBServiceSpecExcludedField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "2.9.8",
+			Version: updatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},

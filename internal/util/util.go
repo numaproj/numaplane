@@ -221,8 +221,13 @@ func removePath(m map[string]any, pathTokens []string) {
 // at each level. If the path leads to a value that is neither a map nor a slice,
 // it returns that value.
 func ExtractPath(data any, path []string) (any, bool, error) {
-	if len(path) == 0 {
-		return data, reflect.TypeOf(data).Kind() == reflect.Map, nil
+	if len(path) == 0 || data == nil {
+		isMap := false
+		if data != nil {
+			isMap = reflect.TypeOf(data).Kind() == reflect.Map
+		}
+
+		return data, isMap, nil
 	}
 
 	v := reflect.ValueOf(data)
@@ -261,6 +266,6 @@ func ExtractPath(data any, path []string) (any, bool, error) {
 		return s, atLeastOneIsMap, nil
 
 	default:
-		return nil, false, fmt.Errorf("invalid type encountered: %s", v.Kind())
+		return nil, false, fmt.Errorf("invalid type encountered: %s", v.Kind().String())
 	}
 }

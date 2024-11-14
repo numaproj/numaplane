@@ -7,8 +7,53 @@ metadata:
 data:
   defaultUpgradeStrategy: "progressive"
   pipelineSpecDataLossFields: |
-    - path: spec
+    - path: spec.edges.from
+    - path: spec.edges.to
+    - path: spec.edges.conditions
+      includeSubfields: true
+    - path: spec.interStepBufferServiceName
+    - path: spec.vertices.source.generator
+    - path: spec.vertices.source.kafka
+    - path: spec.vertices.source.http
+    - path: spec.vertices.source.nats
+    - path: spec.vertices.source.jetstream
+    - path: spec.vertices.source.serving
+    - path: spec.vertices.source.udsource.container.image
+    - path: spec.vertices.source.transformer.container.image
+    - path: spec.vertices.source.transformer.container.command
+    - path: spec.vertices.source.transformer.container.args
+    - path: spec.vertices.source.transformer.container.env
+      includeSubfields: true
+    - path: spec.vertices.source.transformer.container.envfrom
+      includeSubfields: true
+    - path: spec.vertices.source.transformer.builtin
+      includeSubfields: true
+    - path: spec.vertices.sink.log
+    - path: spec.vertices.sink.kafka
+    - path: spec.vertices.sink.blackhole
+    - path: spec.vertices.sink.udsink.container.image
+    - path: spec.vertices.sink.udsink.container.command
+    - path: spec.vertices.sink.udsink.container.args
+    - path: spec.vertices.sink.udsink.container.env
+      includeSubfields: true
+    - path: spec.vertices.sink.udsink.container.envfrom
+      includeSubfields: true
+    - path: spec.vertices.udf.container.image
+    - path: spec.vertices.udf.container.command
+    - path: spec.vertices.udf.container.args
+    - path: spec.vertices.udf.container.env
+      includeSubfields: true
+    - path: spec.vertices.udf.container.envfrom
+      includeSubfields: true
+    - path: spec.vertices.udf.builtin
+      includeSubfields: true
+    - path: spec.sideInputs
+      includeSubfields: true
+    - path: spec.templates
       includeSubfields: true
   isbServiceSpecDataLossFields: |
-    - path: spec
-      includeSubfields: true
+    - path: spec.jetstream.version
+    - path: spec.redis.native.version
+    - path: spec.redis.external.url
+    - path: spec.redis.external.sentinelUrl
+    - path: spec.redis.external.masterName
