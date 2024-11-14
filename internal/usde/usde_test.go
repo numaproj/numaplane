@@ -314,6 +314,23 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
+			name:          "with changes in array deep map - detect pointer fields - parent field is included (array)",
+			newDefinition: pipelineDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := defaultPipelineSpec.DeepCopy()
+				newPipelineDef.Vertices[2].Sink.Log = nil
+				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
 			name:          "with changes in array deep map - detect pointer fields - parent field is included (no subfields)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
