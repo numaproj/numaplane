@@ -10,8 +10,6 @@ import (
 
 type msa = map[string]any
 
-const pathSeparator = "."
-
 var simpleMap = msa{
 	"map": msa{
 		"field": msa{
@@ -21,30 +19,6 @@ var simpleMap = msa{
 		"field2": msa{
 			"x": 324,
 		},
-	},
-}
-
-var complexMap = msa{
-	"address": msa{
-		"city":    "New York",
-		"country": "USA",
-		"postal": msa{
-			"code":   "10001",
-			"region": "NY",
-			"something": msa{
-				"abc": "123",
-			},
-		},
-	},
-	"age":      30,
-	"lastname": nil,
-	"name":     "John",
-	"primArr":  []any{1, 2, 3, 4, 5, 6},
-	"projects": []msa{
-		{"name": "Project2", "nothing": nil, "other": []msa{{"x": "x2"}, {"y": "y2"}}, "status": "completed", "vals": []any{1, 2, 3}},
-		{"name": "Project3", "other": []msa{{"y": "y3"}}},
-		{"name": "Project4", "other": []msa{{"z": "z4"}}},
-		{"name": "Project1", "other": []msa{{"x": "x1"}, {"w": "w1", "y": "y1"}, {"t": "t1"}, {"z": "z1"}}, "status": "in progress", "vals": []any{4, 5, 6, 7}},
 	},
 }
 
