@@ -131,23 +131,17 @@ var (
 		},
 	}
 
-	volSize, _         = apiresource.ParseQuantity("10Mi")
-	memLimit, _        = apiresource.ParseQuantity("1Gi")
-	updatedMemLimit, _ = apiresource.ParseQuantity("2Gi")
-	isbServiceSpec     = numaflowv1.InterStepBufferServiceSpec{
+	volSize, _     = apiresource.ParseQuantity("10Mi")
+	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
-			ContainerTemplate: &numaflowv1.ContainerTemplate{
-				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
-				},
-			},
 		},
 	}
+	updatedMemLimit, _            = apiresource.ParseQuantity("2Gi")
 	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{

@@ -1483,17 +1483,23 @@ apiVersion: v1
 data:
   defaultUpgradeStrategy: pause-and-drain
   isbServiceSpecDataLossFields: |
+    # Principal: Update to StatefulSet may not be backward compatible to understand the data on the PVC
     - path: spec.jetstream.version
     - path: spec.redis.native.version
     - path: spec.redis.external.url
     - path: spec.redis.external.sentinelUrl
     - path: spec.redis.external.masterName
   pipelineSpecDataLossFields: |
+    # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
     - path: spec.edges.from
     - path: spec.edges.to
     - path: spec.edges.conditions
       includeSubfields: true
+
+    # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
     - path: spec.interStepBufferServiceName
+
+    # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
     - path: spec.vertices.source.generator
     - path: spec.vertices.source.kafka
     - path: spec.vertices.source.http
@@ -1529,9 +1535,18 @@ data:
       includeSubfields: true
     - path: spec.vertices.udf.builtin
       includeSubfields: true
-    - path: spec.sideInputs
+    - path: spec.sideInputs.container.image
+    - path: spec.sideInputs.container.command
+    - path: spec.sideInputs.container.args
+    - path: spec.sideInputs.container.env
       includeSubfields: true
-    - path: spec.templates
+    - path: spec.sideInputs.container.envfrom
+      includeSubfields: true
+    - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
+      includeSubfields: true
+
+    # Principal: TBD
+    - path: spec.sideInputs.container.envfrom
       includeSubfields: true
 kind: ConfigMap
 metadata:
