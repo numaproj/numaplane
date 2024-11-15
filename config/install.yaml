@@ -1469,11 +1469,12 @@ subjects:
 ---
 apiVersion: v1
 data:
-  config.yaml: |-
+  config.yaml: |
     logLevel: 3
     includedResources: "group=apps,kind=Deployment;\
     group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
+    defaultUpgradeStrategy: "pause-and-drain"
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config
@@ -1481,7 +1482,6 @@ metadata:
 ---
 apiVersion: v1
 data:
-  defaultUpgradeStrategy: pause-and-drain
   isbServiceSpecDataLossFields: |
     - path: spec.jetstream.version
     - path: spec.redis.native.version

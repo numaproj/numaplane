@@ -77,7 +77,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	usdeConfig := config.USDEConfig{
-		DefaultUpgradeStrategy:       config.PPNDStrategyID,
 		ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec", IncludeSubfields: true}},
 	}
 

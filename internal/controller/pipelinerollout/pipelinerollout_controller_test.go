@@ -492,7 +492,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		DefaultUpgradeStrategy:     config.PPNDStrategyID,
 		PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices", IncludeSubfields: true}},
 	})
 
@@ -732,7 +731,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		DefaultUpgradeStrategy:     config.ProgressiveStrategyID,
 		PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices", IncludeSubfields: true}},
 	})
 	ctx := context.Background()

@@ -24,8 +24,6 @@ type SpecDataLossField struct {
 }
 
 type USDEConfig struct {
-	// If user's config doesn't exist or doesn't specify strategy, this is the default
-	DefaultUpgradeStrategy       USDEUserStrategy    `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 	PipelineSpecDataLossFields   []SpecDataLossField `json:"pipelineSpecDataLossFields,omitempty" yaml:"pipelineSpecDataLossFields,omitempty"`
 	ISBServiceSpecDataLossFields []SpecDataLossField `json:"isbServiceSpecDataLossFields,omitempty" yaml:"isbServiceSpecDataLossFields,omitempty"`
 }
