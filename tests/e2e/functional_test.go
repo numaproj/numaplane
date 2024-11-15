@@ -141,11 +141,6 @@ var (
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
-			ContainerTemplate: &numaflowv1.ContainerTemplate{
-				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
-				},
-			},
 		},
 	}
 	ISBServiceSpecExcludedField = numaflowv1.InterStepBufferServiceSpec{
