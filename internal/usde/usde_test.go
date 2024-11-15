@@ -64,6 +64,32 @@ var defaultPipelineSpec = numaflowv1.PipelineSpec{
 	},
 }
 
+var existingPipelineSpec1 = numaflowv1.PipelineSpec{
+	InterStepBufferServiceName: "my-isbsvc",
+	Vertices: []numaflowv1.AbstractVertex{
+		{
+			Name:   "v1",
+			Source: &numaflowv1.Source{},
+		},
+		{
+			Name:   "v2",
+			Source: nil,
+		},
+	},
+}
+
+var existingPipelineSpec2 = numaflowv1.PipelineSpec{
+	InterStepBufferServiceName: "my-isbsvc",
+	Vertices: []numaflowv1.AbstractVertex{
+		{
+			Name: "v1",
+			Source: &numaflowv1.Source{
+				Generator: &numaflowv1.GeneratorSource{},
+			},
+		},
+	},
+}
+
 var volSize, _ = apiresource.ParseQuantity("10Mi")
 var memLimit, _ = apiresource.ParseQuantity("10Mi")
 var newMemLimit, _ = apiresource.ParseQuantity("20Mi")
@@ -453,6 +479,40 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyProgressive,
+		},
+		{
+			name: "existing pipeline with empty or nil map and new pipeline adding subfield map",
+			newDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := existingPipelineSpec1.DeepCopy()
+				newPipelineDef.Vertices[0].Source.Generator = &numaflowv1.GeneratorSource{}
+				newPipelineDef.Vertices[1].Source = &numaflowv1.Source{Generator: &numaflowv1.GeneratorSource{}}
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			existingDefinition: makePipelineDefinition(existingPipelineSpec1),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name: "existing pipeline with empty map and new pipeline adding subfield primitive",
+			newDefinition: func() kubernetes.GenericObject {
+				newRPU := int64(10)
+				newPipelineDef := existingPipelineSpec2.DeepCopy()
+				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			existingDefinition: makePipelineDefinition(existingPipelineSpec2),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 	}
 
