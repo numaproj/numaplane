@@ -1540,6 +1540,8 @@ data:
     - path: spec.sideInputs.container.args
     - path: spec.sideInputs.container.env
       includeSubfields: true
+    - path: spec.sideInputs.container.envfrom
+      includeSubfields: true
     - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
       includeSubfields: true
 
