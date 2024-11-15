@@ -64,6 +64,32 @@ var defaultPipelineSpec = numaflowv1.PipelineSpec{
 	},
 }
 
+var existingPipelineSpec1 = numaflowv1.PipelineSpec{
+	InterStepBufferServiceName: "my-isbsvc",
+	Vertices: []numaflowv1.AbstractVertex{
+		{
+			Name:   "v1",
+			Source: &numaflowv1.Source{},
+		},
+		{
+			Name:   "v2",
+			Source: nil,
+		},
+	},
+}
+
+var existingPipelineSpec2 = numaflowv1.PipelineSpec{
+	InterStepBufferServiceName: "my-isbsvc",
+	Vertices: []numaflowv1.AbstractVertex{
+		{
+			Name: "v1",
+			Source: &numaflowv1.Source{
+				Generator: &numaflowv1.GeneratorSource{},
+			},
+		},
+	},
+}
+
 var volSize, _ = apiresource.ParseQuantity("10Mi")
 var memLimit, _ = apiresource.ParseQuantity("10Mi")
 var newMemLimit, _ = apiresource.ParseQuantity("20Mi")
@@ -149,7 +175,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		expectedStrategy      apiv1.UpgradeStrategy
 	}{
 		{
-			name: "NoOp: empty pipeline spec excluded paths, and equivalent metadata",
+			name: "NoOp: empty pipeline spec data loss fields, and equivalent metadata",
 			newDefinition: func() kubernetes.GenericObject {
 				pipelineDef := pipelineDefn
 				pipelineDef.Annotations = map[string]string{"something": "a"}
@@ -163,15 +189,15 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: false,
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
-			name:          "empty pipeline spec excluded paths and change interStepBufferServiceName field",
+			name:          "empty pipeline spec data loss fields and change interStepBufferServiceName field",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
@@ -179,43 +205,43 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{},
-			},
-			namespaceConfig:       nil,
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND,
-		},
-		{
-			name:          "only exclude interStepBufferServiceName field (changed)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-			name:               "only exclude interStepBufferServiceName field (NOT changed)",
+			name:          "only include interStepBufferServiceName field (changed)",
+			newDefinition: pipelineDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := defaultPipelineSpec.DeepCopy()
+				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+			},
+			namespaceConfig:       nil,
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name:               "only include interStepBufferServiceName field (NOT changed)",
 			newDefinition:      pipelineDefn,
 			existingDefinition: pipelineDefn,
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: false,
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
-			name:          "only exclude interStepBufferServiceName field and change some other field (no user strategy)",
+			name:          "only include interStepBufferServiceName field and change some other field (no user strategy)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
@@ -223,15 +249,15 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-			name:          "only exclude interStepBufferServiceName field and change some other field (with invalid user strategy)",
+			name:          "only include interStepBufferServiceName field and change some other field (with invalid user strategy)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
@@ -239,15 +265,15 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-			name:          "only exclude interStepBufferServiceName field and change some other field (with valid user strategy)",
+			name:          "only include interStepBufferServiceName field and change some other field (with valid user strategy)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
@@ -255,63 +281,42 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
+		},
+		{
+			name:          "with changes in array deep map (map field)",
+			newDefinition: pipelineDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newRPU := int64(10)
+				newPipelineDef := defaultPipelineSpec.DeepCopy()
+				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator", IncludeSubfields: true}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
-			name:          "with changes in array deep map but excluded",
+			name:          "with changes in array deep map (primitive field)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newRPU := int64(10)
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
 				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
-			},
-			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyApply,
-		},
-		{
-			name:          "with changes in array deep map but excluded parent",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-				newRPU := int64(10)
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator"},
-			},
-			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyApply,
-		},
-		{
-			name:          "with changes in array deep map but one is NOT excluded",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-				newRPU := int64(10)
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.Vertices[0].Name = "new-vtx-name"
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator.rpu"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -327,15 +332,15 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"vertices.sink.log"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink.log"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
-			name:          "with changes in array deep map - detect pointer fields - parent field is excluded",
+			name:          "with changes in array deep map - detect pointer fields - parent field is included (array)",
 			newDefinition: pipelineDefn,
 			existingDefinition: func() kubernetes.GenericObject {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
@@ -344,20 +349,54 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"vertices"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name:          "with changes in array deep map - detect pointer fields - parent field is included (no subfields)",
+			newDefinition: pipelineDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := defaultPipelineSpec.DeepCopy()
+				newPipelineDef.Vertices[2].Sink.Log = nil
+				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-			name:               "excluded paths not found",
+			name:          "with changes in array deep map - detect pointer fields - parent field is included (with subfields)",
+			newDefinition: pipelineDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := defaultPipelineSpec.DeepCopy()
+				newPipelineDef.Vertices[2].Sink.Log = nil
+				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink", IncludeSubfields: true}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name:               "included paths not found",
 			newDefinition:      pipelineDefn,
 			existingDefinition: pipelineDefn,
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"vertices.source.something"},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: false,
@@ -372,13 +411,30 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:      config.PPNDStrategyID,
-				PipelineSpecExcludedPaths:   []string{"vertices.source.something"},
-				ISBServiceSpecExcludedPaths: []string{"jetstream.containerTemplate.resources.limits"},
+				DefaultUpgradeStrategy:       config.PPNDStrategyID,
+				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
+				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
+		},
+		{
+			name:          "isb test - include subfields",
+			newDefinition: isbServiceDefn,
+			existingDefinition: func() kubernetes.GenericObject {
+				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
+				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = v1.ResourceList{v1.ResourceMemory: newMemLimit}
+				return makeISBServiceDefinition(*newISBServiceSpec)
+			}(),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:       config.PPNDStrategyID,
+				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
+				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits", IncludeSubfields: true}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name: "test Annotation changes resulting in Direct Apply",
@@ -393,8 +449,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{},
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -417,12 +473,46 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.ProgressiveStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
+				DefaultUpgradeStrategy:     config.ProgressiveStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyProgressive,
+		},
+		{
+			name: "existing pipeline with empty or nil map and new pipeline adding subfield map",
+			newDefinition: func() kubernetes.GenericObject {
+				newPipelineDef := existingPipelineSpec1.DeepCopy()
+				newPipelineDef.Vertices[0].Source.Generator = &numaflowv1.GeneratorSource{}
+				newPipelineDef.Vertices[1].Source = &numaflowv1.Source{Generator: &numaflowv1.GeneratorSource{}}
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			existingDefinition: makePipelineDefinition(existingPipelineSpec1),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
+		},
+		{
+			name: "existing pipeline with empty map and new pipeline adding subfield primitive",
+			newDefinition: func() kubernetes.GenericObject {
+				newRPU := int64(10)
+				newPipelineDef := existingPipelineSpec2.DeepCopy()
+				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
+				return makePipelineDefinition(*newPipelineDef)
+			}(),
+			existingDefinition: makePipelineDefinition(existingPipelineSpec2),
+			usdeConfig: config.USDEConfig{
+				DefaultUpgradeStrategy:     config.PPNDStrategyID,
+				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+			},
+			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
+			expectedNeedsUpdating: true,
+			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 	}
 

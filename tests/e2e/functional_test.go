@@ -148,10 +148,10 @@ var (
 			},
 		},
 	}
-	ISBServiceSpecExcludedField = numaflowv1.InterStepBufferServiceSpec{
+	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: "2.9.8",
+			Version: updatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -617,10 +617,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	It("Should update the child ISBService with an excluded field", func() {
+	It("Should update the child ISBService updating a no-data-loss field", func() {
 
 		// new ISBService spec
-		rawSpec, err := json.Marshal(ISBServiceSpecExcludedField)
+		rawSpec, err := json.Marshal(ISBServiceSpecNoDataLossField)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {

@@ -18,11 +18,16 @@ package config
 
 import "fmt"
 
+type SpecDataLossField struct {
+	Path             string `json:"path" yaml:"path"`
+	IncludeSubfields bool   `json:"includeSubfields,omitempty" yaml:"includeSubfields,omitempty"`
+}
+
 type USDEConfig struct {
 	// If user's config doesn't exist or doesn't specify strategy, this is the default
-	DefaultUpgradeStrategy      USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
-	PipelineSpecExcludedPaths   []string         `json:"pipelineSpecExcludedPaths,omitempty" yaml:"pipelineSpecExcludedPaths,omitempty"`
-	ISBServiceSpecExcludedPaths []string         `json:"isbServiceSpecExcludedPaths,omitempty" yaml:"isbServiceSpecExcludedPaths,omitempty"`
+	DefaultUpgradeStrategy       USDEUserStrategy    `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
+	PipelineSpecDataLossFields   []SpecDataLossField `json:"pipelineSpecDataLossFields,omitempty" yaml:"pipelineSpecDataLossFields,omitempty"`
+	ISBServiceSpecDataLossFields []SpecDataLossField `json:"isbServiceSpecDataLossFields,omitempty" yaml:"isbServiceSpecDataLossFields,omitempty"`
 }
 
 func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
