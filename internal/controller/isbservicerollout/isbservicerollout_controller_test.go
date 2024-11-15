@@ -76,7 +76,12 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
-	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{DefaultUpgradeStrategy: config.PPNDStrategyID})
+	usdeConfig := config.USDEConfig{
+		DefaultUpgradeStrategy:       config.PPNDStrategyID,
+		ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec", IncludeSubfields: true}},
+	}
+
+	config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
