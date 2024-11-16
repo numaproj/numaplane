@@ -101,11 +101,15 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 
 	// Loop through all the data loss fields from config to see if any changes based on those fields require a data loss prevention strategy
 	for _, dataLossField := range dataLossFields {
+		// newDefField is a map starting with the first field specified in the path
+		// newIsMap describes the inner most element(s) described by the path
 		newDefField, newIsMap, err := util.ExtractPath(newDefUnstr.Object, strings.Split(dataLossField.Path, "."))
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
 
+		// existingDefField is a map starting with the first field specified in the path
+		// existingIsMap describes the inner most element(s) described by the path
 		existingDefField, existingIsMap, err := util.ExtractPath(existingDefUnstr.Object, strings.Split(dataLossField.Path, "."))
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
@@ -119,17 +123,23 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 			"existingIsMap", existingIsMap,
 		).Debug("checking data loss field differences")
 
-		// Note: if the data loss field is a map but it is nil in either the new or existing spec,
-		// the related variable ...IsMap will be false even though the underlying field is a
-		// map (since it is nil we do not know if it is truly a map).
-		// Therefore, the areDefFieldsMap will also be false.
-		areDefFieldsMap := newIsMap && existingIsMap
-
-		// If the current field is not explicitely a map (or if it is assumed from the config because IncludeSubfields would be true)
-		// and the config says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
-		// a data loss prevention strategy is needed
-		if (dataLossField.IncludeSubfields || !areDefFieldsMap) && !reflect.DeepEqual(newDefField, existingDefField) {
-			return true, upgradeStrategy, nil
+		if dataLossField.IncludeSubfields {
+			// is the definition (fields + children) at all different?
+			if !reflect.DeepEqual(newDefField, existingDefField) {
+				return true, upgradeStrategy, nil
+			}
+		} else {
+			isMap := newIsMap || existingIsMap
+			// if it's a map, since we don't care about subfields, we just need to know if it's present in one and not the other
+			if isMap {
+				if !newIsMap || !existingIsMap { // this means that one of them is nil
+					return true, upgradeStrategy, nil
+				}
+			} else {
+				if !reflect.DeepEqual(newDefField, existingDefField) {
+					return true, upgradeStrategy, nil
+				}
+			}
 		}
 	}
 
