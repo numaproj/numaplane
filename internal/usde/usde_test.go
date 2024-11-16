@@ -3,6 +3,8 @@ package usde
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -160,7 +162,12 @@ func makeISBServiceDefinition(isbServiceSpec numaflowv1.InterStepBufferServiceSp
 func Test_ResourceNeedsUpdating(t *testing.T) {
 	ctx := context.Background()
 
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../", "tests", "config")
 	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
+	assert.NoError(t, err)
 
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
 	isbServiceDefn := makeISBServiceDefinition(defaultISBServiceSpec)
@@ -460,7 +467,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyProgressive,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name: "existing pipeline with empty or nil map and new pipeline adding subfield map",

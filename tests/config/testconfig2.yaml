@@ -1,2 +1,2 @@
 logLevel: 3
-defaultUpgradeStrategy: "pause-and-drain"
+defaultUpgradeStrategy: "progressive"

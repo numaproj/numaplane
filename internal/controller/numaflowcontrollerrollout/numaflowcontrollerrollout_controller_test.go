@@ -19,6 +19,8 @@ package numaflowcontrollerrollout
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -188,6 +190,13 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
+	assert.NoError(t, err)
 
 	controllerDefinitions, err := ctlrcommon.GetNumaflowControllerDefinitions("../../../tests/config/controller-definitions-config.yaml")
 	assert.Nil(t, err)
