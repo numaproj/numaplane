@@ -119,10 +119,14 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 			"existingIsMap", existingIsMap,
 		).Debug("checking data loss field differences")
 
+		// Note: if the data loss field is a map but it is nil in either the new or existing spec,
+		// the related variable ...IsMap will be false even though the underlying field is a
+		// map (since it is nil we do not know if it is truly a map).
+		// Therefore, the areDefFieldsMap will also be false.
 		areDefFieldsMap := newIsMap && existingIsMap
 
-		// If the current field is not a map or if it is (assumed from the config if IncludeSubfields is true) and the config
-		// says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
+		// If the current field is not explicitely a map (or if it is assumed from the config because IncludeSubfields would be true)
+		// and the config says to include comparing the subfields, then compare the fields/maps and, if the fields/maps are different,
 		// a data loss prevention strategy is needed
 		if (dataLossField.IncludeSubfields || !areDefFieldsMap) && !reflect.DeepEqual(newDefField, existingDefField) {
 			return true, upgradeStrategy, nil
