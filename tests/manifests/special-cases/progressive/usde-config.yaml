@@ -5,7 +5,6 @@ metadata:
   labels:
     numaplane.numaproj.io/config: usde-config
 data:
-  defaultUpgradeStrategy: "progressive"
   pipelineSpecDataLossFields: |
     # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
     - path: spec.edges.from

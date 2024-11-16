@@ -19,6 +19,8 @@ package pipelinerollout
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -491,8 +493,14 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
+	assert.NoError(t, err)
+
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		DefaultUpgradeStrategy:     config.PPNDStrategyID,
 		PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices", IncludeSubfields: true}},
 	})
 
@@ -731,8 +739,14 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		DefaultUpgradeStrategy:     config.ProgressiveStrategyID,
 		PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices", IncludeSubfields: true}},
 	})
 	ctx := context.Background()

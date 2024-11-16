@@ -19,6 +19,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type USDEUserStrategy string
@@ -39,6 +40,10 @@ func (s *USDEUserStrategy) UnmarshalJSON(data []byte) (err error) {
 		ProgressiveStrategyID: {},
 		PPNDStrategyID:        {},
 		NoStrategyID:          {}}
+
+	if strings.TrimSpace(usdeUserStrategyStr) == "" {
+		usdeUserStrategyStr = string(NoStrategyID)
+	}
 
 	// Make sure the string is one of the possible strategy values
 	_, found := allowedValues[USDEUserStrategy(usdeUserStrategyStr)]

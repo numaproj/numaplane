@@ -162,7 +162,8 @@ func TestGetConfigManagerInstanceSingleton(t *testing.T) {
 
 func TestCloneWithSerialization(t *testing.T) {
 	original := &GlobalConfig{
-		LogLevel: 0,
+		LogLevel:               0,
+		DefaultUpgradeStrategy: NoStrategyID,
 	}
 
 	cloned, err := CloneWithSerialization(original)

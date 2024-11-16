@@ -242,7 +242,12 @@ func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStra
 
 	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
 
-	var userUpgradeStrategy config.USDEUserStrategy = config.GetConfigManagerInstance().GetUSDEConfig().DefaultUpgradeStrategy
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return config.NoStrategyID, fmt.Errorf("error getting the global config: %v", err)
+	}
+
+	var userUpgradeStrategy config.USDEUserStrategy = globalConfig.DefaultUpgradeStrategy
 	if userUpgradeStrategy == "" {
 		userUpgradeStrategy = config.NoStrategyID
 	}

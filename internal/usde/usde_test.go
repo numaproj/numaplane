@@ -3,6 +3,8 @@ package usde
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -160,7 +162,12 @@ func makeISBServiceDefinition(isbServiceSpec numaflowv1.InterStepBufferServiceSp
 func Test_ResourceNeedsUpdating(t *testing.T) {
 	ctx := context.Background()
 
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../", "tests", "config")
 	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
+	assert.NoError(t, err)
 
 	pipelineDefn := makePipelineDefinition(defaultPipelineSpec)
 	isbServiceDefn := makeISBServiceDefinition(defaultISBServiceSpec)
@@ -189,7 +196,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
@@ -205,7 +211,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
@@ -221,7 +226,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
@@ -233,7 +237,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      pipelineDefn,
 			existingDefinition: pipelineDefn,
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
@@ -249,7 +252,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
@@ -265,7 +267,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
@@ -281,7 +282,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -298,7 +298,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator", IncludeSubfields: true}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -315,7 +314,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator.rpu"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -332,7 +330,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink.log"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -349,7 +346,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -366,7 +362,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -383,7 +378,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink", IncludeSubfields: true}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -395,7 +389,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      pipelineDefn,
 			existingDefinition: pipelineDefn,
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -411,7 +404,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:       config.PPNDStrategyID,
 				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
 				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits"}},
 			},
@@ -428,7 +420,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:       config.PPNDStrategyID,
 				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
 				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits", IncludeSubfields: true}},
 			},
@@ -449,7 +440,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{},
 			},
 			namespaceConfig:       nil,
@@ -473,12 +463,11 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.ProgressiveStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyProgressive,
+			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name: "existing pipeline with empty or nil map and new pipeline adding subfield map",
@@ -490,7 +479,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec1),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
@@ -507,7 +495,6 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec2),
 			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:     config.PPNDStrategyID,
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
