@@ -289,16 +289,16 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	}
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
-		if mvNeedsToUpdate {
-			numaLogger.Debug("processing MonoVertex with Progressive")
-			done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
-			if err != nil {
-				return err
-			}
-			if done {
-				r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
-			}
+		//if mvNeedsToUpdate {
+		numaLogger.Debug("processing MonoVertex with Progressive")
+		done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		if err != nil {
+			return err
 		}
+		if done {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
+		}
+		//}
 
 	default:
 		if mvNeedsToUpdate {

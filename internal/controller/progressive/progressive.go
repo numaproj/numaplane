@@ -58,33 +58,42 @@ type progressiveController interface {
 
 // return whether we're done, and error if any
 func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommon.RolloutObject,
-	existingPromotedChild *kubernetes.GenericObject, controller progressiveController, c client.Client) (bool, error) {
+	existingPromotedChild *kubernetes.GenericObject, promotedDifference bool, controller progressiveController, c client.Client) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+	// is there currently an "upgrading" child
+	currentUpgradingChild, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return false, err
 	}
 
-	// Get the Upgrading object to see if it exists
-	existingUpgradingChildDef, err := kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
-	if err != nil {
-		// create object as it doesn't exist
-		if apierrors.IsNotFound(err) {
-			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.Kind, newUpgradingChildDef.Namespace, newUpgradingChildDef.Name)
-			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
+	if promotedDifference && currentUpgradingChild == nil {
+		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+		if err != nil {
 			return false, err
-		} else {
-			return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.Kind, err)
+		}
+		// TODO: I removed the call to Merge() - do we need it?
+
+		// Create it, first making sure it doesn't exist by checking the live K8S API
+		currentUpgradingChild, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+		if err != nil {
+			// create object as it doesn't exist
+			if apierrors.IsNotFound(err) {
+				numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.Kind, newUpgradingChildDef.Namespace, newUpgradingChildDef.Name)
+				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+				return false, err
+			} else {
+				return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.Kind, err)
+			}
 		}
 	}
-	newUpgradingChildDef, err = controller.Merge(existingUpgradingChildDef, newUpgradingChildDef)
-	if err != nil {
-		return false, err
+	if currentUpgradingChild == nil { // nothing to do
+		return true, err
 	}
 
-	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, newUpgradingChildDef, existingUpgradingChildDef, c)
+	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChild, c)
 	if err != nil {
 		return false, err
 	}
@@ -93,6 +102,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
+// if one already exists, use that
 func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController) (*kubernetes.GenericObject, error) {
 
 	numaLogger := logger.FromContext(ctx)
@@ -112,6 +122,25 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 	return upgradingChild, nil
 }
 
+func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState) (*kubernetes.GenericObject, error) {
+	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
+		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
+		common.LabelKeyUpgradeState, string(upgradeState),
+	), "")
+
+	if err != nil {
+		return nil, err
+	}
+	if len(children) > 1 {
+		// TODO: find the latest indexed one
+	} else if len(children) == 1 {
+		return children[0], nil
+	} else {
+		return nil, nil
+	}
+}
+
+// TODO: can this function make use of the one above?
 func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState string) (string, error) {
 	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
@@ -138,7 +167,7 @@ func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
-	existingPromotedChildDef, desiredUpgradingChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
+	existingPromotedChildDef, existingUpgradingChildDef *kubernetes.GenericObject,
 	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -153,6 +182,10 @@ func processUpgradingChild(
 	case "Failed":
 
 		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation)
+
+		// TODO: check if there's a difference between the desired spec and the "upgrading" one
+		// if so, mark the existing one for garbage collection and then create a new upgrading one
+
 		return false, nil
 
 	case "Running":
@@ -166,10 +199,7 @@ func processUpgradingChild(
 			return false, err
 		}
 
-		// TODO: if any of the below items fail, then we return false which keeps us in UpgradeStrategyInProgress=Progressive, but due to "if pipelineNeedsToUpdate" check in pipelinerollout_controller.go, we never come back here
-		// to complete the below logic
-		// Consider upgrading to "promoted" as the last thing?
-
+		// TODO: what if we fail before this line? It seems we will have 2 promoted pipelines in that case - maybe our logic should always assume the highest index "promoted" one is the best and then garbage collect the others?
 		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
@@ -184,10 +214,9 @@ func processUpgradingChild(
 		return true, nil
 	default:
 		// Ensure the latest spec is applied
-		// TODO: this needs revisiting - a race condition means we could deem this "Running" prior to latest version
-		// being reconciled
+		// TODO: instead of all of this, under the "Failed" section we can try creating a new one
 
-		childNeedsToUpdate, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef) // TODO: if we decide not to drain the upgrading one on failure, I think we can change this to DeepEqual() check
+		/*childNeedsToUpdate, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef) // TODO: if we decide not to drain the upgrading one on failure, I think we can change this to DeepEqual() check
 		if err != nil {
 			return false, err
 		}
@@ -198,7 +227,7 @@ func processUpgradingChild(
 			if err != nil {
 				return false, err
 			}
-		}
+		}*/
 		//continue (re-enqueue)
 		return false, nil
 	}
