@@ -3,12 +3,9 @@ package usde
 import (
 	"context"
 	"encoding/json"
-<<<<<<< HEAD
+	"log"
 	"os"
 	"path/filepath"
-=======
-	"log"
->>>>>>> chandankumar4/controller_refactor
 	"testing"
 	"time"
 
@@ -186,19 +183,11 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		expectedStrategy      apiv1.UpgradeStrategy
 	}{
 		{
-<<<<<<< HEAD
 			name: "NoOp: empty pipeline spec data loss fields, and equivalent metadata",
-			newDefinition: func() kubernetes.GenericObject {
-				pipelineDef := pipelineDefn
-				pipelineDef.Annotations = map[string]string{"something": "a"}
-				pipelineDef.Labels = map[string]string{"something": "a"}
-=======
-			name: "NoOp: empty pipeline spec excluded paths, and equivalent metadata",
 			newDefinition: func() unstructured.Unstructured {
 				pipelineDef := *pipelineDefn.DeepCopy()
 				pipelineDef.SetAnnotations(map[string]string{"something": "a"})
 				pipelineDef.SetLabels(map[string]string{"something": "a"})
->>>>>>> chandankumar4/controller_refactor
 				return pipelineDef
 			}(),
 			existingDefinition: func() unstructured.Unstructured {
@@ -215,52 +204,24 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
-<<<<<<< HEAD
 			name:          "empty pipeline spec data loss fields and change interStepBufferServiceName field",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "empty pipeline spec excluded paths and change interStepBufferServiceName field",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-<<<<<<< HEAD
 				PipelineSpecDataLossFields: []config.SpecDataLossField{},
-=======
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{},
-			},
-			namespaceConfig:       nil,
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyPPND,
-		},
-		{
-			name:          "only exclude interStepBufferServiceName field (changed)",
-			newDefinition: *pipelineDefn.DeepCopy(),
-			existingDefinition: func() unstructured.Unstructured {
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName"},
->>>>>>> chandankumar4/controller_refactor
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-<<<<<<< HEAD
 			name:          "only include interStepBufferServiceName field (changed)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
+			newDefinition: *pipelineDefn.DeepCopy(),
+			existingDefinition: func() unstructured.Unstructured {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
 				return makePipelineDefinition(*newPipelineDef)
@@ -274,13 +235,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name:               "only include interStepBufferServiceName field (NOT changed)",
-			newDefinition:      pipelineDefn,
-			existingDefinition: pipelineDefn,
-=======
-			name:               "only exclude interStepBufferServiceName field (NOT changed)",
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
->>>>>>> chandankumar4/controller_refactor
 			usdeConfig: config.USDEConfig{
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
 			},
@@ -289,15 +245,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyNoOp,
 		},
 		{
-<<<<<<< HEAD
 			name:          "only include interStepBufferServiceName field and change some other field (no user strategy)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "only exclude interStepBufferServiceName field and change some other field (no user strategy)",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[0].Name = "new-vtx-name"
 				return makePipelineDefinition(*newPipelineDef)
@@ -310,15 +260,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-<<<<<<< HEAD
 			name:          "only include interStepBufferServiceName field and change some other field (with invalid user strategy)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "only exclude interStepBufferServiceName field and change some other field (with invalid user strategy)",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[0].Name = "new-vtx-name"
 				return makePipelineDefinition(*newPipelineDef)
@@ -331,15 +275,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-<<<<<<< HEAD
 			name:          "only include interStepBufferServiceName field and change some other field (with valid user strategy)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "only exclude interStepBufferServiceName field and change some other field (with valid user strategy)",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[0].Name = "new-vtx-name"
 				return makePipelineDefinition(*newPipelineDef)
@@ -353,8 +291,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name:          "with changes in array deep map (map field)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
+			newDefinition: *pipelineDefn.DeepCopy(),
+			existingDefinition: func() unstructured.Unstructured {
 				newRPU := int64(10)
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
@@ -368,64 +306,16 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
-<<<<<<< HEAD
 			name:          "with changes in array deep map (primitive field)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "with changes in array deep map but excluded",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newRPU := int64(10)
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-<<<<<<< HEAD
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator.rpu"}},
-=======
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
-			},
-			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyApply,
-		},
-		{
-			name:          "with changes in array deep map but excluded parent",
-			newDefinition: *pipelineDefn.DeepCopy(),
-			existingDefinition: func() unstructured.Unstructured {
-				newRPU := int64(10)
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator"},
-			},
-			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
-			expectedNeedsUpdating: true,
-			expectedStrategy:      apiv1.UpgradeStrategyApply,
-		},
-		{
-			name:          "with changes in array deep map but one is NOT excluded",
-			newDefinition: *pipelineDefn.DeepCopy(),
-			existingDefinition: func() unstructured.Unstructured {
-				newRPU := int64(10)
-				newPipelineDef := defaultPipelineSpec.DeepCopy()
-				newPipelineDef.Vertices[0].Name = "new-vtx-name"
-				newPipelineDef.InterStepBufferServiceName = "changed-isbsvc"
-				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
-				return makePipelineDefinition(*newPipelineDef)
-			}(),
-			usdeConfig: config.USDEConfig{
-				DefaultUpgradeStrategy:    config.PPNDStrategyID,
-				PipelineSpecExcludedPaths: []string{"interStepBufferServiceName", "vertices.source.generator.rpu"},
->>>>>>> chandankumar4/controller_refactor
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -448,15 +338,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyPPND,
 		},
 		{
-<<<<<<< HEAD
 			name:          "with changes in array deep map - detect pointer fields - parent field is included (array)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
-=======
-			name:          "with changes in array deep map - detect pointer fields - parent field is excluded",
 			newDefinition: *pipelineDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
->>>>>>> chandankumar4/controller_refactor
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[2].Sink.Log = nil
 				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
@@ -471,8 +355,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name:          "with changes in array deep map - detect pointer fields - parent field is included (no subfields)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
+			newDefinition: *pipelineDefn.DeepCopy(),
+			existingDefinition: func() unstructured.Unstructured {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[2].Sink.Log = nil
 				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
@@ -486,10 +370,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			expectedStrategy:      apiv1.UpgradeStrategyApply,
 		},
 		{
-<<<<<<< HEAD
 			name:          "with changes in array deep map - detect pointer fields - parent field is included (with subfields)",
-			newDefinition: pipelineDefn,
-			existingDefinition: func() kubernetes.GenericObject {
+			newDefinition: *pipelineDefn.DeepCopy(),
+			existingDefinition: func() unstructured.Unstructured {
 				newPipelineDef := defaultPipelineSpec.DeepCopy()
 				newPipelineDef.Vertices[2].Sink.Log = nil
 				newPipelineDef.Vertices[2].Sink.Blackhole = &numaflowv1.Blackhole{}
@@ -504,13 +387,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name:               "included paths not found",
-			newDefinition:      pipelineDefn,
-			existingDefinition: pipelineDefn,
-=======
-			name:               "excluded paths not found",
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
->>>>>>> chandankumar4/controller_refactor
 			usdeConfig: config.USDEConfig{
 				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
 			},
@@ -536,8 +414,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name:          "isb test - include subfields",
-			newDefinition: isbServiceDefn,
-			existingDefinition: func() kubernetes.GenericObject {
+			newDefinition: *isbServiceDefn.DeepCopy(),
+			existingDefinition: func() unstructured.Unstructured {
 				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
 				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = v1.ResourceList{v1.ResourceMemory: newMemLimit}
 				return makeISBServiceDefinition(*newISBServiceSpec)
@@ -594,7 +472,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name: "existing pipeline with empty or nil map and new pipeline adding subfield map",
-			newDefinition: func() kubernetes.GenericObject {
+			newDefinition: func() unstructured.Unstructured {
 				newPipelineDef := existingPipelineSpec1.DeepCopy()
 				newPipelineDef.Vertices[0].Source.Generator = &numaflowv1.GeneratorSource{}
 				newPipelineDef.Vertices[1].Source = &numaflowv1.Source{Generator: &numaflowv1.GeneratorSource{}}
@@ -610,7 +488,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 		},
 		{
 			name: "existing pipeline with empty map and new pipeline adding subfield primitive",
-			newDefinition: func() kubernetes.GenericObject {
+			newDefinition: func() unstructured.Unstructured {
 				newRPU := int64(10)
 				newPipelineDef := existingPipelineSpec2.DeepCopy()
 				newPipelineDef.Vertices[0].Source.Generator.RPU = &newRPU
