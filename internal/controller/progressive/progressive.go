@@ -101,7 +101,6 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
-
 func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
