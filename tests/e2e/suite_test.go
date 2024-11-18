@@ -49,12 +49,11 @@ var _ = BeforeSuite(func() {
 	var err error
 	// make output directory to store temporary outputs; if it's there from before delete it
 	disableTestArtifacts = os.Getenv("DISABLE_TEST_ARTIFACTS")
+	// pod logs env
+	enablePodLogs = os.Getenv("ENABLE_POD_LOGS")
 	if disableTestArtifacts != "true" {
 		setupOutputDir()
 	}
-
-	// pod logs env
-	enablePodLogs = os.Getenv("ENABLE_POD_LOGS")
 
 	stopCh = make(chan struct{})
 
@@ -193,13 +192,13 @@ func setupOutputDir() {
 			err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
 			Expect(err).NotTo(HaveOccurred())
 		}
-	}
 
-	// output/pods contains pod logs for each resource
-	if enablePodLogs == "true" {
-		for _, dir := range podDirs {
-			err = os.MkdirAll(dir, os.ModePerm)
-			Expect(err).NotTo(HaveOccurred())
+		// output/pods contains pod logs for each resource
+		if enablePodLogs == "true" {
+			for _, dir := range podDirs {
+				err = os.MkdirAll(dir, os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
 		}
 	}
 
