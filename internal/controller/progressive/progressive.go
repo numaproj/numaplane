@@ -177,33 +177,33 @@ func processUpgradingChild(
 	c client.Client,
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
+
+	assessment, err := assessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 
-	numaLogger.Debugf("Upgrading child %s/%s is in phase %s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), upgradingObjectStatus.Phase)
+	switch assessment {
+	case AssessmentResultFailure:
 
-	switch string(upgradingObjectStatus.Phase) {
-	case "Failed":
+		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetObjectMeta().Generation)
 
-		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation)
-
-		// TODO: check if there's a difference between the desired spec and the "upgrading" one
-		// this needs to account for both Spec and Metadata
-		// remember to call Merge() here
-
-		//if !reflect.DeepEqual(latestUnstructuredSpec, existingUpgradingUnstructured) {
+		// check if there are any new incoming changes to the desired spec
+		latestUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+		if err != nil {
+			return false, err
+		}
+		latestUpgradingChildDef, err = controller.Merge(existingUpgradingChildDef, latestUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, latestUpgradingChildDef)
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		//}
 		return false, nil
 
-	case "Running":
-		if !isNumaflowChildReady(&upgradingObjectStatus) {
-			//continue (re-enqueue)
-			return false, nil
-		}
+	case AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef, rolloutObject)
 		if err != nil {
