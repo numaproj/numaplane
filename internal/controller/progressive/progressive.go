@@ -63,7 +63,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 
 	numaLogger := logger.FromContext(ctx)
 
-	// is there currently an "upgrading" child
+	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return false, err
@@ -90,6 +90,14 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	}
 	if currentUpgradingChildDef == nil { // nothing to do
 		return true, err
+	}
+
+	// There's already an Upgrading child, now process it
+
+	// Get the live resource so we don't have issues with an outdated cache
+	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildPluralName())
+	if err != nil {
+		return false, err
 	}
 
 	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
@@ -199,7 +207,27 @@ func processUpgradingChild(
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, latestUpgradingChildDef)
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
-		//}
+		if needsUpdating {
+			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef, rolloutObject)
+			if err != nil {
+				return false, err
+			}
+
+			// Create it, first making sure it doesn't exist by checking the live K8S API
+			currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+			if err != nil {
+				// create object as it doesn't exist
+				if apierrors.IsNotFound(err) {
+					numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
+					err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+					return false, err
+				} else {
+					return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.GetKind(), err)
+				}
+			}
+
+		}
+
 		return false, nil
 
 	case AssessmentResultSuccess:
