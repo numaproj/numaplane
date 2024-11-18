@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/util"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	"github.com/numaproj/numaplane/internal/util/logger"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // this file contains utility functions for working with Unstructured types
@@ -55,9 +54,17 @@ func GetLiveResource(
 	}
 
 	unstruc, err := dynamicClient.Resource(gvr).Namespace(object.GetNamespace()).Get(ctx, object.GetName(), metav1.GetOptions{})
-	if unstruc != nil {
-		numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
+	if err != nil {
+		return nil, err
 	}
+	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
+
+	var resultObject map[string]interface{}
+	if err := util.StructToStruct(unstruc.Object, &resultObject); err != nil {
+		return nil, err
+	}
+	unstruc.Object = resultObject
+
 	return unstruc, err
 }
 

@@ -16,17 +16,10 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-// ResourceNeedsUpdatingUnstructured calculates the upgrade strategy to use during the resource reconciliation process based on configuration and user preference.
-// TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
-func ResourceNeedsUpdatingUnstructured(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
-	return ResourceNeedsUpdating(ctx, newDef, existingDef)
-}
-
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns whether an update is needed and the strategy to use
 func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
-
 	numaLogger := logger.FromContext(ctx)
 
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
