@@ -291,6 +291,22 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	}
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
+
+		// don't risk out-of-date cache while performing Progressive strategy - get
+		// the most current version of the MonoVertex just in case
+		existingMonoVertexDef, err = kubernetes.GetLiveResource(ctx, newMonoVertexDef, "monovertices")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("monoVertexDefinition", *existingMonoVertexDef).Warn("MonoVertex not found.")
+			} else {
+				return fmt.Errorf("error getting MonoVertex for status processing: %v", err)
+			}
+		}
+		newMonoVertexDef, err = r.Merge(existingMonoVertexDef, newMonoVertexDef)
+		if err != nil {
+			return err
+		}
+
 		//if mvNeedsToUpdate {
 		numaLogger.Debug("processing MonoVertex with Progressive")
 		done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
