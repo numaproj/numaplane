@@ -53,6 +53,9 @@ var _ = BeforeSuite(func() {
 		setupOutputDir()
 	}
 
+	// pod logs env
+	enablePodLogs = os.Getenv("ENABLE_POD_LOGS")
+
 	stopCh = make(chan struct{})
 
 	ppnd = os.Getenv("PPND")
@@ -107,6 +110,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	if disableTestArtifacts != "true" {
+
 		wg.Add(1)
 		go watchPods()
 
@@ -115,13 +119,17 @@ var _ = BeforeSuite(func() {
 
 		wg.Add(1)
 		go watchVertices()
+
+		if enablePodLogs == "true" {
+			wg.Add(1)
+			go watchPodLogs(kubeClient, Namespace, NumaplaneLabel)
+
+			wg.Add(1)
+			go watchPodLogs(kubeClient, Namespace, NumaflowLabel)
+		}
+
 	}
 
-	// wg.Add(1)
-	// go watchPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager")
-
-	wg.Add(1)
-	go watchPodLogs(kubeClient, Namespace, "app.kubernetes.io/part-of=numaflow")
 })
 
 var _ = AfterSuite(func() {
@@ -129,9 +137,9 @@ var _ = AfterSuite(func() {
 	cancel()
 	By("tearing down test environment")
 	close(stopCh)
-	if disableTestArtifacts != "true" {
-		getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
-	}
+	// if disableTestArtifacts != "true" {
+	// 	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
+	// }
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
@@ -141,9 +149,9 @@ var _ = AfterEach(func() {
 
 	report := CurrentSpecReport()
 	if report.Failed() {
-		if disableTestArtifacts != "true" {
-			getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
-		}
+		// if disableTestArtifacts != "true" {
+		// 	getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
+		// }
 		AbortSuite("Test spec has failed, aborting suite run")
 	}
 
@@ -155,17 +163,23 @@ func setupOutputDir() {
 		dirs = []string{ResourceChangesPipelineOutputPath, ResourceChangesISBServiceOutputPath,
 			ResourceChangesMonoVertexOutputPath, ResourceChangesNumaflowControllerOutputPath}
 		podDirs = []string{PodLogsPipelineOutputPath, PodLogsISBServiceOutputPath,
-			PodLogsNumaflowControllerOutputPath, PodLogsMonoVertexOutputPath}
+			PodLogsNumaflowControllerOutputPath, PodLogsMonoVertexOutputPath, PodLogsNumaplaneControllerOutputPath}
 	)
 
+	// clear out prior runs output files
 	directory := "output"
 	_, err := os.Stat(directory)
 	if err == nil {
 		err = os.RemoveAll(directory)
 		Expect(err).NotTo(HaveOccurred())
 	}
-	err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
-	Expect(err).NotTo(HaveOccurred())
+
+	// WILL REMOVE LATER AFTER PR REVIEW
+	// output/controllers contains controller logs
+	// err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
+	// Expect(err).NotTo(HaveOccurred())
+
+	// output/resources contains `kubectl get` output for each resource
 	if disableTestArtifacts != "true" {
 		for _, dir := range dirs {
 			if dir == ResourceChangesPipelineOutputPath {
@@ -181,9 +195,12 @@ func setupOutputDir() {
 		}
 	}
 
-	for _, dir := range podDirs {
-		err = os.MkdirAll(dir, os.ModePerm)
-		Expect(err).NotTo(HaveOccurred())
+	// output/pods contains pod logs for each resource
+	if enablePodLogs == "true" {
+		for _, dir := range podDirs {
+			err = os.MkdirAll(dir, os.ModePerm)
+			Expect(err).NotTo(HaveOccurred())
+		}
 	}
 
 }

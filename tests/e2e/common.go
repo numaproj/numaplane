@@ -52,29 +52,30 @@ var (
 
 	ppnd                 string
 	disableTestArtifacts string
+	enablePodLogs        string
 )
 
 const (
 	Namespace = "numaplane-system"
 
 	ControllerOutputPath = "output/controllers"
-	// ResourceChangesOutputPath = "output/resources"
 
 	ResourceChangesPipelineOutputPath           = "output/resources/pipelinerollouts"
 	ResourceChangesISBServiceOutputPath         = "output/resources/isbservicerollouts"
 	ResourceChangesMonoVertexOutputPath         = "output/resources/monovertexrollouts"
 	ResourceChangesNumaflowControllerOutputPath = "output/resources/numaflowcontrollerrollouts"
 
-	PodLogsPipelineOutputPath           = "output/pods/pipelinerollouts"
-	PodLogsISBServiceOutputPath         = "output/pods/isbservicerollouts"
-	PodLogsMonoVertexOutputPath         = "output/pods/monovertexrollouts"
-	PodLogsNumaflowControllerOutputPath = "output/pods/numaflowcontrollerrollouts"
+	PodLogsPipelineOutputPath            = "output/logs/pipelinerollouts"
+	PodLogsISBServiceOutputPath          = "output/logs/isbservicerollouts"
+	PodLogsMonoVertexOutputPath          = "output/logs/monovertexrollouts"
+	PodLogsNumaflowControllerOutputPath  = "output/logs/numaflowcontrollerrollouts"
+	PodLogsNumaplaneControllerOutputPath = "output/logs/numaplanecontroller"
 
 	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
 	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
 
 	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
-	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow, app.kubernetes.io/component=controller-manager"
+	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow"
 
 	LogSpacer = "================================"
 )
@@ -174,33 +175,16 @@ func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 		return
 	}
 
-	// remove later - pod list testing
-	// names := make(map[string]string)
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
 			if event.Type == watch.Modified {
 				pod := event.Object.(*corev1.Pod)
-				// names[pod.Name] = "test"
 				for _, container := range pod.Spec.Containers {
 					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
 				}
 			}
 		case <-stopCh:
-			// file, err := os.OpenFile("pods.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			// if err != nil {
-			// 	fmt.Printf("Failed to open log file: %v\n", err)
-			// 	return
-			// }
-			// defer file.Close()
-
-			// updateLog := fmt.Sprintf("%v\n", names)
-			// _, err = file.WriteString(updateLog)
-			// if err != nil {
-			// 	fmt.Printf("Failed to write to log file: %v\n", err)
-			// 	return
-			// }
 			return
 		}
 	}
@@ -257,6 +241,8 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsNumaflowControllerOutputPath, podName, containerName)
 				} else if strings.Contains(podName, "monovertex") {
 					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsMonoVertexOutputPath, podName, containerName)
+				} else if strings.Contains(podName, "numaplane") {
+					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsNumaplaneControllerOutputPath, podName, containerName)
 				}
 
 				file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -281,7 +267,7 @@ func watchPods() {
 
 	ctx := context.Background()
 	defer wg.Done()
-	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/part-of=numaflow"})
+	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: NumaflowLabel})
 	if err != nil {
 		fmt.Printf("Failed to start watcher: %v\n", err)
 		return
