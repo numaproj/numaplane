@@ -1,9 +1,11 @@
 package e2e
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,6 +64,11 @@ const (
 	ResourceChangesISBServiceOutputPath         = "output/resources/isbservicerollouts"
 	ResourceChangesMonoVertexOutputPath         = "output/resources/monovertexrollouts"
 	ResourceChangesNumaflowControllerOutputPath = "output/resources/numaflowcontrollerrollouts"
+
+	PodLogsPipelineOutputPath           = "output/pods/pipelinerollouts"
+	PodLogsISBServiceOutputPath         = "output/pods/isbservicerollouts"
+	PodLogsMonoVertexOutputPath         = "output/pods/monovertexrollouts"
+	PodLogsNumaflowControllerOutputPath = "output/pods/numaflowcontrollerrollouts"
 
 	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
 	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
@@ -157,6 +165,116 @@ func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerNa
 		}
 	}
 
+}
+
+func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
+	watcher, err := client.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+	if err != nil {
+		fmt.Printf("Error listing pods: %v\n", err)
+		return
+	}
+
+	// remove later - pod list testing
+	// names := make(map[string]string)
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				pod := event.Object.(*corev1.Pod)
+				// names[pod.Name] = "test"
+				for _, container := range pod.Spec.Containers {
+					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
+				}
+			}
+		case <-stopCh:
+			// file, err := os.OpenFile("pods.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			// if err != nil {
+			// 	fmt.Printf("Failed to open log file: %v\n", err)
+			// 	return
+			// }
+			// defer file.Close()
+
+			// updateLog := fmt.Sprintf("%v\n", names)
+			// _, err = file.WriteString(updateLog)
+			// if err != nil {
+			// 	fmt.Printf("Failed to write to log file: %v\n", err)
+			// 	return
+			// }
+			return
+		}
+	}
+
+}
+
+func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, podName, containerName string, stopCh <-chan struct{}) {
+	var retryBackOff = wait.Backoff{
+		Factor:   1,
+		Jitter:   0,
+		Steps:    10,
+		Duration: time.Second * 1,
+	}
+
+	go func() {
+		var stream io.ReadCloser
+		err := wait.ExponentialBackoffWithContext(ctx, retryBackOff, func(_ context.Context) (done bool, err error) {
+			stream, err = client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{Follow: true, Container: containerName}).Stream(ctx)
+			if err == nil {
+				return true, nil
+			}
+
+			fmt.Printf("Got error %v, retrying.\n", err)
+			return false, nil
+		})
+
+		if err != nil {
+			log.Fatalf("Failed to stream pod %q logs: %v", podName, err)
+		}
+		defer func() { _ = stream.Close() }()
+
+		s := bufio.NewScanner(stream)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopCh:
+				return
+			default:
+				if !s.Scan() {
+					if s.Err() != nil {
+						fmt.Printf("Error streaming pod %q logs: %v", podName, s.Err())
+					}
+					return
+				}
+				data := s.Bytes()
+
+				var fileName string
+				if strings.Contains(podName, "pipeline") {
+					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsPipelineOutputPath, podName, containerName)
+				} else if strings.Contains(podName, "isbsvc") {
+					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsISBServiceOutputPath, podName, containerName)
+				} else if strings.Contains(podName, "numaflow") {
+					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsNumaflowControllerOutputPath, podName, containerName)
+				} else if strings.Contains(podName, "monovertex") {
+					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsMonoVertexOutputPath, podName, containerName)
+				}
+
+				file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Printf("Failed to open log file: %v\n", err)
+					return
+				}
+				defer file.Close()
+
+				updateLog := fmt.Sprintf("%s\n", string(data))
+				_, err = file.WriteString(updateLog)
+				if err != nil {
+					fmt.Printf("Failed to write to log file: %v\n", err)
+					return
+				}
+			}
+		}
+	}()
 }
 
 func watchPods() {

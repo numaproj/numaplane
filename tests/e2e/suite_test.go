@@ -117,6 +117,11 @@ var _ = BeforeSuite(func() {
 		go watchVertices()
 	}
 
+	// wg.Add(1)
+	// go watchPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager")
+
+	wg.Add(1)
+	go watchPodLogs(kubeClient, Namespace, "app.kubernetes.io/part-of=numaflow")
 })
 
 var _ = AfterSuite(func() {
@@ -146,8 +151,12 @@ var _ = AfterEach(func() {
 
 func setupOutputDir() {
 
-	var dirs = []string{ResourceChangesPipelineOutputPath, ResourceChangesISBServiceOutputPath,
-		ResourceChangesMonoVertexOutputPath, ResourceChangesNumaflowControllerOutputPath}
+	var (
+		dirs = []string{ResourceChangesPipelineOutputPath, ResourceChangesISBServiceOutputPath,
+			ResourceChangesMonoVertexOutputPath, ResourceChangesNumaflowControllerOutputPath}
+		podDirs = []string{PodLogsPipelineOutputPath, PodLogsISBServiceOutputPath,
+			PodLogsNumaflowControllerOutputPath, PodLogsMonoVertexOutputPath}
+	)
 
 	directory := "output"
 	_, err := os.Stat(directory)
@@ -170,6 +179,11 @@ func setupOutputDir() {
 			err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
 			Expect(err).NotTo(HaveOccurred())
 		}
+	}
+
+	for _, dir := range podDirs {
+		err = os.MkdirAll(dir, os.ModePerm)
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 }
