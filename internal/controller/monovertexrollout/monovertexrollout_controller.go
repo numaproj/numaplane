@@ -19,6 +19,7 @@ package monovertexrollout
 import (
 	"context"
 	"fmt"
+
 	"reflect"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ import (
 	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -216,7 +218,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	}
 
 	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newMonoVertexDef.Namespace, Name: newMonoVertexDef.Name})
+		k8stypes.NamespacedName{Namespace: newMonoVertexDef.GetNamespace(), Name: newMonoVertexDef.GetName()})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
@@ -251,7 +253,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 }
 
 func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
-	existingMonoVertexDef, newMonoVertexDef *kubernetes.GenericObject, syncStartTime time.Time) error {
+	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) error {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -348,22 +350,21 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
-	resultMonoVertex.Spec = *newMonoVertex.Spec.DeepCopy()
 
-	if resultMonoVertex.Annotations == nil {
-		resultMonoVertex.Annotations = map[string]string{}
+	var specAsMap map[string]interface{}
+	if err := util.StructToStruct(newMonoVertex.Object["spec"], &specAsMap); err != nil {
+		return resultMonoVertex, fmt.Errorf("failed to get spec from new MonoVertex: %w", err)
 	}
-	for key, val := range newMonoVertex.Annotations {
-		resultMonoVertex.Annotations[key] = val
+	resultMonoVertex.Object["spec"] = specAsMap
+
+	if newMonoVertex.GetAnnotations() != nil {
+		resultMonoVertex.SetAnnotations(newMonoVertex.GetAnnotations())
 	}
 
-	if resultMonoVertex.Labels == nil {
-		resultMonoVertex.Labels = map[string]string{}
-	}
-	for key, val := range newMonoVertex.Labels {
-		resultMonoVertex.Labels[key] = val
+	if newMonoVertex.GetLabels() != nil {
+		resultMonoVertex.SetLabels(newMonoVertex.GetLabels())
 	}
 
 	// Use the same replicas as the existing MonoVertex
@@ -372,36 +373,22 @@ func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *k
 }
 
 // withExistingMvtxReplicas sets the replicas of the new MonoVertex to the existing MonoVertex's replicas if it exists.
-func withExistingMvtxReplicas(existingMonoVertex, newMonoVertex *kubernetes.GenericObject) (*kubernetes.GenericObject, error) {
-	unstrucExisting, err := kubernetes.ObjectToUnstructured(existingMonoVertex)
-	if err != nil {
-		return newMonoVertex, err
-	}
-	// Have to use float64 as it's  the type of the replicas field in the unstructured object
-	existingReplicas, existing, err := unstructured.NestedFloat64(unstrucExisting.Object, "spec", "replicas")
+func withExistingMvtxReplicas(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	existingReplicas, existing, err := unstructured.NestedFieldNoCopy(existingMonoVertex.Object, "spec", "replicas")
 	if err != nil {
 		return newMonoVertex, fmt.Errorf("failed to get replicas from existing MonoVertex: %w", err)
 	}
 	if existing {
-		unstrucNew, err := kubernetes.ObjectToUnstructured(newMonoVertex)
-		if err != nil {
-			return newMonoVertex, err
-		}
-		err = unstructured.SetNestedField(unstrucNew.Object, existingReplicas, "spec", "replicas")
+		err = unstructured.SetNestedField(newMonoVertex.Object, existingReplicas, "spec", "replicas")
 		if err != nil {
 			return newMonoVertex, fmt.Errorf("failed to set replicas in new MonoVertex: %w", err)
-		}
-
-		newMonoVertex, err = kubernetes.UnstructuredToObject(unstrucNew)
-		if err != nil {
-			return newMonoVertex, err
 		}
 	}
 	return newMonoVertex, nil
 
 }
 
-func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Context, monoVertex *kubernetes.GenericObject, rollout *apiv1.MonoVertexRollout) {
+func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Context, monoVertex *unstructured.Unstructured, rollout *apiv1.MonoVertexRollout) {
 	numaLogger := logger.FromContext(ctx)
 	monoVertexStatus, err := kubernetes.ParseStatus(monoVertex)
 	if err != nil {
@@ -464,7 +451,7 @@ func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRoll
 	return false
 }
 
-func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *kubernetes.GenericObject) error {
+func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) error {
 	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
@@ -504,7 +491,7 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
-) (*kubernetes.GenericObject, error) {
+) (*unstructured.Unstructured, error) {
 	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
 	if err != nil {
 		return nil, err
@@ -523,22 +510,21 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,
 	metadata apiv1.Metadata,
-) (*kubernetes.GenericObject, error) {
+) (*unstructured.Unstructured, error) {
+	monoVertexDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	monoVertexDef.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
+	monoVertexDef.SetName(monoVertexName)
+	monoVertexDef.SetNamespace(monoVertexRollout.Namespace)
+	monoVertexDef.SetLabels(metadata.Labels)
+	monoVertexDef.SetAnnotations(metadata.Annotations)
+	monoVertexDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)})
+	var monoVertexSpec map[string]interface{}
+	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
+		return nil, err
+	}
+	monoVertexDef.Object["spec"] = monoVertexSpec
 
-	return &kubernetes.GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       common.NumaflowMonoVertexKind,
-			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            monoVertexName,
-			Namespace:       monoVertexRollout.Namespace,
-			Labels:          metadata.Labels,
-			Annotations:     metadata.Annotations,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)},
-		},
-		Spec: monoVertexRollout.Spec.MonoVertex.Spec,
-	}, nil
+	return monoVertexDef, nil
 }
 
 // take the Metadata (Labels and Annotations) specified in the MonoVertexRollout plus any others that apply to all MonoVertices
@@ -554,14 +540,14 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 }
 
 // the following functions enable MonoVertexRolloutReconciler to implement progressiveController interface
-func (r *MonoVertexRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) ([]*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	return kubernetes.ListLiveResource(
 		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
 		monoVertexRollout.Namespace, labelSelector, fieldSelector)
 }
 
-func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*kubernetes.GenericObject, error) {
+func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
 	if err != nil {
@@ -603,7 +589,7 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 	return currentNameCount, nil
 }
 
-func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVertexDef *kubernetes.GenericObject) (bool, error) {
+func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVertexDef *unstructured.Unstructured) (bool, error) {
 	monoVertexStatus, err := numaflowtypes.ParseMonoVertexStatus(monoVertexDef)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse MonoVertex Status from MonoVertex CR: %+v, %v", monoVertexDef, err)
@@ -613,13 +599,13 @@ func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVe
 	return monoVertexPhase == "Paused" /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
 }
 
-func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *kubernetes.GenericObject) error {
+func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *unstructured.Unstructured) error {
 	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
 	return kubernetes.PatchResource(ctx, r.client, monoVertexDef, patchJson, k8stypes.MergePatchType)
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from *kubernetes.GenericObject, to *kubernetes.GenericObject) (bool, error) {
+func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
 	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
@@ -635,10 +621,11 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
 	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
 		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
-	labelsEqual := reflect.DeepEqual(from.Labels, to.Labels)
-	numaLogger.Debugf("labelsEqual: %t, from.Labels=%v, to.Labels=%v", labelsEqual, from.Labels, to.Labels)
-	annotationsEqual := reflect.DeepEqual(from.Annotations, to.Annotations)
-	numaLogger.Debugf("annotationsEqual: %t, from.Annotations=%v, to.Annotations=%v", annotationsEqual, from.Annotations, to.Annotations)
+	labelsEqual := reflect.DeepEqual(from.Object["labels"], to.Object["labels"])
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.Object["labels"], to.Object["labels"])
+	annotationsEqual := reflect.DeepEqual(from.Object["annotations"], to.Object["annotations"])
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.Object["annotations"], to.Object["annotations"])
 
-	return !reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB), nil
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+
 }

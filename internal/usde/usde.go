@@ -6,35 +6,26 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	"github.com/numaproj/numaplane/internal/util/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // ResourceNeedsUpdatingUnstructured calculates the upgrade strategy to use during the resource reconciliation process based on configuration and user preference.
 // TODO: This is a temporary function which will be removed once all the controller are migrated to use Unstructured Object
 func ResourceNeedsUpdatingUnstructured(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
-	newDefObject, err := kubernetes.UnstructuredToObject(newDef)
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-	existingDefObject, err := kubernetes.UnstructuredToObject(existingDef)
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-	return ResourceNeedsUpdating(ctx, newDefObject, existingDefObject)
+	return ResourceNeedsUpdating(ctx, newDef, existingDef)
 }
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns whether an update is needed and the strategy to use
-func ResourceNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -61,7 +52,7 @@ func ResourceNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject
 
 }
 
-func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -76,17 +67,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 		dataLossFields = usdeConfig.ISBServiceSpecDataLossFields
 	}
 
-	newDefUnstr, err := kubernetes.ObjectToUnstructured(newDef)
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-
-	existingDefUnstr, err := kubernetes.ObjectToUnstructured(existingDef)
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -95,18 +76,19 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 		"usdeConfig", usdeConfig,
 		"dataLossFields", dataLossFields,
 		"upgradeStrategy", upgradeStrategy,
-		"newDefUnstr", newDefUnstr,
-		"existingDefUnstr", existingDefUnstr,
+		"newDef", newDef,
+		"existingDef", existingDef,
 	).Debug("started deriving upgrade strategy")
 
 	// Loop through all the data loss fields from config to see if any changes based on those fields require a data loss prevention strategy
 	for _, dataLossField := range dataLossFields {
-		newDefField, newIsMap, err := util.ExtractPath(newDefUnstr.Object, strings.Split(dataLossField.Path, "."))
+		newDefField, newIsMap, err := util.ExtractPath(newDef.Object, strings.Split(dataLossField.Path, "."))
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
 
-		existingDefField, existingIsMap, err := util.ExtractPath(existingDefUnstr.Object, strings.Split(dataLossField.Path, "."))
+		existingDefField, existingIsMap, err := util.ExtractPath(existingDef.Object, strings.Split(dataLossField.Path, "."))
+
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
@@ -137,7 +119,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericOb
 
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
-	if !reflect.DeepEqual(newDefUnstr, existingDefUnstr) {
+	if !reflect.DeepEqual(newDef, existingDef) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 
@@ -166,31 +148,31 @@ var (
 	}
 )
 
-func resourceMetadataNeedsUpdating(ctx context.Context, newDef *kubernetes.GenericObject, existingDef *kubernetes.GenericObject) (bool, apiv1.UpgradeStrategy, error) {
+func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.Namespace)
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
 
 	numaLogger.WithValues(
-		"new annotations", newDef.Annotations,
-		"existing annotations", existingDef.Annotations,
-		"new labels", newDef.Labels,
-		"existing labels", existingDef.Labels,
+		"new annotations", newDef.GetAnnotations(),
+		"existing annotations", existingDef.GetAnnotations(),
+		"new labels", newDef.GetLabels(),
+		"existing labels", existingDef.GetLabels(),
 	).Debug("metadata comparison")
 
 	// First look for Label or Annotation changes that require PPND or Progressive strategy
 	// TODO: make this configurable to look for particular Labels and Annotations rather than this specific one
-	instanceIDNew := newDef.Annotations[common.AnnotationKeyNumaflowInstanceID]
-	instanceIDExisting := existingDef.Annotations[common.AnnotationKeyNumaflowInstanceID]
+	instanceIDNew := newDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+	instanceIDExisting := existingDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
 	if instanceIDNew != instanceIDExisting {
 		return true, upgradeStrategy, nil
 	}
 
 	// now see if any Labels or Annotations changed at all
-	if !checkMapsEqual(newDef.Labels, existingDef.Labels) || !checkMapsEqual(newDef.Annotations, existingDef.Annotations) {
+	if !checkMapsEqual(newDef.GetLabels(), existingDef.GetLabels()) || !checkMapsEqual(newDef.GetAnnotations(), existingDef.GetAnnotations()) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 	return false, apiv1.UpgradeStrategyNoOp, nil

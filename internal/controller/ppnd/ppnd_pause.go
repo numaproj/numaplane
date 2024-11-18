@@ -18,14 +18,15 @@ package ppnd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
@@ -90,9 +91,9 @@ func (pm *PauseModule) GetPauseRequest(requester string) (*bool, bool) {
 }
 
 // pause pipeline
-func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) error {
+func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
 		return err
 	}
 
@@ -102,18 +103,18 @@ func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipel
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject) (bool, error) {
+func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (bool, error) {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
 	// verify that all requests are still to pause, if not we can't run right now
-	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.Namespace)]
+	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.GetNamespace())]
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := json.Unmarshal(pipeline.Spec.Raw, &existingPipelineSpec); err != nil {
+	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
 		return false, err
 	}
 	isbsvcName := existingPipelineSpec.GetISBSvcName()
-	isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.Namespace, isbsvcName)]
+	isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.GetNamespace(), isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run
 		return false, nil
@@ -126,8 +127,7 @@ func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, p
 	return true, nil
 }
 
-func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *kubernetes.GenericObject, phase string) error {
-
+func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase string) error {
 	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 

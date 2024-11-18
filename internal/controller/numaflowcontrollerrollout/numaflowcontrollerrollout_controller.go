@@ -347,7 +347,7 @@ func (r *NumaflowControllerRolloutReconciler) GetChildTypeString() string {
 }
 
 func (r *NumaflowControllerRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, _ string) (*unstructured.UnstructuredList, error) {
-	return kubernetes.ListLiveUnstructuredResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyParentRollout, "")
+	return kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", rolloutNamespace, common.LabelKeyParentRollout, "")
 }
 
 func (r *NumaflowControllerRolloutReconciler) GetRolloutKey(rolloutNamespace string, rolloutName string) string {
