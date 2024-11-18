@@ -176,6 +176,6 @@ jobs:
         with:
           name: pod-logs-${{matrix.ppnd}}
           path: |
-            tests/e2e/output/pods/
+            tests/e2e/output/logs/
           retention-days: 7
         
