@@ -241,6 +241,34 @@ func processUpgradingChild(
 	}
 }
 
+type AssessmentResult int
+
+const (
+	AssessmentResultSuccess = iota
+	AssessmentResultFailure
+	AssessmentResultUnknown
+)
+
+func assessUpgradingChild(ctx context.Context, existingUpgradingChildDef *kubernetes.GenericObject) (AssessmentResult, error) {
+	numaLogger := logger.FromContext(ctx)
+	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
+	if err != nil {
+		return AssessmentResultUnknown, err
+	}
+
+	numaLogger.
+		WithValues("namespace", existingUpgradingChildDef.Namespace, "name", existingUpgradingChildDef.Name).
+		Debugf("Upgrading child is in phase %s", upgradingObjectStatus.Phase)
+
+	if upgradingObjectStatus.Phase == "Running" && isNumaflowChildReady(&upgradingObjectStatus) {
+		return AssessmentResultSuccess, nil
+	}
+	if upgradingObjectStatus.Phase == "Failed" {
+		return AssessmentResultFailure, nil
+	}
+	return AssessmentResultUnknown, nil
+}
+
 // update the in-memory object with the new Label and patch the object in K8S
 func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *kubernetes.GenericObject, rolloutObject ctlrcommon.RolloutObject) error {
 	childObject.Labels[common.LabelKeyUpgradeState] = string(upgradeState)

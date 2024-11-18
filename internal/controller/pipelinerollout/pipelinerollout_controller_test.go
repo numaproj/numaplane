@@ -335,6 +335,7 @@ var yamlNoDesiredPhase = `
 }
 `
 
+// TODO: update to account for Labels/Annotations differences
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 
 	_, _, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
