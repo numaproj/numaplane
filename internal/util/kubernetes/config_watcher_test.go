@@ -76,13 +76,13 @@ func Test_watchConfigMaps(t *testing.T) {
 			},
 		},
 		Data: map[string]string{
-			"pipelineSpecExcludedPaths": `
-        - "abc"
-        - "abcde/xyz"
-        - "path/array/sample"
+			"pipelineSpecDataLossFields": `
+        - path: "abc"
+        - path: "abcde/xyz"
+        - path: "path/array/sample"
       `,
-			"isbServiceSpecExcludedPaths": `
-        - "invalid"
+			"isbServiceSpecDataLossFields": `
+        - path: "invalid"
       `,
 		},
 	}
@@ -93,8 +93,8 @@ func Test_watchConfigMaps(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	expectedUSDEConfig := config.USDEConfig{
-		PipelineSpecExcludedPaths:   []string{"abc", "abcde/xyz", "path/array/sample"},
-		ISBServiceSpecExcludedPaths: []string{"invalid"},
+		PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "abc"}, {Path: "abcde/xyz"}, {Path: "path/array/sample"}},
+		ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "invalid"}},
 	}
 
 	actualUSDEConfig := config.GetConfigManagerInstance().GetUSDEConfig()

@@ -87,6 +87,8 @@ type GlobalConfig struct {
 	IncludedResources string `json:"includedResources" mapstructure:"includedResources"`
 	// List of Numaflow Controller image names to look for
 	NumaflowControllerImageNames []string `json:"numaflowControllerImageNames" mapstructure:"numaflowControllerImageNames"`
+	// If user's config doesn't exist or doesn't specify strategy, this is the default
+	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 }
 
 type NumaflowControllerDefinitionConfig struct {
