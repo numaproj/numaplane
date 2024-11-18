@@ -2,13 +2,12 @@ package kubernetes
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/numaproj/numaplane/internal/util"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -78,41 +77,35 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 			},
 		},
 	}
-	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
-	assert.Nil(t, err)
 
 	namespace := "default"
 
-	pipelineObject := &GenericObject{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       common.NumaflowPipelineKind,
-			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-pipeline",
-			Namespace: namespace,
-		},
-		Spec: runtime.RawExtension{
-			Raw: pipelineSpecRaw,
-		},
-	}
+	pipelineObject := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipelineObject.SetName("my-pipeline")
+	pipelineObject.SetNamespace(namespace)
+	var pipelineSpecMap map[string]interface{}
+	err = util.StructToStruct(pipelineSpec, &pipelineSpecMap)
+	assert.Nil(t, err)
+	pipelineObject.Object["spec"] = pipelineSpecMap
+
 	err = CreateResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
 	pipelineObject, err = GetLiveResource(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
-	version1 := pipelineObject.ResourceVersion
+	version1 := pipelineObject.GetResourceVersion()
 	fmt.Printf("Created CR, resource version=%s\n", version1)
 
 	// Get resource with cache
 	pipelineObject, err = GetResource(context.Background(), runtimeClient, pipelineObject.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: pipelineObject.Namespace, Name: pipelineObject.Name})
+		k8stypes.NamespacedName{Namespace: pipelineObject.GetNamespace(), Name: pipelineObject.GetName()})
 	assert.Nil(t, err)
 
 	// Updating should return the result Pipeline with the updated ResourceVersion
-	pipelineObject.ObjectMeta.Labels = map[string]string{"test": "value"}
+	pipelineObject.SetLabels(map[string]string{"test": "value"})
 	err = UpdateResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
-	version2 := pipelineObject.ResourceVersion
+	version2 := pipelineObject.GetResourceVersion()
 
 	fmt.Printf("Updated CR, resource version=%s\n", version2)
 	assert.NotEqual(t, version1, version2)
@@ -120,10 +113,10 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	// Doing a GET should return the same thing
 	pipelineObject, err = GetLiveResource(context.Background(), pipelineObject, "pipelines")
 	assert.Nil(t, err)
-	assert.Equal(t, version2, pipelineObject.ResourceVersion)
+	assert.Equal(t, version2, pipelineObject.GetResourceVersion())
 
 	// List resource
-	pipelineList, err := ListLiveUnstructuredResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	pipelineList, err := ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList.Items, 1)
 
@@ -135,7 +128,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 
 	err = DeleteResource(context.Background(), runtimeClient, pipelineObject)
 	assert.Nil(t, err)
-	pipelineList, err = ListLiveUnstructuredResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
+	pipelineList, err = ListLiveResource(context.Background(), common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines", namespace, "test=value", "")
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList.Items, 0)
 }
