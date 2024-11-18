@@ -619,18 +619,26 @@ func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from *kubernetes.GenericObject, to *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(a)
+	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
 	if err != nil {
 		return false, err
 	}
-	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(b)
+	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
 	if err != nil {
 		return false, err
 	}
 	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+
+	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
+		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+	labelsEqual := reflect.DeepEqual(from.Labels, to.Labels)
+	numaLogger.Debugf("labelsEqual: %t, from.Labels=%v, to.Labels=%v", labelsEqual, from.Labels, to.Labels)
+	annotationsEqual := reflect.DeepEqual(from.Annotations, to.Annotations)
+	numaLogger.Debugf("annotationsEqual: %t, from.Annotations=%v, to.Annotations=%v", annotationsEqual, from.Annotations, to.Annotations)
 
 	return !reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB), nil
 }

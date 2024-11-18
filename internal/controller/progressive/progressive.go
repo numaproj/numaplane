@@ -63,21 +63,19 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child
-	currentUpgradingChild, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
+	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return false, err
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
-	if promotedDifference && currentUpgradingChild == nil {
+	if promotedDifference && currentUpgradingChildDef == nil {
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
 		if err != nil {
 			return false, err
 		}
-		// TODO: I removed the call to Merge() - do we need it?
-
 		// Create it, first making sure it doesn't exist by checking the live K8S API
-		currentUpgradingChild, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+		currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
 		if err != nil {
 			// create object as it doesn't exist
 			if apierrors.IsNotFound(err) {
@@ -89,11 +87,11 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 			}
 		}
 	}
-	if currentUpgradingChild == nil { // nothing to do
+	if currentUpgradingChildDef == nil { // nothing to do
 		return true, err
 	}
 
-	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChild, c)
+	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, err
 	}
@@ -123,6 +121,8 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 }
 
 func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState) (*kubernetes.GenericObject, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
 		common.LabelKeyUpgradeState, string(upgradeState),
@@ -133,6 +133,9 @@ func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Rollo
 	}
 	if len(children) > 1 {
 		// TODO: find the latest indexed one
+		numaLogger.Warnf("Unexpected: found multiple %s of upgrading state %s with Rollout parent %s/%s",
+			rolloutObject.GetChildPluralName(), string(upgradeState), rolloutObject.GetObjectMeta().Namespace, rolloutObject.GetObjectMeta().Name)
+		return children[0], nil
 	} else if len(children) == 1 {
 		return children[0], nil
 	} else {
@@ -184,8 +187,13 @@ func processUpgradingChild(
 		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed("New Child Object Failed", rolloutObject.GetObjectMeta().Generation)
 
 		// TODO: check if there's a difference between the desired spec and the "upgrading" one
-		// if so, mark the existing one for garbage collection and then create a new upgrading one
+		// this needs to account for both Spec and Metadata
+		// remember to call Merge() here
 
+		//if !reflect.DeepEqual(latestUnstructuredSpec, existingUpgradingUnstructured) {
+
+		// if so, mark the existing one for garbage collection and then create a new upgrading one
+		//}
 		return false, nil
 
 	case "Running":

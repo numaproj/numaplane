@@ -858,20 +858,26 @@ func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *kuberne
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a *kubernetes.GenericObject, b *kubernetes.GenericObject) (bool, error) {
+func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from *kubernetes.GenericObject, to *kubernetes.GenericObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(a)
+	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(b)
+	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
 	if err != nil {
 		return false, err
 	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	specsEqual := reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
+		specsEqual, pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	labelsEqual := reflect.DeepEqual(from.Labels, to.Labels)
+	numaLogger.Debugf("labelsEqual: %t, from.Labels=%v, to.Labels=%v", labelsEqual, from.Labels, to.Labels)
+	annotationsEqual := reflect.DeepEqual(from.Annotations, to.Annotations)
+	numaLogger.Debugf("annotationsEqual: %t, from.Annotations=%v, to.Annotations=%v", annotationsEqual, from.Annotations, to.Annotations)
 
-	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
