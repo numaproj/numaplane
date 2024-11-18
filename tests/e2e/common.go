@@ -139,35 +139,6 @@ func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.Generic
 	return status, err
 }
 
-func getPodLogs(client clientgo.Interface, namespace, labelSelector, containerName, fileName string) {
-
-	ctx := context.Background()
-	podLogOptions := &corev1.PodLogOptions{Container: containerName}
-
-	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if err != nil {
-		fmt.Printf("Error listing pods: %v\n", err)
-		return
-	}
-
-	for _, pod := range podList.Items {
-		stream, err := client.CoreV1().Pods(namespace).GetLogs(pod.Name, podLogOptions).Stream(ctx)
-		if err != nil {
-			fmt.Printf("Error getting pods logs: %v\n", err)
-			return
-		}
-		defer stream.Close()
-		logBytes, _ := io.ReadAll(stream)
-
-		err = os.WriteFile(fileName, logBytes, 0644)
-		if err != nil {
-			fmt.Printf("Error writing pod logs to file: %v\n", err)
-			return
-		}
-	}
-
-}
-
 func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 	watcher, err := client.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
 	if err != nil {
