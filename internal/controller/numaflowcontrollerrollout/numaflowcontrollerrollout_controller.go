@@ -763,7 +763,7 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ct
 
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
 	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
-	r.MarkRolloutPaused(ctx, controllerRollout, ppnd.IsRequestingPause(r, controllerRollout))
+	_ = r.MarkRolloutPaused(ctx, controllerRollout, ppnd.IsRequestingPause(r, controllerRollout))
 
 	return nil
 }

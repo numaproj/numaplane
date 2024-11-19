@@ -556,7 +556,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
 	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
-	r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
+	_ = r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
 
 }
 
