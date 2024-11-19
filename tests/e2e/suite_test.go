@@ -161,7 +161,7 @@ func setupOutputDir() {
 	var (
 		dirs = []string{ResourceChangesPipelineOutputPath, ResourceChangesISBServiceOutputPath,
 			ResourceChangesMonoVertexOutputPath, ResourceChangesNumaflowControllerOutputPath}
-		podDirs = []string{PodLogsPipelineOutputPath, PodLogsISBServiceOutputPath,
+		logDirs = []string{PodLogsPipelineOutputPath, PodLogsISBServiceOutputPath,
 			PodLogsNumaflowControllerOutputPath, PodLogsMonoVertexOutputPath, PodLogsNumaplaneControllerOutputPath}
 	)
 
@@ -195,7 +195,7 @@ func setupOutputDir() {
 
 		// output/pods contains pod logs for each resource
 		if enablePodLogs == "true" {
-			for _, dir := range podDirs {
+			for _, dir := range logDirs {
 				err = os.MkdirAll(dir, os.ModePerm)
 				Expect(err).NotTo(HaveOccurred())
 			}
