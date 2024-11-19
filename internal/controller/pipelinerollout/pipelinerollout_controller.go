@@ -592,7 +592,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger.Debugf("pipeline status: %v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
-	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+	r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
 
 	return nil
 }
@@ -620,7 +620,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 
 }
 
-func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured, pipelineStatus *kubernetes.GenericStatus) {
+func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 

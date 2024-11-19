@@ -168,7 +168,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// update our Status with the Deployment's Status
-	err = r.processNumaflowControllerStatus(numaflowControllerRollout, deployment)
+	err = r.processNumaflowControllerStatus(ctx, numaflowControllerRollout, deployment)
 	if err != nil {
 		r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, "ProcessStatusFailed", "Failed to process numaflow controller status: %v", err.Error())
 		return ctrl.Result{}, err
@@ -752,7 +752,7 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 }
 
 // TODO: could pass in the values instead of recalculating them
-func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
+func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, deployment *appsv1.Deployment) error {
 	healthy, conditionReason, conditionMsg := processDeploymentHealth(deployment)
 
 	if healthy {
@@ -760,6 +760,10 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(co
 	} else {
 		controllerRollout.Status.MarkChildResourcesUnhealthy(conditionReason, conditionMsg, controllerRollout.Generation)
 	}
+
+	// check if PPND strategy is requesting Pipelines to pause, and set true/false
+	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
+	_ = r.MarkRolloutPaused(ctx, controllerRollout, ppnd.IsRequestingPause(r, controllerRollout))
 
 	return nil
 }
