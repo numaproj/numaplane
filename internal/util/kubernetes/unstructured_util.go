@@ -192,11 +192,14 @@ func UpdateResource(ctx context.Context, c client.Client, obj *unstructured.Unst
 }
 
 // ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
-func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespace string, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
 	unstructuredList := &unstructured.UnstructuredList{}
 	unstructuredList.SetGroupVersionKind(gvk)
 
-	if err := c.List(ctx, unstructuredList, opts...); err != nil {
+	listOptions := []client.ListOption{client.InNamespace(namespace)}
+	listOptions = append(listOptions, opts...)
+
+	if err := c.List(ctx, unstructuredList, listOptions...); err != nil {
 		return nil, err
 	}
 

@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -36,7 +37,7 @@ import (
 // taking down the original child once the new one is healthy
 type progressiveController interface {
 	// listChildren lists all children of the Rollout identified by the selectors
-	ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error)
+	//ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error)
 
 	// createBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
 	CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
@@ -64,7 +65,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
+	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, false)
 	if err != nil {
 		return false, err
 	}
@@ -75,8 +76,9 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 		if err != nil {
 			return false, err
 		}
-		// Create it, first making sure it doesn't exist by checking the live K8S API
-		currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+		// Create it, first making sure one doesn't already exist by checking the live K8S API
+		//currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
+		currentUpgradingChildDef, err = findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, true)
 		if err != nil {
 			// create object as it doesn't exist
 			if apierrors.IsNotFound(err) {
@@ -95,7 +97,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	// There's already an Upgrading child, now process it
 
 	// Get the live resource so we don't have issues with an outdated cache
-	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildPluralName())
+	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildGVR().Resource)
 	if err != nil {
 		return false, err
 	}
@@ -113,7 +115,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := GetChildName(ctx, rolloutObject, controller, string(common.LabelValueUpgradeInProgress))
+	childName, err := GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -130,21 +132,40 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 	return upgradingChild, nil
 }
 
-func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
+func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
-		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
-		common.LabelKeyUpgradeState, string(upgradeState),
-	), "")
+	childGVR := rolloutObject.GetChildGVR()
+
+	labelSelector := fmt.Sprintf(
+		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
+		common.LabelKeyUpgradeState, string(upgradeState))
+
+	var children *unstructured.UnstructuredList
+	var err error
+	if checkLive {
+		children, err = kubernetes.ListLiveResource(
+			ctx, childGVR.Group, childGVR.Version, childGVR.Resource,
+			rolloutObject.GetRolloutObjectMeta().Namespace, labelSelector, "")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		children, err = kubernetes.ListResources(ctx, c, schema.GroupVersionKind(rolloutObject.GetChildGVK()), rolloutObject.GetRolloutObjectMeta().GetNamespace(),
+			client.MatchingLabels{
+				common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState:  string(upgradeState),
+			},
+		)
+	}
 
 	if err != nil {
 		return nil, err
 	}
 	if len(children.Items) > 1 {
-		// TODO: find the latest indexed one
+		// TODO: find the latest indexed one - can we garbage collect the others here?
 		numaLogger.Warnf("Unexpected: found multiple %s of upgrading state %s with Rollout parent %s/%s",
-			rolloutObject.GetChildPluralName(), string(upgradeState), rolloutObject.GetObjectMeta().Namespace, rolloutObject.GetObjectMeta().Name)
+			rolloutObject.GetChildGVR().Resource, string(upgradeState), rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name)
 		return &children.Items[0], nil
 	} else if len(children.Items) == 1 {
 		return &children.Items[0], nil
@@ -154,25 +175,21 @@ func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Rollo
 }
 
 // TODO: can this function make use of the one above?
-func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState string) (string, error) {
-	children, err := controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
-		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
-		common.LabelKeyUpgradeState, upgradeState,
-	), "")
+func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState) (string, error) {
 
+	existingChild, err := findChildOfUpgradeState(ctx, rolloutObject, controller, upgradeState, true)
 	if err != nil {
 		return "", err
 	}
-	if len(children.Items) > 1 {
-		return "", fmt.Errorf("there should only be one promoted or upgrade in progress pipeline")
-	} else if len(children.Items) == 0 {
+	if existingChild == nil {
 		index, err := controller.IncrementChildCount(ctx, rolloutObject)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s-%d", rolloutObject.GetObjectMeta().Name, index), nil
+		return fmt.Sprintf("%s-%d", rolloutObject.GetRolloutObjectMeta().Name, index), nil
+	} else {
+		return existingChild.GetName(), nil
 	}
-	return children.Items[0].GetName(), nil
 }
 
 // return whether we're done, and error if any
@@ -194,7 +211,7 @@ func processUpgradingChild(
 	switch assessment {
 	case AssessmentResultFailure:
 
-		rolloutObject.GetStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
@@ -240,8 +257,8 @@ func processUpgradingChild(
 			return false, err
 		}
 
-		rolloutObject.GetStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetObjectMeta().Generation)
-		rolloutObject.GetStatus().MarkDeployed(rolloutObject.GetObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		if err := controller.Drain(ctx, existingPromotedChildDef); err != nil {
 			return false, err
@@ -322,7 +339,7 @@ func GarbageCollectChildren(
 	c client.Client,
 ) error {
 	numaLogger := logger.FromContext(ctx)
-	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, controller)
+	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, controller, c)
 	if err != nil {
 		return err
 	}
@@ -330,7 +347,7 @@ func GarbageCollectChildren(
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
 
 	for _, recyclableChild := range recyclableObjects.Items {
-		err = recycle(ctx, &recyclableChild, rolloutObject.GetChildPluralName(), controller, c)
+		err = recycle(ctx, &recyclableChild, rolloutObject.GetChildGVR().Resource, controller, c)
 		if err != nil {
 			return err
 		}
@@ -341,11 +358,19 @@ func getRecyclableObjects(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
+	c client.Client,
 ) (*unstructured.UnstructuredList, error) {
-	return controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
+	/*return controller.ListChildren(ctx, rolloutObject, fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
 		common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
-	), "")
+	), "")*/
+	return kubernetes.ListResources(ctx, c, schema.GroupVersionKind(rolloutObject.GetChildGVK()),
+		rolloutObject.GetRolloutObjectMeta().Namespace,
+		client.MatchingLabels{
+			common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
+		},
+	)
 }
 
 func recycle(ctx context.Context,

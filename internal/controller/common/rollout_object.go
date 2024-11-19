@@ -27,13 +27,19 @@ import (
 )
 
 type RolloutObject interface {
-	GetChildPluralName() string
+	GetRolloutGVR() metav1.GroupVersionResource
 
-	GetTypeMeta() *metav1.TypeMeta
+	GetRolloutGVK() metav1.GroupVersionKind
 
-	GetObjectMeta() *metav1.ObjectMeta
+	GetChildGVR() metav1.GroupVersionResource
 
-	GetStatus() *apiv1.Status
+	GetChildGVK() metav1.GroupVersionKind
+
+	//GetTypeMeta() *metav1.TypeMeta
+
+	GetRolloutObjectMeta() *metav1.ObjectMeta
+
+	GetRolloutStatus() *apiv1.Status
 }
 
 // assume child name is "<rolloutname>-<number>"
