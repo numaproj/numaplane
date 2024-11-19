@@ -125,9 +125,6 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		}
 	}
 
-	/*if err := pauseRequester.MarkRolloutPaused(ctx, rollout, pause); err != nil {
-		return updated, fmt.Errorf("error marking %s paused: %w", pauseRequester.GetChildTypeString(), err)
-	}*/
 	return updated, nil
 }
 
