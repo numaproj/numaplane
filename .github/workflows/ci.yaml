@@ -159,23 +159,23 @@ jobs:
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true PPND=${{matrix.ppnd}} make test-e2e
-
-      - name: Archive controller logs
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: controller-logs-${{matrix.ppnd}}
-          path: |
-            tests/e2e/output/controllers/
-          retention-days: 7
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true PPND=${{matrix.ppnd}} ENABLE_POD_LOGS=true make test-e2e
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: resource-changes-${{matrix.ppnd}}
           path: |
             tests/e2e/output/resources/
+          retention-days: 7
+
+      - name: Archive pod logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pod-logs-${{matrix.ppnd}}
+          path: |
+            tests/e2e/output/logs/
           retention-days: 7
         
