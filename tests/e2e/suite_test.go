@@ -136,9 +136,6 @@ var _ = AfterSuite(func() {
 	cancel()
 	By("tearing down test environment")
 	close(stopCh)
-	// if disableTestArtifacts != "true" {
-	// 	getPodLogs(kubeClient, Namespace, NumaplaneLabel, "manager", filepath.Join(ControllerOutputPath, "numaplane-controller.log"))
-	// }
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
@@ -148,9 +145,6 @@ var _ = AfterEach(func() {
 
 	report := CurrentSpecReport()
 	if report.Failed() {
-		// if disableTestArtifacts != "true" {
-		// 	getPodLogs(kubeClient, Namespace, NumaflowLabel, "controller-manager", filepath.Join(ControllerOutputPath, "numaflow-controller.log"))
-		// }
 		AbortSuite("Test spec has failed, aborting suite run")
 	}
 
@@ -172,11 +166,6 @@ func setupOutputDir() {
 		err = os.RemoveAll(directory)
 		Expect(err).NotTo(HaveOccurred())
 	}
-
-	// WILL REMOVE LATER AFTER PR REVIEW
-	// output/controllers contains controller logs
-	// err = os.MkdirAll(ControllerOutputPath, os.ModePerm)
-	// Expect(err).NotTo(HaveOccurred())
 
 	// output/resources contains `kubectl get` output for each resource
 	if disableTestArtifacts != "true" {
