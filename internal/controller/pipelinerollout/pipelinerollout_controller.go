@@ -758,7 +758,7 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
-	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
+	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client)
 	if err != nil {
 		return nil, err
 	}
@@ -791,14 +791,6 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineDef.Object["spec"] = pipelineSpec
 
 	return pipelineDef, nil
-}
-
-// the following functions enable PipelineRolloutReconciler to implement progressiveController interface
-func (r *PipelineRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error) {
-	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	return kubernetes.ListLiveResource(
-		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
-		pipelineRollout.Namespace, labelSelector, fieldSelector)
 }
 
 func (r *PipelineRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {

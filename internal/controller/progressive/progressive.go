@@ -23,7 +23,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -36,8 +35,6 @@ import (
 // progressiveController describes a Controller that can progressively roll out a second child alongside the original child,
 // taking down the original child once the new one is healthy
 type progressiveController interface {
-	// listChildren lists all children of the Rollout identified by the selectors
-	//ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error)
 
 	// createBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
 	CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
@@ -65,20 +62,20 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, false)
+	currentUpgradingChildDef, err := findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, false, c)
 	if err != nil {
 		return false, err
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
-		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
 		if err != nil {
 			return false, err
 		}
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
 		//currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
-		currentUpgradingChildDef, err = findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, true)
+		currentUpgradingChildDef, err = findChildOfUpgradeState(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, true, c)
 		if err != nil {
 			// create object as it doesn't exist
 			if apierrors.IsNotFound(err) {
@@ -111,11 +108,11 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController) (*unstructured.Unstructured, error) {
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, c client.Client) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress)
+	childName, err := GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, c)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +148,7 @@ func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Rollo
 			return nil, err
 		}
 	} else {
-		children, err = kubernetes.ListResources(ctx, c, schema.GroupVersionKind(rolloutObject.GetChildGVK()), rolloutObject.GetRolloutObjectMeta().GetNamespace(),
+		children, err = kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(), rolloutObject.GetRolloutObjectMeta().GetNamespace(),
 			client.MatchingLabels{
 				common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
 				common.LabelKeyUpgradeState:  string(upgradeState),
@@ -175,9 +172,9 @@ func findChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Rollo
 }
 
 // TODO: can this function make use of the one above?
-func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState) (string, error) {
+func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState, c client.Client) (string, error) {
 
-	existingChild, err := findChildOfUpgradeState(ctx, rolloutObject, controller, upgradeState, true)
+	existingChild, err := findChildOfUpgradeState(ctx, rolloutObject, controller, upgradeState, true, c)
 	if err != nil {
 		return "", err
 	}
@@ -214,7 +211,7 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// check if there are any new incoming changes to the desired spec
-		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller)
+		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
 		if err != nil {
 			return false, err
 		}
@@ -257,7 +254,7 @@ func processUpgradingChild(
 			return false, err
 		}
 
-		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		if err := controller.Drain(ctx, existingPromotedChildDef); err != nil {
@@ -364,7 +361,7 @@ func getRecyclableObjects(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetObjectMeta().Name,
 		common.LabelKeyUpgradeState, common.LabelValueUpgradeRecyclable,
 	), "")*/
-	return kubernetes.ListResources(ctx, c, schema.GroupVersionKind(rolloutObject.GetChildGVK()),
+	return kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(),
 		rolloutObject.GetRolloutObjectMeta().Namespace,
 		client.MatchingLabels{
 			common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,

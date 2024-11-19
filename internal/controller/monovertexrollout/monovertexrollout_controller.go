@@ -508,7 +508,7 @@ func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
+	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client)
 	if err != nil {
 		return nil, err
 	}
@@ -553,14 +553,6 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: monoVertexRollout.Spec.MonoVertex.Annotations}, nil
 
-}
-
-// the following functions enable MonoVertexRolloutReconciler to implement progressiveController interface
-func (r *MonoVertexRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error) {
-	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-	return kubernetes.ListLiveResource(
-		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
-		monoVertexRollout.Namespace, labelSelector, fieldSelector)
 }
 
 func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {

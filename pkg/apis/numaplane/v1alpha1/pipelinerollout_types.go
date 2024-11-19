@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -86,20 +88,36 @@ type PipelineRolloutList struct {
 	Items           []PipelineRollout `json:"items"`
 }
 
-// the following functions implement the rolloutObject interface:
-func (pipelineRollout *PipelineRollout) GetTypeMeta() *metav1.TypeMeta {
-	return &pipelineRollout.TypeMeta
+func (pipelineRollout *PipelineRollout) GetRolloutGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    pipelineRollout.TypeMeta.GroupVersionKind().Group,
+		Version:  pipelineRollout.TypeMeta.GroupVersionKind().Version,
+		Resource: "pipelinerollouts",
+	}
 }
 
-func (pipelineRollout *PipelineRollout) GetObjectMeta() *metav1.ObjectMeta {
+func (pipelineRollout *PipelineRollout) GetRolloutGVK() schema.GroupVersionKind {
+	return pipelineRollout.TypeMeta.GroupVersionKind()
+}
+
+func (pipelineRollout *PipelineRollout) GetChildGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    numaflowv1.PipelineGroupVersionKind.Group,
+		Version:  numaflowv1.PipelineGroupVersionKind.Version,
+		Resource: "pipelines",
+	}
+}
+
+func (pipelineRollout *PipelineRollout) GetChildGVK() schema.GroupVersionKind {
+	return numaflowv1.PipelineGroupVersionKind
+}
+
+func (pipelineRollout *PipelineRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {
 	return &pipelineRollout.ObjectMeta
 }
 
-func (pipelineRollout *PipelineRollout) GetStatus() *Status {
+func (pipelineRollout *PipelineRollout) GetRolloutStatus() *Status {
 	return &pipelineRollout.Status.Status
-}
-func (pipelineRollout *PipelineRollout) GetChildPluralName() string {
-	return "pipelines"
 }
 
 func init() {

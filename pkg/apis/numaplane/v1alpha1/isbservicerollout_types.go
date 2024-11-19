@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -67,19 +69,36 @@ type ISBServiceRolloutList struct {
 	Items           []ISBServiceRollout `json:"items"`
 }
 
-func (isbServiceRollout *ISBServiceRollout) GetTypeMeta() *metav1.TypeMeta {
-	return &isbServiceRollout.TypeMeta
+func (isbServiceRollout *ISBServiceRollout) GetRolloutGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    isbServiceRollout.TypeMeta.GroupVersionKind().Group,
+		Version:  isbServiceRollout.TypeMeta.GroupVersionKind().Version,
+		Resource: "isbservicerollouts",
+	}
 }
 
-func (isbServiceRollout *ISBServiceRollout) GetObjectMeta() *metav1.ObjectMeta {
+func (isbServiceRollout *ISBServiceRollout) GetRolloutGVK() schema.GroupVersionKind {
+	return isbServiceRollout.TypeMeta.GroupVersionKind()
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetChildGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    numaflowv1.PipelineGroupVersionKind.Group,
+		Version:  numaflowv1.PipelineGroupVersionKind.Version,
+		Resource: "interstepbufferservices",
+	}
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetChildGVK() schema.GroupVersionKind {
+	return numaflowv1.PipelineGroupVersionKind
+}
+
+func (isbServiceRollout *ISBServiceRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {
 	return &isbServiceRollout.ObjectMeta
 }
 
-func (isbServiceRollout *ISBServiceRollout) GetStatus() *Status {
+func (isbServiceRollout *ISBServiceRollout) GetRolloutStatus() *Status {
 	return &isbServiceRollout.Status.Status
-}
-func (isbServiceRollout *ISBServiceRollout) GetChildPluralName() string {
-	return "interstepbufferservices"
 }
 
 func init() {

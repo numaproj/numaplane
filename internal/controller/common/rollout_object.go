@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -29,11 +30,11 @@ import (
 type RolloutObject interface {
 	GetRolloutGVR() metav1.GroupVersionResource
 
-	GetRolloutGVK() metav1.GroupVersionKind
+	GetRolloutGVK() schema.GroupVersionKind
 
 	GetChildGVR() metav1.GroupVersionResource
 
-	GetChildGVK() metav1.GroupVersionKind
+	GetChildGVK() schema.GroupVersionKind
 
 	//GetTypeMeta() *metav1.TypeMeta
 
