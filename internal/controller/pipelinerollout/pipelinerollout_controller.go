@@ -513,8 +513,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 		numaLogger.Debug("processing pipeline with PPND")
-		numaLogger.Debugf("EXISTING PIPELINE DEF: %v", existingPipelineDef)
-		numaLogger.Debugf("NEW PIPELINE DEF: %v", newPipelineDef)
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return err
