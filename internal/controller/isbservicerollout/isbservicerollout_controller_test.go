@@ -232,7 +232,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
 			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 	}
 
