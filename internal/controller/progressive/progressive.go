@@ -85,7 +85,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 				return false, err
 			} else {
-				return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.GetKind(), err)
+				return false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 			}
 		}
 	}
