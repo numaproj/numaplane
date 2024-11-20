@@ -71,16 +71,16 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
-		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
-		if err != nil {
-			return false, err
-		}
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
-		//currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, newUpgradingChildDef, rolloutObject.GetChildPluralName())
 		currentUpgradingChildDef, err = findMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
 		if err != nil {
-			// create object as it doesn't exist
 			if apierrors.IsNotFound(err) {
+				// create object as it doesn't exist
+				newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
+				if err != nil {
+					return false, err
+				}
+
 				numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 				return false, err
