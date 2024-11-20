@@ -157,6 +157,7 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 }
 
 // of the children provided of a Rollout, find the most current one and mark the others recyclable
+// typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 func findMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -172,24 +173,24 @@ func findMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		for _, child := range children.Items {
 			childIndex, err := getChildIndex(child.GetName())
 			if err != nil {
+				// something is improperly named for some reason - don't touch it just in case?
 				numaLogger.Warn(err.Error())
 				continue
 			}
-			if mostCurrentChild == nil {
+			if mostCurrentChild == nil { // first one in the list
 				mostCurrentChild = &child
 				mostCurrentIndex = childIndex
-			} else if childIndex > mostCurrentIndex {
-				recycleList = append(recycleList, mostCurrentChild)
+			} else if childIndex > mostCurrentIndex { // most current for now
+				recycleList = append(recycleList, mostCurrentChild) // recycle the previous one
 				mostCurrentChild = &child
 				mostCurrentIndex = childIndex
 			} else {
 				recycleList = append(recycleList, &child)
 			}
 		}
-		if mostCurrentChild == nil {
-			return nil, nil
-		}
+		// recycle the previous children
 		for _, recyclableChild := range recycleList {
+			numaLogger.Debugf("found multiple children of upgrade state=%q, marking recyclable: %s", upgradeState, recyclableChild.GetName())
 			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild, rolloutObject)
 		}
 		return mostCurrentChild, nil
