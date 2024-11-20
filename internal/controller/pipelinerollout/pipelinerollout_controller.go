@@ -424,17 +424,11 @@ func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstruc
 
 	var specAsMap map[string]interface{}
 	if err := util.StructToStruct(newPipeline.Object["spec"], &specAsMap); err != nil {
-		return resultPipeline, fmt.Errorf("failed to get spec from new MonoVertex: %w", err)
+		return resultPipeline, fmt.Errorf("failed to get spec from new Pipeline: %w", err)
 	}
 	resultPipeline.Object["spec"] = specAsMap
-
-	if newPipeline.GetAnnotations() != nil {
-		resultPipeline.SetAnnotations(newPipeline.GetAnnotations())
-	}
-
-	if newPipeline.GetLabels() != nil {
-		resultPipeline.SetLabels(newPipeline.GetLabels())
-	}
+	resultPipeline.SetAnnotations(ctlrcommon.MergeMaps(existingPipeline.GetAnnotations(), newPipeline.GetAnnotations()))
+	resultPipeline.SetLabels(ctlrcommon.MergeMaps(existingPipeline.GetLabels(), newPipeline.GetLabels()))
 
 	return resultPipeline, nil
 }
@@ -519,6 +513,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 		numaLogger.Debug("processing pipeline with PPND")
+		numaLogger.Debugf("EXISTING PIPELINE DEF: %v", existingPipelineDef)
+		numaLogger.Debugf("NEW PIPELINE DEF: %v", newPipelineDef)
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return err
@@ -859,20 +855,27 @@ func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *unstruc
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, a, b *unstructured.Unstructured) (bool, error) {
+func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(a)
+	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
 	if err != nil {
 		return false, err
 	}
-	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(b)
+	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
 	if err != nil {
 		return false, err
 	}
-	numaLogger.Debugf("comparing specs: pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n", pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
 
-	return !reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB), nil
+	specsEqual := reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
+		specsEqual, pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
