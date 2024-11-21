@@ -654,15 +654,15 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{}),
+				false, map[string]string{"numaplane.numaproj.io/isbsvc-name": "my-isbsvc", "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &falseValue,
 			isbServicePauseRequest:         &falseValue,
-			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
-				return reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), spec)
+				return reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
 		{
