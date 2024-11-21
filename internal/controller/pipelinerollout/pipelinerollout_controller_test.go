@@ -662,7 +662,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedInProgressStrategy:     apiv1.UpgradeStrategyPPND,
 			expectedRolloutPhase:           apiv1.PhaseDeployed,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
-				return reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
+				return reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused), spec)
 			},
 		},
 		{
