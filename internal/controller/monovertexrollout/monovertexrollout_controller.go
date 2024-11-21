@@ -629,10 +629,10 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
 	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
 		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
-	labelsEqual := reflect.DeepEqual(from.Object["labels"], to.Object["labels"])
-	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.Object["labels"], to.Object["labels"])
-	annotationsEqual := reflect.DeepEqual(from.Object["annotations"], to.Object["annotations"])
-	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.Object["annotations"], to.Object["annotations"])
+	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 

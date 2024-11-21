@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -74,19 +73,18 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
 		currentUpgradingChildDef, err = findMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// create object as it doesn't exist
-				newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
-				if err != nil {
-					return false, err
-				}
-
-				numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+			return false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
+		}
+		if currentUpgradingChildDef == nil {
+			// create object as it doesn't exist
+			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
+			if err != nil {
 				return false, err
-			} else {
-				return false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 			}
+
+			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
+			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+			return false, err
 		}
 	}
 	if currentUpgradingChildDef == nil { // nothing to do
@@ -124,9 +122,9 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 		return nil, err
 	}
 
-	upgradingChild.SetLabels(map[string]string{
-		common.LabelKeyUpgradeState: string(common.LabelValueUpgradeInProgress),
-	})
+	labels := upgradingChild.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	upgradingChild.SetLabels(labels)
 
 	return upgradingChild, nil
 }
@@ -165,6 +163,8 @@ func findMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 	if err != nil {
 		return nil, err
 	}
+
+	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, children)
 
 	if len(children.Items) > 1 {
 		mostCurrentChild := &unstructured.Unstructured{}
@@ -356,7 +356,9 @@ func assessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstru
 
 // update the in-memory object with the new Label and patch the object in K8S
 func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) error {
-	childObject.SetLabels(map[string]string{common.LabelKeyUpgradeState: string(upgradeState)})
+	labels := childObject.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(upgradeState)
+	childObject.SetLabels(labels)
 	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
 	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
