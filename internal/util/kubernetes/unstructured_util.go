@@ -163,6 +163,14 @@ func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	return m, err
 }
 
+func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
+	namespacedNames := []string{}
+	for _, u := range unstrucList.Items {
+		namespacedNames = append(namespacedNames, fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()))
+	}
+	return namespacedNames
+}
+
 // CreateResource creates the resource in the kubernetes cluster
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Create(ctx, obj)

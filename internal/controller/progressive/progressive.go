@@ -164,7 +164,7 @@ func findMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		return nil, err
 	}
 
-	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, children)
+	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
 		mostCurrentChild := &unstructured.Unstructured{}
@@ -247,7 +247,7 @@ func processUpgradingChild(
 	if err != nil {
 		return false, err
 	}
-	numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "asssessment", assessment).Debug("assessment returned")
+	numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debugf("assessment returned: %v", assessment)
 
 	switch assessment {
 	case AssessmentResultFailure:
@@ -259,10 +259,10 @@ func processUpgradingChild(
 		if err != nil {
 			return false, err
 		}
-		newUpgradingChildDef, err = controller.Merge(existingUpgradingChildDef, newUpgradingChildDef)
+		/*newUpgradingChildDef, err = controller.Merge(existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
 			return false, err
-		}
+		}*/
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
