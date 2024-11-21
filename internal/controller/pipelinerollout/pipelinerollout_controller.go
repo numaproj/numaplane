@@ -427,8 +427,8 @@ func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstruc
 		return resultPipeline, fmt.Errorf("failed to get spec from new Pipeline: %w", err)
 	}
 	resultPipeline.Object["spec"] = specAsMap
-	resultPipeline.SetAnnotations(ctlrcommon.MergeMaps(existingPipeline.GetAnnotations(), newPipeline.GetAnnotations()))
-	resultPipeline.SetLabels(ctlrcommon.MergeMaps(existingPipeline.GetLabels(), newPipeline.GetLabels()))
+	resultPipeline.SetAnnotations(util.MergeMaps(existingPipeline.GetAnnotations(), newPipeline.GetAnnotations()))
+	resultPipeline.SetLabels(util.MergeMaps(existingPipeline.GetLabels(), newPipeline.GetLabels()))
 
 	return resultPipeline, nil
 }
@@ -868,9 +868,9 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	specsEqual := reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
 	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
 		specsEqual, pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
-	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil

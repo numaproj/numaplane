@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package common
+package util
+
+import "reflect"
 
 func MergeMaps(existing, new map[string]string) map[string]string {
 	merged := make(map[string]string)
@@ -27,4 +29,11 @@ func MergeMaps(existing, new map[string]string) map[string]string {
 	}
 
 	return merged
+}
+
+func CompareMaps(existing, new map[string]string) bool {
+	if existing == nil || new == nil {
+		return len(existing) == len(new)
+	}
+	return reflect.DeepEqual(existing, new)
 }

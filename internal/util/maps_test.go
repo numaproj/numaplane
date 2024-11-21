@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package common
+package util
 
 import (
 	"reflect"
@@ -37,6 +37,27 @@ func TestMergeMaps(t *testing.T) {
 			resultMap := MergeMaps(tt.oldMap, tt.newMap)
 			if !reflect.DeepEqual(resultMap, tt.expectedMap) {
 				t.Errorf("expected map: %v, got: %v", tt.expectedMap, resultMap)
+			}
+		})
+	}
+}
+
+func TestCompareMaps(t *testing.T) {
+	tests := []struct {
+		mapA           map[string]string
+		mapB           map[string]string
+		expectedResult bool
+	}{
+		{nil, map[string]string{"numaflow.numaproj.io/instance": "0"}, false},
+		{map[string]string{"numaflow.numaproj.io/instance": "0"}, map[string]string{"numaflow.numaproj.io/instance": "1"}, false},
+		{nil, map[string]string{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			result := CompareMaps(tt.mapA, tt.mapB)
+			if result != tt.expectedResult {
+				t.Errorf("expected result: %v, got: %v", tt.expectedResult, result)
 			}
 		})
 	}

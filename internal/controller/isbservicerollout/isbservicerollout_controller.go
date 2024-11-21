@@ -274,8 +274,8 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Object["spec"] = newISBService.Object["spec"]
-	resultISBService.SetAnnotations(ctlrcommon.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
-	resultISBService.SetLabels(ctlrcommon.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
+	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
+	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
 	return resultISBService
 }
 

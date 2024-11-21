@@ -359,8 +359,8 @@ func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *u
 	}
 	resultMonoVertex.Object["spec"] = specAsMap
 
-	resultMonoVertex.SetAnnotations(ctlrcommon.MergeMaps(existingMonoVertex.GetAnnotations(), newMonoVertex.GetAnnotations()))
-	resultMonoVertex.SetLabels(ctlrcommon.MergeMaps(existingMonoVertex.GetLabels(), newMonoVertex.GetLabels()))
+	resultMonoVertex.SetAnnotations(util.MergeMaps(existingMonoVertex.GetAnnotations(), newMonoVertex.GetAnnotations()))
+	resultMonoVertex.SetLabels(util.MergeMaps(existingMonoVertex.GetLabels(), newMonoVertex.GetLabels()))
 
 	// Use the same replicas as the existing MonoVertex
 	resultMonoVertex, err := withExistingMvtxReplicas(existingMonoVertex, resultMonoVertex)
@@ -616,9 +616,9 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
 	numaLogger.Debugf("specsEqual: %t, monoVertexWithoutDesiredPhaseA=%v, monoVertexWithoutDesiredPhaseB=%v\n",
 		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
-	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil
