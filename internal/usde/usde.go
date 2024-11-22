@@ -121,7 +121,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
-	if !reflect.DeepEqual(newDef, existingDef) {
+	if !reflect.DeepEqual(newDef.Object["spec"], existingDef.Object["spec"]) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 
