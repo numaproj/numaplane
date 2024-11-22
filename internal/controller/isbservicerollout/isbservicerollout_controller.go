@@ -274,9 +274,8 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Object["spec"] = newISBService.Object["spec"]
-	resultISBService.SetAnnotations(newISBService.GetAnnotations())
-	resultISBService.SetLabels(newISBService.GetLabels())
-
+	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
+	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
 	return resultISBService
 }
 
@@ -552,6 +551,10 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
 		}
 	}
+
+	// check if PPND strategy is requesting Pipelines to pause, and set true/false
+	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
+	_ = r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
 
 }
 

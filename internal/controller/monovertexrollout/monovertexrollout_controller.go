@@ -374,13 +374,8 @@ func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *u
 	}
 	resultMonoVertex.Object["spec"] = specAsMap
 
-	if newMonoVertex.GetAnnotations() != nil {
-		resultMonoVertex.SetAnnotations(newMonoVertex.GetAnnotations())
-	}
-
-	if newMonoVertex.GetLabels() != nil {
-		resultMonoVertex.SetLabels(newMonoVertex.GetLabels())
-	}
+	resultMonoVertex.SetAnnotations(util.MergeMaps(existingMonoVertex.GetAnnotations(), newMonoVertex.GetAnnotations()))
+	resultMonoVertex.SetLabels(util.MergeMaps(existingMonoVertex.GetLabels(), newMonoVertex.GetLabels()))
 
 	// Use the same replicas as the existing MonoVertex
 	resultMonoVertex, err := withExistingMvtxReplicas(existingMonoVertex, resultMonoVertex)
@@ -606,23 +601,13 @@ func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	/*mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
-	if err != nil {
-		return false, err
-	}
-	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
-	if err != nil {
-		return false, err
-	}*/
-	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", from, to)
 
 	specsEqual := reflect.DeepEqual(from, to)
-	numaLogger.Debugf("specsEqual: %t, from=%v, pipelineWithoutDesiredPhaseB=%v\n",
+	numaLogger.Debugf("specsEqual: %t, monoVertexWithoutDesiredPhaseA=%v, monoVertexWithoutDesiredPhaseB=%v\n",
 		specsEqual, from, to)
-	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil

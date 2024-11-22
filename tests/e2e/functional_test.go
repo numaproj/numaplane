@@ -218,6 +218,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerRolloutReady()
 
 		verifyNumaflowControllerReady(Namespace)
+
 	})
 
 	It("Should create the ISBServiceRollout if it doesn't exist", func() {

@@ -18,10 +18,10 @@ spec:
             generator:
               rpu: 5
               duration: 2s
-        - name: cat
-          udf:
-            builtin:
-              name: cat # A built-in UDF which simply cats the message
+        #- name: cat
+        #  udf:
+        #    builtin:
+        #      name: cat # A built-in UDF which simply cats the message
         - name: out
           sink:
             # A simple log printing sink

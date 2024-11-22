@@ -424,17 +424,11 @@ func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstruc
 
 	var specAsMap map[string]interface{}
 	if err := util.StructToStruct(newPipeline.Object["spec"], &specAsMap); err != nil {
-		return resultPipeline, fmt.Errorf("failed to get spec from new MonoVertex: %w", err)
+		return resultPipeline, fmt.Errorf("failed to get spec from new Pipeline: %w", err)
 	}
 	resultPipeline.Object["spec"] = specAsMap
-
-	if newPipeline.GetAnnotations() != nil {
-		resultPipeline.SetAnnotations(newPipeline.GetAnnotations())
-	}
-
-	if newPipeline.GetLabels() != nil {
-		resultPipeline.SetLabels(newPipeline.GetLabels())
-	}
+	resultPipeline.SetAnnotations(util.MergeMaps(existingPipeline.GetAnnotations(), newPipeline.GetAnnotations()))
+	resultPipeline.SetLabels(util.MergeMaps(existingPipeline.GetLabels(), newPipeline.GetLabels()))
 
 	return resultPipeline, nil
 }
@@ -593,7 +587,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger.Debugf("pipeline status: %v", pipelineStatus)
 
 	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
-	r.setChildResourcesPauseCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+	r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
 
 	return nil
 }
@@ -621,7 +615,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesHealthCondition(pipelineRol
 
 }
 
-func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured, pipelineStatus *kubernetes.GenericStatus) {
+func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRollout *apiv1.PipelineRollout, pipelineStatus *kubernetes.GenericStatus) {
 
 	pipelinePhase := numaflowv1.PipelinePhase(pipelineStatus.Phase)
 
@@ -886,12 +880,13 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	if err != nil {
 		return false, err
 	}
+
 	specsEqual := reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
 	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
 		specsEqual, pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
-	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil

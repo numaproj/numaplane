@@ -35,9 +35,6 @@ type PauseRequester interface {
 	// get the list of Pipelines corresponding to a Rollout
 	GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error)
 
-	// mark this Rollout paused
-	MarkRolloutPaused(ctx context.Context, rollout client.Object, paused bool) error
-
 	// get the unique key corresponding to this Rollout
 	GetRolloutKey(rolloutNamespace string, rolloutName string) string
 
@@ -98,6 +95,13 @@ func ProcessChildObjectWithPPND(ctx context.Context, k8sclient client.Client, ro
 	return true, nil
 }
 
+func IsRequestingPause(pauseRequester PauseRequester, rollout client.Object) bool {
+	pm := GetPauseModule()
+
+	requested, found := pm.GetPauseRequest(pauseRequester.GetRolloutKey(rollout.GetNamespace(), rollout.GetName()))
+	return found && requested != nil && *requested
+}
+
 // request that the Pipelines corresponding to this Rollout pause
 // return whether an update was made
 func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, rollout client.Object, pause bool, enqueuePipelineFunc func(k8stypes.NamespacedName)) (bool, error) {
@@ -121,9 +125,6 @@ func requestPipelinesPause(ctx context.Context, pauseRequester PauseRequester, r
 		}
 	}
 
-	if err := pauseRequester.MarkRolloutPaused(ctx, rollout, pause); err != nil {
-		return updated, fmt.Errorf("error marking %s paused: %w", pauseRequester.GetChildTypeString(), err)
-	}
 	return updated, nil
 }
 

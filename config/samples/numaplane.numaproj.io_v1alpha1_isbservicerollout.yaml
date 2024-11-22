@@ -1,14 +1,14 @@
 apiVersion: numaplane.numaproj.io/v1alpha1
 kind: ISBServiceRollout
 metadata:
-  name: my-isbsvc
+  name: my-isbsvc-0
   namespace: example-namespace
 spec:
   interStepBufferService:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
+    metadata:
+      annotations:
+        numaflow.numaproj.io/instance: "0"
     spec:
       # Example from https://github.com/numaproj/numaflow/blob/main/examples/0-isbsvc-jetstream.yaml
       jetstream:
