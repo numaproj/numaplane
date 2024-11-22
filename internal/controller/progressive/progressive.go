@@ -60,7 +60,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := findMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
+	currentUpgradingChildDef, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
 	if err != nil {
 		return false, err
 	}
@@ -68,13 +68,13 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
-		currentUpgradingChildDef, err = findMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
+		currentUpgradingChildDef, err = FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
 		if err != nil {
 			return false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
 			// create object as it doesn't exist
-			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
+			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
 				return false, err
 			}
@@ -105,11 +105,12 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, c client.Client) (*unstructured.Unstructured, error) {
+// if there's already an existing "upgrading" child, create a definition using its name; otherwise, use a new name
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, c)
+	childName, err := GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, c, useExistingChildName)
 	if err != nil {
 		return nil, err
 	}
@@ -151,9 +152,10 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
+// TODO: this function is being used outside of our Progressive logic - should we move it?
 // of the children provided of a Rollout, find the most current one and mark the others recyclable
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
-func findMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
+func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	children, err := findChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
@@ -212,14 +214,17 @@ func getChildIndex(childName string) (int, error) {
 	return childIndex, nil
 }
 
-// TODO: can this function make use of the one above?
-func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState, c client.Client) (string, error) {
+// get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState"
+// if none is found, create a new one
+// if one is found, create a new one if "useExistingChild=false", else use existing one
+func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, upgradeState common.UpgradeState, c client.Client, useExistingChild bool) (string, error) {
 
-	existingChild, err := findMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, true, c) // if for some reason there's more than 1
+	existingChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, true, c) // if for some reason there's more than 1
 	if err != nil {
 		return "", err
 	}
-	if existingChild == nil {
+	// if existing child doesn't exist or if it does but we don't want to use it, then create a new one
+	if existingChild == nil || (existingChild != nil && !useExistingChild) {
 		index, err := controller.IncrementChildCount(ctx, rolloutObject)
 		if err != nil {
 			return "", err
@@ -252,7 +257,7 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// check if there are any new incoming changes to the desired spec
-		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c)
+		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
 		if err != nil {
 			return false, err
 		}
@@ -261,10 +266,18 @@ func processUpgradingChild(
 			return false, err
 		}*/
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName(), "replacing 'upgrading' child")
+			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
+			if err != nil {
+				return false, err
+			}
+
+			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef, rolloutObject)
 			if err != nil {
 				return false, err

@@ -507,7 +507,7 @@ func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client)
+	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
