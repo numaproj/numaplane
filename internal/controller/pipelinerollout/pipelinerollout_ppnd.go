@@ -98,7 +98,11 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
-	if specBasedPause && numaflowtypes.IsPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout) {
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, existingPipelineDef, pipelineRollout, false)
+	if err != nil {
+		return false, err
+	}
+	if specBasedPause && pausedOrWontPause {
 		doneWithPPND = true
 	}
 

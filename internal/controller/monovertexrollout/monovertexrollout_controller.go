@@ -44,7 +44,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -597,38 +596,30 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 	return currentNameCount, nil
 }
 
-func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVertexDef *unstructured.Unstructured) (bool, error) {
-	monoVertexStatus, err := numaflowtypes.ParseMonoVertexStatus(monoVertexDef)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse MonoVertex Status from MonoVertex CR: %+v, %v", monoVertexDef, err)
-	}
-	monoVertexPhase := monoVertexStatus.Phase
-
-	return monoVertexPhase == "Paused" /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
-}
-
-func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *unstructured.Unstructured) error {
-	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
-	return kubernetes.PatchResource(ctx, r.client, monoVertexDef, patchJson, k8stypes.MergePatchType)
+func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
+	monoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return kubernetes.DeleteResource(ctx, c, monoVertexDef)
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
+	/*mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
 	if err != nil {
 		return false, err
 	}
 	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
 	if err != nil {
 		return false, err
-	}
-	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+	}*/
+	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", from, to)
 
-	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
-	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
-		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+	specsEqual := reflect.DeepEqual(from, to)
+	numaLogger.Debugf("specsEqual: %t, from=%v, pipelineWithoutDesiredPhaseB=%v\n",
+		specsEqual, from, to)
 	labelsEqual := reflect.DeepEqual(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := reflect.DeepEqual(from.GetAnnotations(), to.GetAnnotations())

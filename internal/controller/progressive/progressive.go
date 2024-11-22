@@ -37,22 +37,19 @@ import (
 // taking down the original child once the new one is healthy
 type progressiveController interface {
 
-	// createBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
+	// CreateBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
 	CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
 
-	// incrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
+	// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
 	IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error)
 
-	// childIsDrained checks to see if the child has been fully drained
-	ChildIsDrained(ctx context.Context, child *unstructured.Unstructured) (bool, error)
+	// Recycle deletes child
+	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error
 
-	// drain updates the child in Kubernetes to cause it to drain
-	Drain(ctx context.Context, child *unstructured.Unstructured) error
-
-	// childNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
+	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
-	// merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
+	// Merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
 	Merge(existingObj, newObj *unstructured.Unstructured) (*unstructured.Unstructured, error)
 }
 
@@ -277,7 +274,7 @@ func processUpgradingChild(
 			if err != nil {
 				return false, err
 			} else {
-				return false, fmt.Errorf("error getting %s: %v", newUpgradingChildDef.GetKind(), err)
+				return false, nil
 			}
 
 		}
@@ -301,9 +298,10 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
-		if err := controller.Drain(ctx, existingPromotedChildDef); err != nil {
+		// TODO: just have the garbage collection process take care of this instead of doing it here
+		/*if err := controller.Drain(ctx, existingPromotedChildDef); err != nil {
 			return false, err
-		}
+		}*/
 		return true, nil
 	default:
 		// Ensure the latest spec is applied
@@ -390,7 +388,7 @@ func GarbageCollectChildren(
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
 
 	for _, recyclableChild := range recyclableObjects.Items {
-		err = recycle(ctx, &recyclableChild, controller, c)
+		err = controller.Recycle(ctx, &recyclableChild, c)
 		if err != nil {
 			return err
 		}
@@ -409,23 +407,4 @@ func getRecyclableObjects(
 			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeRecyclable),
 		},
 	)
-}
-
-func recycle(ctx context.Context,
-	childObject *unstructured.Unstructured,
-	controller progressiveController,
-	c client.Client,
-) error {
-	isDrained, err := controller.ChildIsDrained(ctx, childObject)
-	if err != nil {
-		return err
-	}
-	if isDrained {
-		err = kubernetes.DeleteResource(ctx, c, childObject)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-
 }

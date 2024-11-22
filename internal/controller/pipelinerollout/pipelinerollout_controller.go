@@ -47,7 +47,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -836,17 +836,40 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
-func (r *PipelineRolloutReconciler) ChildIsDrained(ctx context.Context, pipelineDef *unstructured.Unstructured) (bool, error) {
-	pipelineStatus, err := numaflowtypes.ParsePipelineStatus(pipelineDef)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
-	}
-	pipelinePhase := pipelineStatus.Phase
+// TODO: account for failed children
+func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	c client.Client,
+) error {
 
-	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
+	if err != nil {
+		return err
+	}
+	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
+	// TODO: check if we need to wait until it's fully drained - then we can pass in a boolean to say "must be drained too"
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
+	if err != nil {
+		return err
+	}
+	if pausedOrWontPause {
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return err
+	}
+	// make sure we request Paused if we haven't yet
+	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+	if err != nil {
+		return err
+	}
+	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
+		r.drain(ctx, pipeline)
+		return nil
+	}
+	return nil
+
 }
 
-func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
+func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
 	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
 	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }

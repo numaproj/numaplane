@@ -147,8 +147,13 @@ func areAllPipelinesPausedOrWontPause(ctx context.Context, k8sClient client.Clie
 			return false, err
 		}
 
-		if !numaflowtypes.IsPipelinePausedOrWontPause(ctx, &pipeline, pipelineRollout) {
-			numaLogger.Debugf("pipeline %q not paused or won't pause", pipeline.GetName())
+		pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, &pipeline, pipelineRollout, false)
+		if err != nil {
+			return false, err
+		}
+
+		if !pausedOrWontPause {
+			numaLogger.Debugf("pipeline %q not paused/won't pause", pipeline.GetName())
 			return false, nil
 		}
 	}

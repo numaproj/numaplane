@@ -18,13 +18,18 @@ package numaflowtypes
 
 import (
 	"context"
+	"fmt"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PipelineSpec keeps track of minimum number of fields we need to know about
@@ -54,13 +59,27 @@ type PipelineStatus struct {
 	DrainedOnPause     bool                     `json:"drainedOnPause,omitempty" protobuf:"bytes,12,opt,name=drainedOnPause"`
 }
 
-func ParsePipelineStatus(obj *unstructured.Unstructured) (PipelineStatus, error) {
-	if obj == nil || len(obj.Object) == 0 {
+func GetRolloutForPipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (*apiv1.PipelineRollout, error) {
+	rolloutName, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
+	if err != nil {
+		return nil, err
+	}
+	// now find the PipelineRollout of that name
+	pipelineRollout := &apiv1.PipelineRollout{}
+	err = c.Get(ctx, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: rolloutName}, pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
+	return pipelineRollout, nil
+}
+
+func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {
+	if pipeline == nil || len(pipeline.Object) == 0 {
 		return PipelineStatus{}, nil
 	}
 
 	var status PipelineStatus
-	err := util.StructToStruct(obj.Object["status"], &status)
+	err := util.StructToStruct(pipeline.Object["status"], &status)
 	if err != nil {
 		return PipelineStatus{}, err
 	}
@@ -79,15 +98,33 @@ func CheckPipelinePhase(ctx context.Context, pipeline *unstructured.Unstructured
 	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
 }
 
+func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	pipelineStatus, err := ParsePipelineStatus(pipeline)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
+	}
+	pipelinePhase := pipelineStatus.Phase
+
+	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+}
+
 // either pipeline must be:
 //   - Paused
 //   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
 //   - PipelineRollout parent Annotated to allow data loss
-func IsPipelinePausedOrWontPause(ctx context.Context, pipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout) bool {
+func IsPipelinePausedOrWontPause(ctx context.Context, pipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout, requireDrained bool) (bool, error) {
 	wontPause := CheckIfPipelineWontPause(ctx, pipeline, pipelineRollout)
 
-	paused := CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
-	return paused || wontPause
+	if requireDrained {
+		pausedAndDrained, err := CheckPipelineDrained(ctx, pipeline)
+		if err != nil {
+			return false, err
+		}
+		return pausedAndDrained || wontPause, nil
+	} else {
+		paused := CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+		return paused || wontPause, nil
+	}
 }
 
 func CheckIfPipelineWontPause(ctx context.Context, pipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout) bool {
@@ -102,6 +139,11 @@ func CheckIfPipelineWontPause(ctx context.Context, pipeline *unstructured.Unstru
 	return wontPause
 }
 
+func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error) {
+	desiredPhase, _, err := unstructured.NestedString(pipeline.Object, "spec", "lifecycle", "desiredPhase")
+	return desiredPhase, err
+}
+
 func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
 	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
@@ -111,13 +153,13 @@ func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	return nil
 }
 
-// TODO: make this and the WithDesiredPhase() signature from above similar to each other
+// TODO: make this and the WithDesiredPhase() signature (and possibly implmentation) from above similar to each other
 // (this may naturally happen after refactoring)
 // remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
-func WithoutDesiredPhase(obj *unstructured.Unstructured) (map[string]interface{}, error) {
+func WithoutDesiredPhase(pipeline *unstructured.Unstructured) (map[string]interface{}, error) {
 	var specAsMap map[string]any
-	if err := util.StructToStruct(obj.Object["spec"], &specAsMap); err != nil {
+	if err := util.StructToStruct(pipeline.Object["spec"], &specAsMap); err != nil {
 		return nil, err
 	}
 	// remove "lifecycle.desiredPhase"
