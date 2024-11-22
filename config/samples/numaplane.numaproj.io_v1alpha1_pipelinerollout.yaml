@@ -6,18 +6,18 @@ metadata:
 spec:
   pipeline:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
-    metadata:
-      annotations:
-        numaflow.numaproj.io/instance: "0"
+    #metadata:
+    #  annotations:
+    #    numaflow.numaproj.io/instance: "0"
     spec:
-      interStepBufferServiceName: my-isbsvc-0
+      interStepBufferServiceName: my-isbsvc
       vertices:
         - name: in
           source:
             # A self data generating source
             generator:
               rpu: 5
-              duration: 2s
+              duration: 1s
         - name: cat
           udf:
             builtin:
