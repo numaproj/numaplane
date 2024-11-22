@@ -830,7 +830,6 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
-// TODO: account for failed children
 func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	c client.Client,
@@ -841,7 +840,6 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 		return err
 	}
 	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
-	// TODO: check if we need to wait until it's fully drained - then we can pass in a boolean to say "must be drained too"
 	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
 	if err != nil {
 		return err

@@ -152,7 +152,6 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
-// TODO: this function is being used outside of our Progressive logic - should we move it?
 // of the children provided of a Rollout, find the most current one and mark the others recyclable
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
@@ -261,10 +260,6 @@ func processUpgradingChild(
 		if err != nil {
 			return false, err
 		}
-		/*newUpgradingChildDef, err = controller.Merge(existingUpgradingChildDef, newUpgradingChildDef)
-		if err != nil {
-			return false, err
-		}*/
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
 			return false, err
@@ -302,7 +297,6 @@ func processUpgradingChild(
 			return false, err
 		}
 
-		// TODO: what if we fail before this line? It seems we will have 2 promoted pipelines in that case - maybe our logic should always assume the highest index "promoted" one is the best and then garbage collect the others?
 		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
 		if err != nil {
 			return false, err
@@ -310,29 +304,8 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
-
-		// TODO: just have the garbage collection process take care of this instead of doing it here
-		/*if err := controller.Drain(ctx, existingPromotedChildDef); err != nil {
-			return false, err
-		}*/
 		return true, nil
 	default:
-		// Ensure the latest spec is applied
-		// TODO: instead of all of this, under the "Failed" section we can try creating a new one
-
-		/*childNeedsToUpdate, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, desiredUpgradingChildDef) // TODO: if we decide not to drain the upgrading one on failure, I think we can change this to DeepEqual() check
-		if err != nil {
-			return false, err
-		}
-		if childNeedsToUpdate {
-			numaLogger.Debugf("Upgrading child %s/%s has a new update", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
-
-			err = kubernetes.UpdateResource(ctx, c, desiredUpgradingChildDef)
-			if err != nil {
-				return false, err
-			}
-		}*/
-		//continue (re-enqueue)
 		return false, nil
 	}
 }
