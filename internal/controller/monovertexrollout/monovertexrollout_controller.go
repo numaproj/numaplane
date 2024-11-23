@@ -301,12 +301,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 				return fmt.Errorf("error getting MonoVertex for status processing: %v", err)
 			}
 		}
-		newMonoVertexDef, err = r.Merge(existingMonoVertexDef, newMonoVertexDef)
-		if err != nil {
-			return err
-		}
 
-		//if mvNeedsToUpdate {
 		numaLogger.Debug("processing MonoVertex with Progressive")
 		done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
@@ -315,7 +310,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 		}
-		//}
 
 	default:
 		if mvNeedsToUpdate {

@@ -36,8 +36,6 @@ type RolloutObject interface {
 
 	GetChildGVK() schema.GroupVersionKind
 
-	//GetTypeMeta() *metav1.TypeMeta
-
 	GetRolloutObjectMeta() *metav1.ObjectMeta
 
 	GetRolloutStatus() *apiv1.Status

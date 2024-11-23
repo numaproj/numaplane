@@ -523,7 +523,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 	case apiv1.UpgradeStrategyProgressive:
-		//if pipelineNeedsToUpdate {
 		numaLogger.Debug("processing pipeline with Progressive")
 		done, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
@@ -532,7 +531,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		}
-		//}
+
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.client, newPipelineDef); err != nil {

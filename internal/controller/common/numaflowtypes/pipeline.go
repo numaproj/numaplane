@@ -145,7 +145,6 @@ func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error
 }
 
 func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
-	// TODO: I noticed if any of these fields are nil, this function errors out - but can't remember why they'd be nil
 	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
