@@ -853,7 +853,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 		return err
 	}
 	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
-		r.drain(ctx, pipeline)
+		_ = r.drain(ctx, pipeline)
 		return nil
 	}
 	return nil

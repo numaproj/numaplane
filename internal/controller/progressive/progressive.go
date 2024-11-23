@@ -165,7 +165,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
-		mostCurrentChild := &unstructured.Unstructured{}
+		var mostCurrentChild *unstructured.Unstructured
 		recycleList := []*unstructured.Unstructured{}
 		mostCurrentIndex := -1
 		for _, child := range children.Items {
