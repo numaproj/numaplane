@@ -152,8 +152,9 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
-// of the children provided of a Rollout, find the most current one and mark the others recyclable
+// find the most current child of a Rollout
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
+// if we do see older ones, recycle them
 func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 

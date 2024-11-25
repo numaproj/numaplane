@@ -50,9 +50,10 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	defaultISBSVCName = "my-isbsvc"
 
 	pipelineSpec = numaflowv1.PipelineSpec{
-		InterStepBufferServiceName: "my-isbsvc",
+		InterStepBufferServiceName: defaultISBSVCName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
 				Name: "in",
@@ -491,7 +492,7 @@ func TestBasePipelineMetadata(t *testing.T) {
 
 func createDefaultTestPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
 	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, numaflowv1.Status{}, false,
-		map[string]string{"numaplane.numaproj.io/isbsvc-name": "my-isbsvc", "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"})
+		map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"})
 }
 
 func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, labels map[string]string) *numaflowv1.Pipeline {
@@ -656,7 +657,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{"numaplane.numaproj.io/isbsvc-name": "my-isbsvc", "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"}),
+				false, map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &falseValue,
@@ -724,7 +725,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				ppnd.GetPauseModule().PauseRequests[ppnd.GetPauseModule().GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)] = tc.numaflowControllerPauseRequest
 			}
 			if tc.isbServicePauseRequest != nil {
-				ppnd.GetPauseModule().PauseRequests[ppnd.GetPauseModule().GetISBServiceKey(ctlrcommon.DefaultTestNamespace, "my-isbsvc")] = tc.isbServicePauseRequest
+				ppnd.GetPauseModule().PauseRequests[ppnd.GetPauseModule().GetISBServiceKey(ctlrcommon.DefaultTestNamespace, defaultISBSVCName)] = tc.isbServicePauseRequest
 			}
 
 			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
@@ -780,12 +781,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	paused := numaflowv1.PipelinePhasePaused
 
 	testCases := []struct {
-		name                       string
-		newPipelineSpec            numaflowv1.PipelineSpec
-		existingPipelineDef        numaflowv1.Pipeline
-		existingUpgradePipelineDef *numaflowv1.Pipeline
-		initialRolloutPhase        apiv1.Phase
-		initialInProgressStrategy  *apiv1.UpgradeStrategy
+		name                        string
+		newPipelineSpec             numaflowv1.PipelineSpec
+		existingOriginalPipelineDef numaflowv1.Pipeline
+		existingUpgradePipelineDef  *numaflowv1.Pipeline
+		initialRolloutPhase         apiv1.Phase
+		initialInProgressStrategy   *apiv1.UpgradeStrategy
 
 		expectedInProgressStrategy           apiv1.UpgradeStrategy
 		expectedRolloutPhase                 apiv1.Phase
@@ -797,7 +798,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "spec difference results in Progressive",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPipelineDef: *createPipeline(
+			existingOriginalPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -813,13 +814,13 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedExistingPipelineDeleted:      false,
 			expectedExistingPipelineDesiredPhase: nil,
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
-				return true
+				return reflect.DeepEqual(pipelineSpecWithTopologyChange, spec)
 			},
 		},
 		{
 			name:            "Progressive deployed successfully",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPipelineDef: *createPipeline(
+			existingOriginalPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -854,9 +855,47 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
+			name:            "Progressive deployment failed",
+			newPipelineSpec: pipelineSpecWithTopologyChange,
+			existingOriginalPipelineDef: *createPipeline(
+				numaflowv1.PipelinePhaseRunning,
+				numaflowv1.Status{},
+				false,
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+				}),
+			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
+				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestNewPipelineName,
+				numaflowv1.PipelinePhaseFailed,
+				numaflowv1.Status{
+					Conditions: []metav1.Condition{
+						{
+							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+				false,
+				map[string]string{
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
+				}),
+			initialRolloutPhase:                  apiv1.PhasePending,
+			initialInProgressStrategy:            &progressiveUpgradeStrategy,
+			expectedInProgressStrategy:           apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:                 apiv1.PhasePending,
+			expectedExistingPipelineDeleted:      false,
+			expectedExistingPipelineDesiredPhase: nil,
+			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
+				return reflect.DeepEqual(pipelineSpecWithTopologyChange, spec)
+			},
+		},
+		{
 			name:            "Clean up after progressive upgrade",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPipelineDef: *createPipeline(
+			existingOriginalPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhasePaused,
 				numaflowv1.Status{},
 				true,
@@ -884,9 +923,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Clean up after progressive upgrade do not delete not drained pipeline",
+			name:            "Clean up after progressive upgrade: pipeline still draining",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPipelineDef: *createPipeline(
+			existingOriginalPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhasePaused,
 				numaflowv1.Status{},
 				false,
@@ -956,12 +995,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			// create the already-existing Pipeline in Kubernetes
 			// this updates everything but the Status subresource
-			existingPipelineDef := &tc.existingPipelineDef
+			existingPipelineDef := &tc.existingOriginalPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 			pipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Create(ctx, existingPipelineDef, metav1.CreateOptions{})
 			assert.NoError(t, err)
 			// update Status subresource
-			pipeline.Status = tc.existingPipelineDef.Status
+			pipeline.Status = tc.existingOriginalPipelineDef.Status
 			_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, pipeline, metav1.UpdateOptions{})
 			assert.NoError(t, err)
 

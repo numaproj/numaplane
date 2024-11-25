@@ -163,6 +163,7 @@ func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	return m, err
 }
 
+// ExtractResourceNames extracts the names of the resources from an UnstructuredList
 func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
 	namespacedNames := []string{}
 	for _, u := range unstrucList.Items {
