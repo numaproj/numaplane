@@ -777,7 +777,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		recorder)
 
 	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
-	//paused := numaflowv1.PipelinePhasePaused
 
 	testCases := []struct {
 		name                        string
@@ -785,6 +784,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		existingOriginalPipelineDef numaflowv1.Pipeline
 		existingUpgradePipelineDef  *numaflowv1.Pipeline
 		initialRolloutPhase         apiv1.Phase
+		initialRolloutNameCount     int
 		initialInProgressStrategy   *apiv1.UpgradeStrategy
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
@@ -806,6 +806,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				}),
 			existingUpgradePipelineDef: nil,
 			initialRolloutPhase:        apiv1.PhaseDeployed,
+			initialRolloutNameCount:    1,
 			initialInProgressStrategy:  nil,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -843,6 +844,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhasePending,
+			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -881,6 +883,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhasePending,
+			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -888,6 +891,46 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:            "Progressive deployment failed - going back to original spec",
+			newPipelineSpec: pipelineSpec, // this matches the original spec
+			existingOriginalPipelineDef: *createPipeline(
+				numaflowv1.PipelinePhaseRunning,
+				numaflowv1.Status{},
+				false,
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+				}),
+			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
+				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
+				numaflowv1.PipelinePhaseFailed,
+				numaflowv1.Status{
+					Conditions: []metav1.Condition{
+						{
+							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+				false,
+				map[string]string{
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
+				}),
+			initialRolloutPhase:        apiv1.PhasePending,
+			initialRolloutNameCount:    2,
+			initialInProgressStrategy:  &progressiveUpgradeStrategy,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:       apiv1.PhasePending,
+
+			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
+			expectedPipelines: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
 			},
 		},
 		{
@@ -911,6 +954,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
+			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  nil,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -939,6 +983,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
+			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  nil,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -967,8 +1012,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
 				rollout.Status.NameCount = new(int32)
-				*rollout.Status.NameCount++
 			}
+			*rollout.Status.NameCount = int32(tc.initialRolloutNameCount)
+
 			if tc.initialInProgressStrategy != nil {
 				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
 				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, *tc.initialInProgressStrategy)
@@ -1022,7 +1068,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			resultPipelineList, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
-			assert.Equal(t, len(tc.expectedPipelines), len(resultPipelineList.Items))
+			assert.Equal(t, len(tc.expectedPipelines), len(resultPipelineList.Items), resultPipelineList.Items)
 
 			for _, pipeline := range resultPipelineList.Items {
 				expectedPipelineUpgradeState, found := tc.expectedPipelines[pipeline.Name]
