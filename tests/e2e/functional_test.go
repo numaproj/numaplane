@@ -210,11 +210,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		if disableTestArtifacts != "true" {
-			wg.Add(1)
-			go watchNumaflowControllerRollout()
-		}
-
 		verifyNumaflowControllerRolloutReady()
 
 		verifyNumaflowControllerReady(Namespace)
@@ -233,14 +228,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
-		if disableTestArtifacts != "true" {
-			wg.Add(1)
-			go watchISBServiceRollout()
-
-			wg.Add(1)
-			go watchISBService()
-		}
-
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
@@ -258,14 +245,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			return err
 		}, testTimeout, testPollingInterval).Should(Succeed())
-
-		if disableTestArtifacts != "true" {
-			wg.Add(1)
-			go watchPipelineRollout()
-
-			wg.Add(1)
-			go watchPipeline()
-		}
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -299,14 +278,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
-
-		if disableTestArtifacts != "true" {
-			wg.Add(1)
-			go watchMonoVertexRollout()
-
-			wg.Add(1)
-			go watchMonoVertex()
-		}
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 

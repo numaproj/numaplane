@@ -273,18 +273,8 @@ func watchPods() {
 						continue
 					}
 
-					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					err := writeToFile(fileName, pd)
 					if err != nil {
-						fmt.Printf("Failed to open log file: %v\n", err)
-						return
-					}
-					defer file.Close()
-
-					bytes, _ := yaml.Marshal(pd)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
-					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -293,4 +283,24 @@ func watchPods() {
 			return
 		}
 	}
+}
+
+// helper func to write `kubectl get -o yaml` output to file
+func writeToFile(fileName string, resource Output) error {
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return err
+	}
+	defer file.Close()
+
+	bytes, _ := yaml.Marshal(resource)
+	updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+	_, err = file.WriteString(updateLog)
+	if err != nil {
+		fmt.Printf("Failed to write to log file: %v\n", err)
+		return err
+	}
+
+	return nil
 }

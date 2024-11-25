@@ -3,9 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"time"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/yaml"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
@@ -142,13 +139,6 @@ func watchMonoVertexRollout() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
@@ -162,13 +152,12 @@ func watchMonoVertexRollout() {
 						Spec:       rollout.Spec,
 						Status:     rollout.Status,
 					}
-					bytes, _ := yaml.Marshal(rl)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err := writeToFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml"), rl)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
+
 				}
 			}
 		case <-stopCh:
@@ -186,13 +175,6 @@ func watchMonoVertex() {
 		return
 	}
 	defer watcher.Stop()
-
-	file, err := os.OpenFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
 
 	for {
 		select {
@@ -213,11 +195,9 @@ func watchMonoVertex() {
 						Spec:       mvtx.Spec,
 						Status:     mvtx.Status,
 					}
-					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err = writeToFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml"), output)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -299,4 +279,12 @@ func verifyMonoVertexRolloutDeployed(monoVertexRolloutName string) {
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
+}
+
+func startMonoVertexRolloutWatches() {
+	wg.Add(1)
+	go watchMonoVertexRollout()
+
+	wg.Add(1)
+	go watchMonoVertex()
 }

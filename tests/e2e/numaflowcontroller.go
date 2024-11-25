@@ -3,12 +3,9 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"time"
 
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/yaml"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,13 +95,6 @@ func watchNumaflowControllerRollout() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
@@ -118,11 +108,9 @@ func watchNumaflowControllerRollout() {
 						Spec:       rollout.Spec,
 						Status:     rollout.Status,
 					}
-					bytes, _ := yaml.Marshal(rl)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err := writeToFile(filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml"), rl)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}

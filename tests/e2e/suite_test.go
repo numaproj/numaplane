@@ -114,10 +114,13 @@ var _ = BeforeSuite(func() {
 		go watchPods()
 
 		wg.Add(1)
-		go watchStatefulSet()
+		go watchNumaflowControllerRollout()
 
-		wg.Add(1)
-		go watchVertices()
+		startPipelineRolloutWatches()
+
+		startISBServiceRolloutWatches()
+
+		startMonoVertexRolloutWatches()
 
 		if enablePodLogs == "true" {
 			wg.Add(1)
