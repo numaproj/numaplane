@@ -48,11 +48,11 @@ import (
 var (
 	DefaultTestNamespace = "default"
 
-	DefaultTestISBSvcRolloutName     = "isbservicerollout-test"
-	DefaultTestISBSvcName            = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
-	DefaultTestPipelineRolloutName   = "pipelinerollout-test"
-	DefaultTestPipelineName          = DefaultTestPipelineRolloutName + "-0"
-	DefaultTestNewPipelineName       = DefaultTestPipelineRolloutName + "-1"
+	DefaultTestISBSvcRolloutName   = "isbservicerollout-test"
+	DefaultTestISBSvcName          = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestPipelineRolloutName = "pipelinerollout-test"
+	DefaultTestPipelineName        = DefaultTestPipelineRolloutName + "-0"
+	//DefaultTestNewPipelineName       = DefaultTestPipelineRolloutName + "-1"
 	DefaultTestMonoVertexRolloutName = "monovertexrollout-test"
 	DefaultTestMonoVertexName        = DefaultTestMonoVertexRolloutName + "-0"
 )
