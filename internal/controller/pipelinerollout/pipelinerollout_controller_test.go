@@ -801,8 +801,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: nil,
 			initialRolloutPhase:        apiv1.PhaseDeployed,
@@ -840,8 +841,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhasePending,
 			initialRolloutNameCount:    2,
@@ -950,8 +952,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
 			initialRolloutNameCount:    2,
@@ -979,8 +982,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout: ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
+					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
 			initialRolloutNameCount:    2,
@@ -1077,27 +1081,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				assert.True(t, found)
 				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
 			}
-
-			// Check the new Pipeline spec
-			/*resultPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestNewPipelineName, metav1.GetOptions{})
-			assert.NoError(t, err)
-			assert.NotNil(t, resultPipeline)
-			assert.True(t, tc.expectedPipelineSpecResult(resultPipeline.Spec), "result spec", fmt.Sprint(resultPipeline.Spec))
-
-			// Check the existing Pipeline state
-			resultExistingPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestPipelineName, metav1.GetOptions{})
-			if tc.expectedExistingPipelineDeleted {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, resultExistingPipeline)
-			}
-
-			if tc.expectedExistingPipelineDesiredPhase != nil {
-				assert.True(t,
-					reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpec, *tc.expectedExistingPipelineDesiredPhase), resultExistingPipeline.Spec),
-					"result pipeline phase", fmt.Sprint(resultExistingPipeline.Status.Phase))
-			}*/
 		})
 	}
 }
