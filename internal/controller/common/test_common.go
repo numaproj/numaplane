@@ -48,11 +48,10 @@ import (
 var (
 	DefaultTestNamespace = "default"
 
-	DefaultTestISBSvcRolloutName   = "isbservicerollout-test"
-	DefaultTestISBSvcName          = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
-	DefaultTestPipelineRolloutName = "pipelinerollout-test"
-	DefaultTestPipelineName        = DefaultTestPipelineRolloutName + "-0"
-	//DefaultTestNewPipelineName       = DefaultTestPipelineRolloutName + "-1"
+	DefaultTestISBSvcRolloutName     = "isbservicerollout-test"
+	DefaultTestISBSvcName            = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestPipelineRolloutName   = "pipelinerollout-test"
+	DefaultTestPipelineName          = DefaultTestPipelineRolloutName + "-0"
 	DefaultTestMonoVertexRolloutName = "monovertexrollout-test"
 	DefaultTestMonoVertexName        = DefaultTestMonoVertexRolloutName + "-0"
 )
@@ -83,6 +82,23 @@ func CreatePipelineInK8S(ctx context.Context, t *testing.T, numaflowClientSet *n
 
 	// updating the Status subresource is a separate operation
 	_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(DefaultTestNamespace).UpdateStatus(ctx, resultPipeline, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+}
+
+func CreateMVRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, monoVertexRollout *apiv1.MonoVertexRollout) {
+	err := numaplaneClient.Create(ctx, monoVertexRollout)
+	assert.NoError(t, err)
+	err = numaplaneClient.Status().Update(ctx, monoVertexRollout)
+	assert.NoError(t, err)
+}
+
+func CreateMonoVertexInK8S(ctx context.Context, t *testing.T, numaflowClientSet *numaflowversioned.Clientset, monoVertex *numaflowv1.MonoVertex) {
+	resultMV, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(DefaultTestNamespace).Create(ctx, monoVertex, metav1.CreateOptions{})
+	assert.NoError(t, err)
+	resultMV.Status = monoVertex.Status
+
+	// updating the Status subresource is a separate operation
+	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(DefaultTestNamespace).UpdateStatus(ctx, resultMV, metav1.UpdateOptions{})
 	assert.NoError(t, err)
 }
 
@@ -133,8 +149,8 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 	}
 }
 
-func CreateTestPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec, annotations map[string]string, labels map[string]string) *apiv1.PipelineRollout {
-	pipelineRaw, _ := json.Marshal(isbsvcSpec)
+func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, pipelineAnnotations map[string]string, pipelineLabels map[string]string) *apiv1.PipelineRollout {
+	pipelineRaw, _ := json.Marshal(pipelineSpec)
 	return &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         DefaultTestNamespace,
@@ -142,11 +158,15 @@ func CreateTestPipelineRollout(isbsvcSpec numaflowv1.PipelineSpec, annotations m
 			UID:               "uid",
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
-			Annotations:       annotations,
-			Labels:            labels,
+			Annotations:       rolloutAnnotations,
+			Labels:            rolloutLabels,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Pipeline: apiv1.Pipeline{
+				Metadata: apiv1.Metadata{
+					Labels:      pipelineLabels,
+					Annotations: pipelineAnnotations,
+				},
 				Spec: runtime.RawExtension{
 					Raw: pipelineRaw,
 				},
@@ -159,13 +179,14 @@ func CreateTestPipelineOfSpec(
 	spec numaflowv1.PipelineSpec,
 	name string,
 	phase numaflowv1.PipelinePhase,
-	innerStatus numaflowv1.Status,
+	status numaflowv1.Status,
 	drainedOnPause bool,
 	labels map[string]string,
+	annotations map[string]string,
 ) *numaflowv1.Pipeline {
-	status := numaflowv1.PipelineStatus{
+	pipelineStatus := numaflowv1.PipelineStatus{
 		Phase:          phase,
-		Status:         innerStatus,
+		Status:         status,
 		DrainedOnPause: drainedOnPause,
 	}
 	return &numaflowv1.Pipeline{
@@ -179,7 +200,80 @@ func CreateTestPipelineOfSpec(
 			Labels:    labels,
 		},
 		Spec:   spec,
+		Status: pipelineStatus,
+	}
+
+}
+
+func CreateDefaultTestMVOfPhase(phase numaflowv1.MonoVertexPhase) *numaflowv1.MonoVertex {
+	return &numaflowv1.MonoVertex{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              DefaultTestMonoVertexName,
+			Namespace:         DefaultTestNamespace,
+			UID:               "some-uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+			Labels: map[string]string{
+				common.LabelKeyParentRollout: DefaultTestMonoVertexRolloutName},
+		},
+		Spec: numaflowv1.MonoVertexSpec{},
+		Status: numaflowv1.MonoVertexStatus{
+			Phase: phase,
+		},
+	}
+}
+
+func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, mvAnnotations map[string]string, mvLabels map[string]string) *apiv1.MonoVertexRollout {
+	mvRaw, _ := json.Marshal(mvSpec)
+	return &apiv1.MonoVertexRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         DefaultTestNamespace,
+			Name:              DefaultTestMonoVertexRolloutName,
+			UID:               "uid",
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+			Annotations:       rolloutAnnotations,
+			Labels:            rolloutLabels,
+		},
+		Spec: apiv1.MonoVertexRolloutSpec{
+			MonoVertex: apiv1.MonoVertex{
+				Metadata: apiv1.Metadata{
+					Labels:      mvLabels,
+					Annotations: mvAnnotations,
+				},
+				Spec: runtime.RawExtension{
+					Raw: mvRaw,
+				},
+			},
+		},
+	}
+}
+
+func CreateTestMonoVertexOfSpec(
+	spec numaflowv1.MonoVertexSpec,
+	name string,
+	phase numaflowv1.MonoVertexPhase,
+	status numaflowv1.Status,
+	labels map[string]string,
+	annotations map[string]string,
+) *numaflowv1.MonoVertex {
+	mvStatus := numaflowv1.MonoVertexStatus{
+		Phase:  phase,
 		Status: status,
+	}
+	return &numaflowv1.MonoVertex{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MonoVertex",
+			APIVersion: "numaflow.numaproj.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   DefaultTestNamespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec:   spec,
+		Status: mvStatus,
 	}
 
 }

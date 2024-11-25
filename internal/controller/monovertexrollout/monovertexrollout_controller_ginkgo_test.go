@@ -38,31 +38,6 @@ var _ = Describe("MonoVertexRollout Controller", Ordered, func() {
 
 	ctx := context.Background()
 
-	monoVertexSpec := numaflowv1.MonoVertexSpec{
-		Replicas: ptr.To(int32(1)),
-		Source: &numaflowv1.Source{
-			UDSource: &numaflowv1.UDSource{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
-				},
-			},
-			UDTransformer: &numaflowv1.UDTransformer{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
-				},
-			},
-		},
-		Sink: &numaflowv1.Sink{
-			AbstractSink: numaflowv1.AbstractSink{
-				UDSink: &numaflowv1.UDSink{
-					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
-					},
-				},
-			},
-		},
-	}
-
 	monoVertexSpecRaw, err := json.Marshal(monoVertexSpec)
 	Expect(err).ToNot(HaveOccurred())
 

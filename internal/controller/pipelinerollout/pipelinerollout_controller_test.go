@@ -491,11 +491,12 @@ func TestBasePipelineMetadata(t *testing.T) {
 
 func createDefaultTestPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipeline {
 	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, numaflowv1.Status{}, false,
-		map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"})
+		map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"},
+		map[string]string{})
 }
 
-func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, labels map[string]string) *numaflowv1.Pipeline {
-	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, labels)
+func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, rolloutLabels map[string]string) *numaflowv1.Pipeline {
+	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, rolloutLabels, map[string]string{})
 }
 
 // process an existing pipeline
@@ -625,7 +626,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhaseRunning),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{}),
+				false, map[string]string{}, map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
@@ -656,7 +657,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(pipelineSpecWithTopologyChange, numaflowv1.PipelinePhasePaused),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"}),
+				false, map[string]string{"numaplane.numaproj.io/isbsvc-name": defaultISBSVCName, "numaplane.numaproj.io/parent-rollout-name": "pipelinerollout-test", "numaplane.numaproj.io/upgrade-state": "promoted"},
+				map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyPPND,
 			numaflowControllerPauseRequest: &falseValue,
@@ -699,7 +701,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				tc.pipelineRolloutAnnotations = map[string]string{}
 			}
 
-			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{})
+			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{}, map[string]string{}, map[string]string{})
 			_ = numaplaneClient.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
@@ -844,7 +846,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
 					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+				},
+				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
@@ -883,7 +886,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
 					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+				},
+				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
@@ -922,7 +926,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
 					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradeInProgress),
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+				},
+				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
@@ -955,7 +960,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
 					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradePromoted),
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+				},
+				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  nil,
@@ -985,7 +991,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceNameForPipeline: defaultISBSVCName,
 					common.LabelKeyUpgradeState:              string(common.LabelValueUpgradePromoted),
 					common.LabelKeyParentRollout:             ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+				},
+				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  nil,
@@ -1010,7 +1017,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, pipelineList.Items, 0)
 
-			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{})
+			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{})
 			_ = numaplaneClient.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
