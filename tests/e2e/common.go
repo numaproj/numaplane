@@ -48,11 +48,14 @@ var (
 	kubeClient                      clientgo.Interface
 
 	wg     sync.WaitGroup
+	mutex  sync.RWMutex
 	stopCh chan struct{}
 
 	ppnd                 string
 	disableTestArtifacts string
 	enablePodLogs        string
+
+	openFiles map[string]*os.File
 )
 
 const (
@@ -287,12 +290,16 @@ func watchPods() {
 
 // helper func to write `kubectl get -o yaml` output to file
 func writeToFile(fileName string, resource Output) error {
-	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	file, err := os.Create(fileName)
 	if err != nil {
 		fmt.Printf("Failed to open log file: %v\n", err)
 		return err
 	}
-	defer file.Close()
+	openFiles[fileName] = file
 
 	bytes, _ := yaml.Marshal(resource)
 	updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
@@ -300,6 +307,17 @@ func writeToFile(fileName string, resource Output) error {
 	if err != nil {
 		fmt.Printf("Failed to write to log file: %v\n", err)
 		return err
+	}
+
+	return nil
+}
+
+func closeAllFiles() error {
+	for _, file := range openFiles {
+		err := file.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

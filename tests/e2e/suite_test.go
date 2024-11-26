@@ -55,6 +55,8 @@ var _ = BeforeSuite(func() {
 		setupOutputDir()
 	}
 
+	openFiles = make(map[string]*os.File)
+
 	stopCh = make(chan struct{})
 
 	ppnd = os.Getenv("PPND")
@@ -139,7 +141,11 @@ var _ = AfterSuite(func() {
 	cancel()
 	By("tearing down test environment")
 	close(stopCh)
-	err := testEnv.Stop()
+
+	err := closeAllFiles()
+	Expect(err).NotTo(HaveOccurred())
+
+	err = testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
 })
