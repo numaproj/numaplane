@@ -424,19 +424,24 @@ func TestChildNeedsUpdating(t *testing.T) {
 		expectedError  bool
 		expectedResult bool
 	}{
-		/*{
+		{
 			name: "ObjectsEqual",
+
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"some_map": map[string]interface{}{
-						"key": "value1",
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
 					},
 				},
 			},
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"some_map": map[string]interface{}{
-						"key": "value1",
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
 					},
 				},
 			},
@@ -457,23 +462,52 @@ func TestChildNeedsUpdating(t *testing.T) {
 			}(),
 			expectedError:  false,
 			expectedResult: true,
-		},*/
+		},
 		{
 			name: "SpecsDiffer",
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"some_map": map[string]interface{}{},
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{},
+					},
 				},
 			},
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"some_map": map[string]interface{}{
-						"key": "value1",
+					"spec": map[string]interface{}{
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
 					},
 				},
 			},
 			expectedError:  false,
 			expectedResult: true,
+		},
+		{
+			name: "OnlyReplicasDiffer",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"replicas": 1,
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"replicas": 2,
+						"some_map": map[string]interface{}{
+							"key": "value1",
+						},
+					},
+				},
+			},
+			expectedError:  false,
+			expectedResult: false,
 		},
 	}
 
