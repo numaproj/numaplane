@@ -37,6 +37,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
@@ -408,6 +409,86 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				assert.True(t, found)
 				assert.Equal(t, string(expectedMonoVertexUpgradeState), resultUpgradeState)
 			}
+		})
+	}
+}
+
+func TestChildNeedsUpdating(t *testing.T) {
+	ctx := context.Background()
+	numaLogger := logger.FromContext(ctx)
+
+	tests := []struct {
+		name           string
+		from           *unstructured.Unstructured
+		to             *unstructured.Unstructured
+		expectedError  bool
+		expectedResult bool
+	}{
+		/*{
+			name: "ObjectsEqual",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"some_map": map[string]interface{}{
+						"key": "value1",
+					},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"some_map": map[string]interface{}{
+						"key": "value1",
+					},
+				},
+			},
+			expectedError:  false,
+			expectedResult: false,
+		},
+		{
+			name: "LabelsDiffer",
+			from: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{}
+				obj.SetLabels(map[string]string{"key": "value1"})
+				return obj
+			}(),
+			to: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{}
+				obj.SetLabels(map[string]string{"key": "value2"})
+				return obj
+			}(),
+			expectedError:  false,
+			expectedResult: true,
+		},*/
+		{
+			name: "SpecsDiffer",
+			from: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"some_map": map[string]interface{}{},
+				},
+			},
+			to: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"some_map": map[string]interface{}{
+						"key": "value1",
+					},
+				},
+			},
+			expectedError:  false,
+			expectedResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reconciler := &MonoVertexRolloutReconciler{}
+			needsUpdate, err := reconciler.ChildNeedsUpdating(ctx, tt.from, tt.to)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedResult, needsUpdate)
+			numaLogger.Debugf("Test %s passed", tt.name)
 		})
 	}
 }
