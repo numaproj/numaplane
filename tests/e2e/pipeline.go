@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/yaml"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -257,13 +255,6 @@ func watchPipelineRollout() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
@@ -277,13 +268,12 @@ func watchPipelineRollout() {
 						Spec:       rollout.Spec,
 						Status:     rollout.Status,
 					}
-					bytes, _ := yaml.Marshal(rl)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err = writeToFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline_rollout.yaml"), rl)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
+
 				}
 			}
 		case <-stopCh:
@@ -301,13 +291,6 @@ func watchPipeline() {
 		return
 	}
 	defer watcher.Stop()
-
-	file, err := os.OpenFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
 
 	for {
 		select {
@@ -328,13 +311,12 @@ func watchPipeline() {
 						Spec:       pl.Spec,
 						Status:     pl.Status,
 					}
-					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err = writeToFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline.yaml"), output)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
+
 				}
 			}
 		case <-stopCh:
@@ -373,18 +355,10 @@ func watchVertices() {
 						Spec:       vtx.Spec,
 						Status:     vtx.Status,
 					}
-					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
+
 					fileName := filepath.Join(ResourceChangesPipelineOutputPath, "vertices", strings.Join([]string{vtx.Name, ".yaml"}, ""))
-					file, err := os.OpenFile(filepath.Join(fileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					err = writeToFile(fileName, output)
 					if err != nil {
-						fmt.Printf("Failed to open log file: %v\n", err)
-						return
-					}
-					defer file.Close()
-					_, err = file.WriteString(updateLog)
-					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -394,4 +368,15 @@ func watchVertices() {
 		}
 	}
 
+}
+
+func startPipelineRolloutWatches() {
+	wg.Add(1)
+	go watchPipelineRollout()
+
+	wg.Add(1)
+	go watchPipeline()
+
+	wg.Add(1)
+	go watchVertices()
 }

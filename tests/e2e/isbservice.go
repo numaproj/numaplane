@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,7 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -152,13 +150,6 @@ func watchISBServiceRollout() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice_rollout.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
@@ -172,11 +163,9 @@ func watchISBServiceRollout() {
 						Spec:       rollout.Spec,
 						Status:     rollout.Status,
 					}
-					bytes, _ := yaml.Marshal(rl)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err := writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice_rollout.yaml"), rl)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -197,13 +186,6 @@ func watchISBService() {
 	}
 	defer watcher.Stop()
 
-	file, err := os.OpenFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
 	for {
 		select {
 		case event := <-watcher.ResultChan():
@@ -223,11 +205,9 @@ func watchISBService() {
 						Spec:       isbsvc.Spec,
 						Status:     isbsvc.Status,
 					}
-					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					_, err = file.WriteString(updateLog)
+
+					err = writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice.yaml"), output)
 					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -264,18 +244,8 @@ func watchStatefulSet() {
 						Status:     sts.Status,
 					}
 
-					bytes, _ := yaml.Marshal(output)
-					updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-					fileName := filepath.Join(ResourceChangesISBServiceOutputPath, "statefulsets", strings.Join([]string{sts.Name, ".yaml"}, ""))
-					file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					err := writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "statefulsets", strings.Join([]string{sts.Name, ".yaml"}, "")), output)
 					if err != nil {
-						fmt.Printf("Failed to open log file: %v\n", err)
-						return
-					}
-					defer file.Close()
-					_, err = file.WriteString(updateLog)
-					if err != nil {
-						fmt.Printf("Failed to write to log file: %v\n", err)
 						return
 					}
 				}
@@ -284,4 +254,15 @@ func watchStatefulSet() {
 			return
 		}
 	}
+}
+
+func startISBServiceRolloutWatches() {
+	wg.Add(1)
+	go watchISBServiceRollout()
+
+	wg.Add(1)
+	go watchISBService()
+
+	wg.Add(1)
+	go watchStatefulSet()
 }
