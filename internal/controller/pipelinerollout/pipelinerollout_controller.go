@@ -400,7 +400,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, nil, err
 	}
 
-	needsRequeue, err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDefResult, syncStartTime)
+	needsRequeue, err := r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDefResult, syncStartTime)
 	return needsRequeue, existingPipelineDef, err
 }
 
