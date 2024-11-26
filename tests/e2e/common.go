@@ -294,16 +294,19 @@ func writeToFile(fileName string, resource Output) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	file, err := os.Create(fileName)
-	if err != nil {
-		fmt.Printf("Failed to open log file: %v\n", err)
-		return err
+	if _, ok := openFiles[fileName]; !ok {
+		file, err := os.Create(fileName)
+		if err != nil {
+			fmt.Printf("Failed to open log file: %v\n", err)
+			return err
+		}
+		openFiles[fileName] = file
 	}
-	openFiles[fileName] = file
 
+	file := openFiles[fileName]
 	bytes, _ := yaml.Marshal(resource)
 	updateLog := fmt.Sprintf("%s\n%v\n\n%s\n", LogSpacer, time.Now().Format(time.RFC3339Nano), string(bytes))
-	_, err = file.WriteString(updateLog)
+	_, err := file.WriteString(updateLog)
 	if err != nil {
 		fmt.Printf("Failed to write to log file: %v\n", err)
 		return err
