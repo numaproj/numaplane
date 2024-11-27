@@ -340,13 +340,13 @@ var yamlNoDesiredPhase = `
 // TODO: update to account for Labels/Annotations differences
 func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 
-	_, _, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	_, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
 	recorder := record.NewFakeRecorder(64)
 
 	r := NewPipelineRolloutReconciler(
-		numaplaneClient,
+		client,
 		scheme.Scheme,
 		ctlrcommon.TestCustomMetrics,
 		recorder)
@@ -502,7 +502,7 @@ func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, dr
 // process an existing pipeline
 // in this test, the user preferred strategy is PPND
 func Test_processExistingPipeline_PPND(t *testing.T) {
-	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
@@ -530,7 +530,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	trueValue := true
 
 	r := NewPipelineRolloutReconciler(
-		numaplaneClient,
+		client,
 		scheme.Scheme,
 		ctlrcommon.TestCustomMetrics,
 		recorder)
@@ -702,7 +702,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			}
 
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{}, map[string]string{}, map[string]string{})
-			_ = numaplaneClient.Delete(ctx, rollout)
+			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			rollout.Status.UpgradeInProgress = tc.initialInProgressStrategy
@@ -711,7 +711,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
 
-			err = numaplaneClient.Create(ctx, rollout)
+			err = client.Create(ctx, rollout)
 			assert.NoError(t, err)
 
 			// create the already-existing Pipeline in Kubernetes
@@ -749,7 +749,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 // process an existing pipeline in this test, the user preferred strategy is Progressive
 func Test_processExistingPipeline_Progressive(t *testing.T) {
-	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
@@ -773,7 +773,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	r := NewPipelineRolloutReconciler(
-		numaplaneClient,
+		client,
 		scheme.Scheme,
 		ctlrcommon.TestCustomMetrics,
 		recorder)
@@ -1018,7 +1018,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			assert.Len(t, pipelineList.Items, 0)
 
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{})
-			_ = numaplaneClient.Delete(ctx, rollout)
+			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
@@ -1038,11 +1038,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			rollout.Status.Init(rollout.Generation)
 
 			rolloutCopy := *rollout
-			err = numaplaneClient.Create(ctx, rollout)
+			err = client.Create(ctx, rollout)
 			assert.NoError(t, err)
 			// update Status subresource
 			rollout.Status = rolloutCopy.Status
-			err = numaplaneClient.Status().Update(ctx, rollout)
+			err = client.Status().Update(ctx, rollout)
 			assert.NoError(t, err)
 
 			// create the already-existing Pipeline in Kubernetes

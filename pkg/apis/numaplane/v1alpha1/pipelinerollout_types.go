@@ -54,7 +54,6 @@ type PipelineRolloutStatus struct {
 }
 
 type UpgradeStrategy string
-type UpgradeState string
 
 const (
 	UpgradeStrategyNoOp        UpgradeStrategy = ""

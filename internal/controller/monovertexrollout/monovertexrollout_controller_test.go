@@ -176,7 +176,7 @@ func createMonoVertex(phase numaflowv1.MonoVertexPhase, status numaflowv1.Status
 
 // process an existing monoVertex in this test, the user preferred strategy is Progressive
 func Test_processExistingMonoVertex_Progressive(t *testing.T) {
-	restConfig, numaflowClientSet, numaplaneClient, _, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
@@ -197,7 +197,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	r := NewMonoVertexRolloutReconciler(
-		numaplaneClient,
+		client,
 		scheme.Scheme,
 		ctlrcommon.TestCustomMetrics,
 		recorder)
@@ -339,7 +339,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			assert.Len(t, monoVertexList.Items, 0)
 
 			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{}, map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.newControllerInstanceID}, map[string]string{})
-			_ = numaplaneClient.Delete(ctx, rollout)
+			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
@@ -359,11 +359,11 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			rollout.Status.Init(rollout.Generation)
 
 			rolloutCopy := *rollout
-			err = numaplaneClient.Create(ctx, rollout)
+			err = client.Create(ctx, rollout)
 			assert.NoError(t, err)
 			// update Status subresource
 			rollout.Status = rolloutCopy.Status
-			err = numaplaneClient.Status().Update(ctx, rollout)
+			err = client.Status().Update(ctx, rollout)
 			assert.NoError(t, err)
 
 			// create the already-existing MonoVertex in Kubernetes

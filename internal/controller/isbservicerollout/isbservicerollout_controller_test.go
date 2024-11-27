@@ -58,7 +58,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	logger.SetBaseLogger(numaLogger)
 	ctx = logger.WithLogger(ctx, numaLogger)
 
-	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
@@ -82,7 +82,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	r := NewISBServiceRolloutReconciler(numaplaneClient, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
+	r := NewISBServiceRolloutReconciler(client, scheme.Scheme, ctlrcommon.TestCustomMetrics, recorder)
 
 	trueValue := true
 	falseValue := false
@@ -251,7 +251,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.DeleteOptions{})
 			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName), metav1.DeleteOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestPipelineName, metav1.DeleteOptions{})
-			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
+			_ = client.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -279,7 +279,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 				ctlrcommon.CreateStatefulSetInK8S(ctx, t, k8sClientSet, tc.existingStatefulSetDef)
 			}
 
-			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
+			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, tc.existingPipelineRollout)
 
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, tc.existingPipeline)
 

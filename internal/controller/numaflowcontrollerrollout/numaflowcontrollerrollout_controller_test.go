@@ -186,7 +186,7 @@ func Test_resolveManifestTemplate(t *testing.T) {
 
 func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
-	restConfig, numaflowClientSet, numaplaneClient, k8sClientSet, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
 
@@ -211,7 +211,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	r, err := NewNumaflowControllerRolloutReconciler(
-		numaplaneClient,
+		client,
 		scheme.Scheme,
 		restConfig,
 		kubernetes.NewKubectl(),
@@ -334,8 +334,8 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			_ = k8sClientSet.RbacV1().Roles(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.RbacV1().RoleBindings(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, fmt.Sprintf("%s-0", ctlrcommon.DefaultTestPipelineRolloutName), metav1.DeleteOptions{})
-			_ = numaplaneClient.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
-			_ = numaplaneClient.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: NumaflowControllerDeploymentName}})
+			_ = client.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
+			_ = client.Delete(ctx, &apiv1.NumaflowControllerRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: NumaflowControllerDeploymentName}})
 
 			// create NumaflowControllerRollout definition
 			rollout := createNumaflowControllerRolloutDef(ctlrcommon.DefaultTestNamespace, tc.newControllerVersion, "", []metav1.Condition{})
@@ -350,7 +350,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			}
 
 			if tc.existingPipelineRollout != nil {
-				ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, numaplaneClient, tc.existingPipelineRollout)
+				ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, tc.existingPipelineRollout)
 
 			}
 			if tc.existingPipeline != nil {

@@ -190,7 +190,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		// recycle the previous children
 		for _, recyclableChild := range recycleList {
 			numaLogger.Debugf("found multiple children of upgrade state=%q, marking recyclable: %s", upgradeState, recyclableChild.GetName())
-			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild, rolloutObject)
+			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
 		}
 		return mostCurrentChild, nil
 	} else if len(children.Items) == 1 {
@@ -275,7 +275,7 @@ func processUpgradingChild(
 			}
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef, rolloutObject)
+			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef)
 			if err != nil {
 				return false, err
 			}
@@ -294,12 +294,12 @@ func processUpgradingChild(
 	case AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef, rolloutObject)
+		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
 		if err != nil {
 			return false, err
 		}
 
-		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef, rolloutObject)
+		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -342,7 +342,7 @@ func assessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstru
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
-func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) error {
+func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured) error {
 	labels := childObject.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	childObject.SetLabels(labels)

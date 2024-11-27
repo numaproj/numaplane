@@ -12,7 +12,7 @@ import (
 	k8sclientgo "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -21,7 +21,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, numaplaneClient client.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
+func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numaflowversioned.Clientset, client ctlrruntimeclient.Client, k8sClientSet *k8sclientgo.Clientset, err error) {
 
 	// Set up a test Kubernetes environment which includes both our Numaplane and Numaflow CRDs
 
@@ -85,8 +85,7 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 	}
 
 	numaflowClientSet = numaflowversioned.NewForConfigOrDie(restConfig)
-	//numaplaneClientSet := numaplaneversioned.NewForConfigOrDie(restConfig)
-	numaplaneClient, err = client.New(restConfig, client.Options{})
+	client, err = ctlrruntimeclient.New(restConfig, ctlrruntimeclient.Options{})
 	if err != nil {
 		return
 	}
