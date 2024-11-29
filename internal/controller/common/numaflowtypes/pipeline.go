@@ -152,22 +152,15 @@ func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	return nil
 }
 
-// TODO: make this and the WithDesiredPhase() signature (and possibly implmentation) from above similar to each other
-// (this may naturally happen after refactoring)
 // remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
-func WithoutDesiredPhase(pipeline *unstructured.Unstructured) (map[string]interface{}, error) {
-	var specAsMap map[string]any
-	if err := util.StructToStruct(pipeline.Object["spec"], &specAsMap); err != nil {
-		return nil, err
-	}
-	// remove "lifecycle.desiredPhase"
-	comparisonExcludedPaths := []string{"lifecycle.desiredPhase"}
-	util.RemovePaths(specAsMap, comparisonExcludedPaths, ".")
+func WithoutDesiredPhase(pipeline *unstructured.Unstructured) {
+	unstructured.RemoveNestedField(pipeline.Object, "spec", "lifecycle", "desiredPhase")
+
 	// if "lifecycle" is there and empty, remove it
-	lifecycleMap, found := specAsMap["lifecycle"].(map[string]interface{})
+	spec := pipeline.Object["spec"].(map[string]interface{})
+	lifecycleMap, found := spec["lifecycle"].(map[string]interface{})
 	if found && len(lifecycleMap) == 0 {
-		util.RemovePaths(specAsMap, []string{"lifecycle"}, ".")
+		unstructured.RemoveNestedField(pipeline.Object, "spec", "lifecycle")
 	}
-	return specAsMap, nil
 }
