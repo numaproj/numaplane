@@ -3,9 +3,10 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"github.com/numaproj/numaplane/internal/util"
 	"os"
 	"testing"
+
+	"github.com/numaproj/numaplane/internal/util"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -122,7 +123,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 
 	// List resource with cache
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
-	pipelineList, err = ListResources(context.Background(), runtimeClient, gvk, client.InNamespace(namespace), client.MatchingLabels{"test": "value"})
+	pipelineList, err = ListResources(context.Background(), runtimeClient, gvk, namespace, client.MatchingLabels{"test": "value"})
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList.Items, 1)
 

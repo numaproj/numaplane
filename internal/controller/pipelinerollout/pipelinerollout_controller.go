@@ -47,7 +47,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -450,6 +450,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
+
 	numaLogger.
 		WithValues("pipelineNeedsToUpdate", pipelineNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
 		Debug("Upgrade decision result")
@@ -523,16 +524,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 	case apiv1.UpgradeStrategyProgressive:
-		if pipelineNeedsToUpdate {
-			numaLogger.Debug("processing pipeline with Progressive")
-			done, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, r, r.client)
-			if err != nil {
-				return false, err
-			}
-			if done {
-				r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
-			}
+		numaLogger.Debug("processing pipeline with Progressive")
+		done, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		if err != nil {
+			return false, err
 		}
+		if done {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+		}
+
 	default:
 		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.client, newPipelineDef); err != nil {
@@ -753,7 +753,7 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
-	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, string(common.LabelValueUpgradePromoted))
+	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -786,14 +786,6 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineDef.Object["spec"] = pipelineSpec
 
 	return pipelineDef, nil
-}
-
-// the following functions enable PipelineRolloutReconciler to implement progressiveController interface
-func (r *PipelineRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error) {
-	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	return kubernetes.ListLiveResource(
-		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
-		pipelineRollout.Namespace, labelSelector, fieldSelector)
 }
 
 func (r *PipelineRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
@@ -838,17 +830,38 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
-func (r *PipelineRolloutReconciler) ChildIsDrained(ctx context.Context, pipelineDef *unstructured.Unstructured) (bool, error) {
-	pipelineStatus, err := numaflowtypes.ParsePipelineStatus(pipelineDef)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipelineDef, err)
-	}
-	pipelinePhase := pipelineStatus.Phase
+func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	c client.Client,
+) error {
 
-	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
+	if err != nil {
+		return err
+	}
+	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
+	if err != nil {
+		return err
+	}
+	if pausedOrWontPause {
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return err
+	}
+	// make sure we request Paused if we haven't yet
+	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+	if err != nil {
+		return err
+	}
+	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
+		_ = r.drain(ctx, pipeline)
+		return nil
+	}
+	return nil
+
 }
 
-func (r *PipelineRolloutReconciler) Drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
+func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
 	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
 	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }

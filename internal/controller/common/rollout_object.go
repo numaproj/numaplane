@@ -22,18 +22,23 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 type RolloutObject interface {
-	GetChildPluralName() string
+	GetRolloutGVR() metav1.GroupVersionResource
 
-	GetTypeMeta() *metav1.TypeMeta
+	GetRolloutGVK() schema.GroupVersionKind
 
-	GetObjectMeta() *metav1.ObjectMeta
+	GetChildGVR() metav1.GroupVersionResource
 
-	GetStatus() *apiv1.Status
+	GetChildGVK() schema.GroupVersionKind
+
+	GetRolloutObjectMeta() *metav1.ObjectMeta
+
+	GetRolloutStatus() *apiv1.Status
 }
 
 // assume child name is "<rolloutname>-<number>"

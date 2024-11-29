@@ -444,8 +444,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
-	return kubernetes.ListResources(ctx, r.client, gvk,
-		client.InNamespace(rolloutNamespace),
+	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
 		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
 		client.HasLabels{common.LabelKeyParentRollout},
 	)

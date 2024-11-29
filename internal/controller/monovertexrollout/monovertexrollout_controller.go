@@ -44,7 +44,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	numaflowtypes "github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -291,15 +291,25 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	}
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
-		if mvNeedsToUpdate {
-			numaLogger.Debug("processing MonoVertex with Progressive")
-			done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, r, r.client)
-			if err != nil {
-				return err
+
+		// don't risk out-of-date cache while performing Progressive strategy - get
+		// the most current version of the MonoVertex just in case
+		existingMonoVertexDef, err = kubernetes.GetLiveResource(ctx, newMonoVertexDef, "monovertices")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("monoVertexDefinition", *existingMonoVertexDef).Warn("MonoVertex not found.")
+			} else {
+				return fmt.Errorf("error getting MonoVertex for status processing: %v", err)
 			}
-			if done {
-				r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
-			}
+		}
+
+		numaLogger.Debug("processing MonoVertex with Progressive")
+		done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		if err != nil {
+			return err
+		}
+		if done {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 		}
 
 	default:
@@ -415,22 +425,10 @@ func (r *MonoVertexRolloutReconciler) processMonoVertexStatus(ctx context.Contex
 func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *apiv1.MonoVertexRollout, mvtxPhase numaflowv1.MonoVertexPhase) {
 
 	if mvtxPhase == numaflowv1.MonoVertexPhasePaused {
-		// TODO: METRICS
-		// if BeginTime hasn't been set yet, we must have just started pausing - set it
-		// if rollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !rollout.Status.PauseStatus.LastPauseBeginTime.After(rollout.Status.PauseStatus.LastPauseEndTime.Time) {
-		// 	rollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
-		// }
 		reason := fmt.Sprintf("MonoVertex%s", string(mvtxPhase))
 		msg := fmt.Sprintf("MonoVertex %s", strings.ToLower(string(mvtxPhase)))
-		// r.updatePauseMetric(rollout)
 		rollout.Status.MarkMonoVertexPaused(reason, msg, rollout.Generation)
 	} else {
-		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
-		// EndTime is either just initialized or the end of a previous pause which is why it will be before the new BeginTime
-		// if (rollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !rollout.Status.PauseStatus.LastPauseEndTime.After(rollout.Status.PauseStatus.LastPauseBeginTime.Time) {
-		// 	rollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
-		// 	r.updatePauseMetric(rollout)
-		// }
 		rollout.Status.MarkMonoVertexUnpaused(rollout.Generation)
 	}
 
@@ -487,7 +485,7 @@ func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, string(common.LabelValueUpgradePromoted))
+	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -534,14 +532,6 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 
 }
 
-// the following functions enable MonoVertexRolloutReconciler to implement progressiveController interface
-func (r *MonoVertexRolloutReconciler) ListChildren(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, labelSelector string, fieldSelector string) (*unstructured.UnstructuredList, error) {
-	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-	return kubernetes.ListLiveResource(
-		ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
-		monoVertexRollout.Namespace, labelSelector, fieldSelector)
-}
-
 func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
@@ -584,38 +574,29 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 	return currentNameCount, nil
 }
 
-func (r *MonoVertexRolloutReconciler) ChildIsDrained(ctx context.Context, monoVertexDef *unstructured.Unstructured) (bool, error) {
-	monoVertexStatus, err := numaflowtypes.ParseMonoVertexStatus(monoVertexDef)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse MonoVertex Status from MonoVertex CR: %+v, %v", monoVertexDef, err)
-	}
-	monoVertexPhase := monoVertexStatus.Phase
-
-	return monoVertexPhase == "Paused" /*&& monoVertexStatus.DrainedOnPause*/, nil // TODO: should Numaflow implement?
-}
-
-func (r *MonoVertexRolloutReconciler) Drain(ctx context.Context, monoVertexDef *unstructured.Unstructured) error {
-	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
-	return kubernetes.PatchResource(ctx, r.client, monoVertexDef, patchJson, k8stypes.MergePatchType)
+func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
+	monoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return kubernetes.DeleteResource(ctx, c, monoVertexDef)
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	mvWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
+	// remove "replicas" field from comparison to test for equality
+	fromNew, err := numaflowtypes.MonoVertexWithoutReplicas(from)
 	if err != nil {
 		return false, err
 	}
-	mvWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
+	toNew, err := numaflowtypes.MonoVertexWithoutReplicas(to)
 	if err != nil {
 		return false, err
 	}
-	numaLogger.Debugf("comparing specs: mvWithoutDesiredPhaseA=%v, mvWithoutDesiredPhaseB=%v\n", mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
 
-	specsEqual := reflect.DeepEqual(mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
-	numaLogger.Debugf("specsEqual: %t, monoVertexWithoutDesiredPhaseA=%v, monoVertexWithoutDesiredPhaseB=%v\n",
-		specsEqual, mvWithoutDesiredPhaseA, mvWithoutDesiredPhaseB)
+	specsEqual := reflect.DeepEqual(fromNew, toNew)
+	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
+		specsEqual, fromNew, toNew)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())

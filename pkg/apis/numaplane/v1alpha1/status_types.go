@@ -52,7 +52,7 @@ const (
 	ConditionPausingPipelines ConditionType = "PausingPipelines"
 
 	// ConditionProgressiveUpgradeSucceeded indicates that whether the progressive upgrade succeeded.
-	ConditionProgressiveUpgradeSucceeded ConditionType = "ProgressiveUpgradeSucceed"
+	ConditionProgressiveUpgradeSucceeded ConditionType = "ProgressiveUpgradeSucceeded"
 )
 
 // Status is a common structure which can be used for Status field.

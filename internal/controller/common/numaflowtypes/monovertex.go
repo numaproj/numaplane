@@ -25,16 +25,26 @@ import (
 
 type MonoVertexStatus = kubernetes.GenericStatus
 
-func ParseMonoVertexStatus(obj *unstructured.Unstructured) (MonoVertexStatus, error) {
-	if obj == nil || len(obj.Object) == 0 {
+func ParseMonoVertexStatus(monoVertex *unstructured.Unstructured) (MonoVertexStatus, error) {
+	if monoVertex == nil || len(monoVertex.Object) == 0 {
 		return MonoVertexStatus{}, nil
 	}
 
 	var status MonoVertexStatus
-	err := util.StructToStruct(obj.Object["status"], &status)
+	err := util.StructToStruct(monoVertex.Object["status"], &status)
 	if err != nil {
 		return MonoVertexStatus{}, err
 	}
 
 	return status, nil
+}
+func MonoVertexWithoutReplicas(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
+	var specAsMap map[string]any
+	if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+		return nil, err
+	}
+	// remove "replicas" field
+	comparisonExcludedPaths := []string{"replicas"}
+	util.RemovePaths(specAsMap, comparisonExcludedPaths, ".")
+	return specAsMap, nil
 }

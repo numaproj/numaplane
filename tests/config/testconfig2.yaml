@@ -1,2 +1,2 @@
-logLevel: 3
+logLevel: 4
 defaultUpgradeStrategy: "progressive"

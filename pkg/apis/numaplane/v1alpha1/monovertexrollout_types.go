@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -73,19 +75,36 @@ type MonoVertexRolloutList struct {
 }
 
 // the following functions implement the rolloutObject interface:
-func (monoVertexRollout *MonoVertexRollout) GetTypeMeta() *metav1.TypeMeta {
-	return &monoVertexRollout.TypeMeta
+func (monoVertexRollout *MonoVertexRollout) GetRolloutGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    monoVertexRollout.TypeMeta.GroupVersionKind().Group,
+		Version:  monoVertexRollout.TypeMeta.GroupVersionKind().Version,
+		Resource: "monovertexrollouts",
+	}
 }
 
-func (monoVertexRollout *MonoVertexRollout) GetObjectMeta() *metav1.ObjectMeta {
+func (monoVertexRollout *MonoVertexRollout) GetRolloutGVK() schema.GroupVersionKind {
+	return monoVertexRollout.TypeMeta.GroupVersionKind()
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetChildGVR() metav1.GroupVersionResource {
+	return metav1.GroupVersionResource{
+		Group:    numaflowv1.MonoVertexGroupVersionKind.Group,
+		Version:  numaflowv1.MonoVertexGroupVersionKind.Version,
+		Resource: "monovertices",
+	}
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetChildGVK() schema.GroupVersionKind {
+	return numaflowv1.MonoVertexGroupVersionKind
+}
+
+func (monoVertexRollout *MonoVertexRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {
 	return &monoVertexRollout.ObjectMeta
 }
 
-func (monoVertexRollout *MonoVertexRollout) GetStatus() *Status {
+func (monoVertexRollout *MonoVertexRollout) GetRolloutStatus() *Status {
 	return &monoVertexRollout.Status.Status
-}
-func (monoVertexRollout *MonoVertexRollout) GetChildPluralName() string {
-	return "monovertices"
 }
 
 func init() {

@@ -163,6 +163,15 @@ func nestedNullableStringMap(obj map[string]interface{}, fields ...string) (map[
 	return m, err
 }
 
+// ExtractResourceNames extracts the names of the resources from an UnstructuredList
+func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
+	namespacedNames := []string{}
+	for _, u := range unstrucList.Items {
+		namespacedNames = append(namespacedNames, fmt.Sprintf("%s/%s", u.GetNamespace(), u.GetName()))
+	}
+	return namespacedNames
+}
+
 // CreateResource creates the resource in the kubernetes cluster
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Create(ctx, obj)
@@ -192,11 +201,14 @@ func UpdateResource(ctx context.Context, c client.Client, obj *unstructured.Unst
 }
 
 // ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
-func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespace string, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
 	unstructuredList := &unstructured.UnstructuredList{}
 	unstructuredList.SetGroupVersionKind(gvk)
 
-	if err := c.List(ctx, unstructuredList, opts...); err != nil {
+	listOptions := []client.ListOption{client.InNamespace(namespace)}
+	listOptions = append(listOptions, opts...)
+
+	if err := c.List(ctx, unstructuredList, listOptions...); err != nil {
 		return nil, err
 	}
 
