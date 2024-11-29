@@ -870,18 +870,12 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	pipelineWithoutDesiredPhaseA, err := numaflowtypes.WithoutDesiredPhase(from)
-	if err != nil {
-		return false, err
-	}
-	pipelineWithoutDesiredPhaseB, err := numaflowtypes.WithoutDesiredPhase(to)
-	if err != nil {
-		return false, err
-	}
+	numaflowtypes.WithoutDesiredPhase(from)
+	numaflowtypes.WithoutDesiredPhase(to)
 
-	specsEqual := reflect.DeepEqual(pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
-	numaLogger.Debugf("specsEqual: %t, pipelineWithoutDesiredPhaseA=%v, pipelineWithoutDesiredPhaseB=%v\n",
-		specsEqual, pipelineWithoutDesiredPhaseA, pipelineWithoutDesiredPhaseB)
+	specsEqual := reflect.DeepEqual(from.Object["spec"], to.Object["spec"])
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, from, to)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
