@@ -869,13 +869,15 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
+	fromCopy := from.DeepCopy()
+	toCopy := to.DeepCopy()
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	numaflowtypes.WithoutDesiredPhase(from)
-	numaflowtypes.WithoutDesiredPhase(to)
+	numaflowtypes.WithoutDesiredPhase(fromCopy)
+	numaflowtypes.WithoutDesiredPhase(toCopy)
 
-	specsEqual := reflect.DeepEqual(from.Object["spec"], to.Object["spec"])
+	specsEqual := reflect.DeepEqual(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, from, to)
+		specsEqual, fromCopy, toCopy)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
