@@ -617,11 +617,18 @@ func generateNewISBServiceDef(isbServiceRollout *apiv1.ISBServiceRollout) (*unst
 	newISBServiceDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
 	newISBServiceDef.SetName(isbServiceRollout.Name)
 	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
-	newISBServiceDef.SetLabels(isbServiceRollout.Spec.InterStepBufferService.Labels)
 	newISBServiceDef.SetAnnotations(isbServiceRollout.Spec.InterStepBufferService.Annotations)
 	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
 	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
 	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
+	// Update label of ISBService to include the parent rollout name
+	existingLabel := isbServiceRollout.Spec.InterStepBufferService.Labels
+	if existingLabel == nil {
+		existingLabel = make(map[string]string)
+	}
+	existingLabel[common.LabelKeyParentRollout] = isbServiceRollout.Name
+	newISBServiceDef.SetLabels(existingLabel)
+	// Update spec of ISBService to match the ISBServiceRollout spec
 	var isbServiceSpec map[string]interface{}
 	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
 		return nil, err

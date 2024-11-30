@@ -43,8 +43,8 @@ type CustomMetrics struct {
 	MonoVertexROSyncs *prometheus.CounterVec
 	// NumaflowControllersRolloutHealth is the gauge for the health of NumaflowControllerRollouts.
 	NumaflowControllersRolloutHealth *prometheus.GaugeVec
-	// NumaflowControlleRORunning is the gauge for the number of running NumaflowControllerRollouts with a specific version.
-	NumaflowControlleRORunning *prometheus.GaugeVec
+	// NumaflowControllerRORunning is the gauge for the number of running NumaflowControllerRollouts with a specific version.
+	NumaflowControllerRORunning *prometheus.GaugeVec
 	// NumaflowControllerROSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerROSyncErrors *prometheus.CounterVec
 	// NumaflowControllersROSyncs in the counter for the total number of NumaflowControllerRollout reconciliations
@@ -309,7 +309,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		MonoVertexROSyncs:                         monoVertexROSyncs,
 		MonoVertexROSyncErrors:                    monoVertexROSyncErrors,
 		NumaflowControllersRolloutHealth:          numaflowControllersRolloutHealth,
-		NumaflowControlleRORunning:                numaflowControllerRORunning,
+		NumaflowControllerRORunning:               numaflowControllerRORunning,
 		NumaflowControllersROSyncs:                numaflowControllerROSyncs,
 		NumaflowControllerROSyncErrors:            numaflowControllerROSyncErrors,
 		KubeRequestCounter:                        kubeRequestCounter,
