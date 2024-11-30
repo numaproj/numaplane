@@ -550,7 +550,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
 	}{
-		/*{
+		{
 			name:                           "nothing to do",
 			newPipelineSpec:                pipelineSpec,
 			existingPipelineDef:            *createDefaultTestPipeline(numaflowv1.PipelinePhaseRunning),
@@ -650,7 +650,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return reflect.DeepEqual(ctlrcommon.PipelineWithDesiredPhase(pipelineSpec, numaflowv1.PipelinePhasePaused), spec)
 			},
-		},*/
+		},
 		{
 			name:            "PPND in progress, spec applied",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
