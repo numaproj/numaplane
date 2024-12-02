@@ -351,6 +351,9 @@ func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ctlrcommon.DefaultTestISBSvcRolloutName,
 			Namespace: ctlrcommon.DefaultTestNamespace,
+			Labels: map[string]string{
+				common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+			},
 		},
 		Spec:   createDefaultISBServiceSpec(jetstreamVersion),
 		Status: status,

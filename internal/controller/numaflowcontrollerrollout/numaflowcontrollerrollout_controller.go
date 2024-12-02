@@ -200,7 +200,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// generate the metrics for the numaflow controller based on a numaflow version.
-	r.customMetrics.NumaflowControlleRORunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
+	r.customMetrics.NumaflowControllerRORunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
 
 	numaLogger.Debug("reconciliation successful")
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
@@ -244,10 +244,15 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
+			// Check if dependent resources are deleted, if not then requeue after 5 seconds
+			if !r.areDependentResourcesDeleted(ctx, controllerRollout) {
+				numaLogger.Warn("Dependent resources are not deleted yet, requeue after 5 seconds")
+				return ctrl.Result{Requeue: true}, nil
+			}
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
-		r.customMetrics.NumaflowControlleRORunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
+		r.customMetrics.NumaflowControllerRORunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.NumaflowControllersRolloutHealth.DeleteLabelValues(controllerRollout.Namespace, controllerRollout.Name)
 		return ctrl.Result{}, nil
@@ -902,4 +907,28 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 func (r *NumaflowControllerRolloutReconciler) ErrorHandler(numaflowControllerRollout *apiv1.NumaflowControllerRollout, err error, reason, msg string) {
 	r.customMetrics.NumaflowControllerROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
+}
+
+// areDependentResourcesDeleted checks if dependent resources are deleted.
+func (r *NumaflowControllerRolloutReconciler) areDependentResourcesDeleted(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) bool {
+	pipelineRolloutList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+		controllerRollout.Namespace, common.LabelKeyParentRollout, "")
+	if err != nil {
+		return false
+	}
+	monoVertexRolloutList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
+		controllerRollout.Namespace, common.LabelKeyParentRollout, "")
+	if err != nil {
+		return false
+	}
+	isbServiceRolloutList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "interstepbufferservices",
+		controllerRollout.Namespace, common.LabelKeyParentRollout, "")
+	if err != nil {
+		return false
+	}
+	if len(pipelineRolloutList.Items)+len(monoVertexRolloutList.Items)+len(isbServiceRolloutList.Items) == 0 {
+		return true
+	}
+
+	return false
 }
