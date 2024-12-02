@@ -245,9 +245,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
 			// Check if dependent resources are deleted, if not then requeue after 5 seconds
-			if !r.isDependentResourceDeleted(ctx, controllerRollout) {
+			if !r.areDependentResourcesDeleted(ctx, controllerRollout) {
 				numaLogger.Warn("Dependent resources are not deleted yet, requeue after 5 seconds")
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+				return ctrl.Result{Requeue: true}, nil
 			}
 			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
 		}
@@ -909,8 +909,8 @@ func (r *NumaflowControllerRolloutReconciler) ErrorHandler(numaflowControllerRol
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
-// isDependentResourceDeleted checks if dependent resources are deleted.
-func (r *NumaflowControllerRolloutReconciler) isDependentResourceDeleted(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) bool {
+// areDependentResourcesDeleted checks if dependent resources are deleted.
+func (r *NumaflowControllerRolloutReconciler) areDependentResourcesDeleted(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout) bool {
 	pipelineRolloutList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
 		controllerRollout.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
