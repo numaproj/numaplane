@@ -300,6 +300,22 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
+		// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
+		// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
+		// Therefore, independently of the previous attempt result (either success or failure), the reconciler will skip this reconciliation.
+		// The first reconciliation of the current instanceID/version, will set the previous attempt instanceID/version in the status.
+		if controllerRollout.Status.PreviousAttemptInstanceID == controllerRollout.Spec.Controller.InstanceID &&
+			controllerRollout.Status.PreviousAttemptVersion == controllerRollout.Spec.Controller.Version {
+
+			numaLogger.Debugf("skipping reconciliation since previousAttemptInstanceID (%s) and PreviousAttemptVersion (%s) are set, meaning the controller already attempted reconciliation previously",
+				controllerRollout.Status.PreviousAttemptInstanceID, controllerRollout.Status.PreviousAttemptVersion)
+
+			return ctrl.Result{}, nil
+		} else {
+			controllerRollout.Status.PreviousAttemptInstanceID = controllerRollout.Spec.Controller.InstanceID
+			controllerRollout.Status.PreviousAttemptVersion = controllerRollout.Spec.Controller.Version
+		}
+
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
 			controllerDeploymentIsUpdating, func() error {
 				r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "AllPipelinesPaused", "All Pipelines have paused so Numaflow Controller can safely update")
@@ -675,15 +691,6 @@ func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ct
 // get the tag of the numaflow container
 func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
 
-	c, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
-	}
-	imageNames := []string{DefaultNumaflowControllerImageName}
-	if len(c.NumaflowControllerImageNames) > 0 {
-		imageNames = c.NumaflowControllerImageNames
-	}
-
 	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
 	containers := deployment.Spec.Template.Spec.Containers
 	for _, c := range containers {
@@ -699,14 +706,9 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			imageName = imageName[finalSlash+1:]
 
 		}
+
 		// is this is the Numaflow Controller itself?
-		isNumaflowController := false
-		for _, nfControllerImageName := range imageNames {
-			if imageName == nfControllerImageName {
-				isNumaflowController = true
-				break
-			}
-		}
+		isNumaflowController := imageName == DefaultNumaflowControllerImageName
 		if isNumaflowController {
 			if tag == "" {
 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
@@ -719,6 +721,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			}
 		}
 	}
+
 	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
 }
 
