@@ -661,6 +661,10 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              previousAttemptInstanceID:
+                type: string
+              previousAttemptVersion:
+                type: string
             type: object
         type: object
         x-kubernetes-validations:
