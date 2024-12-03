@@ -300,6 +300,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
 		}
 
+		numaLogger.Debugf("previousAttemptInstanceID='%s', previousAttemptVersion='%s', currentInstanceID='%s', currentVersion='%s'",
+			controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version,
+			controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
+
 		// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
 		// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
 		// Therefore, independently of the previous attempt result (either success or failure), the reconciler will skip this reconciliation.
@@ -307,11 +311,14 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		if controllerRollout.Status.PreviousAttemptStatus.InstanceID == controllerRollout.Spec.Controller.InstanceID &&
 			controllerRollout.Status.PreviousAttemptStatus.Version == controllerRollout.Spec.Controller.Version {
 
-			numaLogger.Debugf("skipping reconciliation since previousAttemptInstanceID (%s) and PreviousAttemptVersion (%s) are set, meaning the controller already attempted reconciliation previously",
+			numaLogger.Debugf("skipping reconciliation since previousAttemptInstanceID='%s' and previousAttemptVersion='%s' are equal to the current InstanceID and Version respectively. This means that the controller must have already attempted reconciliation for this instanceID/version",
 				controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version)
 
 			return ctrl.Result{}, nil
 		} else {
+			numaLogger.Debugf("setting previousAttemptInstanceID='%s' and previousAttemptVersion='%s'",
+				controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
+
 			controllerRollout.Status.PreviousAttemptStatus.InstanceID = controllerRollout.Spec.Controller.InstanceID
 			controllerRollout.Status.PreviousAttemptStatus.Version = controllerRollout.Spec.Controller.Version
 		}
