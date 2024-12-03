@@ -74,3 +74,8 @@ func init() {
 func (nc *NumaflowControllerRolloutStatus) IsHealthy() bool {
 	return nc.Phase == PhaseDeployed || nc.Phase == PhasePending
 }
+
+func (ncrs *NumaflowControllerRolloutStatus) UpdatePreviousAttemptStatus(ncr *NumaflowControllerRollout) {
+	ncrs.PreviousAttemptStatus.InstanceID = ncr.Spec.Controller.InstanceID
+	ncrs.PreviousAttemptStatus.Version = ncr.Spec.Controller.Version
+}

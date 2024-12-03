@@ -298,29 +298,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkPending()
 		} else {
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
-		}
-
-		numaLogger.Debugf("previousAttemptInstanceID='%s', previousAttemptVersion='%s', currentInstanceID='%s', currentVersion='%s'",
-			controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version,
-			controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
-
-		// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
-		// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
-		// Therefore, independently of the previous attempt result (either success or failure), the reconciler will skip this reconciliation.
-		// The first reconciliation of the current instanceID/version, will set the previous attempt instanceID/version in the status.
-		if controllerRollout.Status.PreviousAttemptStatus.InstanceID == controllerRollout.Spec.Controller.InstanceID &&
-			controllerRollout.Status.PreviousAttemptStatus.Version == controllerRollout.Spec.Controller.Version {
-
-			numaLogger.Debugf("skipping reconciliation since previousAttemptInstanceID='%s' and previousAttemptVersion='%s' are equal to the current InstanceID and Version respectively. This means that the controller must have already attempted reconciliation for this instanceID/version",
-				controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version)
-
-			return ctrl.Result{}, nil
-		} else {
-			numaLogger.Debugf("setting previousAttemptInstanceID='%s' and previousAttemptVersion='%s'",
-				controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
-
-			controllerRollout.Status.PreviousAttemptStatus.InstanceID = controllerRollout.Spec.Controller.InstanceID
-			controllerRollout.Status.PreviousAttemptStatus.Version = controllerRollout.Spec.Controller.Version
+			controllerRollout.Status.UpdatePreviousAttemptStatus(controllerRollout)
 		}
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
@@ -400,7 +378,19 @@ func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx
 	if err != nil {
 		return false, false, err
 	}
-	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion)
+
+	numaLogger.Debugf("previousAttemptInstanceID='%s', previousAttemptVersion='%s', currentInstanceID='%s', currentVersion='%s'",
+		controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version,
+		controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
+
+	// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
+	// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
+	// Therefore, independently of the previous attempt result (either success or failure), the reconciler should not perform
+	// the update but without pausing the pipelines.
+	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion &&
+		controllerRollout.Status.PreviousAttemptStatus.InstanceID != controllerRollout.Spec.Controller.InstanceID &&
+		controllerRollout.Status.PreviousAttemptStatus.Version != controllerRollout.Spec.Controller.Version)
+
 	if controllerVersionNeedsToUpdate {
 		numaLogger.Debugf("current Deployment image tag=%q differs from desired %q", currentVersion, controllerRollout.Spec.Controller.Version)
 	}
@@ -593,6 +583,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	syncCtx.Sync()
 
 	rollout.Status.MarkDeployed(rollout.Generation)
+	rollout.Status.UpdatePreviousAttemptStatus(rollout)
 
 	phase, _, _ := syncCtx.GetState()
 	return phase, nil
@@ -911,6 +902,7 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
 	controllerRollout.Status.MarkFailed(err.Error())
+	controllerRollout.Status.UpdatePreviousAttemptStatus(controllerRollout)
 	return r.updateNumaflowControllerRolloutStatus(ctx, controllerRollout)
 }
 
