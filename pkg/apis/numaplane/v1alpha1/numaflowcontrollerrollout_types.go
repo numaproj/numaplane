@@ -33,12 +33,13 @@ type NumaflowControllerRolloutSpec struct {
 	Controller Controller `json:"controller"`
 }
 
+type PreviousAttemptStatus Controller
+
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
 type NumaflowControllerRolloutStatus struct {
-	Status                    `json:",inline"`
-	PauseRequestStatus        PauseStatus `json:"pauseRequestStatus,omitempty"`
-	PreviousAttemptInstanceID string      `json:"previousAttemptInstanceID,omitempty"`
-	PreviousAttemptVersion    string      `json:"previousAttemptVersion,omitempty"`
+	Status                `json:",inline"`
+	PauseRequestStatus    PauseStatus           `json:"pauseRequestStatus,omitempty"`
+	PreviousAttemptStatus PreviousAttemptStatus `json:"previousAttemptStatus,omitempty"`
 }
 
 // +genclient

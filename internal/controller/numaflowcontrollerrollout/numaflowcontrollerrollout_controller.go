@@ -304,16 +304,16 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
 		// Therefore, independently of the previous attempt result (either success or failure), the reconciler will skip this reconciliation.
 		// The first reconciliation of the current instanceID/version, will set the previous attempt instanceID/version in the status.
-		if controllerRollout.Status.PreviousAttemptInstanceID == controllerRollout.Spec.Controller.InstanceID &&
-			controllerRollout.Status.PreviousAttemptVersion == controllerRollout.Spec.Controller.Version {
+		if controllerRollout.Status.PreviousAttemptStatus.InstanceID == controllerRollout.Spec.Controller.InstanceID &&
+			controllerRollout.Status.PreviousAttemptStatus.Version == controllerRollout.Spec.Controller.Version {
 
 			numaLogger.Debugf("skipping reconciliation since previousAttemptInstanceID (%s) and PreviousAttemptVersion (%s) are set, meaning the controller already attempted reconciliation previously",
-				controllerRollout.Status.PreviousAttemptInstanceID, controllerRollout.Status.PreviousAttemptVersion)
+				controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version)
 
 			return ctrl.Result{}, nil
 		} else {
-			controllerRollout.Status.PreviousAttemptInstanceID = controllerRollout.Spec.Controller.InstanceID
-			controllerRollout.Status.PreviousAttemptVersion = controllerRollout.Spec.Controller.Version
+			controllerRollout.Status.PreviousAttemptStatus.InstanceID = controllerRollout.Spec.Controller.InstanceID
+			controllerRollout.Status.PreviousAttemptStatus.Version = controllerRollout.Spec.Controller.Version
 		}
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
