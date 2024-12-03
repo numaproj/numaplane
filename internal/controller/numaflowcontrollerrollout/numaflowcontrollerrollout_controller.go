@@ -386,10 +386,10 @@ func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx
 	// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
 	// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
 	// Therefore, independently of the previous attempt result (either success or failure), the reconciler should not perform
-	// the update but without pausing the pipelines.
+	// the update (but without pausing the pipelines).
 	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion &&
-		controllerRollout.Status.PreviousAttemptStatus.InstanceID != controllerRollout.Spec.Controller.InstanceID &&
-		controllerRollout.Status.PreviousAttemptStatus.Version != controllerRollout.Spec.Controller.Version)
+		(controllerRollout.Status.PreviousAttemptStatus.InstanceID != controllerRollout.Spec.Controller.InstanceID ||
+			controllerRollout.Status.PreviousAttemptStatus.Version != controllerRollout.Spec.Controller.Version))
 
 	if controllerVersionNeedsToUpdate {
 		numaLogger.Debugf("current Deployment image tag=%q differs from desired %q", currentVersion, controllerRollout.Spec.Controller.Version)

@@ -372,7 +372,11 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 			////// check results:
 
 			// Check in-memory pause request:
-			assert.Equal(t, tc.expectedPauseRequest, (pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)]))
+			if tc.expectedPauseRequest != nil && pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)] != nil {
+				assert.Equal(t, *tc.expectedPauseRequest, *(pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)]))
+			} else {
+				assert.Equal(t, tc.expectedPauseRequest, (pm.PauseRequests[pm.GetNumaflowControllerKey(ctlrcommon.DefaultTestNamespace)]))
+			}
 
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
