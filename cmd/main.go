@@ -37,9 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/isbservicerollout"
 	"github.com/numaproj/numaplane/internal/controller/monovertexrollout"
+	"github.com/numaproj/numaplane/internal/controller/numaflowcontroller"
 	"github.com/numaproj/numaplane/internal/controller/numaflowcontrollerrollout"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -157,7 +159,7 @@ func main() {
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,
-		mgr.GetEventRecorderFor(apiv1.RolloutPipeline),
+		mgr.GetEventRecorderFor(apiv1.RolloutPipelineName),
 	)
 	pipelinerollout.PipelineROReconciler = pipelineRolloutReconciler
 
@@ -173,7 +175,7 @@ func main() {
 		newRawConfig,
 		kubectl,
 		customMetrics,
-		mgr.GetEventRecorderFor(apiv1.RolloutNumaflowController),
+		mgr.GetEventRecorderFor(apiv1.RolloutNumaflowControllerName),
 	)
 	if err != nil {
 		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
@@ -187,7 +189,7 @@ func main() {
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,
-		mgr.GetEventRecorderFor(apiv1.RolloutISBSvc),
+		mgr.GetEventRecorderFor(apiv1.RolloutISBSvcName),
 	)
 
 	if err = isbServiceRolloutReconciler.SetupWithManager(mgr); err != nil {
@@ -198,11 +200,22 @@ func main() {
 		mgr.GetClient(),
 		mgr.GetScheme(),
 		customMetrics,
-		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertex),
+		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertexName),
 	)
 
 	if err = monoVertexRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up MonoVertexRollout controller")
+	}
+
+	numaflowControllerReconciler := numaflowcontroller.NewNumaflowControllerReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		customMetrics,
+		mgr.GetEventRecorderFor(apiv1.NumaflowControllerName),
+	)
+
+	if err = numaflowControllerReconciler.SetupWithManager(mgr); err != nil {
+		numaLogger.Fatal(err, "Unable to set up NumaflowController controller")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
