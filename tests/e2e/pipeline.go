@@ -3,14 +3,13 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
@@ -247,126 +246,76 @@ func getDaemonLabelSelector(pipelineName string) string {
 // build watcher functions for both Pipeline and PipelineRollout
 func watchPipelineRollout() {
 
-	defer wg.Done()
-	watcher, err := pipelineRolloutClient.Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if rollout, ok := event.Object.(*apiv1.PipelineRollout); ok {
-					rollout.ManagedFields = nil
-					rl := Output{
-						APIVersion: NumaplaneAPIVersion,
-						Kind:       "PipelineRollout",
-						Metadata:   rollout.ObjectMeta,
-						Spec:       rollout.Spec,
-						Status:     rollout.Status,
-					}
-
-					err = writeToFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline_rollout.yaml"), rl)
-					if err != nil {
-						return
-					}
-
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := pipelineRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if rollout, ok := o.(*apiv1.PipelineRollout); ok {
+			rollout.ManagedFields = nil
+			return Output{
+				APIVersion: NumaplaneAPIVersion,
+				Kind:       "PipelineRollout",
+				Metadata:   rollout.ObjectMeta,
+				Spec:       rollout.Spec,
+				Status:     rollout.Status,
 			}
-		case <-stopCh:
-			return
 		}
-	}
+		return Output{}
+	})
+
 }
 
 func watchPipeline() {
 
-	defer wg.Done()
-	watcher, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
-					pl := numaflowv1.Pipeline{}
-					err = util.StructToStruct(&obj, &pl)
-					if err != nil {
-						fmt.Printf("Failed to convert unstruct: %v\n", err)
-						return
-					}
-					pl.ManagedFields = nil
-					output := Output{
-						APIVersion: NumaflowAPIVersion,
-						Kind:       "Pipeline",
-						Metadata:   pl.ObjectMeta,
-						Spec:       pl.Spec,
-						Status:     pl.Status,
-					}
-
-					err = writeToFile(filepath.Join(ResourceChangesPipelineOutputPath, "pipeline.yaml"), output)
-					if err != nil {
-						return
-					}
-
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if obj, ok := o.(*unstructured.Unstructured); ok {
+			pl := numaflowv1.Pipeline{}
+			err := util.StructToStruct(&obj, &pl)
+			if err != nil {
+				fmt.Printf("Failed to convert unstruct: %v\n", err)
+				return Output{}
 			}
-		case <-stopCh:
-			return
+			pl.ManagedFields = nil
+			return Output{
+				APIVersion: NumaflowAPIVersion,
+				Kind:       "Pipeline",
+				Metadata:   pl.ObjectMeta,
+				Spec:       pl.Spec,
+				Status:     pl.Status,
+			}
 		}
-	}
+		return Output{}
+	})
 
 }
 
 func watchVertices() {
 
-	defer wg.Done()
-	watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
-					vtx := numaflowv1.Vertex{}
-					err = util.StructToStruct(&obj, &vtx)
-					if err != nil {
-						fmt.Printf("Failed to convert unstruct: %v\n", err)
-						return
-					}
-					vtx.ManagedFields = nil
-					output := Output{
-						APIVersion: NumaflowAPIVersion,
-						Kind:       "Vertex",
-						Metadata:   vtx.ObjectMeta,
-						Spec:       vtx.Spec,
-						Status:     vtx.Status,
-					}
-
-					fileName := filepath.Join(ResourceChangesPipelineOutputPath, "vertices", strings.Join([]string{vtx.Name, ".yaml"}, ""))
-					err = writeToFile(fileName, output)
-					if err != nil {
-						return
-					}
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if obj, ok := o.(*unstructured.Unstructured); ok {
+			vtx := numaflowv1.Vertex{}
+			err := util.StructToStruct(&obj, &vtx)
+			if err != nil {
+				fmt.Printf("Failed to convert unstruct: %v\n", err)
+				return Output{}
 			}
-		case <-stopCh:
-			return
+			vtx.ManagedFields = nil
+			return Output{
+				APIVersion: NumaflowAPIVersion,
+				Kind:       "Vertex",
+				Metadata:   vtx.ObjectMeta,
+				Spec:       vtx.Spec,
+				Status:     vtx.Status,
+			}
 		}
-	}
+		return Output{}
+	})
 
 }
 

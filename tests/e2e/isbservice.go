@@ -3,8 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -13,6 +11,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
@@ -142,118 +141,71 @@ func verifyInProgressStrategyISBService(namespace string, isbsvcRolloutName stri
 
 func watchISBServiceRollout() {
 
-	defer wg.Done()
-	watcher, err := isbServiceRolloutClient.Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if rollout, ok := event.Object.(*apiv1.ISBServiceRollout); ok {
-					rollout.ManagedFields = nil
-					rl := Output{
-						APIVersion: NumaplaneAPIVersion,
-						Kind:       "ISBServiceRollout",
-						Metadata:   rollout.ObjectMeta,
-						Spec:       rollout.Spec,
-						Status:     rollout.Status,
-					}
-
-					err := writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice_rollout.yaml"), rl)
-					if err != nil {
-						return
-					}
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := isbServiceRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if rollout, ok := o.(*apiv1.ISBServiceRollout); ok {
+			rollout.ManagedFields = nil
+			return Output{
+				APIVersion: NumaplaneAPIVersion,
+				Kind:       "ISBServiceRollout",
+				Metadata:   rollout.ObjectMeta,
+				Spec:       rollout.Spec,
+				Status:     rollout.Status,
 			}
-		case <-stopCh:
-			return
 		}
-	}
+		return Output{}
+	})
+
 }
 
 func watchISBService() {
 
-	defer wg.Done()
-	watcher, err := dynamicClient.Resource(getGVRForISBService()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
-					isbsvc := numaflowv1.InterStepBufferService{}
-					err = util.StructToStruct(&obj, &isbsvc)
-					if err != nil {
-						fmt.Printf("Failed to convert unstruct: %v\n", err)
-						return
-					}
-					isbsvc.ManagedFields = nil
-					output := Output{
-						APIVersion: NumaflowAPIVersion,
-						Kind:       "InterStepBufferService",
-						Metadata:   isbsvc.ObjectMeta,
-						Spec:       isbsvc.Spec,
-						Status:     isbsvc.Status,
-					}
-
-					err = writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice.yaml"), output)
-					if err != nil {
-						return
-					}
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := dynamicClient.Resource(getGVRForISBService()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if obj, ok := o.(*unstructured.Unstructured); ok {
+			isbsvc := numaflowv1.InterStepBufferService{}
+			err := util.StructToStruct(&obj, &isbsvc)
+			if err != nil {
+				fmt.Printf("Failed to convert unstruct: %v\n", err)
+				return Output{}
 			}
-		case <-stopCh:
-			return
+			isbsvc.ManagedFields = nil
+			return Output{
+				APIVersion: NumaflowAPIVersion,
+				Kind:       "InterStepBufferService",
+				Metadata:   isbsvc.ObjectMeta,
+				Spec:       isbsvc.Spec,
+				Status:     isbsvc.Status,
+			}
 		}
-	}
+		return Output{}
+	})
 
 }
 
 func watchStatefulSet() {
 
-	ctx := context.Background()
-	defer wg.Done()
-	watcher, err := kubeClient.AppsV1().StatefulSets(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/part-of=numaflow"})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if sts, ok := event.Object.(*appsv1.StatefulSet); ok {
-					sts.ManagedFields = nil
-					output := Output{
-						APIVersion: "v1",
-						Kind:       "StatefulSet",
-						Metadata:   sts.ObjectMeta,
-						Spec:       sts.Spec,
-						Status:     sts.Status,
-					}
-
-					err := writeToFile(filepath.Join(ResourceChangesISBServiceOutputPath, "statefulsets", strings.Join([]string{sts.Name, ".yaml"}, "")), output)
-					if err != nil {
-						return
-					}
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := kubeClient.AppsV1().StatefulSets(Namespace).Watch(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/part-of=numaflow"})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if sts, ok := o.(*appsv1.StatefulSet); ok {
+			sts.ManagedFields = nil
+			return Output{
+				APIVersion: "v1",
+				Kind:       "StatefulSet",
+				Metadata:   sts.ObjectMeta,
+				Spec:       sts.Spec,
+				Status:     sts.Status,
 			}
-		case <-stopCh:
-			return
 		}
-	}
+		return Output{}
+	})
+
 }
 
 func startISBServiceRolloutWatches() {

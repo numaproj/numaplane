@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 
@@ -239,9 +240,29 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 
 func watchPods() {
 
-	ctx := context.Background()
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if pod, ok := o.(*corev1.Pod); ok {
+			pod.ManagedFields = nil
+			return Output{
+				APIVersion: "v1",
+				Kind:       "Pod",
+				Metadata:   pod.ObjectMeta,
+				Spec:       pod.Spec,
+				Status:     pod.Status,
+			}
+		}
+		return Output{}
+	})
+
+}
+
+func watchResourceType(getWatchFunc func() (watch.Interface, error), processEventObject func(runtime.Object) Output) {
+
 	defer wg.Done()
-	watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(ctx, metav1.ListOptions{LabelSelector: NumaflowLabel})
+	watcher, err := getWatchFunc()
 	if err != nil {
 		fmt.Printf("Failed to start watcher: %v\n", err)
 		return
@@ -252,47 +273,60 @@ func watchPods() {
 		select {
 		case event := <-watcher.ResultChan():
 			if event.Type == watch.Modified {
-				if pod, ok := event.Object.(*corev1.Pod); ok {
-					pod.ManagedFields = nil
-					pd := Output{
-						APIVersion: "v1",
-						Kind:       "Pod",
-						Metadata:   pod.ObjectMeta,
-						Spec:       pod.Spec,
-						Status:     pod.Status,
-					}
-
-					var fileName string
-					switch pod.Labels["app.kubernetes.io/component"] {
-					case "controller-manager":
-						fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
-					case "isbsvc":
-						fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
-					case "mono-vertex", "mono-vertex-daemon":
-						fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
-					case "daemon", "vertex", "job":
-						fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pods", strings.Join([]string{pod.Name, ".yaml"}, ""))
-					default:
-						continue
-					}
-
-					err := writeToFile(fileName, pd)
-					if err != nil {
-						return
-					}
+				output := processEventObject(event.Object)
+				err = writeToFile(output)
+				if err != nil {
+					return
 				}
 			}
 		case <-stopCh:
 			return
 		}
 	}
+
 }
 
 // helper func to write `kubectl get -o yaml` output to file
-func writeToFile(fileName string, resource Output) error {
+func writeToFile(resource Output) error {
 
 	mutex.Lock()
 	defer mutex.Unlock()
+
+	var fileName string
+
+	switch resource.Kind {
+	case "Pipeline":
+		fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pipeline.yaml")
+	case "Vertex":
+		fileName = filepath.Join(ResourceChangesPipelineOutputPath, "vertices", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+	case "PipelineRollout":
+		fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pipeline_rollout.yaml")
+	case "InterStepBufferService":
+		fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice.yaml")
+	case "StatefulSet":
+		fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "statefulsets", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+	case "ISBServiceRollout":
+		fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "isbservice_rollout.yaml")
+	case "MonoVertex":
+		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml")
+	case "MonoVertexRollout":
+		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml")
+	case "NumaflowControllerRollout":
+		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml")
+	case "Pod":
+		switch resource.Metadata.Labels["app.kubernetes.io/component"] {
+		case "controller-manager":
+			fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "pods", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+		case "isbsvc":
+			fileName = filepath.Join(ResourceChangesISBServiceOutputPath, "pods", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+		case "mono-vertex", "mono-vertex-daemon":
+			fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "pods", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+		case "daemon", "vertex", "job":
+			fileName = filepath.Join(ResourceChangesPipelineOutputPath, "pods", strings.Join([]string{resource.Metadata.Name, ".yaml"}, ""))
+		default:
+			return nil
+		}
+	}
 
 	if _, ok := openFiles[fileName]; !ok {
 		file, err := os.Create(fileName)

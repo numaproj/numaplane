@@ -3,11 +3,11 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
@@ -131,81 +131,49 @@ func updateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (
 
 func watchMonoVertexRollout() {
 
-	defer wg.Done()
-	watcher, err := monoVertexRolloutClient.Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if rollout, ok := event.Object.(*apiv1.MonoVertexRollout); ok {
-					rollout.ManagedFields = nil
-					rl := Output{
-						APIVersion: NumaplaneAPIVersion,
-						Kind:       "MonoVertexRollout",
-						Metadata:   rollout.ObjectMeta,
-						Spec:       rollout.Spec,
-						Status:     rollout.Status,
-					}
-
-					err := writeToFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml"), rl)
-					if err != nil {
-						return
-					}
-
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := monoVertexRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if rollout, ok := o.(*apiv1.MonoVertexRollout); ok {
+			rollout.ManagedFields = nil
+			return Output{
+				APIVersion: NumaplaneAPIVersion,
+				Kind:       "MonoVertexRollout",
+				Metadata:   rollout.ObjectMeta,
+				Spec:       rollout.Spec,
+				Status:     rollout.Status,
 			}
-		case <-stopCh:
-			return
 		}
-	}
+		return Output{}
+	})
+
 }
 
 func watchMonoVertex() {
 
-	defer wg.Done()
-	watcher, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if obj, ok := event.Object.(*unstructured.Unstructured); ok {
-					mvtx := numaflowv1.MonoVertex{}
-					err = util.StructToStruct(&obj, &mvtx)
-					if err != nil {
-						fmt.Printf("Failed to convert unstruct: %v\n", err)
-						return
-					}
-					mvtx.ManagedFields = nil
-					output := Output{
-						APIVersion: NumaflowAPIVersion,
-						Kind:       "MonoVertex",
-						Metadata:   mvtx.ObjectMeta,
-						Spec:       mvtx.Spec,
-						Status:     mvtx.Status,
-					}
-
-					err = writeToFile(filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml"), output)
-					if err != nil {
-						return
-					}
-				}
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if obj, ok := o.(*unstructured.Unstructured); ok {
+			mvtx := numaflowv1.MonoVertex{}
+			err := util.StructToStruct(&obj, &mvtx)
+			if err != nil {
+				fmt.Printf("Failed to convert unstruct: %v\n", err)
+				return Output{}
 			}
-		case <-stopCh:
-			return
+			mvtx.ManagedFields = nil
+			return Output{
+				APIVersion: NumaflowAPIVersion,
+				Kind:       "MonoVertex",
+				Metadata:   mvtx.ObjectMeta,
+				Spec:       mvtx.Spec,
+				Status:     mvtx.Status,
+			}
 		}
-	}
+		return Output{}
+	})
 
 }
 
