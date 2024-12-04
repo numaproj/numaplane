@@ -2,13 +2,12 @@ package e2e
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
@@ -87,36 +86,21 @@ func updateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout
 
 func watchNumaflowControllerRollout() {
 
-	defer wg.Done()
-	watcher, err := numaflowControllerRolloutClient.Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("Failed to start watcher: %v\n", err)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Modified {
-				if rollout, ok := event.Object.(*apiv1.NumaflowControllerRollout); ok {
-					rollout.ManagedFields = nil
-					rl := Output{
-						APIVersion: NumaplaneAPIVersion,
-						Kind:       "NumaflowControllerRollout",
-						Metadata:   rollout.ObjectMeta,
-						Spec:       rollout.Spec,
-						Status:     rollout.Status,
-					}
-
-					err := writeToFile(filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml"), rl)
-					if err != nil {
-						return
-					}
-				}
+	go watchResourceType(func() (watch.Interface, error) {
+		watcher, err := numaflowControllerRolloutClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if rollout, ok := o.(*apiv1.NumaflowControllerRollout); ok {
+			rollout.ManagedFields = nil
+			return Output{
+				APIVersion: NumaplaneAPIVersion,
+				Kind:       "NumaflowControllerRollout",
+				Metadata:   rollout.ObjectMeta,
+				Spec:       rollout.Spec,
+				Status:     rollout.Status,
 			}
-		case <-stopCh:
-			return
 		}
-	}
+		return Output{}
+	})
+
 }
