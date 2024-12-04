@@ -1,0 +1,7 @@
+apiVersion: numaplane.numaproj.io/v1alpha1
+kind: NumaflowController
+metadata:
+  name: numaflowcontroller-sample
+  namespace: example-namespace
+spec:
+  version: "1.3.3"

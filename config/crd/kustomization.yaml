@@ -6,5 +6,6 @@ resources:
 - bases/numaplane.numaproj.io_numaflowcontrollerrollouts.yaml
 - bases/numaplane.numaproj.io_isbservicerollouts.yaml
 - bases/numaplane.numaproj.io_monovertexrollouts.yaml
+- bases/numaplane.numaproj.io_numaflowcontrollers.yaml
 # install numaflow minimal CRDs as a dependency
 - https://github.com/numaproj/numaflow/config/advanced-install/minimal-crds?ref=stable

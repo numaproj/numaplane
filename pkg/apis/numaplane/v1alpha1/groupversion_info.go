@@ -45,6 +45,9 @@ var (
 
 	MonoVertexRolloutGroupVersionKind     = SchemeGroupVersion.WithKind("MonoVertexRollout")
 	MonoVertexRolloutGroupVersionResource = SchemeGroupVersion.WithResource("monovertexrollouts")
+
+	NumaflowControllerGroupVersionKind     = SchemeGroupVersion.WithKind("NumaflowController")
+	NumaflowControllerGroupVersionResource = SchemeGroupVersion.WithResource("numaflowcontrollers")
 )
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource

@@ -1,0 +1,23 @@
+# permissions for end users to view numaflowcontrollers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: numaplane
+    app.kubernetes.io/managed-by: kustomize
+  name: numaflowcontroller-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers/status
+  verbs:
+  - get

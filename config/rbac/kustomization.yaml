@@ -18,3 +18,5 @@ resources:
   - numaplane-aggregate-to-admin.yaml
   - numaplane-aggregate-to-edit.yaml
   - numaplane-aggregate-to-view.yaml
+  - numaflowcontroller_editor_role.yaml
+  - numaflowcontroller_viewer_role.yaml
