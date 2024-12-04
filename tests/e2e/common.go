@@ -241,7 +241,7 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 func watchPods() {
 
 	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		watcher, err := kubeClient.CoreV1().Pods(Namespace).Watch(context.Background(), metav1.ListOptions{LabelSelector: NumaflowLabel})
 		return watcher, err
 	}, func(o runtime.Object) Output {
 		if pod, ok := o.(*corev1.Pod); ok {
