@@ -44,8 +44,8 @@ const (
 	monoVertexName                   = "test-monovertex-rollout-0"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.4.0"
-	initialJetstreamVersion          = "2.9.6"
-	updatedJetstreamVersion          = "2.9.8"
+	initialJetstreamVersion          = "2.10.17"
+	updatedJetstreamVersion          = "2.10.11"
 )
 
 var (
