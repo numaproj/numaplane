@@ -33,10 +33,13 @@ type NumaflowControllerRolloutSpec struct {
 	Controller Controller `json:"controller"`
 }
 
+type PreviousAttemptStatus Controller
+
 // NumaflowControllerRolloutStatus defines the observed state of NumaflowControllerRollout
 type NumaflowControllerRolloutStatus struct {
-	Status             `json:",inline"`
-	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
+	Status                `json:",inline"`
+	PauseRequestStatus    PauseStatus           `json:"pauseRequestStatus,omitempty"`
+	PreviousAttemptStatus PreviousAttemptStatus `json:"previousAttemptStatus,omitempty"`
 }
 
 // +genclient
@@ -45,6 +48,7 @@ type NumaflowControllerRolloutStatus struct {
 // +kubebuilder:validation:XValidation:rule="matches(self.metadata.name, '^numaflow-controller.*')",message="The metadata name must start with 'numaflow-controller'"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.controller.version",description="The desired Numaflow Controller version"
 // NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts API
 type NumaflowControllerRollout struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -70,4 +74,9 @@ func init() {
 // IsHealthy indicates whether the NumaflowController rollout is healthy or not
 func (nc *NumaflowControllerRolloutStatus) IsHealthy() bool {
 	return nc.Phase == PhaseDeployed || nc.Phase == PhasePending
+}
+
+func (ncrs *NumaflowControllerRolloutStatus) UpdatePreviousAttemptStatus(ncr *NumaflowControllerRollout) {
+	ncrs.PreviousAttemptStatus.InstanceID = ncr.Spec.Controller.InstanceID
+	ncrs.PreviousAttemptStatus.Version = ncr.Spec.Controller.Version
 }

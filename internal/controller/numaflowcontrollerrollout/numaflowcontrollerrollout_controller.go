@@ -298,6 +298,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerRollout.Status.MarkPending()
 		} else {
 			controllerRollout.Status.MarkDeployed(controllerRollout.Generation)
+			controllerRollout.Status.UpdatePreviousAttemptStatus(controllerRollout)
 		}
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, controllerRollout, r, controllerDeploymentNeedsUpdating,
@@ -377,7 +378,19 @@ func (r *NumaflowControllerRolloutReconciler) isControllerDeploymentUpdating(ctx
 	if err != nil {
 		return false, false, err
 	}
-	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion)
+
+	numaLogger.Debugf("previousAttemptInstanceID='%s', previousAttemptVersion='%s', currentInstanceID='%s', currentVersion='%s'",
+		controllerRollout.Status.PreviousAttemptStatus.InstanceID, controllerRollout.Status.PreviousAttemptStatus.Version,
+		controllerRollout.Spec.Controller.InstanceID, controllerRollout.Spec.Controller.Version)
+
+	// If the Rollout status indicates previous attempt instanceID and version same to the current instanceID and version,
+	// it means that the Numaplane Controller already attempted to reconcile this instance/version of the Numaflow Controller.
+	// Therefore, independently of the previous attempt result (either success or failure), the reconciler should not perform
+	// the update (but without pausing the pipelines).
+	controllerVersionNeedsToUpdate := (controllerRollout.Spec.Controller.Version != currentVersion &&
+		(controllerRollout.Status.PreviousAttemptStatus.InstanceID != controllerRollout.Spec.Controller.InstanceID ||
+			controllerRollout.Status.PreviousAttemptStatus.Version != controllerRollout.Spec.Controller.Version))
+
 	if controllerVersionNeedsToUpdate {
 		numaLogger.Debugf("current Deployment image tag=%q differs from desired %q", currentVersion, controllerRollout.Spec.Controller.Version)
 	}
@@ -570,6 +583,7 @@ func (r *NumaflowControllerRolloutReconciler) sync(
 	syncCtx.Sync()
 
 	rollout.Status.MarkDeployed(rollout.Generation)
+	rollout.Status.UpdatePreviousAttemptStatus(rollout)
 
 	phase, _, _ := syncCtx.GetState()
 	return phase, nil
@@ -675,15 +689,6 @@ func (r *NumaflowControllerRolloutReconciler) getNumaflowControllerDeployment(ct
 // get the tag of the numaflow container
 func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
 
-	c, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
-	}
-	imageNames := []string{DefaultNumaflowControllerImageName}
-	if len(c.NumaflowControllerImageNames) > 0 {
-		imageNames = c.NumaflowControllerImageNames
-	}
-
 	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
 	containers := deployment.Spec.Template.Spec.Containers
 	for _, c := range containers {
@@ -699,14 +704,9 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			imageName = imageName[finalSlash+1:]
 
 		}
+
 		// is this is the Numaflow Controller itself?
-		isNumaflowController := false
-		for _, nfControllerImageName := range imageNames {
-			if imageName == nfControllerImageName {
-				isNumaflowController = true
-				break
-			}
-		}
+		isNumaflowController := imageName == DefaultNumaflowControllerImageName
 		if isNumaflowController {
 			if tag == "" {
 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
@@ -719,6 +719,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 			}
 		}
 	}
+
 	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
 }
 
@@ -901,6 +902,7 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutStatusToFailed(ctx context.Context, controllerRollout *apiv1.NumaflowControllerRollout, err error) error {
 	controllerRollout.Status.MarkFailed(err.Error())
+	controllerRollout.Status.UpdatePreviousAttemptStatus(controllerRollout)
 	return r.updateNumaflowControllerRolloutStatus(ctx, controllerRollout)
 }
 

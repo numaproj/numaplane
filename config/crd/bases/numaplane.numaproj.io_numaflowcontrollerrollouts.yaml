@@ -22,6 +22,10 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: The desired Numaflow Controller version
+      jsonPath: .spec.controller.version
+      name: Version
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -170,6 +174,15 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              previousAttemptStatus:
+                properties:
+                  instanceID:
+                    type: string
+                  version:
+                    type: string
+                required:
+                - version
+                type: object
             type: object
         type: object
         x-kubernetes-validations:
