@@ -97,7 +97,7 @@ func (r *NumaflowControllerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		return err
 	}
 
-	// Watch ISBServiceRollouts
+	// Watch NumaflowController
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowController{},
 		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowController]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowController]{})); err != nil {
 		return fmt.Errorf("failed to watch NumaflowController: %v", err)

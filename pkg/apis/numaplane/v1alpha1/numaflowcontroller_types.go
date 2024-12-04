@@ -25,7 +25,8 @@ import (
 
 // NumaflowControllerSpec defines the desired state of NumaflowController
 type NumaflowControllerSpec struct {
-	Version string `json:"version"`
+	InstanceID string `json:"instanceID,omitempty"`
+	Version    string `json:"version"`
 }
 
 // NumaflowControllerStatus defines the observed state of NumaflowController

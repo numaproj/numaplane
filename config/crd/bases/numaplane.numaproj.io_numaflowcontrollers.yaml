@@ -40,6 +40,8 @@ spec:
           spec:
             description: NumaflowControllerSpec defines the desired state of NumaflowController
             properties:
+              instanceID:
+                type: string
               version:
                 type: string
             required:
