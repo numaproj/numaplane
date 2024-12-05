@@ -21,6 +21,7 @@ type CustomMetrics struct {
 	PipelineRolloutQueueLength *prometheus.GaugeVec
 	// PipelineROSyncs is the counter for the total number of PipelineRollout reconciliations
 	PipelineROSyncs *prometheus.CounterVec
+
 	// ISBServicesRolloutHealth is the gauge for the health of ISBServiceRollouts.
 	ISBServicesRolloutHealth *prometheus.GaugeVec
 	// ISBServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
@@ -31,6 +32,7 @@ type CustomMetrics struct {
 	ISBServicesROSyncErrors *prometheus.CounterVec
 	// ISBServiceROSyncs is the counter for the total number of ISBServiceRollout reconciliations
 	ISBServiceROSyncs *prometheus.CounterVec
+
 	// MonoVerticesRolloutHealth is the gauge for the health of MonoVertexRollout.
 	MonoVerticesRolloutHealth *prometheus.GaugeVec
 	// MonoVertexRolloutsRunning is the gauge for the number of running MonoVertexRollouts.
@@ -41,6 +43,7 @@ type CustomMetrics struct {
 	MonoVertexROSyncErrors *prometheus.CounterVec
 	// MonoVertexROSyncs is the counter for the total number of MonoVertexRollout reconciliations
 	MonoVertexROSyncs *prometheus.CounterVec
+
 	// NumaflowControllersRolloutHealth is the gauge for the health of NumaflowControllerRollouts.
 	NumaflowControllersRolloutHealth *prometheus.GaugeVec
 	// NumaflowControllerRORunning is the gauge for the number of running NumaflowControllerRollouts with a specific version.
@@ -49,6 +52,16 @@ type CustomMetrics struct {
 	NumaflowControllerROSyncErrors *prometheus.CounterVec
 	// NumaflowControllersROSyncs in the counter for the total number of NumaflowControllerRollout reconciliations
 	NumaflowControllersROSyncs *prometheus.CounterVec
+
+	// NumaflowControllersHealth is the gauge for the health of NumaflowControllers.
+	NumaflowControllersHealth *prometheus.GaugeVec
+	// NumaflowControllerRunning is the gauge for the number of running NumaflowControllers with a specific version.
+	NumaflowControllerRunning *prometheus.GaugeVec
+	// NumaflowControllerSyncErrors is the counter for the total number of NumaflowController reconciliation errors
+	NumaflowControllerSyncErrors *prometheus.CounterVec
+	// NumaflowControllersSyncs in the counter for the total number of NumaflowController reconciliations
+	NumaflowControllersSyncs *prometheus.CounterVec
+
 	// ReconciliationDuration is the histogram for the duration of pipeline, isb service, monovertex and numaflow controller reconciliation.
 	ReconciliationDuration *prometheus.HistogramVec
 	// NumaflowControllerKubectlExecutionCounter Count the number of kubectl executions during numaflow controller reconciliation
@@ -72,18 +85,19 @@ type CustomMetrics struct {
 }
 
 const (
-	LabelIntuit             = "intuit_alert"
-	LabelVersion            = "version"
-	LabelType               = "type"
-	LabelPhase              = "phase"
-	LabelK8SVersion         = "K8SVersion"
-	LabelName               = "name"
-	LabelNamespace          = "namespace"
-	LabelPipeline           = "pipeline"
-	LabelISBService         = "isbservice"
-	LabelNumaflowController = "numaflowcontroller"
-	LabelMonoVertex         = "monovertex"
-	LabelPauseType          = "pause_type"
+	LabelIntuit                    = "intuit_alert"
+	LabelVersion                   = "version"
+	LabelType                      = "type"
+	LabelPhase                     = "phase"
+	LabelK8SVersion                = "K8SVersion"
+	LabelName                      = "name"
+	LabelNamespace                 = "namespace"
+	LabelPipeline                  = "pipeline"
+	LabelISBService                = "isbservice"
+	LabelNumaflowControllerRollout = "numaflowcontrollerrollout"
+	LabelNumaflowController        = "numaflowcontroller"
+	LabelMonoVertex                = "monovertex"
+	LabelPauseType                 = "pause_type"
 )
 
 var (

@@ -205,12 +205,17 @@ func main() {
 		numaLogger.Fatal(err, "Unable to set up MonoVertexRollout controller")
 	}
 
-	numaflowControllerReconciler := numaflowcontroller.NewNumaflowControllerReconciler(
+	numaflowControllerReconciler, err := numaflowcontroller.NewNumaflowControllerReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
+		newRawConfig,
+		kubectl,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.NumaflowControllerName),
 	)
+	if err != nil {
+		numaLogger.Fatal(err, "Unable to create NumaflowController controller")
+	}
 
 	if err = numaflowControllerReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up NumaflowController controller")

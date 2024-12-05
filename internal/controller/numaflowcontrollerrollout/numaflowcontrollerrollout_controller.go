@@ -64,10 +64,6 @@ import (
 )
 
 const (
-	finalizerName = "numaplane.numaproj.io/numaplane-controller"
-)
-
-const (
 	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
 	NumaflowControllerDeploymentName    = "numaflow-controller"
 	DefaultNumaflowControllerImageName  = "numaflow"
@@ -242,14 +238,14 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	if !controllerRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowControllerRollout")
 		r.recorder.Eventf(controllerRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
-		if controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
+		if controllerutil.ContainsFinalizer(controllerRollout, common.FinalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
 			// Check if dependent resources are deleted, if not then requeue after 5 seconds
 			if !r.areDependentResourcesDeleted(ctx, controllerRollout) {
 				numaLogger.Warn("Dependent resources are not deleted yet, requeue after 5 seconds")
 				return ctrl.Result{Requeue: true}, nil
 			}
-			controllerutil.RemoveFinalizer(controllerRollout, finalizerName)
+			controllerutil.RemoveFinalizer(controllerRollout, common.FinalizerName)
 		}
 		// generate the metrics for the numaflow controller deletion based on a numaflow version.
 		r.customMetrics.NumaflowControllerRORunning.DeleteLabelValues(controllerRollout.Name, controllerRollout.Namespace, controllerRollout.Spec.Controller.Version)
@@ -259,8 +255,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
-	if !controllerutil.ContainsFinalizer(controllerRollout, finalizerName) {
-		controllerutil.AddFinalizer(controllerRollout, finalizerName)
+	if !controllerutil.ContainsFinalizer(controllerRollout, common.FinalizerName) {
+		controllerutil.AddFinalizer(controllerRollout, common.FinalizerName)
 	}
 
 	_, pauseRequestExists := ppnd.GetPauseModule().GetPauseRequest(controllerKey)
