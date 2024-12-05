@@ -125,7 +125,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontroller-reconciler").WithValues("numaflowcontroller", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.NumaflowControllersSyncs.WithLabelValues().Inc()
+	r.customMetrics.NumaflowControllerSyncs.WithLabelValues().Inc()
 
 	numaflowController := &apiv1.NumaflowController{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowController); err != nil {
@@ -568,56 +568,6 @@ func (r *NumaflowControllerReconciler) getNumaflowControllerDeployment(ctx conte
 	}
 	return deployment, true, nil
 }
-
-// // get the tag of the numaflow container
-// func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
-
-// 	c, err := config.GetConfigManagerInstance().GetConfig()
-// 	if err != nil {
-// 		return "", fmt.Errorf("error getting ConfigMap: %+v", err)
-// 	}
-// 	imageNames := []string{DefaultNumaflowControllerImageName}
-// 	if len(c.NumaflowControllerImageNames) > 0 {
-// 		imageNames = c.NumaflowControllerImageNames
-// 	}
-
-// 	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
-// 	containers := deployment.Spec.Template.Spec.Containers
-// 	for _, c := range containers {
-// 		imageName := c.Image
-// 		tag := ""
-// 		colon := strings.Index(c.Image, ":")
-// 		if colon != -1 {
-// 			imageName = c.Image[0:colon]
-// 			tag = c.Image[colon+1:]
-// 		}
-// 		finalSlash := strings.LastIndex(imageName, "/")
-// 		if finalSlash != -1 {
-// 			imageName = imageName[finalSlash+1:]
-
-// 		}
-// 		// is this is the Numaflow Controller itself?
-// 		isNumaflowController := false
-// 		for _, nfControllerImageName := range imageNames {
-// 			if imageName == nfControllerImageName {
-// 				isNumaflowController = true
-// 				break
-// 			}
-// 		}
-// 		if isNumaflowController {
-// 			if tag == "" {
-// 				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
-// 			} else {
-// 				// expect first letter to be a "v"
-// 				if tag[0] != 'v' {
-// 					return "", fmt.Errorf("expected numaflow-controller tag to start with 'v': %q", tag)
-// 				}
-// 				return tag[1:], nil
-// 			}
-// 		}
-// 	}
-// 	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
-// }
 
 func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, string) {
 

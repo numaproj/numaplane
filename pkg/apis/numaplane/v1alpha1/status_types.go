@@ -71,6 +71,9 @@ type Status struct {
 
 	// ObservedGeneration stores the generation value observed when setting the current Phase
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
+	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
 }
 
 // PauseStatus is a common structure used to communicate how long Pipelines are paused.
@@ -180,6 +183,14 @@ func (status *Status) MarkProgressiveUpgradeSucceeded(message string, generation
 
 func (status *Status) MarkProgressiveUpgradeFailed(message string, generation int64) {
 	status.MarkFalse(ConditionProgressiveUpgradeSucceeded, "Failed", message, generation)
+}
+
+func (status *Status) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
+	status.UpgradeInProgress = upgradeStrategy
+}
+
+func (status *Status) ClearUpgradeInProgress() {
+	status.UpgradeInProgress = ""
 }
 
 // setCondition sets a condition

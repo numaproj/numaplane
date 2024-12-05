@@ -40,7 +40,6 @@ import (
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,6 +51,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
@@ -65,53 +65,54 @@ import (
 
 const (
 	ControllerNumaflowControllerRollout = "numaflow-controller-rollout-controller"
-	NumaflowControllerDeploymentName    = "numaflow-controller"
-	DefaultNumaflowControllerImageName  = "numaflow"
 )
 
 // NumaflowControllerRolloutReconciler reconciles a NumaflowControllerRollout object
 type NumaflowControllerRolloutReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	restConfig    *rest.Config
-	rawConfig     *rest.Config
-	kubectl       kubeUtil.Kubectl
-	stateCache    sync.LiveStateCache
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
+
+	// maintain inProgressStrategies in memory and in ISBServiceRollout Status
+	inProgressStrategyMgr *ctlrcommon.InProgressStrategyMgr
 }
 
 func NewNumaflowControllerRolloutReconciler(
-	client client.Client,
-	s *runtime.Scheme,
-	rawConfig *rest.Config,
-	kubectl kubeUtil.Kubectl,
+	cli client.Client,
+	scheme *runtime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
-) (*NumaflowControllerRolloutReconciler, error) {
-	stateCache := sync.NewLiveStateCache(rawConfig, customMetrics)
-	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontrollerrollout")
-	err := stateCache.Init(numaLogger)
-	if err != nil {
-		return nil, err
-	}
+) *NumaflowControllerRolloutReconciler {
 
-	kubectl.SetOnKubectlRun(func(command string) (kubeUtil.CleanupFunc, error) {
-		customMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues().Inc()
-		return func() {}, nil
-	})
-	restConfig := rawConfig
-	return &NumaflowControllerRolloutReconciler{
-		client,
-		s,
-		restConfig,
-		rawConfig,
-		kubectl,
-		stateCache,
+	r := &NumaflowControllerRolloutReconciler{
+		cli,
+		scheme,
 		customMetrics,
 		recorder,
-	}, nil
+		nil,
+	}
+
+	r.inProgressStrategyMgr = ctlrcommon.NewInProgressStrategyMgr(
+		// getRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object) *apiv1.UpgradeStrategy {
+			numaflowControllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
+
+			if numaflowControllerRollout.Status.UpgradeInProgress != "" {
+				return (*apiv1.UpgradeStrategy)(&numaflowControllerRollout.Status.UpgradeInProgress)
+			} else {
+				return nil
+			}
+		},
+		// setRolloutStrategy function:
+		func(ctx context.Context, rollout client.Object, strategy apiv1.UpgradeStrategy) {
+			numaflowControllerRollout := rollout.(*apiv1.NumaflowControllerRollout)
+			numaflowControllerRollout.Status.SetUpgradeInProgress(strategy)
+		},
+	)
+
+	return r
 }
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollerrollouts,verbs=get;list;watch;create;update;patch;delete
@@ -135,7 +136,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			r.ErrorHandler(numaflowControllerRollout, err, "GetNumaflowControllerFailed", "Failed to get numaflow controller rollout")
+			r.ErrorHandler(numaflowControllerRollout, err, "GetNumaflowControllerRolloutFailed", "Failed to get numaflow controller rollout")
 			return ctrl.Result{}, err
 		}
 	}

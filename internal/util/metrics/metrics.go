@@ -48,6 +48,8 @@ type CustomMetrics struct {
 	NumaflowControllersRolloutHealth *prometheus.GaugeVec
 	// NumaflowControllerRORunning is the gauge for the number of running NumaflowControllerRollouts with a specific version.
 	NumaflowControllerRORunning *prometheus.GaugeVec
+	// NumaflowControllerROCounterMap contains the information of all running NumaflowControllerRollouts.
+	NumaflowControllerROCounterMap map[string]map[string]struct{}
 	// NumaflowControllerROSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerROSyncErrors *prometheus.CounterVec
 	// NumaflowControllersROSyncs in the counter for the total number of NumaflowControllerRollout reconciliations
@@ -59,8 +61,8 @@ type CustomMetrics struct {
 	NumaflowControllerRunning *prometheus.GaugeVec
 	// NumaflowControllerSyncErrors is the counter for the total number of NumaflowController reconciliation errors
 	NumaflowControllerSyncErrors *prometheus.CounterVec
-	// NumaflowControllersSyncs in the counter for the total number of NumaflowController reconciliations
-	NumaflowControllersSyncs *prometheus.CounterVec
+	// NumaflowControllerSyncs in the counter for the total number of NumaflowController reconciliations
+	NumaflowControllerSyncs *prometheus.CounterVec
 
 	// ReconciliationDuration is the histogram for the duration of pipeline, isb service, monovertex and numaflow controller reconciliation.
 	ReconciliationDuration *prometheus.HistogramVec
@@ -101,10 +103,11 @@ const (
 )
 
 var (
-	defaultLabels  = prometheus.Labels{LabelIntuit: "true"}
-	pipelineLock   sync.Mutex
-	isbServiceLock sync.Mutex
-	monoVertexLock sync.Mutex
+	defaultLabels          = prometheus.Labels{LabelIntuit: "true"}
+	pipelineLock           sync.Mutex
+	isbServiceLock         sync.Mutex
+	monoVertexLock         sync.Mutex
+	numaflowControllerLock sync.Mutex
 
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -124,6 +127,13 @@ var (
 	numaflowControllersRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_controller_rollout_health",
 		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelNumaflowController})
+
+	// numaflowControllersHealth indicates whether the numaflow controllers are healthy (from k8s resource perspective).
+	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_health",
+		Help:        "A metric to indicate whether the numaflow controller is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelNumaflowController})
 
@@ -246,6 +256,27 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
+	// numaflowControllerRunning is the gauge for the number of running numaflow controllers.
+	numaflowControllerRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controllers_running",
+		Help:        "Number of NumaflowControllers",
+		ConstLabels: defaultLabels,
+	}, []string{LabelName, LabelNamespace, LabelVersion})
+
+	// numaflowControllerSyncs Check the total number of NumaflowController reconciliations
+	numaflowControllerSyncs = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaflow_controller_syncs_total",
+		Help:        "The total number of NumaflowController syncs",
+		ConstLabels: defaultLabels,
+	}, []string{})
+
+	// numaflowControllerSyncErrors Check the total number of NumaflowController reconciliation errors
+	numaflowControllerSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaflow_controller_sync_errors_total",
+		Help:        "The total number of Numaflow controller sync errors",
+		ConstLabels: defaultLabels,
+	}, []string{})
+
 	// numaflowControllerKubectlExecutionCounter Check the total number of kubectl executions for numaflow controller
 	numaflowControllerKubectlExecutionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name:        "numaflow_controller_kubectl_execution_total",
@@ -298,12 +329,14 @@ var (
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics() *CustomMetrics {
-	metrics.Registry.MustRegister(pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength,
+	metrics.Registry.MustRegister(
+		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength,
 		isbServicesRolloutHealth, isbServiceRolloutsRunning, isbServiceROSyncs, isbServiceROSyncErrors,
 		monoVerticesRolloutHealth, monoVertexRolloutsRunning, monoVertexROSyncs, monoVertexROSyncErrors,
-		numaflowControllersRolloutHealth, numaflowControllerRORunning, numaflowControllerROSyncs, numaflowControllerROSyncErrors, reconciliationDuration, kubeRequestCounter,
-		numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored, kubeResourceCache, clusterCacheError,
-		pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
+		numaflowControllersRolloutHealth, numaflowControllerRORunning, numaflowControllerROSyncs, numaflowControllerROSyncErrors,
+		numaflowControllersHealth, numaflowControllerRunning, numaflowControllerSyncs, numaflowControllerSyncErrors,
+		reconciliationDuration, kubeRequestCounter, numaflowControllerKubectlExecutionCounter, kubeResourceCacheMonitored,
+		kubeResourceCache, clusterCacheError, pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds, numaflowControllerPausedSeconds)
 
 	return &CustomMetrics{
 		PipelinesRolloutHealth:                    pipelinesRolloutHealth,
@@ -326,6 +359,10 @@ func RegisterCustomMetrics() *CustomMetrics {
 		NumaflowControllerRORunning:               numaflowControllerRORunning,
 		NumaflowControllersROSyncs:                numaflowControllerROSyncs,
 		NumaflowControllerROSyncErrors:            numaflowControllerROSyncErrors,
+		NumaflowControllersHealth:                 numaflowControllersHealth,
+		NumaflowControllerRunning:                 numaflowControllerRunning,
+		NumaflowControllerSyncs:                   numaflowControllerSyncs,
+		NumaflowControllerSyncErrors:              numaflowControllerSyncErrors,
 		KubeRequestCounter:                        kubeRequestCounter,
 		NumaflowControllerKubectlExecutionCounter: numaflowControllerKubectlExecutionCounter,
 		ReconciliationDuration:                    reconciliationDuration,
@@ -405,5 +442,28 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	delete(m.MonoVerticesCounterMap[namespace], name)
 	for ns, monoVertices := range m.MonoVerticesCounterMap {
 		m.MonoVertexRolloutsRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
+	}
+}
+
+// IncNumaflowControllerRollouts increments the NumaflowControllerRollout counter if it doesn't already know about it
+func (m *CustomMetrics) IncNumaflowControllerRollouts(name, namespace string) {
+	numaflowControllerLock.Lock()
+	defer numaflowControllerLock.Unlock()
+	if _, ok := m.NumaflowControllerROCounterMap[namespace]; !ok {
+		m.NumaflowControllerROCounterMap[namespace] = make(map[string]struct{})
+	}
+	m.NumaflowControllerROCounterMap[namespace][name] = struct{}{}
+	for ns, NumaflowControllers := range m.NumaflowControllerROCounterMap {
+		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(NumaflowControllers)))
+	}
+}
+
+// DecNumaflowControllerRollouts decrements the NumaflowControllerRollout counter
+func (m *CustomMetrics) DecNumaflowControllerRollouts(name, namespace string) {
+	numaflowControllerLock.Lock()
+	defer numaflowControllerLock.Unlock()
+	delete(m.NumaflowControllerROCounterMap[namespace], name)
+	for ns, NumaflowControllers := range m.NumaflowControllerROCounterMap {
+		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(NumaflowControllers)))
 	}
 }
