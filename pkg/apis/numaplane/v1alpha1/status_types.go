@@ -90,6 +90,11 @@ func (status *Status) SetPhase(phase Phase, msg string) {
 	status.Message = msg
 }
 
+// IsHealthy indicates whether the resource is healthy
+func (s *Status) IsHealthy() bool {
+	return s.Phase == PhaseDeployed || s.Phase == PhasePending
+}
+
 func (status *Status) SetObservedGeneration(generation int64) {
 	status.ObservedGeneration = generation
 }
