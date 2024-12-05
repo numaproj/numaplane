@@ -132,17 +132,17 @@ var _ = BeforeSuite(func() {
 
 	Expect(kubernetes.SetClientSets(k8sManager.GetConfig())).To(Succeed())
 
-	err = pipelinerollout.NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
+	pipelinerollout.NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipelineName)).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
 
-	err = isbservicerollout.NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
+	isbservicerollout.NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutISBSvcName)).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
 
-	err = monovertexrollout.NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
+	monovertexrollout.NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertexName)).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
+
+	numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
+		ctlrcommon.TestCustomMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowControllerName))
 
 	stateCache := sync.NewLiveStateCache(cfg, ctlrcommon.TestCustomMetrics)
 	err = stateCache.Init(nil)
@@ -155,12 +155,6 @@ var _ = BeforeSuite(func() {
 	definitions, err := ctlrcommon.GetNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
 	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions)
-
-	numaflowControllerRolloutReconciler, err := numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),
-		cfg, kubernetes.NewKubectl(), ctlrcommon.TestCustomMetrics, k8sManager.GetEventRecorderFor(apiv1.RolloutNumaflowControllerName))
-	Expect(err).ToNot(HaveOccurred())
-	err = numaflowControllerRolloutReconciler.SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

@@ -24,6 +24,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type Controller struct {
+	// NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
+	// create multiple Numaflow controllers within the same namespace
 	InstanceID string `json:"instanceID,omitempty"`
 	Version    string `json:"version"`
 }

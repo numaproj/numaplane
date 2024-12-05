@@ -167,17 +167,12 @@ func main() {
 	defer pipelineRolloutReconciler.Shutdown(ctx)
 
 	kubectl := kubernetes.NewKubectl()
-	numaflowControllerRolloutReconciler, err := numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(
+	numaflowControllerRolloutReconciler := numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		newRawConfig,
-		kubectl,
 		customMetrics,
 		mgr.GetEventRecorderFor(apiv1.RolloutNumaflowControllerName),
 	)
-	if err != nil {
-		numaLogger.Fatal(err, "Unable to create NumaflowControllerRollout controller")
-	}
 
 	if err = numaflowControllerRolloutReconciler.SetupWithManager(mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up NumaflowControllerRollout controller")
