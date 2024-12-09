@@ -55,6 +55,27 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 			expectedName:  "",
 			expectedError: nil,
 		},
+		{
+			name: "Backward compatibility with older code",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+			},
+
+			expectedName:  "my-pipeline-3",
+			expectedError: nil,
+		},
+		{
+			name: "Backward compatibility with older code, and just one pipeline exists",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+			},
+
+			expectedName:  "my-pipeline",
+			expectedError: nil,
+		},
 	}
 
 	for _, tt := range tests {

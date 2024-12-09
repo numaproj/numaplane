@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -168,9 +169,9 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
 		recycleList := []*unstructured.Unstructured{}
-		mostCurrentIndex := -1
+		mostCurrentIndex := math.MinInt
 		for _, child := range children.Items {
-			childIndex, err := getChildIndex(child.GetName())
+			childIndex, err := getChildIndex(rolloutObject.GetRolloutObjectMeta().Name, child.GetName())
 			if err != nil {
 				// something is improperly named for some reason - don't touch it just in case?
 				numaLogger.Warn(err.Error())
@@ -200,13 +201,28 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 	}
 }
 
-// get the index of the child following the dash in the name
-func getChildIndex(childName string) (int, error) {
-	dash := strings.LastIndex(childName, "-")
-	if dash == -1 {
-		return 0, fmt.Errorf("child name %q doesn't contain a dash", childName)
+// Get the index of the child following the dash in the name
+// childName should be the rolloutName + '-<integer>'
+// For backward compatibility, support child resources whose names were equivalent to rollout names, returning -1 index
+func getChildIndex(rolloutName string, childName string) (int, error) {
+	// verify that the initial part of the child name is the rolloutName
+	if !strings.HasPrefix(childName, rolloutName) {
+		return 0, fmt.Errorf("child name %q should begin with rollout name %q", childName, rolloutName)
 	}
-	suffix := childName[dash+1:]
+	// backward compatibility for older naming convention (before the '-<integer>' suffix was introduced - if it's the same name, consider it to essentially be the smallest index
+	if childName == rolloutName {
+		return -1, nil
+	}
+
+	// next character should be a dash
+	dash := childName[len(rolloutName)]
+	if dash != '-' {
+		return 0, fmt.Errorf("child name %q should begin with rollout name %q, followed by '-<integer>'", childName, rolloutName)
+	}
+
+	// remaining characters should be the integer index
+	suffix := childName[len(rolloutName)+1:]
+
 	childIndex, err := strconv.Atoi(suffix)
 	if err != nil {
 		return 0, fmt.Errorf("child name %q has a suffix which is not an integer", childName)

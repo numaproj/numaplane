@@ -361,7 +361,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
-	newPipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
+	newPipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, nil, err
 	}
@@ -563,7 +563,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
 	if existingPipelineDef == nil {
-		pipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
+		pipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
 		if err != nil {
 			return err
 		}
@@ -749,7 +749,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
+func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
