@@ -357,6 +357,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		MonoVertexROSyncErrors:                    monoVertexROSyncErrors,
 		NumaflowControllersRolloutHealth:          numaflowControllersRolloutHealth,
 		NumaflowControllerRORunning:               numaflowControllerRORunning,
+		NumaflowControllerROCounterMap:            make(map[string]map[string]struct{}),
 		NumaflowControllersROSyncs:                numaflowControllerROSyncs,
 		NumaflowControllerROSyncErrors:            numaflowControllerROSyncErrors,
 		NumaflowControllersHealth:                 numaflowControllersHealth,
@@ -453,8 +454,8 @@ func (m *CustomMetrics) IncNumaflowControllerRollouts(name, namespace string) {
 		m.NumaflowControllerROCounterMap[namespace] = make(map[string]struct{})
 	}
 	m.NumaflowControllerROCounterMap[namespace][name] = struct{}{}
-	for ns, NumaflowControllers := range m.NumaflowControllerROCounterMap {
-		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(NumaflowControllers)))
+	for ns, numaflowControllers := range m.NumaflowControllerROCounterMap {
+		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(numaflowControllers)))
 	}
 }
 
@@ -463,7 +464,7 @@ func (m *CustomMetrics) DecNumaflowControllerRollouts(name, namespace string) {
 	numaflowControllerLock.Lock()
 	defer numaflowControllerLock.Unlock()
 	delete(m.NumaflowControllerROCounterMap[namespace], name)
-	for ns, NumaflowControllers := range m.NumaflowControllerROCounterMap {
-		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(NumaflowControllers)))
+	for ns, numaflowControllers := range m.NumaflowControllerROCounterMap {
+		m.NumaflowControllerRORunning.WithLabelValues(ns).Set(float64(len(numaflowControllers)))
 	}
 }
