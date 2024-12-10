@@ -145,12 +145,22 @@ func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error
 }
 
 func GetPipelineISBSVCName(pipeline *unstructured.Unstructured) (string, error) {
-	isbsvcName, _, err := unstructured.NestedString(pipeline.Object, "spec", "interstepBufferServiceName")
+	isbsvcName, found, err := unstructured.NestedString(pipeline.Object, "spec", "interStepBufferServiceName")
+	if err != nil {
+		return isbsvcName, err
+	}
+	if !found {
+		return "default", nil // if not set, the default value is "default"
+	}
 	return isbsvcName, err
 }
 
 func PipelineWithISBServiceName(pipeline *unstructured.Unstructured, isbsvcName string) error {
-
+	err := unstructured.SetNestedField(pipeline.Object, isbsvcName, "spec", "interStepBufferServiceName")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func PipelineWithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {

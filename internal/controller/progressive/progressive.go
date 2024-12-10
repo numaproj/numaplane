@@ -85,7 +85,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 			return false, err
 		}
 	}
-	if currentUpgradingChildDef == nil { // nothing to do
+	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
 		return true, err
 	}
 
@@ -130,6 +130,7 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	labelSelector := fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
 		common.LabelKeyUpgradeState, string(upgradeState))
+	fmt.Printf("deletethis: childGVR=%+v, labelSelector=%q\n", childGVR, labelSelector)
 
 	var children *unstructured.UnstructuredList
 	var err error
@@ -160,7 +161,8 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		return nil, err
 	}
 
-	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, kubernetes.ExtractResourceNames(children))
+	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, found: %s",
+		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
@@ -186,7 +188,8 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		}
 		// recycle the previous children
 		for _, recyclableChild := range recycleList {
-			numaLogger.Debugf("found multiple children of upgrade state=%q, marking recyclable: %s", upgradeState, recyclableChild.GetName())
+			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
+				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
 			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
 		}
 		return mostCurrentChild, nil

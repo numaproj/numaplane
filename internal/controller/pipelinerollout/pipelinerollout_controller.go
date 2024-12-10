@@ -515,6 +515,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 		numaLogger.Debug("processing pipeline with PPND")
+		fmt.Printf("deletethis: newPipelineDef.spec=%+v\n", newPipelineDef.Object["spec"])
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
@@ -762,12 +763,14 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	// determine name of the InterstepBufferService by finding the "promoted" isbsvc for the ISBServiceRollout
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%s", err.Error())
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
+	// TODO: want to change back:
 	promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
+	//promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, true, r.client)
 	if err != nil || promotedISBSvc == nil {
-		return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%s", err.Error())
+		return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
@@ -838,7 +841,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%s", err.Error())
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
 	isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradeInProgress, false, r.client)
@@ -849,7 +852,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
 		if isbsvc == nil || err != nil {
-			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted', err=%s", err.Error())
+			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted', err=%v", err)
 		}
 	}
 

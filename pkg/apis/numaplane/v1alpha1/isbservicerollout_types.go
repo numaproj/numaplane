@@ -94,7 +94,7 @@ func (isbServiceRollout *ISBServiceRollout) GetChildGVR() metav1.GroupVersionRes
 }
 
 func (isbServiceRollout *ISBServiceRollout) GetChildGVK() schema.GroupVersionKind {
-	return numaflowv1.PipelineGroupVersionKind
+	return numaflowv1.ISBGroupVersionKind
 }
 
 func (isbServiceRollout *ISBServiceRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {
