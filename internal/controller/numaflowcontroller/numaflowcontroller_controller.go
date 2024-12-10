@@ -161,7 +161,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// update our Status with the Deployment's Status
-	err = r.processNumaflowControllerStatus(numaflowController, deployment)
+	err = r.processNumaflowControllerDeploymentStatus(numaflowController, deployment)
 	if err != nil {
 		r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, "ProcessStatusFailed", "Failed to process NumaflowController Deployment status: %v", err.Error())
 		return ctrl.Result{}, err
@@ -191,9 +191,6 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
-
-	// generate the metrics for the numaflow controller based on a numaflow version.
-	r.customMetrics.NumaflowControllerRunning.WithLabelValues(numaflowController.Name, numaflowController.Namespace, numaflowController.Spec.Controller.Version).Set(1)
 
 	numaLogger.Debug("reconciliation successful")
 	r.recorder.Eventf(numaflowController, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
@@ -243,8 +240,8 @@ func (r *NumaflowControllerReconciler) reconcile(
 			}
 			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
 		}
-		// generate the metrics for the numaflow controller deletion based on a numaflow version.
-		r.customMetrics.NumaflowControllerRunning.DeleteLabelValues(controller.Name, controller.Namespace, controller.Spec.Controller.Version)
+
+		// generate the metrics for the numaflow controller deletion
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowController, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.NumaflowControllersHealth.DeleteLabelValues(controller.Namespace, controller.Name)
 		return ctrl.Result{}, nil
@@ -368,7 +365,7 @@ func resolveManifestTemplate(manifest string, controller *apiv1.NumaflowControll
 		return nil, fmt.Errorf("unable to parse manifest: %v", err)
 	}
 
-	instanceID := controller.Spec.Controller.InstanceID
+	instanceID := controller.Spec.InstanceID
 	instanceSuffix := ""
 	if strings.TrimSpace(instanceID) != "" {
 		instanceSuffix = fmt.Sprintf("-%s", instanceID)
@@ -398,7 +395,7 @@ func (r *NumaflowControllerReconciler) sync(
 ) (gitopsSyncCommon.OperationPhase, error) {
 
 	// Get the target manifests based on the version of the controller and throw an error if the definition not for a version.
-	version := controller.Spec.Controller.Version
+	version := controller.Spec.Version
 	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
 	manifest := definition[version]
 	if len(manifest) == 0 {
@@ -552,7 +549,7 @@ func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 // - whether it exists
 // - error if any
 func (r *NumaflowControllerReconciler) getNumaflowControllerDeployment(ctx context.Context, controller *apiv1.NumaflowController) (*appsv1.Deployment, bool, error) {
-	instanceID := controller.Spec.Controller.InstanceID
+	instanceID := controller.Spec.InstanceID
 	numaflowControllerDeploymentName := NumaflowControllerDeploymentName
 	if strings.TrimSpace(instanceID) != "" {
 		numaflowControllerDeploymentName = fmt.Sprintf("%s-%s", NumaflowControllerDeploymentName, instanceID)
@@ -604,7 +601,7 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 }
 
 // TODO: could pass in the values instead of recalculating them
-func (r *NumaflowControllerReconciler) processNumaflowControllerStatus(controller *apiv1.NumaflowController, deployment *appsv1.Deployment) error {
+func (r *NumaflowControllerReconciler) processNumaflowControllerDeploymentStatus(controller *apiv1.NumaflowController, deployment *appsv1.Deployment) error {
 	healthy, conditionReason, conditionMsg := processDeploymentHealth(deployment)
 
 	if healthy {
@@ -717,7 +714,7 @@ func (r *NumaflowControllerReconciler) updateNumaflowControllerStatusToFailed(ct
 }
 
 func (r *NumaflowControllerReconciler) ErrorHandler(numaflowController *apiv1.NumaflowController, err error, reason, msg string) {
-	r.customMetrics.NumaflowControllerROSyncErrors.WithLabelValues().Inc()
+	r.customMetrics.NumaflowControllerSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 

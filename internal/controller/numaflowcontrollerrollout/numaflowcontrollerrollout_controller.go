@@ -116,7 +116,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 	numaLogger := logger.GetBaseLogger().WithName("numaflowcontrollerrollout-reconciler").WithValues("numaflowcontrollerrollout", req.NamespacedName)
 	// update the context with this Logger so downstream users can incorporate these values in the logs
 	ctx = logger.WithLogger(ctx, numaLogger)
-	r.customMetrics.NumaflowControllersROSyncs.WithLabelValues().Inc()
+	r.customMetrics.NumaflowControllerRolloutSyncs.WithLabelValues().Inc()
 
 	numaflowControllerRollout := &apiv1.NumaflowControllerRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, numaflowControllerRollout); err != nil {
@@ -172,6 +172,7 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 
 	// generate metrics for NumaflowControllerRollout
 	r.customMetrics.IncNumaflowControllerRollouts(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace)
+
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
 
@@ -190,9 +191,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	defer func() {
 		if nfcRollout.Status.IsHealthy() {
-			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(1)
+			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(1)
 		} else {
-			r.customMetrics.NumaflowControllersRolloutHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(0)
+			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(0)
 		}
 	}()
 
@@ -206,10 +207,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
 		}
 
-		// generate the metrics for the numaflow controller deletion based on a numaflow version.
-		r.customMetrics.NumaflowControllerRORunning.DeleteLabelValues(nfcRollout.Name, nfcRollout.Namespace, nfcRollout.Spec.Controller.Version)
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.NumaflowControllersRolloutHealth.DeleteLabelValues(nfcRollout.Namespace, nfcRollout.Name)
+		// generate the metrics for the numaflow controller rollout deletion.
+		r.customMetrics.DecNumaflowControllerRollouts(nfcRollout.Name, nfcRollout.Namespace)
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
+		r.customMetrics.NumaflowControllerRolloutsHealth.DeleteLabelValues(nfcRollout.Namespace, nfcRollout.Name)
 
 		return ctrl.Result{}, nil
 	}
@@ -418,7 +419,7 @@ func (r *NumaflowControllerRolloutReconciler) MarkRolloutPaused(ctx context.Cont
 
 func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(nfcRollout *apiv1.NumaflowControllerRollout) {
 	timeElapsed := time.Since(nfcRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time)
-	r.customMetrics.NumaflowControllerPausedSeconds.WithLabelValues(nfcRollout.Name).Set(timeElapsed.Seconds())
+	r.customMetrics.NumaflowControllerRolloutPausedSeconds.WithLabelValues(nfcRollout.Name).Set(timeElapsed.Seconds())
 }
 
 // return:
@@ -540,7 +541,7 @@ func (r *NumaflowControllerRolloutReconciler) updateNumaflowControllerRolloutSta
 }
 
 func (r *NumaflowControllerRolloutReconciler) ErrorHandler(nfcRollout *apiv1.NumaflowControllerRollout, err error, reason, msg string) {
-	r.customMetrics.NumaflowControllerROSyncErrors.WithLabelValues().Inc()
+	r.customMetrics.NumaflowControllerRolloutSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(nfcRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
