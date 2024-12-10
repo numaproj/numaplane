@@ -486,11 +486,19 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 			return err
 		}
 
-		if existingNumaflowControllerStatus.IsHealthy() {
+		healthyChildCond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
+
+		if existingNumaflowControllerStatus.IsHealthy() &&
+			healthyChildCond != nil && healthyChildCond.ObservedGeneration == existingNumaflowControllerDef.GetGeneration() &&
+			healthyChildCond.Status == metav1.ConditionTrue {
+
 			nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
 		} else {
-			cond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
-			nfcRollout.Status.MarkChildResourcesUnhealthy(cond.Reason, cond.Message, nfcRollout.Generation)
+			if healthyChildCond != nil {
+				nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
+			} else {
+				nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Progressing", nfcRollout.Generation)
+			}
 		}
 	}
 
@@ -526,6 +534,13 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{},
 		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowControllerRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch NumaflowControllerRollout: %w", err)
+	}
+
+	// Watch NumaflowController
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowController{},
+		handler.TypedEnqueueRequestForOwner[*apiv1.NumaflowController](mgr.GetScheme(), mgr.GetRESTMapper(),
+			&apiv1.NumaflowControllerRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*apiv1.NumaflowController]{})); err != nil {
+		return fmt.Errorf("failed to watch NumaflowController: %v", err)
 	}
 
 	return nil

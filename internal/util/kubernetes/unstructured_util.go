@@ -59,12 +59,6 @@ func GetLiveResource(
 	}
 	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
 
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstruc.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstruc.Object = resultObject
-
 	return unstruc, err
 }
 
@@ -185,12 +179,6 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
 		return nil, err
 	}
-
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstructuredObj.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstructuredObj.Object = resultObject
 
 	return unstructuredObj, nil
 }
