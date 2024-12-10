@@ -157,9 +157,9 @@ var (
 func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcName string, upgradeState common.UpgradeState) *numaflowv1.Pipeline {
 	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false,
 		map[string]string{
-			common.LabelKeyParentRollout:             pipelineRolloutName,
-			common.LabelKeyISBServiceNameForPipeline: isbsvcName,
-			common.LabelKeyUpgradeState:              string(upgradeState),
+			common.LabelKeyParentRollout:               pipelineRolloutName,
+			common.LabelKeyISBServiceRONameForPipeline: isbsvcName,
+			common.LabelKeyUpgradeState:                string(upgradeState),
 		},
 		map[string]string{})
 }

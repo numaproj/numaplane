@@ -449,7 +449,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
-		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
+		client.MatchingLabels{common.LabelKeyISBServiceRONameForPipeline: rolloutName},
 		client.HasLabels{common.LabelKeyParentRollout},
 	)
 }
@@ -670,14 +670,23 @@ func getBaseISBSVCMetadata(isbServiceRollout *apiv1.ISBServiceRollout) (apiv1.Me
 
 }
 
-// CreateBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
-func (r *ISBServiceRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
+func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
 	if err != nil {
 		return nil, err
 	}
-	return r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
+	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := isbsvc.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	isbsvc.SetLabels(labels)
+
+	return isbsvc, nil
 }
 
 func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {

@@ -144,7 +144,16 @@ func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error
 	return desiredPhase, err
 }
 
-func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
+func GetPipelineISBSVCName(pipeline *unstructured.Unstructured) (string, error) {
+	isbsvcName, _, err := unstructured.NestedString(pipeline.Object, "spec", "interstepBufferServiceName")
+	return isbsvcName, err
+}
+
+func PipelineWithISBServiceName(pipeline *unstructured.Unstructured, isbsvcName string) error {
+
+}
+
+func PipelineWithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 	err := unstructured.SetNestedField(pipeline.Object, phase, "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
@@ -154,7 +163,7 @@ func WithDesiredPhase(pipeline *unstructured.Unstructured, phase string) error {
 
 // remove 'lifecycle.desiredPhase' key/value pair from spec
 // also remove 'lifecycle' if it's an empty map
-func WithoutDesiredPhase(pipeline *unstructured.Unstructured) {
+func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	unstructured.RemoveNestedField(pipeline.Object, "spec", "lifecycle", "desiredPhase")
 
 	// if "lifecycle" is there and empty, remove it

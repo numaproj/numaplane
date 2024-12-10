@@ -38,8 +38,8 @@ import (
 // taking down the original child once the new one is healthy
 type progressiveController interface {
 
-	// CreateBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
-	CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
+	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
+	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
 	IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error)
@@ -116,14 +116,10 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 		return nil, err
 	}
 	numaLogger.Debugf("Upgrading child: %s", childName)
-	upgradingChild, err := controller.CreateBaseChildDefinition(rolloutObject, childName)
+	upgradingChild, err := controller.CreateUpgradingChildDefinition(ctx, rolloutObject, childName)
 	if err != nil {
 		return nil, err
 	}
-
-	labels := upgradingChild.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
-	upgradingChild.SetLabels(labels)
 
 	return upgradingChild, nil
 }

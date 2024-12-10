@@ -78,7 +78,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			r.recorder.Eventf(pipelineRollout, "Normal", "PipelineUpdate", "it's safe to update Pipeline so updating now")
 
 			if shouldBePaused {
-				err = numaflowtypes.WithDesiredPhase(newPipelineDef, "Paused")
+				err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
 				if err != nil {
 					return false, err
 				}
