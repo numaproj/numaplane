@@ -606,7 +606,7 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch ISBServiceRollouts
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.ISBServiceRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.ISBServiceRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.ISBServiceRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.ISBServiceRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch ISBServiceRollout: %v", err)
 	}
 

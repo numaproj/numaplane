@@ -547,7 +547,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 
 	// Watch NumaflowControllerRollout
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowControllerRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch NumaflowControllerRollout: %w", err)
 	}
 

@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
 	"time"
 
@@ -114,7 +113,7 @@ func main() {
 
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
-	syncPeriod := time.Minute * 1
+	syncPeriod := 15 * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -145,8 +144,6 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
-	fmt.Printf("mgr.GetCache(): %+v", mgr.GetCache())
 
 	// initialize the custom metrics with the global prometheus registry
 	customMetrics := metrics.RegisterCustomMetrics()
@@ -239,7 +236,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 func loadConfigs() {

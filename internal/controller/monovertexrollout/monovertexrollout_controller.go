@@ -340,7 +340,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch MonoVertexRollouts
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.MonoVertexRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.MonoVertexRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.MonoVertexRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.MonoVertexRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch MonoVertexRollouts: %w", err)
 	}
 
