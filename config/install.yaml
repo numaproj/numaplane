@@ -513,6 +513,10 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: The desired Numaflow Controller version
+      jsonPath: .spec.controller.version
+      name: Version
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -543,6 +547,9 @@ spec:
               controller:
                 properties:
                   instanceID:
+                    description: |-
+                      NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
+                      create multiple Numaflow controllers within the same namespace
                     type: string
                   version:
                     type: string
@@ -661,6 +668,11 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
             type: object
         type: object
         x-kubernetes-validations:
@@ -686,7 +698,19 @@ spec:
     singular: numaflowcontroller
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: The desired Numaflow Controller version
+      jsonPath: .spec.version
+      name: Version
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NumaflowController is the Schema for the numaflowcontrollers
@@ -808,6 +832,11 @@ spec:
                 - Pending
                 - Deployed
                 - Failed
+                type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
                 type: string
             type: object
         type: object
