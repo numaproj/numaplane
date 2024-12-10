@@ -44,6 +44,10 @@ type ISBServiceRolloutStatus struct {
 
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
+
+	// NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
+	// identify a isbsvc.
+	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
 // +genclient

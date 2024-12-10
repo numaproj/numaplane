@@ -49,7 +49,43 @@ spec:
       # versions < 1.19 or on vendors versions which do NOT support this field by default (i.e. Openshift < 4.11 ).
       # seccompProfile:
       #   type: RuntimeDefault
-      initContainers: []
+      initContainers:
+        # an init containers that create directory
+        - name: label-isbsvc
+          image: bitnami/kubectl
+          #command: ['sh', '-c', 'sleep 5 && echo "creating dir" && mkdir -p opt/log']
+          command: 
+
+            - "/bin/bash"
+            - "-c"
+            - |
+              #!/bin/bash
+
+              # Define the label key and value
+              LABEL_KEY="numaplane.numaproj.io/upgrade-state"
+              LABEL_VALUE="promoted"
+
+              # Get all namespaces
+              namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
+
+              # Loop through each namespace
+              for namespace in $namespaces; do
+                echo "Processing namespace: $namespace"
+                
+                # Get all isbsvc in the current namespace
+                interstepbuffersvcs=$(kubectl get isbsvc -n $namespace -o jsonpath='{.items[*].metadata.name}')
+                
+                # Loop through each isbsvc
+                for isbsvc in $interstepbuffersvcs; do
+                  echo "Patching isbsvc: $isbsvc in namespace: $namespace"
+                  
+                  # Patch the deployment to add the label
+                  kubectl patch isbsvc $isbsvc -n $namespace --type='json' -p="[{\"op\": \"add\", \"path\": \"/metadata/labels/$LABEL_KEY\", \"value\": \"$LABEL_VALUE\"}]"
+                done
+              done
+
+              echo "All interstepbufferservices have been patched."
+
       containers:
         - command:
             - /manager

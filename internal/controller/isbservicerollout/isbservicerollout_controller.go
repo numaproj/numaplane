@@ -641,19 +641,13 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 	newISBServiceDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	newISBServiceDef.SetName(isbServiceRollout.Name)
-	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
-	newISBServiceDef.SetAnnotations(isbServiceRollout.Spec.InterStepBufferService.Annotations)
-	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
 	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
 	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
-	// Update label of ISBService to include the parent rollout name
-	existingLabel := isbServiceRollout.Spec.InterStepBufferService.Labels
-	if existingLabel == nil {
-		existingLabel = make(map[string]string)
-	}
-	existingLabel[common.LabelKeyParentRollout] = isbServiceRollout.Name
-	newISBServiceDef.SetLabels(existingLabel)
+	newISBServiceDef.SetName(isbsvcName)
+	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
+	newISBServiceDef.SetLabels(metadata.Labels)
+	newISBServiceDef.SetAnnotations(metadata.Annotations)
+	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
 	// Update spec of ISBService to match the ISBServiceRollout spec
 	var isbServiceSpec map[string]interface{}
 	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
@@ -686,9 +680,37 @@ func (r *ISBServiceRolloutReconciler) CreateBaseChildDefinition(rolloutObject ct
 	return r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
 }
 
+func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	if isbsvcRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *isbsvcRollout.Status.NameCount, true
+	}
+}
+
+func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	isbsvcRollout.Status.NameCount = &nameCount
+	return r.updateISBServiceRolloutStatus(ctx, isbsvcRollout)
+}
+
 // IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
 func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
-	return -1, nil
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
 }
 
 // Recycle deletes child

@@ -1808,7 +1808,23 @@ spec:
         volumeMounts:
         - mountPath: /etc/numaplane
           name: config-volume
-      initContainers: []
+      initContainers:
+      - command:
+        - /bin/bash
+        - -c
+        - "#!/bin/bash\n\n# Define the label key and value\nLABEL_KEY=\"numaplane.numaproj.io/upgrade-state\"\nLABEL_VALUE=\"promoted\"\n\n#
+          Get all namespaces\nnamespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')\n\n#
+          Loop through each namespace\nfor namespace in $namespaces; do\n  echo \"Processing
+          namespace: $namespace\"\n  \n  # Get all isbsvc in the current namespace\n
+          \ interstepbuffersvcs=$(kubectl get isbsvc -n $namespace -o jsonpath='{.items[*].metadata.name}')\n
+          \ \n  # Loop through each isbsvc\n  for isbsvc in $interstepbuffersvcs;
+          do\n    echo \"Patching isbsvc: $isbsvc in namespace: $namespace\"\n    \n
+          \   # Patch the deployment to add the label\n    kubectl patch isbsvc $isbsvc
+          -n $namespace --type='json' -p=\"[{\\\"op\\\": \\\"add\\\", \\\"path\\\":
+          \\\"/metadata/labels/$LABEL_KEY\\\", \\\"value\\\": \\\"$LABEL_VALUE\\\"}]\"\n
+          \ done\ndone\n\necho \"All deployments have been patched.\"\n"
+        image: bitnami/kubectl
+        name: label-isbsvc
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
       volumes:

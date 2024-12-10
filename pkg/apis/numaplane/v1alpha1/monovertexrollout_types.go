@@ -46,8 +46,8 @@ type MonoVertexRolloutStatus struct {
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
 
-	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
-	// identify a pipeline.
+	// NameCount is used as a suffix for the name of the managed monovertex, to uniquely
+	// identify a monovertex.
 	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
