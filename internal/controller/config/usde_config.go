@@ -16,7 +16,10 @@ limitations under the License.
 
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/rs/zerolog/log"
+)
 
 type SpecDataLossField struct {
 	Path             string `json:"path" yaml:"path"`
@@ -34,7 +37,7 @@ func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
 
 	cm.usdeConfig = config
 
-	fmt.Printf("USDE Config update: %+v\n", config) // due to cyclical dependency, we can't call logger
+	log.Debug().Msg(fmt.Sprintf("USDE Config update: %+v", config)) // due to cyclical dependency, we can't call logger
 }
 
 func (cm *ConfigManager) UnsetUSDEConfig() {
@@ -43,7 +46,7 @@ func (cm *ConfigManager) UnsetUSDEConfig() {
 
 	cm.usdeConfig = USDEConfig{}
 
-	fmt.Println("USDE Config unset") // due to cyclical dependency, we can't call logger
+	log.Debug().Msg("USDE Config unset") // due to cyclical dependency, we can't call logger
 }
 
 func (cm *ConfigManager) GetUSDEConfig() USDEConfig {
