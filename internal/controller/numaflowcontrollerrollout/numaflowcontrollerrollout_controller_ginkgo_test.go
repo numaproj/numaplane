@@ -39,13 +39,13 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		ctx := context.Background()
 
 		resourceLookupKey := types.NamespacedName{
-			Name:      NumaflowControllerDeploymentName,
+			Name:      ctlrcommon.DefaultTestNumaflowControllerDeploymentName,
 			Namespace: namespace,
 		}
 
 		numaflowControllerResource := apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      NumaflowControllerDeploymentName,
+				Name:      ctlrcommon.DefaultTestNumaflowControllerDeploymentName,
 				Namespace: namespace,
 			},
 			Spec: apiv1.NumaflowControllerRolloutSpec{
@@ -86,7 +86,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
+				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: ctlrcommon.DefaultTestNumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				return err == nil
 			}, ctlrcommon.TestDefaultTimeout, ctlrcommon.TestDefaultInterval).Should(BeTrue())
 		})
@@ -102,7 +102,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment image version")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
+				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: ctlrcommon.DefaultTestNumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				if err == nil {
 					return numaflowDeployment.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.2.1"
 				}
