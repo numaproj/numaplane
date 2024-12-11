@@ -26,7 +26,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -285,49 +284,49 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 }
 
-func createDeploymentDefinition(imagePath string, stillReconciling bool) *appsv1.Deployment {
-	generation := 1
-	observedGeneration := generation
-	if stillReconciling {
-		observedGeneration = generation - 1
-	}
-	replicas := int32(1)
-	labels := map[string]string{
-		"app.kubernetes.io/component": "controller-manager",
-		"app.kubernetes.io/name":      "controller-manager",
-		"app.kubernetes.io/part-of":   "numaflow",
-	}
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  ctlrcommon.DefaultTestNamespace,
-			Name:       NumaflowControllerDeploymentName,
-			Generation: int64(generation),
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "controller-manager",
-							Image: imagePath,
-						},
-					},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-			},
-			Replicas: &replicas,
-		},
-		Status: appsv1.DeploymentStatus{
-			ObservedGeneration: int64(observedGeneration),
-			Replicas:           1,
-			UpdatedReplicas:    replicas,
-			AvailableReplicas:  1,
-			ReadyReplicas:      1,
-		},
-	}
-}
+// func createDeploymentDefinition(imagePath string, stillReconciling bool) *appsv1.Deployment {
+// 	generation := 1
+// 	observedGeneration := generation
+// 	if stillReconciling {
+// 		observedGeneration = generation - 1
+// 	}
+// 	replicas := int32(1)
+// 	labels := map[string]string{
+// 		"app.kubernetes.io/component": "controller-manager",
+// 		"app.kubernetes.io/name":      "controller-manager",
+// 		"app.kubernetes.io/part-of":   "numaflow",
+// 	}
+// 	return &appsv1.Deployment{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Namespace:  ctlrcommon.DefaultTestNamespace,
+// 			Name:       NumaflowControllerDeploymentName,
+// 			Generation: int64(generation),
+// 		},
+// 		Spec: appsv1.DeploymentSpec{
+// 			Selector: &metav1.LabelSelector{
+// 				MatchLabels: labels,
+// 			},
+// 			Template: corev1.PodTemplateSpec{
+// 				Spec: corev1.PodSpec{
+// 					Containers: []corev1.Container{
+// 						{
+// 							Name:  "controller-manager",
+// 							Image: imagePath,
+// 						},
+// 					},
+// 				},
+// 				ObjectMeta: metav1.ObjectMeta{
+// 					Labels: labels,
+// 				},
+// 			},
+// 			Replicas: &replicas,
+// 		},
+// 		Status: appsv1.DeploymentStatus{
+// 			ObservedGeneration: int64(observedGeneration),
+// 			Replicas:           1,
+// 			UpdatedReplicas:    replicas,
+// 			AvailableReplicas:  1,
+// 			ReadyReplicas:      1,
+// 		},
+// 	}
+// }
