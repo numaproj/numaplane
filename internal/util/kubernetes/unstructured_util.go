@@ -53,7 +53,7 @@ func GetLiveResource(
 		return nil, err
 	}
 
-	unstruc, err := dynamicClient.Resource(gvr).Namespace(object.GetNamespace()).Get(ctx, object.GetName(), metav1.GetOptions{})
+	unstruc, err := DynamicClient.Resource(gvr).Namespace(object.GetNamespace()).Get(ctx, object.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func ListLiveResource(
 		Version:  version,
 		Resource: pluralName,
 	}
-	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	return DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
 func PatchResource(
