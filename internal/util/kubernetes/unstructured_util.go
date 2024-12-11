@@ -186,6 +186,12 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 		return nil, err
 	}
 
+	var resultObject map[string]interface{}
+	if err := util.StructToStruct(unstructuredObj.Object, &resultObject); err != nil {
+		return nil, err
+	}
+	unstructuredObj.Object = resultObject
+
 	return unstructuredObj, nil
 }
 

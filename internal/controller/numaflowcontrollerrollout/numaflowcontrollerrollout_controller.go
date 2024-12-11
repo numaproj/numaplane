@@ -488,8 +488,19 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 
 		healthyChildCond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
 
+		// TODO: due to the conversion of the unstructured.Object field done in the functions GetLiveResource and GetResource in the file internal/util/kubernetes/unstructured_util.go
+		// calling the function .GetGeneration() will always return 0 due to an unexpected data type (expecting int64 but getting float64).
+		// While we investigate why the conversions are needed and how to remove them, the following workaround is in place:
+		existingControllerGeneration, found, err := unstructured.NestedFloat64(existingNumaflowControllerDef.Object, "metadata", "generation")
+		if !found || err != nil {
+			existingControllerGeneration = 0
+		}
+		// Use the following instead once the issue above is resolved:
+		// existingControllerGeneration := existingNumaflowControllerDef.GetGeneration()
+
 		if existingNumaflowControllerStatus.IsHealthy() &&
-			healthyChildCond != nil && healthyChildCond.ObservedGeneration == existingNumaflowControllerDef.GetGeneration() &&
+			// TODO: remove unnecessary int64 casting when above issue is resolved
+			healthyChildCond != nil && healthyChildCond.ObservedGeneration == int64(existingControllerGeneration) &&
 			healthyChildCond.Status == metav1.ConditionTrue {
 
 			nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
