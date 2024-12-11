@@ -52,17 +52,27 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
+	}
+
 	// Get data loss fields config based on the spec type (Pipeline, ISBS)
 	dataLossFields := []config.SpecDataLossField{}
 	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
 		dataLossFields = usdeConfig.PipelineSpecDataLossFields
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
 		dataLossFields = usdeConfig.ISBServiceSpecDataLossFields
-	}
-
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
+	} else if reflect.DeepEqual(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
+		// TODO: for NumaflowController updates do we need to figure out which strategy to use based on the type of changes similarly done for Pipeline and ISBSvc?
+		// OR should we always return the user's preferred strategy?
+		// For now, make the entire spec a data loss field and include all its subfields
+		dataLossFields = []config.SpecDataLossField{
+			{
+				Path:             "spec",
+				IncludeSubfields: true,
+			},
+		}
 	}
 
 	numaLogger.WithValues(
