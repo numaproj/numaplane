@@ -59,6 +59,12 @@ func GetLiveResource(
 	}
 	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
 
+	var resultObject map[string]interface{}
+	if err := util.StructToStruct(unstruc.Object, &resultObject); err != nil {
+		return nil, err
+	}
+	unstruc.Object = resultObject
+
 	return unstruc, err
 }
 
