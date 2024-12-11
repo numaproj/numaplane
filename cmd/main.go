@@ -153,6 +153,10 @@ func main() {
 		numaLogger.Fatal(err, "Failed to set dynamic client")
 	}
 
+	if err := kubernetes.SetKubeClient(newRawConfig); err != nil {
+		numaLogger.Fatal(err, "Failed to set kubernetes client")
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	pipelineRolloutReconciler := pipelinerollout.NewPipelineRolloutReconciler(

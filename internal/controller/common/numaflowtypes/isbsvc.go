@@ -37,22 +37,24 @@ func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *u
 	statefulSetSelector := labels.NewSelector()
 	requirement, err := labels.NewRequirement(numaflowv1.KeyISBSvcName, selection.Equals, []string{isbsvc.GetName()})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error creating label requirement: %v", err)
 	}
 	statefulSetSelector = statefulSetSelector.Add(*requirement)
 
-	var statefulSetList *appsv1.StatefulSetList
+	var statefulSetList appsv1.StatefulSetList
 	if checkLive {
-		statefulSetList, err = kubernetes.KubernetesClient.AppsV1().StatefulSets(isbsvc.GetNamespace()).List(ctx, metav1.ListOptions{
+		fmt.Printf("something related to invalid memory address below....")
+		statefulSets, err := kubernetes.KubernetesClient.AppsV1().StatefulSets(isbsvc.GetNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvc.GetName())})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error listing live StatefulSets: %v", err)
 		}
+		statefulSetList = *statefulSets
 	} else {
-		err = c.List(ctx, statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
-	}
-	if err != nil {
-		return nil, err
+		err = c.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
+		if err != nil {
+			return nil, fmt.Errorf("Error listing StatefulSets: %v", err)
+		}
 	}
 	if len(statefulSetList.Items) > 1 {
 		return nil, fmt.Errorf("unexpected: isbsvc %s/%s has multiple StatefulSets: %+v", isbsvc.GetNamespace(), isbsvc.GetName(), statefulSetList.Items)
