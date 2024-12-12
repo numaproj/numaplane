@@ -188,7 +188,7 @@ func Test_reconcile_numaflowcontrollerrollout_PPND(t *testing.T) {
 
 	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	getwd, err := os.Getwd()
 	assert.Nil(t, err, "Failed to get working directory")

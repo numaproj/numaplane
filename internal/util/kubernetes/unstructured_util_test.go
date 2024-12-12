@@ -52,7 +52,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	assert.Nil(t, err)
 	runtimeClient, err := client.New(restConfig, client.Options{Scheme: runtime.NewScheme()})
 	assert.Nil(t, err)
-	assert.Nil(t, SetDynamicClient(restConfig))
+	assert.Nil(t, SetClientSets(restConfig))
 
 	pipelineSpec := numaflowv1.PipelineSpec{
 		Vertices: []numaflowv1.AbstractVertex{

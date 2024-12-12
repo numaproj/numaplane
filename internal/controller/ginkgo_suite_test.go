@@ -131,7 +131,7 @@ var _ = BeforeSuite(func() {
 		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
 	}
 
-	Expect(kubernetes.SetDynamicClient(k8sManager.GetConfig())).To(Succeed())
+	Expect(kubernetes.SetClientSets(k8sManager.GetConfig())).To(Succeed())
 
 	err = pipelinerollout.NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
 		k8sManager.GetEventRecorderFor(apiv1.RolloutPipelineName)).SetupWithManager(k8sManager)
