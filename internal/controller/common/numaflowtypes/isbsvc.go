@@ -50,7 +50,10 @@ func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *u
 		}
 		statefulSetList = *statefulSets
 	} else {
-		err = c.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
+		//TODO: this is currently making a Live K8S call, not a call to cache as it's supposed to
+		// Option 1: figure out how we can watch a StatefulSet and have its owner's owner reconcile it
+		// Option 2: update InterstepBufferService code in Numaflow to provide all the info we need so we don't need to access StatefulSet directly
+		err = c.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector})
 		if err != nil {
 			return nil, fmt.Errorf("Error listing StatefulSets: %v", err)
 		}
