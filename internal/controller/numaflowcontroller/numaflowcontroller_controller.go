@@ -402,7 +402,7 @@ func (r *NumaflowControllerReconciler) sync(
 		return gitopsSyncCommon.OperationError, fmt.Errorf("no controller definition found for version %s", version)
 	}
 
-	// Update templated manifest with information from the
+	// Update templated manifest with information from the NumaflowController definition
 	manifestBytes, err := resolveManifestTemplate(manifest, controller)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, fmt.Errorf("unable to resolve manifest: %v", err)
