@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -114,7 +115,7 @@ func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefiniti
 	for _, controller := range config.ControllerDefinitions {
 		cm.rolloutConfig[controller.Version] = controller.FullSpec
 
-		fmt.Printf("Added/Updated Controller definition Config, version: %s\n", controller.Version)
+		log.Debug().Msg(fmt.Sprintf("Added/Updated Controller definition Config, version: %s", config)) // due to cyclical dependency, we can't call logger
 	}
 }
 
@@ -125,7 +126,7 @@ func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefiniti
 	for _, controller := range config.ControllerDefinitions {
 		delete(cm.rolloutConfig, controller.Version)
 
-		fmt.Printf("Removed Controller definition Config, version: %s\n", controller.Version)
+		log.Debug().Msg(fmt.Sprintf("Removed Controller definition Config, version: %s", controller.Version)) // due to cyclical dependency, we can't call logger
 	}
 }
 
@@ -185,7 +186,7 @@ func (cm *ConfigManager) loadGlobalConfig(
 			onErrorReloading(err)
 		}
 		cm.config = &newConfig
-		fmt.Printf("Global Config update: %+v\n", newConfig) // due to cyclical dependency, we can't call logger
+		log.Debug().Msg(fmt.Sprintf("Global Config update: %+v", newConfig)) // due to cyclical dependency, we can't call logger
 
 		// call any registered callbacks
 		for _, f := range cm.callbacks {
@@ -222,7 +223,7 @@ func (cm *ConfigManager) UpdateNamespaceConfig(namespace string, config Namespac
 	defer cm.namespaceConfigMapLock.Unlock()
 
 	cm.namespaceConfigMap[namespace] = config
-	fmt.Printf("Added Namespace ConfigMap for namespace %s\n", namespace)
+	log.Debug().Msg(fmt.Sprintf("Added Namespace ConfigMap for namespace %s", namespace)) // due to cyclical dependency, we can't call logger
 }
 
 func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
@@ -230,7 +231,7 @@ func (cm *ConfigManager) UnsetNamespaceConfig(namespace string) {
 	defer cm.namespaceConfigMapLock.Unlock()
 
 	delete(cm.namespaceConfigMap, namespace)
-	fmt.Printf("Deleted Namespace ConfigMap for namespace %s\n", namespace)
+	log.Debug().Msg(fmt.Sprintf("Deleted Namespace ConfigMap for namespace %s", namespace)) // due to cyclical dependency, we can't call logger
 }
 
 func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
