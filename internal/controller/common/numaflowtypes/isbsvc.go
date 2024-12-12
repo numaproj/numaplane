@@ -43,7 +43,6 @@ func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *u
 
 	var statefulSetList appsv1.StatefulSetList
 	if checkLive {
-		fmt.Printf("something related to invalid memory address below....")
 		statefulSets, err := kubernetes.KubernetesClient.AppsV1().StatefulSets(isbsvc.GetNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvc.GetName())})
 		if err != nil {

@@ -518,7 +518,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	}
 
 	isbsvcReconciled := isbsvc.GetGeneration() <= isbsvcStatus.ObservedGeneration
-	numaLogger.Debugf("isbsvc status: %+v, generation=%d, observed generation=%d", isbsvcStatus, isbsvc.GetGeneration(), isbsvcStatus.ObservedGeneration)
+	numaLogger.Debugf("isbsvc status: %+v, isbsvc.Object[metadata]=%+v, generation=%d, observed generation=%d", isbsvcStatus, isbsvc.Object["metadata"], isbsvc.GetGeneration(), isbsvcStatus.ObservedGeneration)
 
 	if !isbsvcReconciled {
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
@@ -526,8 +526,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet == nil {
 		return false, "StatefulSet not found, may not have been created", nil
 	}
-	numaLogger.Debugf("statefulset: generation=%d, observedgen=%d, replicas=%v, updated replicas=%d",
-		statefulSet.Generation, statefulSet.Status.ObservedGeneration, statefulSet.Spec.Replicas, statefulSet.Status.UpdatedReplicas)
+	numaLogger.Debugf("statefulset: generation=%d, observedgen=%d", statefulSet.Generation, statefulSet.Status.ObservedGeneration)
 
 	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
 		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil
@@ -536,6 +535,10 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet.Spec.Replicas != nil {
 		specifiedReplicas = *statefulSet.Spec.Replicas
 	}
+
+	numaLogger.Debugf("statefulset: generation=%d, observedgen=%d, replicas=%d, updated replicas=%d",
+		statefulSet.Generation, statefulSet.Status.ObservedGeneration, specifiedReplicas, statefulSet.Status.UpdatedReplicas)
+
 	if specifiedReplicas != statefulSet.Status.UpdatedReplicas { // TODO: keep this, or is this a better test?: UpdatedRevision == CurrentRevision
 		return false, fmt.Sprintf("StatefulSet UpdatedReplicas (%d) != specified replicas (%d)", statefulSet.Status.UpdatedReplicas, specifiedReplicas), nil
 	}

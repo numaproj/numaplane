@@ -64,6 +64,17 @@ func GetLiveResource(
 		return nil, err
 	}
 	unstruc.Object = resultObject
+	generation, found, err := unstructured.NestedFieldCopy(unstruc.Object, "metadata", "generation")
+	fmt.Printf("deletethis: retrieving generation, generation=%v, generation=%f, found=%t, err=%v\n", generation, generation, found, err)
+	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstruc.Object, "metadata", "generation")
+
+	if err != nil {
+		return nil, err
+	}
+	if foundAsFloat {
+		fmt.Printf("deletethis: setting generation to %d\n", int64(generationAsFloat))
+		unstructured.SetNestedField(unstruc.Object, int64(generationAsFloat), "metadata", "generation")
+	}
 
 	return unstruc, err
 }
@@ -191,8 +202,19 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 		return nil, err
 	}
 	unstructuredObj.Object = resultObject
+	generation, found, err := unstructured.NestedFieldCopy(unstructuredObj.Object, "metadata", "generation")
+	fmt.Printf("deletethis: retrieving generation, generation=%v, generation=%f, found=%t, err=%v\n", generation, generation, found, err)
+	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstructuredObj.Object, "metadata", "generation")
 
-	return unstructuredObj, nil
+	if err != nil {
+		return nil, err
+	}
+	if foundAsFloat {
+		fmt.Printf("deletethis: setting generation to %d\n", int64(generationAsFloat))
+		unstructured.SetNestedField(unstructuredObj.Object, int64(generationAsFloat), "metadata", "generation")
+	}
+
+	return unstructuredObj, err
 }
 
 // UpdateResource updates the resource in the kubernetes cluster
