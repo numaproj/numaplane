@@ -50,10 +50,10 @@ spec:
       # seccompProfile:
       #   type: RuntimeDefault
       initContainers:
-        # an init containers that create directory
+        
+        # temporary init container to patch all isbsvc on the cluster owned by ISBServiceRollout to add "promoted" label
         - name: label-isbsvc
           image: bitnami/kubectl
-          #command: ['sh', '-c', 'sleep 5 && echo "creating dir" && mkdir -p opt/log']
           command: 
 
             - "/bin/bash"
@@ -73,7 +73,7 @@ spec:
                 echo "Processing namespace: $namespace"
                 
                 # Get all isbsvc in the current namespace
-                interstepbuffersvcs=$(kubectl get isbsvc -n $namespace -o jsonpath='{.items[*].metadata.name}')
+                interstepbuffersvcs=$(kubectl get isbsvc -n $namespace -o json | jq -r '.items[] | select(.metadata.ownerReferences[]?.kind == "ISBServiceRollout") | .metadata.name')
                 
                 # Loop through each isbsvc
                 for isbsvc in $interstepbuffersvcs; do

@@ -69,8 +69,7 @@ const (
 	// LabelValueNamespaceConfig is the label value used to identify the user's namespace-level ConfigMap
 	LabelValueNamespaceConfig = "namespace-level-config"
 
-	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBService being used by a Pipeline
-	// This is useful as a Label to quickly locate all Pipelines of a given ISBService
+	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
 	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name"
 
 	// LabelKeyParentRollout is the label key used to identify the Rollout that a child Resource is managed by

@@ -617,15 +617,18 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBS
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
+// Create an InterstepBufferService definition of "promoted" state
 func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
 ) (*unstructured.Unstructured, error) {
+	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
 	isbsvcName, err := progressive.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
 
+	// set Labels and Annotations
 	metadata, err := getBaseISBSVCMetadata(isbServiceRollout)
 	if err != nil {
 		return nil, err
@@ -670,7 +673,9 @@ func getBaseISBSVCMetadata(isbServiceRollout *apiv1.ISBServiceRollout) (apiv1.Me
 
 }
 
-// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
+// Implemented functions for the progressiveController interface:
+
+// CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
 func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
@@ -724,10 +729,12 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 
 // Recycle deletes child
 func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error {
+	// TODO: Implement
 	return nil
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
+	// TODO: Implement
 	return false, nil
 }

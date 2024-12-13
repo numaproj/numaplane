@@ -515,7 +515,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 		numaLogger.Debug("processing pipeline with PPND")
-		fmt.Printf("deletethis: newPipelineDef.spec=%+v\n", newPipelineDef.Object["spec"])
 		done, err := r.processExistingPipelineWithPPND(ctx, pipelineRollout, existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
@@ -766,9 +765,7 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
-	// TODO: want to change back:
 	promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
-	//promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, true, r.client)
 	if err != nil || promotedISBSvc == nil {
 		return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 	}

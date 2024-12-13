@@ -38,7 +38,7 @@ import (
 // taking down the original child once the new one is healthy
 type progressiveController interface {
 
-	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
+	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
