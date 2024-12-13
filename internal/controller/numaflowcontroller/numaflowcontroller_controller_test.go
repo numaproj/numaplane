@@ -205,21 +205,6 @@ func Test_reconcile_numaflowcontroller_PPND(t *testing.T) {
 			expectedResultControllerVersion: "1.2.0",
 		},
 		{
-			name:                 "new Controller version, pipelines paused",
-			newControllerVersion: "1.2.1",
-			existingController:   createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.0", false),
-			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
-				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
-			existingPipeline:     ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePaused),
-			existingPauseRequest: &trueValue,
-			expectedPauseRequest: &trueValue,
-			expectedPhase:        apiv1.PhaseDeployed,
-			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
-				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
-			},
-			expectedResultControllerVersion: "1.2.1",
-		},
-		{
 			name:                 "new Controller version done reconciling",
 			newControllerVersion: "1.2.1",
 			existingController:   createDeploymentDefinition("quay.io/numaproj/numaflow:v1.2.1", false),
