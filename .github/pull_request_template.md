@@ -15,4 +15,4 @@ Fixes #TODO
 
 ### Backward incompatibilities
 
-<!-- TODO: Considering the resources that have previously rolled out to clusters, do you see any issues related to this PR being able to correctly process them? (not a showstopper but something to prepare for) -->
+<!-- TODO: Considering the resources that have previously rolled out to clusters, do you see any issues related to this PR being able to correctly process them? Or is there any backward incompatibility for our CRDs? (not a showstopper but something to prepare for) -->
