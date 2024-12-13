@@ -53,6 +53,9 @@ const (
 
 	// ConditionProgressiveUpgradeSucceeded indicates that whether the progressive upgrade succeeded.
 	ConditionProgressiveUpgradeSucceeded ConditionType = "ProgressiveUpgradeSucceeded"
+
+	// ProgressingReasonString indicates the status condition reason as Progressing
+	ProgressingReasonString = "Progressing"
 )
 
 // Status is a common structure which can be used for Status field.

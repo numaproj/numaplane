@@ -464,7 +464,16 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerReconciled(ctx
 	}
 	numaLogger.Debugf("numaflowController status: %+v", numaflowControllerStatus)
 
-	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration
+	var nfcStatus apiv1.NumaflowControllerStatus
+	err = util.StructToStruct(numaflowControllerStatus, &nfcStatus)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to convert NumaflowController Status: %+v, %v", numaflowController, err)
+	}
+
+	healthyChildCond := nfcStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
+
+	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration &&
+		healthyChildCond.Status == metav1.ConditionTrue && healthyChildCond.Reason != apiv1.ProgressingReasonString
 
 	if !numaflowControllerReconciled {
 		return false, "Mismatch between NumaflowController Generation and ObservedGeneration", nil
@@ -497,7 +506,7 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 			if healthyChildCond != nil {
 				nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
 			} else {
-				nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing", "Progressing", nfcRollout.Generation)
+				nfcRollout.Status.MarkChildResourcesUnhealthy(apiv1.ProgressingReasonString, "Progressing", nfcRollout.Generation)
 			}
 		}
 	}

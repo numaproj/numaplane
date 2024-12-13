@@ -3,7 +3,6 @@ package sync
 import (
 	"errors"
 	"fmt"
-	"github.com/numaproj/numaplane/internal/util/metrics"
 	"net"
 	"net/url"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/numaproj/numaplane/internal/util/metrics"
 
 	clustercache "github.com/argoproj/gitops-engine/pkg/cache"
 	"github.com/argoproj/gitops-engine/pkg/diff"
@@ -359,7 +360,7 @@ func (c *liveStateCache) getSyncedCluster() (clustercache.ClusterCache, error) {
 }
 
 func (c *liveStateCache) Init(numaLogger *logger.NumaLogger) error {
-	c.logger = numaLogger
+	c.logger = numaLogger.WithName("state-cache")
 	setting, err := c.loadCacheSettings()
 	if err != nil {
 		return fmt.Errorf("error on init live state cache: %w", err)

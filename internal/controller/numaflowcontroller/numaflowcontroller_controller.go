@@ -87,7 +87,7 @@ func NewNumaflowControllerReconciler(
 	recorder record.EventRecorder,
 ) (*NumaflowControllerReconciler, error) {
 	stateCache := sync.NewLiveStateCache(rawConfig, customMetrics)
-	numaLogger := logger.GetBaseLogger().WithName("state cache").WithValues("numaflowcontroller")
+	numaLogger := logger.GetBaseLogger().WithValues("numaflowcontroller")
 	err := stateCache.Init(numaLogger)
 	if err != nil {
 		return nil, err
@@ -570,7 +570,7 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 
 	if deployment == nil {
 		msg := "Numaflow Controller Deployment not found"
-		return false, "Progressing", msg
+		return false, apiv1.ProgressingReasonString, msg
 	}
 
 	deploymentSpec := deployment.Spec
@@ -584,17 +584,17 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 			return false, "Degraded", msg
 		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
 			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
-			return false, "Progressing", msg
+			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
 			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
-			return false, "Progressing", msg
+			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
 			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
-			return false, "Progressing", msg
+			return false, apiv1.ProgressingReasonString, msg
 		}
 	} else {
 		msg := "Waiting for Deployment  to finish: observed deployment generation less than desired generation"
-		return false, "Progressing", msg
+		return false, apiv1.ProgressingReasonString, msg
 	}
 
 	return true, "", ""
