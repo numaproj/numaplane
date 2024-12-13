@@ -231,6 +231,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("error generating NumaflowController: %v", err)
 	}
 
+	// Using unstructured object since USDE needs unstructured type to extract paths and perform comparisons.
+	// Also, keeping the code consistent between ISBSvcRollout and NumaflowControllerRollout for easier maintainability
+	// and to be able to possibly reduce code duplication at some point.
 	existingNumaflowControllerDef, err := kubernetes.GetResource(ctx, r.client, newNumaflowControllerDef.GroupVersionKind(),
 		k8stypes.NamespacedName{Namespace: newNumaflowControllerDef.GetNamespace(), Name: newNumaflowControllerDef.GetName()})
 	if err != nil {
