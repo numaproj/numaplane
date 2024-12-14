@@ -847,7 +847,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	}
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
+		isbsvc, err = progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
 		if isbsvc == nil || err != nil {
 			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted', err=%v", err)
 		}
