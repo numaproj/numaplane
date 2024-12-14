@@ -323,10 +323,12 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	if !inProgressStrategySet {
 		if upgradeStrategyType == apiv1.UpgradeStrategyPPND {
 			inProgressStrategy = apiv1.UpgradeStrategyPPND
+			fmt.Print("deletethis: set strategy to PPND")
 			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			fmt.Print("deletethis: set strategy to progressive")
 			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
 	}
@@ -342,7 +344,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				return false, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
 			}
 		}
-		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
+		newISBServiceDef, err = r.Merge(existingISBServiceDef, newISBServiceDef)
+		if err != nil {
+			return false, fmt.Errorf("error merging ISBService definitions: %v", err)
+		}
 	}
 
 	switch inProgressStrategy {
@@ -551,6 +556,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 
 func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Context, isbsvc *unstructured.Unstructured, rollout *apiv1.ISBServiceRollout) {
 	numaLogger := logger.FromContext(ctx)
+	fmt.Printf("deletethis: before calling processISBServiceStatus(): status=%+v\n", rollout.Status)
 	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
 	if err != nil {
 		numaLogger.Errorf(err, "failed to parse Status from InterstepBuffer CR: %+v, %v", isbsvc, err)
@@ -586,6 +592,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
 	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
 	_ = r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
+	fmt.Printf("deletethis: after calling processISBServiceStatus(): status=%+v\n", rollout.Status)
 
 }
 
