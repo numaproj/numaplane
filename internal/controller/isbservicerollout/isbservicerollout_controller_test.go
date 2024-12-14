@@ -248,10 +248,11 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete any previous resources if they already exist, in Kubernetes
-			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.DeleteOptions{})
-			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName), metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcName, metav1.DeleteOptions{})
+			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcName), metav1.DeleteOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestPipelineName, metav1.DeleteOptions{})
 			_ = client.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
+			_ = client.Delete(ctx, &apiv1.ISBServiceRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestISBSvcRolloutName}})
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -265,6 +266,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 			// create ISBServiceRollout definition
 			rollout := createISBServiceRollout(tc.newISBSvcSpec)
+			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, rollout)
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
@@ -303,7 +305,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			// Check In-Progress Strategy
 			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
 			// Check isbsvc
-			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.GetOptions{})
+			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestISBSvcName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultISBSVC)
 			assert.Equal(t, tc.expectedISBSvcSpec, resultISBSVC.Spec)
@@ -349,7 +351,7 @@ func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ctlrcommon.DefaultTestISBSvcRolloutName,
+			Name:      ctlrcommon.DefaultTestISBSvcName,
 			Namespace: ctlrcommon.DefaultTestNamespace,
 			Labels: map[string]string{
 				common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
@@ -375,13 +377,13 @@ func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) 
 		"app.kubernetes.io/component":      "isbsvc",
 		"app.kubernetes.io/managed-by":     "isbsvc-controller",
 		"app.kubernetes.io/part-of":        "numaflow",
-		"numaflow.numaproj.io/isbsvc-name": ctlrcommon.DefaultTestISBSvcRolloutName,
+		"numaflow.numaproj.io/isbsvc-name": ctlrcommon.DefaultTestISBSvcName,
 		"numaflow.numaproj.io/isbsvc-type": "jetstream",
 	}
 	selector := metav1.LabelSelector{MatchLabels: labels}
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName),
+			Name:      deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcName),
 			Namespace: ctlrcommon.DefaultTestNamespace,
 			Labels:    labels,
 		},
@@ -410,9 +412,9 @@ func createISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *
 	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
 	return &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:         ctlrcommon.DefaultTestNamespace,
-			Name:              ctlrcommon.DefaultTestISBSvcRolloutName,
-			UID:               "some-uid",
+			Namespace: ctlrcommon.DefaultTestNamespace,
+			Name:      ctlrcommon.DefaultTestISBSvcRolloutName,
+			//UID:               "some-uid",
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 		},
