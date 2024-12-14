@@ -54,7 +54,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	ctx := context.Background()
 
 	numaLogger := logger.New()
-	numaLogger.SetLevel(3)
+	numaLogger.SetLevel(4)
 	logger.SetBaseLogger(numaLogger)
 	ctx = logger.WithLogger(ctx, numaLogger)
 
@@ -355,6 +355,7 @@ func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 			Namespace: ctlrcommon.DefaultTestNamespace,
 			Labels: map[string]string{
 				common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+				common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
 			},
 		},
 		Spec:   createDefaultISBServiceSpec(jetstreamVersion),
