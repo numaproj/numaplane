@@ -53,16 +53,6 @@ type PipelineRolloutStatus struct {
 	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
-type UpgradeStrategy string
-
-const (
-	UpgradeStrategyNoOp        UpgradeStrategy = ""
-	UpgradeStrategyError       UpgradeStrategy = "Error"
-	UpgradeStrategyApply       UpgradeStrategy = "DirectApply"
-	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
-	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
-)
-
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

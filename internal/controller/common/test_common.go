@@ -49,7 +49,7 @@ var (
 	DefaultTestNamespace = "default"
 
 	DefaultTestISBSvcRolloutName     = "isbservicerollout-test"
-	DefaultTestISBSvcName            = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestISBSvcName            = "isbservicerollout-test" + "-0"
 	DefaultTestPipelineRolloutName   = "pipelinerollout-test"
 	DefaultTestPipelineName          = DefaultTestPipelineRolloutName + "-0"
 	DefaultTestMonoVertexRolloutName = "monovertexrollout-test"
@@ -102,6 +102,13 @@ func CreateMonoVertexInK8S(ctx context.Context, t *testing.T, numaflowClientSet 
 	assert.NoError(t, err)
 }
 
+func CreateISBServiceRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, isbsvcRollout *apiv1.ISBServiceRollout) {
+	err := numaplaneClient.Create(ctx, isbsvcRollout)
+	assert.NoError(t, err)
+	err = numaplaneClient.Status().Update(ctx, isbsvcRollout)
+	assert.NoError(t, err)
+}
+
 func CreateISBSvcInK8S(ctx context.Context, t *testing.T, numaflowClientSet *numaflowversioned.Clientset, isbsvc *numaflowv1.InterStepBufferService) {
 	resultISBSvc, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(DefaultTestNamespace).Create(ctx, isbsvc, metav1.CreateOptions{})
 	assert.NoError(t, err)
@@ -137,11 +144,11 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 			Labels: map[string]string{
-				common.LabelKeyISBServiceRONameForPipeline: DefaultTestISBSvcRolloutName,
+				common.LabelKeyISBServiceRONameForPipeline: DefaultTestISBSvcName,
 				common.LabelKeyParentRollout:               DefaultTestPipelineRolloutName},
 		},
 		Spec: numaflowv1.PipelineSpec{
-			InterStepBufferServiceName: DefaultTestISBSvcRolloutName,
+			InterStepBufferServiceName: DefaultTestISBSvcName,
 		},
 		Status: numaflowv1.PipelineStatus{
 			Phase: phase,
