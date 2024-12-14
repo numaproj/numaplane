@@ -21,7 +21,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	ctx := context.TODO()
 	pipelineRollout := &apiv1.PipelineRollout{

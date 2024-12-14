@@ -504,7 +504,7 @@ func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, dr
 func Test_processExistingPipeline_PPND(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	getwd, err := os.Getwd()
 	assert.Nil(t, err, "Failed to get working directory")
@@ -751,7 +751,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 func Test_processExistingPipeline_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	getwd, err := os.Getwd()
 	assert.Nil(t, err, "Failed to get working directory")

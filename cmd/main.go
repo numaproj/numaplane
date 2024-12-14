@@ -149,7 +149,7 @@ func main() {
 		numaLogger.Fatal(err, "Failed to start configmap watcher")
 	}
 
-	if err := kubernetes.SetDynamicClient(newRawConfig); err != nil {
+	if err := kubernetes.SetClientSets(newRawConfig); err != nil {
 		numaLogger.Fatal(err, "Failed to set dynamic client")
 	}
 
