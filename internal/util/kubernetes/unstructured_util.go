@@ -34,7 +34,7 @@ func ParseStatus(obj *unstructured.Unstructured) (GenericStatus, error) {
 	}
 
 	var status GenericStatus
-	if err := util.StructToStruct(statusRaw, &status); err != nil {
+	if err := util.JsonUnmarshaler(statusRaw, &status); err != nil {
 		return GenericStatus{}, err
 	}
 
@@ -58,13 +58,6 @@ func GetLiveResource(
 		return nil, err
 	}
 	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
-
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstruc.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstruc.Object = resultObject
-
 	return unstruc, err
 }
 
@@ -179,19 +172,14 @@ func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unst
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
 func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx)
 	unstructuredObj := &unstructured.Unstructured{}
 	unstructuredObj.SetGroupVersionKind(gvk)
 
 	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
 		return nil, err
 	}
-
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstructuredObj.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstructuredObj.Object = resultObject
-
+	numaLogger.Verbosef("retrieved resource %s/%s of type %+v", namespacedName.Namespace, namespacedName.Name, gvk)
 	return unstructuredObj, nil
 }
 

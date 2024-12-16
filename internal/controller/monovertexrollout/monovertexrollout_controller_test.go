@@ -105,8 +105,8 @@ func fakeMonoVertex(t *testing.T, s numaflowv1.MonoVertexSpec) *unstructured.Uns
 	monoVertexDef.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
 	monoVertexDef.SetName("test--mvtx")
 	monoVertexDef.SetNamespace("test-ns")
-	var monoVertexSpec map[string]interface{}
-	if err := util.StructToStruct(s, &monoVertexSpec); err != nil {
+	monoVertexSpec, err := util.StructToStruct(s)
+	if err != nil {
 		log.Fatal(err)
 	}
 	monoVertexDef.Object["spec"] = monoVertexSpec
@@ -159,7 +159,7 @@ func Test_withExistingMvtxReplicas(t *testing.T) {
 			result, err := withExistingMvtxReplicas(existingGenericMvtx, newGenericMvtx)
 			assert.NoError(t, err)
 
-			expected, existing, err := unstructured.NestedFloat64(result.Object, "spec", "replicas")
+			expected, existing, err := unstructured.NestedInt64(result.Object, "spec", "replicas")
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected != nil, existing)
 			if tt.expected != nil {

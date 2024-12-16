@@ -155,7 +155,7 @@ func handleNamespaceConfigMapEvent(configMap *corev1.ConfigMap, event watch.Even
 		}
 
 		namespaceConfig := config.NamespaceConfig{}
-		err := util.StructToStruct(configMap.Data, &namespaceConfig)
+		err := util.JsonUnmarshaler(configMap.Data, &namespaceConfig)
 		if err != nil {
 			return fmt.Errorf("error converting Namespace-level ConfigMap: %v", err)
 		}

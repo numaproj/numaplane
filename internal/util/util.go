@@ -7,19 +7,74 @@ import (
 	"strings"
 )
 
-// StructToStruct converts a struct type (src) into another (dst)
-func StructToStruct(src any, dst any) error {
+func JsonUnmarshaler(src any, dst any) error {
 	jsonBytes, err := json.Marshal(src)
 	if err != nil {
 		return err
 	}
 
-	err = json.Unmarshal(jsonBytes, dst)
-	if err != nil {
+	if err = json.Unmarshal(jsonBytes, dst); err != nil {
 		return fmt.Errorf("failed to convert json %s: err=%s", string(jsonBytes), err)
 	}
-
 	return nil
+}
+
+// StructToStruct converts a struct to a map[string]interface{} by marshalling the struct to JSON and then
+// unmarshalling it to a map. It also converts all json.Number values to int64 or float64.
+func StructToStruct(src any) (map[string]any, error) {
+	jsonBytes, err := json.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsedValue map[string]any
+	d := json.NewDecoder(strings.NewReader(string(jsonBytes)))
+	d.UseNumber()
+	err = d.Decode(&parsedValue)
+	if err != nil {
+		return parsedValue, fmt.Errorf("failed to convert json %s: err=%s", string(jsonBytes), err)
+	}
+	convertNumbers(parsedValue)
+
+	return parsedValue, nil
+}
+
+func convertNumbers(parsedValue map[string]any) {
+	for k, v := range parsedValue {
+		switch t := v.(type) {
+		case json.Number:
+			parsedValue[k] = convertNumber(t)
+		case map[string]any:
+			convertNumbers(t)
+		case []any:
+			convertNumbersArray(t)
+		}
+	}
+}
+
+func convertNumbersArray(arr []any) {
+	for i, v := range arr {
+		switch t := v.(type) {
+		case json.Number:
+			arr[i] = convertNumber(t)
+		case map[string]any:
+			convertNumbers(t)
+		case []any:
+			convertNumbersArray(t)
+		}
+	}
+}
+
+func convertNumber(value json.Number) any {
+	i64, err := value.Int64()
+	if err == nil {
+		return i64
+	}
+	f64, err := value.Float64()
+	if err == nil {
+		return f64
+	}
+	return value.String()
 }
 
 // RemovePaths removes all of the excludedPaths passed in from m, where each excludedPath is a string

@@ -93,7 +93,7 @@ func (pm *PauseModule) GetPauseRequest(requester string) (*bool, bool) {
 // pause pipeline
 func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
 		return err
 	}
 
@@ -110,7 +110,7 @@ func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, p
 	// verify that all requests are still to pause, if not we can't run right now
 	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.GetNamespace())]
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
 		return false, err
 	}
 	isbsvcName := existingPipelineSpec.GetISBSvcName()

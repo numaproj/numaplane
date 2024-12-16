@@ -139,7 +139,7 @@ func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.Cond
 func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
 	statusMap := u.Object["status"]
 	var status kubernetes.GenericStatus
-	err := util.StructToStruct(&statusMap, &status)
+	err := util.JsonUnmarshaler(&statusMap, &status)
 	return status, err
 }
 

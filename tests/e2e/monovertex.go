@@ -31,7 +31,7 @@ func getGVRForMonoVertex() schema.GroupVersionResource {
 func getMonoVertexSpec(u *unstructured.Unstructured) (numaflowv1.MonoVertexSpec, error) {
 	specMap := u.Object["spec"]
 	var monoVertexSpec numaflowv1.MonoVertexSpec
-	err := util.StructToStruct(&specMap, &monoVertexSpec)
+	err := util.JsonUnmarshaler(&specMap, &monoVertexSpec)
 	return monoVertexSpec, err
 }
 
@@ -158,7 +158,7 @@ func watchMonoVertex() {
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
 			mvtx := numaflowv1.MonoVertex{}
-			err := util.StructToStruct(&obj, &mvtx)
+			err := util.JsonUnmarshaler(&obj, &mvtx)
 			if err != nil {
 				fmt.Printf("Failed to convert unstruct: %v\n", err)
 				return Output{}
@@ -223,7 +223,7 @@ func getMonoVertexFromK8S(namespace string, monoVertexName string) (*unstructure
 func getMonoVertexStatus(u *unstructured.Unstructured) (numaflowv1.MonoVertexStatus, error) {
 	statusMap := u.Object["status"]
 	var status numaflowv1.MonoVertexStatus
-	err := util.StructToStruct(&statusMap, &status)
+	err := util.JsonUnmarshaler(&statusMap, &status)
 	return status, err
 }
 

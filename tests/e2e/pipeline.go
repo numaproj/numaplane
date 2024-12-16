@@ -128,7 +128,7 @@ func verifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy api
 func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, error) {
 	specMap := u.Object["spec"]
 	var pipelineSpec numaflowv1.PipelineSpec
-	err := util.StructToStruct(&specMap, &pipelineSpec)
+	err := util.JsonUnmarshaler(&specMap, &pipelineSpec)
 	return pipelineSpec, err
 }
 
@@ -191,7 +191,7 @@ func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Un
 func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus, error) {
 	statusMap := u.Object["status"]
 	var status numaflowv1.PipelineStatus
-	err := util.StructToStruct(&statusMap, &status)
+	err := util.JsonUnmarshaler(&statusMap, &status)
 	return status, err
 }
 
@@ -217,7 +217,7 @@ func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.Pipeline
 	// get PipelineSpec from unstructured object
 	specMap := u.Object["spec"]
 	var pipelineSpec numaflowv1.PipelineSpec
-	err := util.StructToStruct(&specMap, &pipelineSpec)
+	err := util.JsonUnmarshaler(&specMap, &pipelineSpec)
 	if err != nil {
 		return err
 	}
@@ -226,8 +226,7 @@ func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.Pipeline
 	if err != nil {
 		return err
 	}
-	var newMap map[string]interface{}
-	err = util.StructToStruct(&pipelineSpec, &newMap)
+	newMap, err := util.StructToStruct(&pipelineSpec)
 	if err != nil {
 		return err
 	}
@@ -273,7 +272,7 @@ func watchPipeline() {
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
 			pl := numaflowv1.Pipeline{}
-			err := util.StructToStruct(&obj, &pl)
+			err := util.JsonUnmarshaler(&obj, &pl)
 			if err != nil {
 				fmt.Printf("Failed to convert unstruct: %v\n", err)
 				return Output{}
@@ -300,7 +299,7 @@ func watchVertices() {
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
 			vtx := numaflowv1.Vertex{}
-			err := util.StructToStruct(&obj, &vtx)
+			err := util.JsonUnmarshaler(&obj, &vtx)
 			if err != nil {
 				fmt.Printf("Failed to convert unstruct: %v\n", err)
 				return Output{}

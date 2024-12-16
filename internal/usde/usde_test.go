@@ -127,8 +127,8 @@ func makePipelineDefinition(pipelineSpec numaflowv1.PipelineSpec) unstructured.U
 	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
 	pipelineDef.SetName("test-pipeline")
 	pipelineDef.SetNamespace(defaultNamespace)
-	var pipelineSpecMap map[string]interface{}
-	if err := util.StructToStruct(prs.Pipeline.Spec, &pipelineSpecMap); err != nil {
+	pipelineSpecMap, err := util.StructToStruct(prs.Pipeline.Spec)
+	if err != nil {
 		log.Fatal(err)
 	}
 	pipelineDef.Object["spec"] = pipelineSpecMap
@@ -151,8 +151,8 @@ func makeISBServiceDefinition(isbServiceSpec numaflowv1.InterStepBufferServiceSp
 	isbServiceDef.SetGroupVersionKind(numaflowv1.ISBGroupVersionKind)
 	isbServiceDef.SetName("test-isbsvc")
 	isbServiceDef.SetNamespace(defaultNamespace)
-	var isbServiceSpecMap map[string]interface{}
-	if err := util.StructToStruct(isbrs.InterStepBufferService.Spec, &isbServiceSpecMap); err != nil {
+	isbServiceSpecMap, err := util.StructToStruct(isbrs.InterStepBufferService.Spec)
+	if err != nil {
 		log.Fatal(err)
 	}
 	isbServiceDef.Object["spec"] = isbServiceSpecMap

@@ -34,7 +34,7 @@ func getGVRForISBService() schema.GroupVersionResource {
 func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceSpec, error) {
 	specMap := u.Object["spec"]
 	var isbServiceSpec numaflowv1.InterStepBufferServiceSpec
-	err := util.StructToStruct(&specMap, &isbServiceSpec)
+	err := util.JsonUnmarshaler(&specMap, &isbServiceSpec)
 	return isbServiceSpec, err
 }
 
@@ -168,7 +168,7 @@ func watchISBService() {
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
 			isbsvc := numaflowv1.InterStepBufferService{}
-			err := util.StructToStruct(&obj, &isbsvc)
+			err := util.JsonUnmarshaler(&obj, &isbsvc)
 			if err != nil {
 				fmt.Printf("Failed to convert unstruct: %v\n", err)
 				return Output{}

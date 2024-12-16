@@ -79,7 +79,7 @@ func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, e
 	}
 
 	var status PipelineStatus
-	err := util.StructToStruct(pipeline.Object["status"], &status)
+	err := util.JsonUnmarshaler(pipeline.Object["status"], &status)
 	if err != nil {
 		return PipelineStatus{}, err
 	}
