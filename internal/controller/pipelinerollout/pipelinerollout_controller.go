@@ -421,12 +421,7 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 // take the existing pipeline and merge anything needed from the new pipeline definition
 func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultPipeline := existingPipeline.DeepCopy()
-
-	var specAsMap map[string]interface{}
-	if err := util.StructToStruct(newPipeline.Object["spec"], &specAsMap); err != nil {
-		return resultPipeline, fmt.Errorf("failed to get spec from new Pipeline: %w", err)
-	}
-	resultPipeline.Object["spec"] = specAsMap
+	resultPipeline.Object["spec"] = newPipeline.Object["spec"]
 	resultPipeline.SetAnnotations(util.MergeMaps(existingPipeline.GetAnnotations(), newPipeline.GetAnnotations()))
 	resultPipeline.SetLabels(util.MergeMaps(existingPipeline.GetLabels(), newPipeline.GetLabels()))
 
@@ -779,8 +774,8 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineDef.SetLabels(metadata.Labels)
 	pipelineDef.SetAnnotations(metadata.Annotations)
 	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
-	var pipelineSpec map[string]interface{}
-	if err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpec); err != nil {
+	pipelineSpec, err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec)
+	if err != nil {
 		return nil, err
 	}
 	pipelineDef.Object["spec"] = pipelineSpec

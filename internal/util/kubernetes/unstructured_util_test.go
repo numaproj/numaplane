@@ -85,8 +85,7 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
 	pipelineObject.SetName("my-pipeline")
 	pipelineObject.SetNamespace(namespace)
-	var pipelineSpecMap map[string]interface{}
-	err = util.StructToStruct(pipelineSpec, &pipelineSpecMap)
+	pipelineSpecMap, err := util.StructToStruct(pipelineSpec)
 	assert.Nil(t, err)
 	pipelineObject.Object["spec"] = pipelineSpecMap
 

@@ -31,7 +31,7 @@ func ParseMonoVertexStatus(monoVertex *unstructured.Unstructured) (MonoVertexSta
 	}
 
 	var status MonoVertexStatus
-	err := util.StructToStruct(monoVertex.Object["status"], &status)
+	err := util.JsonUnmarshaler(monoVertex.Object["status"], &status)
 	if err != nil {
 		return MonoVertexStatus{}, err
 	}
@@ -39,8 +39,8 @@ func ParseMonoVertexStatus(monoVertex *unstructured.Unstructured) (MonoVertexSta
 	return status, nil
 }
 func MonoVertexWithoutReplicas(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
-	var specAsMap map[string]any
-	if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+	specAsMap, err := util.StructToStruct(monoVertex.Object["spec"])
+	if err != nil {
 		return nil, err
 	}
 	// remove "replicas" field

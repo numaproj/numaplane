@@ -46,7 +46,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", newPipelineDef.Object, err)
 	}
 
@@ -121,11 +121,11 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object["spec"], err)
 	}
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert existing Pipeline spec %v into PipelineSpec type, err=%v", existingPipelineDef.Object["spec"], err)
 	}
 
@@ -164,7 +164,7 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
 		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object, err)
 	}
 
@@ -224,7 +224,7 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, existingPipelineDef *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
+	if err := util.JsonUnmarshaler(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
 		return err
 	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)

@@ -362,13 +362,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
-
-	var specAsMap map[string]interface{}
-	if err := util.StructToStruct(newMonoVertex.Object["spec"], &specAsMap); err != nil {
-		return resultMonoVertex, fmt.Errorf("failed to get spec from new MonoVertex: %w", err)
-	}
-	resultMonoVertex.Object["spec"] = specAsMap
-
+	resultMonoVertex.Object["spec"] = newMonoVertex.Object["spec"]
 	resultMonoVertex.SetAnnotations(util.MergeMaps(existingMonoVertex.GetAnnotations(), newMonoVertex.GetAnnotations()))
 	resultMonoVertex.SetLabels(util.MergeMaps(existingMonoVertex.GetLabels(), newMonoVertex.GetLabels()))
 
@@ -511,8 +505,8 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexDef.SetLabels(metadata.Labels)
 	monoVertexDef.SetAnnotations(metadata.Annotations)
 	monoVertexDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)})
-	var monoVertexSpec map[string]interface{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
+	monoVertexSpec, err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec)
+	if err != nil {
 		return nil, err
 	}
 	monoVertexDef.Object["spec"] = monoVertexSpec

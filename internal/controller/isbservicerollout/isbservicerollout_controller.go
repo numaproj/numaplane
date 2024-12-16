@@ -431,8 +431,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 		return false, false, err
 	}
 
-	newSpecAsMap := make(map[string]interface{})
-	err = util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec, &newSpecAsMap)
+	newSpecAsMap, err := util.StructToStruct(&isbServiceRollout.Spec.InterStepBufferService.Spec)
 	if err != nil {
 		return false, false, err
 	}
@@ -629,8 +628,8 @@ func generateNewISBServiceDef(isbServiceRollout *apiv1.ISBServiceRollout) (*unst
 	existingLabel[common.LabelKeyParentRollout] = isbServiceRollout.Name
 	newISBServiceDef.SetLabels(existingLabel)
 	// Update spec of ISBService to match the ISBServiceRollout spec
-	var isbServiceSpec map[string]interface{}
-	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
+	isbServiceSpec, err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec)
+	if err != nil {
 		return nil, err
 	}
 	newISBServiceDef.Object["spec"] = isbServiceSpec
