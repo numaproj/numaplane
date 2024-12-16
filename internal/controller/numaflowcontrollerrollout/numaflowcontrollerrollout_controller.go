@@ -472,9 +472,13 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerReconciled(ctx
 		return false, "", fmt.Errorf("failed to convert NumaflowController Status: %+v, %v", numaflowController, err)
 	}
 
+	// Assume NumaflowController is progressing unless otherwise specified in the condition
+	ncProgressing := true
 	healthyChildCond := nfcStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
+	if healthyChildCond != nil {
+		ncProgressing = healthyChildCond.Reason == apiv1.ProgressingReasonString
+	}
 
-	ncProgressing := healthyChildCond.Reason == apiv1.ProgressingReasonString
 	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration && !ncProgressing
 
 	if !numaflowControllerReconciled {

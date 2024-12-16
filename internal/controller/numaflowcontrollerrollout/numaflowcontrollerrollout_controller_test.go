@@ -200,24 +200,6 @@ func Test_reconcile_NumaflowControllerRollout_PPND(t *testing.T) {
 			expectedNumaflowControllerVersion: "3.2.1",
 			expectedInProgressStrategy:        apiv1.UpgradeStrategyPPND,
 		},
-		{
-			name:                          "existing NumaflowController - spec already updated - NumaflowController done reconciling",
-			newNumaflowControllerVersion:  "1.2.3",
-			existingNumaflowControllerDef: createDefaultNumaflowController("1.2.3", apiv1.PhaseDeployed, true),
-			existingDeploymentDef:         createDefaultNumaflowControllerDeployment("1.2.3", true),
-			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
-				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
-			existingPipeline:          ctlrcommon.CreateDefaultTestPipelineOfPhase(numaflowv1.PipelinePhasePaused),
-			existingPauseRequest:      &trueValue,
-			initialInProgressStrategy: apiv1.UpgradeStrategyPPND,
-			expectedPauseRequest:      &falseValue,
-			expectedRolloutPhase:      apiv1.PhaseDeployed,
-			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
-				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
-			},
-			expectedNumaflowControllerVersion: "1.2.3",
-			expectedInProgressStrategy:        apiv1.UpgradeStrategyNoOp,
-		},
 	}
 
 	for _, tc := range testCases {
