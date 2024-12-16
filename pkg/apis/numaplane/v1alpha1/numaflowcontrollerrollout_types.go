@@ -24,6 +24,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type Controller struct {
+	// NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
+	// create multiple Numaflow controllers within the same namespace
 	InstanceID string `json:"instanceID,omitempty"`
 	Version    string `json:"version"`
 }
@@ -45,6 +47,7 @@ type NumaflowControllerRolloutStatus struct {
 // +kubebuilder:validation:XValidation:rule="matches(self.metadata.name, '^numaflow-controller.*')",message="The metadata name must start with 'numaflow-controller'"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="The current phase"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.controller.version",description="The desired Numaflow Controller version"
 // NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts API
 type NumaflowControllerRollout struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -65,9 +68,4 @@ type NumaflowControllerRolloutList struct {
 
 func init() {
 	SchemeBuilder.Register(&NumaflowControllerRollout{}, &NumaflowControllerRolloutList{})
-}
-
-// IsHealthy indicates whether the NumaflowController rollout is healthy or not
-func (nc *NumaflowControllerRolloutStatus) IsHealthy() bool {
-	return nc.Phase == PhaseDeployed || nc.Phase == PhasePending
 }
