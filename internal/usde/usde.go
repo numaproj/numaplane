@@ -52,11 +52,6 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-
 	// Get data loss fields config based on the spec type (Pipeline, ISBS)
 	dataLossFields := []config.SpecDataLossField{}
 	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
@@ -73,6 +68,11 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 				IncludeSubfields: true,
 			},
 		}
+	}
+
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, err
 	}
 
 	numaLogger.WithValues(
