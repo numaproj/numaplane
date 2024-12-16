@@ -370,15 +370,15 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	// TODO: Progressive strategy should ideally be creating a second parallel isbsvc, and all Pipelines should be on it;
 	// for now we just create a 2nd ISBServiceRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyNoOp, apiv1.UpgradeStrategyProgressive:
-		if isbServiceNeedsToUpdate {
-			// update ISBService
-			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
-			if err != nil {
-				return false, fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyNoOp, err)
-			}
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyApply, apiv1.UpgradeStrategyProgressive:
+		// update ISBService
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+		if err != nil {
+			return false, fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyNoOp, err)
 		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyNoOp:
+		return false, nil
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
