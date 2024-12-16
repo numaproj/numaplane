@@ -474,7 +474,7 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerReconciled(ctx
 
 	healthyChildCond := nfcStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
 
-        ncProgressing := healthyChildCond.Reason == apiv1.ProgressingReasonString
+	ncProgressing := healthyChildCond.Reason == apiv1.ProgressingReasonString
 	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration && !ncProgressing
 
 	if !numaflowControllerReconciled {
