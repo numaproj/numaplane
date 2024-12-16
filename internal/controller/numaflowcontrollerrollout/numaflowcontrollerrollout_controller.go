@@ -452,7 +452,6 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerUpdating(ctx c
 	return NumaflowControllerNeedsToUpdate, !numaflowControllerReconciled, nil
 }
 
-// TODO: do we need to also check the underlying Deployment?
 // determine if the NumaflowController, including its underlying Deployment, has been reconciled
 // so, this requires:
 // 1. NumaflowController.Status.ObservedGeneration == NumaflowController.Generation
