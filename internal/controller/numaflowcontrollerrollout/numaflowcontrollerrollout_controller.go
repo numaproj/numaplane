@@ -475,8 +475,8 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerReconciled(ctx
 
 	healthyChildCond := nfcStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
 
-	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration &&
-		healthyChildCond.Status == metav1.ConditionTrue && healthyChildCond.Reason != apiv1.ProgressingReasonString
+        ncProgressing := healthyChildCond.Reason == apiv1.ProgressingReasonString
+	numaflowControllerReconciled := numaflowController.GetGeneration() <= numaflowControllerStatus.ObservedGeneration && !ncProgressing
 
 	if !numaflowControllerReconciled {
 		return false, "Mismatch between NumaflowController Generation and ObservedGeneration", nil
