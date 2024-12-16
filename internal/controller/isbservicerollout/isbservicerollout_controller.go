@@ -291,11 +291,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// update our Status with the ISBService's Status
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
-	_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef)
-	if err != nil {
-		return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
-	}
-
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
@@ -332,8 +327,28 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	}
 
+	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
+	// the most current version of the isbsvc just in case
+	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		existingISBServiceDef, err = kubernetes.GetLiveResource(ctx, newISBServiceDef, "interstepbufferservices")
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.WithValues("isbsvcDefinition", *newISBServiceDef).Warn("InterstepBufferService not found.")
+			} else {
+				return false, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
+			}
+		}
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
+	}
+
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
+
+		_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef, true)
+		if err != nil {
+			return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
+		}
+
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
@@ -419,12 +434,17 @@ func (r *ISBServiceRolloutReconciler) GetRolloutKey(rolloutNamespace string, rol
 // - whether ISBService needs to update
 // - whether it's in the process of being updated
 // - error if any
-func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *unstructured.Unstructured) (bool, bool, error) {
 
-	isbServiceReconciled, _, err := r.isISBServiceReconciled(ctx, existingISBSVCDef)
+// Depending on value "checkLive", either check K8S API directly or go to informer cache
+func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, existingISBSVCDef *unstructured.Unstructured,
+	checkLive bool) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	isbServiceReconciled, msg, err := r.isISBServiceReconciled(ctx, existingISBSVCDef, checkLive)
 	if err != nil {
 		return false, false, err
 	}
+	numaLogger.Debugf("isbServiceReconciled=%t, msg=%s", isbServiceReconciled, msg)
 
 	existingSpecAsMap, found, err := unstructured.NestedMap(existingISBSVCDef.Object, "spec")
 	if err != nil || !found {
@@ -484,20 +504,21 @@ func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Conte
 // 1. ISBService.Status.ObservedGeneration == ISBService.Generation
 // 2. StatefulSet.Status.ObservedGeneration == StatefulSet.Generation
 // 3. StatefulSet.Status.UpdatedReplicas == StatefulSet.Spec.Replicas
-func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *unstructured.Unstructured) (bool, string, error) {
+// Depending on value "checkLive", either check K8S API directly or go to informer cache
+func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context, isbsvc *unstructured.Unstructured, checkLive bool) (bool, string, error) {
 	numaLogger := logger.FromContext(ctx)
 	isbsvcStatus, err := kubernetes.ParseStatus(isbsvc)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to parse Status from InterstepBufferService CR: %+v, %v", isbsvc, err)
 	}
-	numaLogger.Debugf("isbsvc status: %+v", isbsvcStatus)
 
-	statefulSet, err := numaflowtypes.GetISBSvcStatefulSetFromK8s(ctx, r.client, isbsvc)
+	statefulSet, err := numaflowtypes.GetISBSvcStatefulSetFromK8s(ctx, r.client, isbsvc, checkLive)
 	if err != nil {
 		return false, "", err
 	}
 
 	isbsvcReconciled := isbsvc.GetGeneration() <= isbsvcStatus.ObservedGeneration
+	numaLogger.Debugf("isbsvc status: %+v, isbsvc.Object[metadata]=%+v, generation=%d, observed generation=%d", isbsvcStatus, isbsvc.Object["metadata"], isbsvc.GetGeneration(), isbsvcStatus.ObservedGeneration)
 
 	if !isbsvcReconciled {
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
@@ -505,6 +526,8 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet == nil {
 		return false, "StatefulSet not found, may not have been created", nil
 	}
+	numaLogger.Debugf("statefulset: generation=%d, observedgen=%d", statefulSet.Generation, statefulSet.Status.ObservedGeneration)
+
 	if statefulSet.Generation != statefulSet.Status.ObservedGeneration {
 		return false, "Mismatch between StatefulSet Generation and ObservedGeneration", nil
 	}
@@ -512,6 +535,10 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	if statefulSet.Spec.Replicas != nil {
 		specifiedReplicas = *statefulSet.Spec.Replicas
 	}
+
+	numaLogger.Debugf("statefulset: generation=%d, observedgen=%d, replicas=%d, updated replicas=%d",
+		statefulSet.Generation, statefulSet.Status.ObservedGeneration, specifiedReplicas, statefulSet.Status.UpdatedReplicas)
+
 	if specifiedReplicas != statefulSet.Status.UpdatedReplicas { // TODO: keep this, or is this a better test?: UpdatedRevision == CurrentRevision
 		return false, fmt.Sprintf("StatefulSet UpdatedReplicas (%d) != specified replicas (%d)", statefulSet.Status.UpdatedReplicas, specifiedReplicas), nil
 	}
@@ -540,7 +567,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	} else if isbSvcPhase == numaflowv1.ISBSvcPhaseUnknown {
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	} else {
-		reconciled, nonreconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc)
+		reconciled, nonreconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc, false)
 		if err != nil {
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return

@@ -53,7 +53,7 @@ func GetLiveResource(
 		return nil, err
 	}
 
-	unstruc, err := dynamicClient.Resource(gvr).Namespace(object.GetNamespace()).Get(ctx, object.GetName(), metav1.GetOptions{})
+	unstruc, err := DynamicClient.Resource(gvr).Namespace(object.GetNamespace()).Get(ctx, object.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +64,21 @@ func GetLiveResource(
 		return nil, err
 	}
 	unstruc.Object = resultObject
+
+	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
+	// instead of the expected int64 type after using the StructToStruct conversion func.
+	// This fix allows us to use GetGeneration() func of an Unstructured object.
+	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstruc.Object, "metadata", "generation")
+	if err != nil {
+		numaLogger.Warnf("expected generation field to be set to float64 but it's not: unstruc.Object=%+v", unstruc.Object)
+		return unstruc, nil
+	}
+	if foundAsFloat {
+		err = unstructured.SetNestedField(unstruc.Object, int64(generationAsFloat), "metadata", "generation")
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return unstruc, err
 }
@@ -82,7 +97,7 @@ func ListLiveResource(
 		Version:  version,
 		Resource: pluralName,
 	}
-	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	return DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
 }
 
 func PatchResource(
@@ -179,6 +194,8 @@ func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unst
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
 func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespacedName k8stypes.NamespacedName) (*unstructured.Unstructured, error) {
+
+	numaLogger := logger.FromContext(ctx)
 	unstructuredObj := &unstructured.Unstructured{}
 	unstructuredObj.SetGroupVersionKind(gvk)
 
@@ -192,7 +209,22 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 	}
 	unstructuredObj.Object = resultObject
 
-	return unstructuredObj, nil
+	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
+	// instead of the expected int64 type after using the StructToStruct conversion func.
+	// This fix allows us to use GetGeneration() func of an Unstructured object.
+	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstructuredObj.Object, "metadata", "generation")
+	if err != nil {
+		numaLogger.Warnf("expected generation field to be set to float64 but it's not: name=%v,unstructuredObj.Object=%+v", namespacedName, unstructuredObj.Object)
+		return unstructuredObj, nil
+	}
+	if foundAsFloat {
+		err = unstructured.SetNestedField(unstructuredObj.Object, int64(generationAsFloat), "metadata", "generation")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return unstructuredObj, err
 }
 
 // UpdateResource updates the resource in the kubernetes cluster
