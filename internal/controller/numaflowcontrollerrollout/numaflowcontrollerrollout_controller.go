@@ -372,15 +372,15 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 		}
 	// TODO: Progressive strategy should ideally be creating a second parallel NumaflowController, and all Pipelines should be on it;
 	// for now we just create a 2nd NumaflowControllerRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyNoOp, apiv1.UpgradeStrategyProgressive:
-		if numaflowControllerNeedsToUpdate {
-			// update NumaflowController
-			err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
-			if err != nil {
-				return false, fmt.Errorf("error updating NumaflowController, %s: %v", apiv1.UpgradeStrategyNoOp, err)
-			}
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyApply, apiv1.UpgradeStrategyProgressive:
+		// update NumaflowController
+		err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
+		if err != nil {
+			return false, fmt.Errorf("error updating NumaflowController, %s: %v", apiv1.UpgradeStrategyNoOp, err)
 		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyNoOp:
+		return false, nil
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
@@ -389,6 +389,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 }
 
 func (r *NumaflowControllerRolloutReconciler) updateNumaflowController(ctx context.Context, nfcRollout *apiv1.NumaflowControllerRollout, newNumaflowControllerDef *unstructured.Unstructured) error {
+
 	if err := kubernetes.UpdateResource(ctx, r.client, newNumaflowControllerDef); err != nil {
 		return err
 	}
