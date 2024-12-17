@@ -812,7 +812,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
 
 	}{
-		/*{
+		{
 			name:            "spec difference results in Progressive",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingOriginalPipelineDef: *createPipeline(
@@ -876,7 +876,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
-		},*/
+		},
 		{
 			name:            "Progressive deployment failed",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
@@ -890,7 +890,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
+				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseFailed,
 				numaflowv1.Status{
 					Conditions: []metav1.Condition{
@@ -918,7 +918,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
 			},
 		},
-		/*{
+		{
 			name:            "Progressive deployment failed - going back to original spec",
 			newPipelineSpec: pipelineSpec, // this matches the original spec
 			existingOriginalPipelineDef: *createPipeline(
@@ -931,7 +931,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
+				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
 				numaflowv1.PipelinePhaseFailed,
 				numaflowv1.Status{
 					Conditions: []metav1.Condition{
@@ -973,7 +973,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
+				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -1005,7 +1005,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
+				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -1025,7 +1025,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
-		},*/
+		},
 	}
 
 	for _, tc := range testCases {
