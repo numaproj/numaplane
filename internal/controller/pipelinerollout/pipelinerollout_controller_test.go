@@ -819,7 +819,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
 
 	}{
-		/*{
+		{
 			name:            "spec difference results in Progressive",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingOriginalPipelineDef: *createPipeline(
@@ -924,7 +924,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
 			},
-		},*/
+		},
 		{
 			name:            "Progressive deployment failed - going back to original spec",
 			newPipelineSpec: pipelineSpec, // this matches the original spec
@@ -959,7 +959,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:    2,
 			initialInProgressStrategy:  &progressiveUpgradeStrategy,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
+			expectedRolloutPhase:       apiv1.PhaseDeployed,
 
 			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
@@ -967,7 +967,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
 			},
 		},
-		/*{
+		{
 			name:            "Clean up after progressive upgrade",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingOriginalPipelineDef: *createPipeline(
@@ -1032,7 +1032,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
-		},*/
+		},
 	}
 
 	for _, tc := range testCases {

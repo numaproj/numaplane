@@ -274,15 +274,6 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 	return "interstepbufferservice"
 }
 
-// take the existing ISBService and merge anything needed from the new ISBService definition
-func (r *ISBServiceRolloutReconciler) Merge(existingISBService, newISBService *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	resultISBService := existingISBService.DeepCopy()
-	resultISBService.Object["spec"] = newISBService.Object["spec"]
-	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
-	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
-	return resultISBService, nil
-}
-
 // process an existing ISBService
 // return:
 // - true if needs a requeue
@@ -767,4 +758,13 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *
 func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
 	// TODO: Implement
 	return false, nil
+}
+
+// take the existing ISBService and merge anything needed from the new ISBService definition
+func (r *ISBServiceRolloutReconciler) Merge(existingISBService, newISBService *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	resultISBService := existingISBService.DeepCopy()
+	resultISBService.Object["spec"] = newISBService.Object["spec"]
+	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
+	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
+	return resultISBService, nil
 }
