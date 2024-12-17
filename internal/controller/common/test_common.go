@@ -161,7 +161,7 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 			Labels: map[string]string{
-				common.LabelKeyISBServiceRONameForPipeline: DefaultTestISBSvcName,
+				common.LabelKeyISBServiceRONameForPipeline: DefaultTestISBSvcRolloutName,
 				common.LabelKeyParentRollout:               DefaultTestPipelineRolloutName},
 		},
 		Spec: numaflowv1.PipelineSpec{
