@@ -64,18 +64,6 @@ func GetLiveResource(
 		return nil, err
 	}
 	unstruc.Object = resultObject
-	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstruc.Object, "metadata", "generation")
-
-	if err != nil {
-		numaLogger.Warnf("expected generation field to be set to float64 but it's not: unstruc.Object=%+v", unstruc.Object)
-		return unstruc, nil
-	}
-	if foundAsFloat {
-		err = unstructured.SetNestedField(unstruc.Object, int64(generationAsFloat), "metadata", "generation")
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
 	// instead of the expected int64 type after using the StructToStruct conversion func.
