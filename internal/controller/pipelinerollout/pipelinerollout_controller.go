@@ -945,7 +945,7 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 
 	specsEqual := reflect.DeepEqual(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, fromCopy, toCopy)
+		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
