@@ -178,7 +178,7 @@ func createMonoVertex(phase numaflowv1.MonoVertexPhase, status numaflowv1.Status
 func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
-	assert.Nil(t, kubernetes.SetDynamicClient(restConfig))
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	getwd, err := os.Getwd()
 	assert.Nil(t, err, "Failed to get working directory")

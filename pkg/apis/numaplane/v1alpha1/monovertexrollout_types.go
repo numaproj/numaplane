@@ -43,9 +43,6 @@ type MonoVertex struct {
 type MonoVertexRolloutStatus struct {
 	Status `json:",inline"`
 
-	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
-	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
-
 	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
 	// identify a pipeline.
 	NameCount *int32 `json:"nameCount,omitempty"`
@@ -111,23 +108,10 @@ func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
 }
 
-func (status *MonoVertexRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
-	status.UpgradeInProgress = upgradeStrategy
-}
-
-func (status *MonoVertexRolloutStatus) ClearUpgradeInProgress() {
-	status.UpgradeInProgress = ""
-}
-
 func (status *MonoVertexRolloutStatus) MarkMonoVertexPaused(reason, message string, generation int64) {
 	status.MarkTrueWithReason(ConditionMonoVertexPausingOrPaused, reason, message, generation)
 }
 
 func (status *MonoVertexRolloutStatus) MarkMonoVertexUnpaused(generation int64) {
 	status.MarkFalse(ConditionMonoVertexPausingOrPaused, "Unpaused", "MonoVertex unpaused", generation)
-}
-
-// IsHealthy indicates whether the MonoVertexRollout is healthy.
-func (mv *MonoVertexRolloutStatus) IsHealthy() bool {
-	return mv.Phase == PhaseDeployed || mv.Phase == PhasePending
 }

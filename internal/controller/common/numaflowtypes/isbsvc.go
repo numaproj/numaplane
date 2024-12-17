@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,18 +31,32 @@ import (
 )
 
 // Each ISBService has one underlying StatefulSet
-func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *unstructured.Unstructured) (*appsv1.StatefulSet, error) {
+// Find it
+// Depending on value "checkLive", either check K8S API directly or go to informer cache
+func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *unstructured.Unstructured, checkLive bool) (*appsv1.StatefulSet, error) {
 	statefulSetSelector := labels.NewSelector()
 	requirement, err := labels.NewRequirement(numaflowv1.KeyISBSvcName, selection.Equals, []string{isbsvc.GetName()})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error creating label requirement: %v", err)
 	}
 	statefulSetSelector = statefulSetSelector.Add(*requirement)
 
 	var statefulSetList appsv1.StatefulSetList
-	err = c.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector}) //TODO: add Watch to StatefulSet (unless we decide to use isbsvc to get all the info directly)
-	if err != nil {
-		return nil, err
+	if checkLive {
+		statefulSets, err := kubernetes.KubernetesClient.AppsV1().StatefulSets(isbsvc.GetNamespace()).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvc.GetName())})
+		if err != nil {
+			return nil, fmt.Errorf("Error listing live StatefulSets: %v", err)
+		}
+		statefulSetList = *statefulSets
+	} else {
+		//TODO: this is currently making a Live K8S call, not a call to cache as it's supposed to
+		// Option 1: figure out how we can watch a StatefulSet and have its owner's owner reconcile it
+		// Option 2: update InterstepBufferService code in Numaflow to provide all the info we need so we don't need to access StatefulSet directly
+		err = c.List(ctx, &statefulSetList, &client.ListOptions{Namespace: isbsvc.GetNamespace(), LabelSelector: statefulSetSelector})
+		if err != nil {
+			return nil, fmt.Errorf("Error listing StatefulSets: %v", err)
+		}
 	}
 	if len(statefulSetList.Items) > 1 {
 		return nil, fmt.Errorf("unexpected: isbsvc %s/%s has multiple StatefulSets: %+v", isbsvc.GetNamespace(), isbsvc.GetName(), statefulSetList.Items)
