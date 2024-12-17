@@ -130,7 +130,6 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	labelSelector := fmt.Sprintf(
 		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
 		common.LabelKeyUpgradeState, string(upgradeState))
-	fmt.Printf("deletethis: childGVR=%+v, labelSelector=%q\n", childGVR, labelSelector)
 
 	var children *unstructured.UnstructuredList
 	var err error
