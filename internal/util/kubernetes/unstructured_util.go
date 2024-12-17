@@ -208,6 +208,10 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 		return nil, err
 	}
 	unstructuredObj.Object = resultObject
+
+	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
+	// instead of the expected int64 type after using the StructToStruct conversion func.
+	// This fix allows us to use GetGeneration() func of an Unstructured object.
 	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstructuredObj.Object, "metadata", "generation")
 	if err != nil {
 		numaLogger.Warnf("expected generation field to be set to float64 but it's not: name=%v,unstructuredObj.Object=%+v", namespacedName, unstructuredObj.Object)

@@ -95,7 +95,8 @@ var (
 	pipelineSpecWithWatermarkDisabled numaflowv1.PipelineSpec
 	pipelineSpecWithTopologyChange    numaflowv1.PipelineSpec
 
-	// these have resolved InterstepBufferService names for an actual Pipeline running (as opposed to the spec defined in the PipelineRollout)
+	// running pipelnes represent an actual running Pipeline and thus have resolved InterstepBufferService names
+	// (as opposed to the spec defined in the PipelineRollout, which has the ISBServiceRollout's name)
 	runningPipelineSpec                      numaflowv1.PipelineSpec
 	runningPipelineSpecWithWatermarkDisabled numaflowv1.PipelineSpec
 	runningPipelineSpecWithTopologyChange    numaflowv1.PipelineSpec
@@ -119,6 +120,7 @@ func init() {
 	pipelineSpecWithTopologyChange.Edges[1].To = "cat-2"
 	pipelineSpecWithTopologyChange.Edges = append(pipelineSpecWithTopologyChange.Edges, numaflowv1.Edge{From: "cat-2", To: "out"})
 
+	// running pipelnes represent an actual running Pipeline and thus have resolved InterstepBufferService names
 	runningPipelineSpec = withInterstepBufferService(pipelineSpec, ctlrcommon.DefaultTestISBSvcName)
 	runningPipelineSpecWithWatermarkDisabled = withInterstepBufferService(pipelineSpecWithWatermarkDisabled, ctlrcommon.DefaultTestISBSvcName)
 
@@ -706,12 +708,12 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			// first delete resources (Pipeline, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
+			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
-			client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
-			client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 
 			if tc.pipelineRolloutAnnotations == nil {
 				tc.pipelineRolloutAnnotations = map[string]string{}
@@ -1039,12 +1041,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			// first delete resources (Pipeline, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
+			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
-			client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
-			client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 
 			// Create our PipelineRollout
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{})
