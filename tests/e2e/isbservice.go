@@ -30,6 +30,28 @@ func getGVRForISBService() schema.GroupVersionResource {
 	}
 }
 
+// uncomment and use when Progressive strategy is implemented for ISBServiceRollout
+// func getISBServiceName(namespace, isbServiceRolloutName string) string {
+
+// 	var isbServiceName string
+// 	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, isbServiceRolloutName)
+
+// 	Eventually(func() bool {
+// 		unstructList, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+// 		if err != nil {
+// 			return false
+// 		}
+// 		if len(unstructList.Items) == 0 {
+// 			return false
+// 		}
+// 		isbServiceName = unstructList.Items[0].GetName()
+// 		return true
+// 	}, 60*time.Second, testPollingInterval).Should(BeTrue())
+
+// 	return isbServiceName
+
+// }
+
 // Get ISBServiceSpec from Unstructured type
 func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceSpec, error) {
 	specMap := u.Object["spec"]

@@ -20,6 +20,27 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+func getPipelineName(namespace, pipelineRolloutName string) string {
+
+	var pipelineName string
+	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, pipelineRolloutName)
+
+	Eventually(func() bool {
+		unstructList, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+		if err != nil {
+			return false
+		}
+		if len(unstructList.Items) == 0 {
+			return false
+		}
+		pipelineName = unstructList.Items[0].GetName()
+		return true
+	}, 60*time.Second, testPollingInterval).Should(BeTrue())
+
+	return pipelineName
+
+}
+
 func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
 
 	document("verifying Pipeline Spec")
