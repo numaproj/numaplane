@@ -1855,10 +1855,12 @@ spec:
           '.items[] | select(.metadata.ownerReferences[]?.kind == \"ISBServiceRollout\")
           | .metadata.name')\n  \n  # Loop through each isbsvc\n  for isbsvc in $interstepbuffersvcs;
           do\n    echo \"Patching isbsvc: $isbsvc in namespace: $namespace\"\n    \n
-          \   # Patch the isbsvc to add the label\n    kubectl patch isbsvc $isbsvc
+          \   # Patch the isbsvc to add the labels\n    kubectl patch isbsvc $isbsvc
           -n $namespace --type='merge' -p '{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/upgrade-state\":
-          \"promoted\"}}}'\n  done\ndone\n\necho \"All interstepbufferservices have
-          been patched.\"\n"
+          \"promoted\"}}}'\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
+          -p '{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/parent-rollout\":
+          $isbsvc}}}'\n  done\ndone\n\necho \"All interstepbufferservices have been
+          patched.\"\n"
         image: bitnami/kubectl
         name: label-isbsvc
       serviceAccountName: numaplane-sa
