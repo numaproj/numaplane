@@ -62,7 +62,7 @@ spec:
               #!/bin/bash
 
               # Define the label key and value
-              LABEL_KEY="numaplane.numaproj.io/upgrade-state"
+              LABEL_KEY="numaplane.numaproj.io~1upgrade-state"
               LABEL_VALUE="promoted"
 
               # Get all namespaces
@@ -79,8 +79,8 @@ spec:
                 for isbsvc in $interstepbuffersvcs; do
                   echo "Patching isbsvc: $isbsvc in namespace: $namespace"
                   
-                  # Patch the deployment to add the label
-                  kubectl patch isbsvc $isbsvc -n $namespace --type='json' -p="[{\"op\": \"add\", \"path\": \"/metadata/labels/$LABEL_KEY\", \"value\": \"$LABEL_VALUE\"}]"
+                  # Patch the isbsvc to add the label
+                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p '{"metadata": {"labels": {"numaplane.numaproj.io/upgrade-state": "promoted"}}}'
                 done
               done
 
