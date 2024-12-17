@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
 )
@@ -93,7 +94,7 @@ func New() *NumaLogger {
 	// get the log level
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
-		fmt.Println("error using global config to get log level: " + err.Error())
+		log.Debug().Msg("error using global config to get log level: " + err.Error())
 		return newNumaLogger(&w, nil)
 	}
 	lvl := globalConfig.LogLevel

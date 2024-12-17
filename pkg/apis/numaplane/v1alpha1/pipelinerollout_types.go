@@ -45,9 +45,6 @@ type PipelineRolloutStatus struct {
 	Status      `json:",inline"`
 	PauseStatus PauseStatus `json:"pauseStatus,omitempty"`
 
-	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
-	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
-
 	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
 	// identify a pipeline.
 	NameCount *int32 `json:"nameCount,omitempty"`
@@ -119,17 +116,4 @@ func (status *PipelineRolloutStatus) MarkPipelinePausingOrPaused(reason, message
 
 func (status *PipelineRolloutStatus) MarkPipelineUnpaused(generation int64) {
 	status.MarkFalse(ConditionPipelinePausingOrPaused, "Unpaused", "Pipeline unpaused", generation)
-}
-
-func (status *PipelineRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
-	status.UpgradeInProgress = upgradeStrategy
-}
-
-func (status *PipelineRolloutStatus) ClearUpgradeInProgress() {
-	status.UpgradeInProgress = ""
-}
-
-// IsHealthy indicates whether the PipelineRollout is healthy.
-func (status *PipelineRolloutStatus) IsHealthy() bool {
-	return status.Phase == PhaseDeployed || status.Phase == PhasePending
 }

@@ -18,7 +18,6 @@ package numaflowcontrollerrollout
 
 import (
 	"context"
-	"strings"
 
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -40,13 +39,13 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 		ctx := context.Background()
 
 		resourceLookupKey := types.NamespacedName{
-			Name:      NumaflowControllerDeploymentName,
+			Name:      ctlrcommon.DefaultTestNumaflowControllerDeploymentName,
 			Namespace: namespace,
 		}
 
 		numaflowControllerResource := apiv1.NumaflowControllerRollout{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      NumaflowControllerDeploymentName,
+				Name:      ctlrcommon.DefaultTestNumaflowControllerDeploymentName,
 				Namespace: namespace,
 			},
 			Spec: apiv1.NumaflowControllerRolloutSpec{
@@ -87,7 +86,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
+				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: ctlrcommon.DefaultTestNumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				return err == nil
 			}, ctlrcommon.TestDefaultTimeout, ctlrcommon.TestDefaultInterval).Should(BeTrue())
 		})
@@ -103,7 +102,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 			By("Verifying the numaflow controller deployment image version")
 			Eventually(func() bool {
 				numaflowDeployment := &appsv1.Deployment{}
-				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: NumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
+				err := ctlrcommon.TestK8sClient.Get(ctx, types.NamespacedName{Name: ctlrcommon.DefaultTestNumaflowControllerDeploymentName, Namespace: namespace}, numaflowDeployment)
 				if err == nil {
 					return numaflowDeployment.Spec.Template.Spec.Containers[0].Image == "quay.io/numaproj/numaflow:v1.2.1"
 				}
@@ -113,7 +112,7 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 
 		It("Should have the metrics updated", func() {
 			By("Verifying the Numaflow Controller metric")
-			Expect(testutil.ToFloat64(ctlrcommon.TestCustomMetrics.NumaflowControllersROSyncs.WithLabelValues())).Should(BeNumerically(">", 1))
+			Expect(testutil.ToFloat64(ctlrcommon.TestCustomMetrics.NumaflowControllerRolloutSyncs.WithLabelValues())).Should(BeNumerically(">", 1))
 			Expect(testutil.ToFloat64(ctlrcommon.TestCustomMetrics.NumaflowControllerKubectlExecutionCounter.WithLabelValues())).Should(BeNumerically(">", 1))
 		})
 
@@ -147,118 +146,6 @@ var _ = Describe("NumaflowControllerRollout Controller", Ordered, func() {
 
 			Expect(deletingChildResource.OwnerReferences).Should(HaveLen(1))
 			Expect(deletedResource.UID).Should(Equal(deletingChildResource.OwnerReferences[0].UID))
-
-		})
-	})
-})
-
-var _ = Describe("Apply Ownership Reference", func() {
-	Context("ownership reference", func() {
-		const resourceName = "test-resource"
-		manifests := []string{
-			`
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: example-deployment
-  labels:
-    app: example
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: example
-  template:
-    metadata:
-      labels:
-        app: example
-    spec:
-      containers:
-      - name: example-container
-        image: nginx:1.14.2
-        ports:
-        - containerPort: 80
-`,
-			`
-apiVersion: v1
-kind: Service
-metadata:
-  name: example-service
-spec:
-  selector:
-    app: example
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 9376
-`}
-		emanifests := []string{
-			`apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: example
-  name: example-deployment
-  ownerReferences:
-  - apiVersion: ""
-    blockOwnerDeletion: true
-    controller: true
-    kind: ""
-    name: test-resource
-    uid: ""
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: example
-  template:
-    metadata:
-      labels:
-        app: example
-    spec:
-      containers:
-      - image: nginx:1.14.2
-        name: example-container
-        ports:
-        - containerPort: 80`,
-			`apiVersion: v1
-kind: Service
-metadata:
-  name: example-service
-  ownerReferences:
-  - apiVersion: ""
-    blockOwnerDeletion: true
-    controller: true
-    kind: ""
-    name: test-resource
-    uid: ""
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 9376
-  selector:
-    app: example`,
-		}
-
-		resource := &apiv1.NumaflowControllerRollout{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: "default",
-			},
-		}
-		It("should apply ownership reference correctly", func() {
-
-			manifests, err := applyOwnershipToManifests(manifests, resource)
-			Expect(err).To(BeNil())
-			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
-			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
-		})
-		It("should not apply ownership if it already exists", func() {
-			manifests, err := applyOwnershipToManifests(emanifests, resource)
-			Expect(err).To(BeNil())
-			Expect(strings.TrimSpace(manifests[0])).To(Equal(strings.TrimSpace(emanifests[0])))
-			Expect(strings.TrimSpace(manifests[1])).To(Equal(strings.TrimSpace(emanifests[1])))
 
 		})
 	})

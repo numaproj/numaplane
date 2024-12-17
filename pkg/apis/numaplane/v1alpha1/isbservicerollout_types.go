@@ -39,11 +39,9 @@ type InterStepBufferService struct {
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
 type ISBServiceRolloutStatus struct {
-	Status             `json:",inline"`
-	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
+	Status `json:",inline"`
 
-	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
-	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
+	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
 
 	// NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
 	// identify a isbsvc.
@@ -107,16 +105,4 @@ func (isbServiceRollout *ISBServiceRollout) GetRolloutStatus() *Status {
 
 func init() {
 	SchemeBuilder.Register(&ISBServiceRollout{}, &ISBServiceRolloutList{})
-}
-func (status *ISBServiceRolloutStatus) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
-	status.UpgradeInProgress = upgradeStrategy
-}
-
-func (status *ISBServiceRolloutStatus) ClearUpgradeInProgress() {
-	status.UpgradeInProgress = ""
-}
-
-// IsHealthy indicates whether the InterStepBufferService rollout is healthy or not
-func (isb *ISBServiceRolloutStatus) IsHealthy() bool {
-	return isb.Phase == PhaseDeployed || isb.Phase == PhasePending
 }

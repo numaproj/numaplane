@@ -49,12 +49,15 @@ import (
 var (
 	DefaultTestNamespace = "default"
 
-	DefaultTestISBSvcRolloutName     = "isbservicerollout-test"
-	DefaultTestISBSvcName            = "isbservicerollout-test" + "-0"
-	DefaultTestPipelineRolloutName   = "pipelinerollout-test"
-	DefaultTestPipelineName          = DefaultTestPipelineRolloutName + "-0"
-	DefaultTestMonoVertexRolloutName = "monovertexrollout-test"
-	DefaultTestMonoVertexName        = DefaultTestMonoVertexRolloutName + "-0"
+	DefaultTestISBSvcRolloutName                = "isbservicerollout-test"
+	DefaultTestISBSvcName                       = DefaultTestISBSvcRolloutName + "-0"
+	DefaultTestPipelineRolloutName              = "pipelinerollout-test"
+	DefaultTestPipelineName                     = DefaultTestPipelineRolloutName + "-0"
+	DefaultTestMonoVertexRolloutName            = "monovertexrollout-test"
+	DefaultTestMonoVertexName                   = DefaultTestMonoVertexRolloutName + "-0"
+	DefaultTestNumaflowControllerRolloutName    = "numaflow-controller"
+	DefaultTestNumaflowControllerName           = "numaflow-controller" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestNumaflowControllerDeploymentName = "numaflow-controller"
 )
 
 const (
@@ -131,6 +134,13 @@ func CreateStatefulSetInK8S(ctx context.Context, t *testing.T, k8sClientSet *k8s
 	// update Status subresource
 	ss.Status = statefulSet.Status
 	_, err = k8sClientSet.AppsV1().StatefulSets(DefaultTestNamespace).UpdateStatus(ctx, ss, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+}
+
+func CreateNumaflowControllerInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, numaflowController *apiv1.NumaflowController) {
+	err := numaplaneClient.Create(ctx, numaflowController)
+	assert.NoError(t, err)
+	err = numaplaneClient.Status().Update(ctx, numaflowController)
 	assert.NoError(t, err)
 }
 
