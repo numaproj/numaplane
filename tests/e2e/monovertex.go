@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,27 @@ func getGVRForMonoVertex() schema.GroupVersionResource {
 		Version:  "v1alpha1",
 		Resource: "monovertices",
 	}
+}
+
+func getMonoVertexName(namespace, monoVertexRolloutName string) string {
+
+	var monoVertexName string
+	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, monoVertexRolloutName)
+
+	Eventually(func() bool {
+		unstructList, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+		if err != nil {
+			return false
+		}
+		if len(unstructList.Items) == 0 {
+			return false
+		}
+		monoVertexName = unstructList.Items[0].GetName()
+		return true
+	}, 60*time.Second, testPollingInterval).Should(BeTrue())
+
+	return monoVertexName
+
 }
 
 // Get MonoVertexSpec from Unstructured type
