@@ -81,6 +81,9 @@ const (
 	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
 	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow"
 
+	ParentRolloutLabel        = "numaplane.numaproj.io/parent-rollout-name"
+	UpgradeStateLabelSelector = "numaplane.numaproj.io/upgrade-state=promoted"
+
 	LogSpacer = "================================"
 )
 

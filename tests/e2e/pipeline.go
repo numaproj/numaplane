@@ -20,11 +20,33 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) bool) {
+func getPipelineName(namespace, pipelineRolloutName string) string {
+
+	var pipelineName string
+	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, pipelineRolloutName)
+
+	Eventually(func() bool {
+		unstructList, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+		if err != nil {
+			return false
+		}
+		if len(unstructList.Items) == 0 {
+			return false
+		}
+		pipelineName = unstructList.Items[0].GetName()
+		return true
+	}, 60*time.Second, testPollingInterval).Should(BeTrue())
+
+	return pipelineName
+
+}
+
+func verifyPipelineSpec(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) bool) {
 
 	document("verifying Pipeline Spec")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	Eventually(func() bool {
+		pipelineName := getPipelineName(namespace, pipelineRolloutName)
 		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 		if err != nil {
 			return false
@@ -37,21 +59,18 @@ func verifyPipelineSpec(namespace string, pipelineName string, f func(numaflowv1
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
-func verifyPipelineStatusEventually(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
+func verifyPipelineStatusEventually(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 
 	Eventually(func() bool {
-
-		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineName)
-
+		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}, testTimeout).Should(BeTrue())
 }
 
-func verifyPipelineStatusConsistently(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
+func verifyPipelineStatusConsistently(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 
 	Consistently(func() bool {
-		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineName)
-
+		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineFromK8S(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}, 30*time.Second, testPollingInterval).Should(BeTrue())
 
@@ -79,26 +98,27 @@ func verifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
-func verifyPipelineRunning(namespace string, pipelineName string, numVertices int) {
+func verifyPipelineRunning(namespace string, pipelineRolloutName string, numVertices int) {
 	document("Verifying that the Pipeline is running")
-	verifyPipelineStatusEventually(namespace, pipelineName,
+	verifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhaseRunning
 		})
 	Eventually(func() metav1.ConditionStatus {
-		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineName, metav1.GetOptions{})
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout).Should(Not(Equal(metav1.ConditionTrue)))
 
 	// Get Pipeline Pods to verify they're all up
 	document("Verifying that the Pipeline is ready")
 	// check "vertex" Pods
+	pipelineName := getPipelineName(namespace, pipelineRolloutName)
 	verifyPodsRunning(namespace, numVertices, getVertexLabelSelector(pipelineName))
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipelineName))
 
 }
 
-func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipelineName string) {
+func verifyPipelinePaused(namespace string, pipelineRolloutName string) {
 
 	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
@@ -107,7 +127,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string, pipeline
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	document("Verify that Pipeline is paused and fully drained")
-	verifyPipelineStatusEventually(namespace, pipelineName,
+	verifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
 
@@ -166,11 +186,12 @@ func updatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func getPipelineFromK8S(namespace string, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
+func getPipelineFromK8S(namespace string, pipelineRolloutName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus numaflowv1.PipelineStatus
 
+	pipelineName := getPipelineName(namespace, pipelineRolloutName)
 	unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 	if err != nil {
 		return nil, retrievedPipelineSpec, retrievedPipelineStatus, err
@@ -195,9 +216,10 @@ func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus,
 	return status, err
 }
 
-func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+func updatePipelineSpecInK8S(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
 
+	pipelineName := getPipelineName(namespace, pipelineRolloutName)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		unstruct, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 		retrievedPipeline := unstruct
@@ -208,6 +230,7 @@ func updatePipelineSpecInK8S(namespace string, pipelineName string, f func(numaf
 		_, err = dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
 		return err
 	})
+
 	Expect(err).ShouldNot(HaveOccurred())
 }
 

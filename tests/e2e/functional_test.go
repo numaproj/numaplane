@@ -37,11 +37,11 @@ import (
 )
 
 const (
-	isbServiceRolloutName            = "test-isbservice-rollout"
-	pipelineRolloutName              = "test-pipeline-rollout"
-	pipelineName                     = "test-pipeline-rollout-0"
-	monoVertexRolloutName            = "test-monovertex-rollout"
-	monoVertexName                   = "test-monovertex-rollout-0"
+	isbServiceRolloutName = "test-isbservice-rollout"
+	pipelineRolloutName   = "test-pipeline-rollout"
+	// pipelineName                     = "test-pipeline-rollout-0"
+	monoVertexRolloutName = "test-monovertex-rollout"
+	// monoVertexName                   = "test-monovertex-rollout-0"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.4.0"
 	initialJetstreamVersion          = "2.10.17"
@@ -247,7 +247,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the Pipeline was created")
-		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
@@ -256,7 +256,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineName, 2)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
 
 	})
 
@@ -275,13 +275,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}, testTimeout, testPollingInterval).Should(Succeed())
 
 		document("Verifying that the MonoVertex was created")
-		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return monoVertexSpec.Source != nil
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexName)
+		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
 	})
 
@@ -294,14 +294,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Updating Pipeline directly")
 
 		// update child Pipeline
-		updatePipelineSpecInK8S(Namespace, pipelineName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
+		updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
 			pipelineSpec.Watermark.Disabled = true
 			return pipelineSpec, nil
 		})
 
 		if ppnd == "true" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
-			verifyPipelineStatusConsistently(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
 		}
@@ -311,7 +311,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		// get updated Pipeline again to compare spec
 		document("Verifying self-healing")
-		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return !retrievedPipelineSpec.Watermark.Disabled
 		})
 
@@ -320,7 +320,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineName, 2)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
 
 	})
 
@@ -343,7 +343,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
 		}
 
@@ -353,7 +353,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying Pipeline got updated")
 
 		// get Pipeline to check that spec has been updated to correct spec
-		verifyPipelineSpec(Namespace, pipelineName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
 		})
 
@@ -362,7 +362,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -388,11 +388,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused (or otherwise Pausing)
-		verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
+		verifyPipelinePaused(Namespace, pipelineRolloutName)
 		document("verifying Pipeline stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
+			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			if err != nil {
 				return false
 			}
@@ -402,6 +402,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
+		pipelineName := getPipelineName(Namespace, pipelineRolloutName)
 		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineName))
 	})
 
@@ -427,7 +428,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
@@ -448,11 +449,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
 		// Give it a little while to get to Paused and then verify that it stays in Paused
-		verifyMonoVertexPaused(Namespace, monoVertexRolloutName, monoVertexName)
+		verifyMonoVertexPaused(Namespace, monoVertexRolloutName)
 		document("verifying MonoVertex stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexName)
+			_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, monoVertexRolloutName)
 			if err != nil {
 				return false
 			}
@@ -462,7 +463,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexName))
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexRolloutName))
 	})
 
 	time.Sleep(2 * time.Second)
@@ -507,7 +508,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -531,7 +532,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyNumaflowControllerReady(Namespace)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -555,7 +556,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-			verifyPipelinePaused(Namespace, pipelineRolloutName, pipelineName)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -579,7 +580,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -596,7 +597,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
 		verifyNotPausing := func() bool {
-			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineName)
+			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
 			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -622,7 +623,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		verifyPipelineRunning(Namespace, pipelineName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
 	})
 
@@ -639,13 +640,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		verifyMonoVertexSpec(Namespace, monoVertexName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
 
-		verifyMonoVertexReady(Namespace, monoVertexName)
+		verifyMonoVertexReady(Namespace, monoVertexRolloutName)
 
 	})
 
@@ -657,6 +658,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		document("Verifying PipelineRollout deletion")
+		pipelineName := getPipelineName(Namespace, pipelineRolloutName)
 		Eventually(func() bool {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -692,6 +694,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying MonoVertexRollout deletion")
 
+		monoVertexName := getMonoVertexName(Namespace, monoVertexRolloutName)
 		Eventually(func() bool {
 			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 			if err != nil {
