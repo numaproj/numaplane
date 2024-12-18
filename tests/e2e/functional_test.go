@@ -402,8 +402,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		pipelineName := getPipelineName(Namespace, pipelineRolloutName)
-		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipelineName))
+		pipeline, err := getPipeline(Namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
 	})
 
 	time.Sleep(2 * time.Second)
@@ -658,7 +659,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		document("Verifying PipelineRollout deletion")
-		pipelineName := getPipelineName(Namespace, pipelineRolloutName)
+		pipeline, err := getPipeline(Namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
 		Eventually(func() bool {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -673,7 +675,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying Pipeline deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipeline.GetName(), metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the Pipeline: " + err.Error())
@@ -694,7 +696,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying MonoVertexRollout deletion")
 
-		monoVertexName := getMonoVertexName(Namespace, monoVertexRolloutName)
+		monoVertex, err := getMonoVertex(Namespace, monoVertexRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		Eventually(func() bool {
 			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -709,7 +713,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying MonoVertex deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertexName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertex.GetName(), metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the MonoVertex: " + err.Error())
