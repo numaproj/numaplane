@@ -1858,7 +1858,7 @@ spec:
           the labels\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
           -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/upgrade-state\\\":
           \\\"promoted\\\"}}}\"\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
-          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/parent-rollout\\\":
+          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/parent-rollout-name\\\":
           \\\"$isbsvc\\\"}}}\"\n  done\ndone\n\necho \"All interstepbufferservices
           have been patched.\"\n"
         image: bitnami/kubectl
