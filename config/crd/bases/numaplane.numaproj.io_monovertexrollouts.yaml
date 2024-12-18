@@ -149,8 +149,8 @@ spec:
                 type: string
               nameCount:
                 description: |-
-                  NameCount is used as a suffix for the name of the managed pipeline, to uniquely
-                  identify a pipeline.
+                  NameCount is used as a suffix for the name of the managed monovertex, to uniquely
+                  identify a monovertex.
                 format: int32
                 type: integer
               observedGeneration:

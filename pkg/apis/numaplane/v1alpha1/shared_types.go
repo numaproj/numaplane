@@ -29,3 +29,13 @@ type Metadata struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 }
+
+type UpgradeStrategy string
+
+const (
+	UpgradeStrategyNoOp        UpgradeStrategy = ""
+	UpgradeStrategyError       UpgradeStrategy = "Error"
+	UpgradeStrategyApply       UpgradeStrategy = "DirectApply"
+	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
+	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
+)

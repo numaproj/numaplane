@@ -103,7 +103,7 @@ func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipel
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (bool, error) {
+func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, isbsvcName string) (bool, error) {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
@@ -113,7 +113,7 @@ func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, p
 	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
 		return false, err
 	}
-	isbsvcName := existingPipelineSpec.GetISBSvcName()
+
 	isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.GetNamespace(), isbsvcName)]
 	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
 		// somebody is requesting to pause - can't run

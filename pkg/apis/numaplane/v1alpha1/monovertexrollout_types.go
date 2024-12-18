@@ -43,8 +43,8 @@ type MonoVertex struct {
 type MonoVertexRolloutStatus struct {
 	Status `json:",inline"`
 
-	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
-	// identify a pipeline.
+	// NameCount is used as a suffix for the name of the managed monovertex, to uniquely
+	// identify a monovertex.
 	NameCount *int32 `json:"nameCount,omitempty"`
 }
 

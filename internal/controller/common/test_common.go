@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -48,15 +49,15 @@ import (
 var (
 	DefaultTestNamespace = "default"
 
-	DefaultTestNumaflowControllerRolloutName    = "numaflow-controller"
-	DefaultTestNumaflowControllerName           = "numaflow-controller" // TODO: change to add "-0" suffix after Progressive
-	DefaultTestNumaflowControllerDeploymentName = "numaflow-controller"
 	DefaultTestISBSvcRolloutName                = "isbservicerollout-test"
-	DefaultTestISBSvcName                       = "isbservicerollout-test" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestISBSvcName                       = DefaultTestISBSvcRolloutName + "-0"
 	DefaultTestPipelineRolloutName              = "pipelinerollout-test"
 	DefaultTestPipelineName                     = DefaultTestPipelineRolloutName + "-0"
 	DefaultTestMonoVertexRolloutName            = "monovertexrollout-test"
 	DefaultTestMonoVertexName                   = DefaultTestMonoVertexRolloutName + "-0"
+	DefaultTestNumaflowControllerRolloutName    = "numaflow-controller"
+	DefaultTestNumaflowControllerName           = "numaflow-controller" // TODO: change to add "-0" suffix after Progressive
+	DefaultTestNumaflowControllerDeploymentName = "numaflow-controller"
 )
 
 const (
@@ -72,8 +73,10 @@ var (
 )
 
 func CreatePipelineRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, pipelineRollout *apiv1.PipelineRollout) {
+	pipelineRolloutCopy := *pipelineRollout
 	err := numaplaneClient.Create(ctx, pipelineRollout)
 	assert.NoError(t, err)
+	pipelineRollout.Status = pipelineRolloutCopy.Status
 	err = numaplaneClient.Status().Update(ctx, pipelineRollout)
 	assert.NoError(t, err)
 }
@@ -89,8 +92,10 @@ func CreatePipelineInK8S(ctx context.Context, t *testing.T, numaflowClientSet *n
 }
 
 func CreateMVRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, monoVertexRollout *apiv1.MonoVertexRollout) {
+	rolloutCopy := *monoVertexRollout
 	err := numaplaneClient.Create(ctx, monoVertexRollout)
 	assert.NoError(t, err)
+	monoVertexRollout.Status = rolloutCopy.Status
 	err = numaplaneClient.Status().Update(ctx, monoVertexRollout)
 	assert.NoError(t, err)
 }
@@ -102,6 +107,15 @@ func CreateMonoVertexInK8S(ctx context.Context, t *testing.T, numaflowClientSet 
 
 	// updating the Status subresource is a separate operation
 	_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(DefaultTestNamespace).UpdateStatus(ctx, resultMV, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+}
+
+func CreateISBServiceRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, isbsvcRollout *apiv1.ISBServiceRollout) {
+	rolloutCopy := *isbsvcRollout
+	err := numaplaneClient.Create(ctx, isbsvcRollout)
+	assert.NoError(t, err)
+	isbsvcRollout.Status = rolloutCopy.Status
+	err = numaplaneClient.Status().Update(ctx, isbsvcRollout)
 	assert.NoError(t, err)
 }
 
@@ -147,11 +161,11 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 			CreationTimestamp: metav1.NewTime(time.Now()),
 			Generation:        1,
 			Labels: map[string]string{
-				common.LabelKeyISBServiceNameForPipeline: DefaultTestISBSvcRolloutName,
-				common.LabelKeyParentRollout:             DefaultTestPipelineRolloutName},
+				common.LabelKeyISBServiceRONameForPipeline: DefaultTestISBSvcRolloutName,
+				common.LabelKeyParentRollout:               DefaultTestPipelineRolloutName},
 		},
 		Spec: numaflowv1.PipelineSpec{
-			InterStepBufferServiceName: DefaultTestISBSvcRolloutName,
+			InterStepBufferServiceName: DefaultTestISBSvcName,
 		},
 		Status: numaflowv1.PipelineStatus{
 			Phase: phase,
@@ -286,6 +300,62 @@ func CreateTestMonoVertexOfSpec(
 		Status: mvStatus,
 	}
 
+}
+
+func CreateDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBufferServiceSpec {
+	return numaflowv1.InterStepBufferServiceSpec{
+		Redis: &numaflowv1.RedisBufferService{},
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version:     jetstreamVersion,
+			Persistence: nil,
+		},
+	}
+}
+
+func CreateDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPhase, fullyReconciled bool) *numaflowv1.InterStepBufferService {
+	status := numaflowv1.InterStepBufferServiceStatus{
+		Phase: phase,
+	}
+	if fullyReconciled {
+		status.ObservedGeneration = 1
+	} else {
+		status.ObservedGeneration = 0
+	}
+	return &numaflowv1.InterStepBufferService{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DefaultTestISBSvcName,
+			Namespace: DefaultTestNamespace,
+			Labels: map[string]string{
+				common.LabelKeyParentRollout: DefaultTestISBSvcRolloutName,
+				common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			},
+		},
+		Spec:   CreateDefaultISBServiceSpec(jetstreamVersion),
+		Status: status,
+	}
+}
+
+func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
+	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
+	return &apiv1.ISBServiceRollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         DefaultTestNamespace,
+			Name:              DefaultTestISBSvcRolloutName,
+			CreationTimestamp: metav1.NewTime(time.Now()),
+			Generation:        1,
+		},
+		Spec: apiv1.ISBServiceRolloutSpec{
+			InterStepBufferService: apiv1.InterStepBufferService{
+				Spec: k8sruntime.RawExtension{
+					Raw: isbsSpecRaw,
+				},
+			},
+		},
+	}
 }
 
 func PipelineWithDesiredPhase(spec numaflowv1.PipelineSpec, phase numaflowv1.PipelinePhase) numaflowv1.PipelineSpec {
