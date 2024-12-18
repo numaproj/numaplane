@@ -61,10 +61,6 @@ spec:
             - |
               #!/bin/bash
 
-              # Define the label key and value
-              LABEL_KEY="numaplane.numaproj.io~1upgrade-state"
-              LABEL_VALUE="promoted"
-
               # Get all namespaces
               namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
 
@@ -80,8 +76,8 @@ spec:
                   echo "Patching isbsvc: $isbsvc in namespace: $namespace"
                   
                   # Patch the isbsvc to add the labels
-                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p '{"metadata": {"labels": {"numaplane.numaproj.io/upgrade-state": "promoted"}}}'
-                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p '{"metadata": {"labels": {"numaplane.numaproj.io/parent-rollout": $isbsvc}}}'
+                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p "{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/upgrade-state\": \"promoted\"}}}"
+                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p "{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/parent-rollout\": \"$isbsvc\"}}}"
                 done
               done
 
