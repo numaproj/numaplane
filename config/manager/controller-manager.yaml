@@ -52,6 +52,7 @@ spec:
       initContainers:
         
         # temporary init container to patch all isbsvc on the cluster owned by ISBServiceRollout to add "promoted" label
+        # TODO: remove when no longer needed
         - name: label-isbsvc
           image: bitnami/kubectl
           command: 
