@@ -41,9 +41,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "Multiple children with valid indices",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
 			},
 
 			expectedName:  "my-pipeline-3",
@@ -53,6 +53,27 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 			name:          "No children",
 			pipelines:     []*numaflowv1.Pipeline{},
 			expectedName:  "",
+			expectedError: nil,
+		},
+		{
+			name: "Backward compatibility with older code",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+			},
+
+			expectedName:  "my-pipeline-3",
+			expectedError: nil,
+		},
+		{
+			name: "Backward compatibility with older code, and just one pipeline exists",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+			},
+
+			expectedName:  "my-pipeline",
 			expectedError: nil,
 		},
 	}
@@ -105,9 +126,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 }
 
 var (
-	defaultISBSVCName = "my-isbsvc"
-	pipelineSpec      = numaflowv1.PipelineSpec{
-		InterStepBufferServiceName: defaultISBSVCName,
+	defaultISBSVCRolloutName = "my-isbsvc"
+	pipelineSpec             = numaflowv1.PipelineSpec{
+		InterStepBufferServiceName: defaultISBSVCRolloutName + "-0",
 		Vertices: []numaflowv1.AbstractVertex{
 			{
 				Name: "in",
@@ -133,12 +154,12 @@ var (
 	}
 )
 
-func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcName string, upgradeState common.UpgradeState) *numaflowv1.Pipeline {
+func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState) *numaflowv1.Pipeline {
 	return ctlrcommon.CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false,
 		map[string]string{
-			common.LabelKeyParentRollout:             pipelineRolloutName,
-			common.LabelKeyISBServiceNameForPipeline: isbsvcName,
-			common.LabelKeyUpgradeState:              string(upgradeState),
+			common.LabelKeyParentRollout:               pipelineRolloutName,
+			common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
+			common.LabelKeyUpgradeState:                string(upgradeState),
 		},
 		map[string]string{})
 }

@@ -361,7 +361,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
-	newPipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
+	newPipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return false, nil, err
 	}
@@ -395,7 +395,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, existingPipelineDef, errors.New(errStr)
 	}
 
-	newPipelineDefResult, err := r.Merge(existingPipelineDef, newPipelineDef)
+	newPipelineDefResult, err := r.merge(existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, nil, err
 	}
@@ -419,7 +419,7 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 }
 
 // take the existing pipeline and merge anything needed from the new pipeline definition
-func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (r *PipelineRolloutReconciler) merge(existingPipeline, newPipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultPipeline := existingPipeline.DeepCopy()
 
 	var specAsMap map[string]interface{}
@@ -505,7 +505,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return false, fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
 		}
-		newPipelineDef, err = r.Merge(existingPipelineDef, newPipelineDef)
+		newPipelineDef, err = r.merge(existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
 		}
@@ -563,7 +563,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
 	if existingPipelineDef == nil {
-		pipelineDef, err := r.makeRunningPipelineDefinition(ctx, pipelineRollout)
+		pipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
 		if err != nil {
 			return err
 		}
@@ -733,7 +733,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 		return apiv1.Metadata{}, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 
-	labelMapping[common.LabelKeyISBServiceNameForPipeline] = pipelineSpec.GetISBSvcName()
+	labelMapping[common.LabelKeyISBServiceRONameForPipeline] = pipelineSpec.GetISBSvcName()
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Spec.Pipeline.Annotations}, nil
@@ -749,13 +749,25 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
+func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
+	// determine name of the Pipeline
 	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
+	}
+
+	// determine name of the InterstepBufferService by finding the "promoted" isbsvc for the ISBServiceRollout
+	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
+	if err != nil || isbsvcRollout == nil {
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	}
+
+	promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
+	if err != nil || promotedISBSvc == nil {
+		return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
@@ -764,12 +776,29 @@ func (r *PipelineRolloutReconciler) makeRunningPipelineDefinition(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 
-	return r.makePipelineDefinition(pipelineRollout, pipelineName, metadata)
+	return r.makePipelineDefinition(pipelineRollout, pipelineName, promotedISBSvc.GetName(), metadata)
+}
+
+func (r *PipelineRolloutReconciler) getISBSvcRollout(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) (*apiv1.ISBServiceRollout, error) {
+	// get the ISBServiceRollout name from the PipelineRollout's Pipeline spec
+	var pipelineSpec numaflowtypes.PipelineSpec
+	if err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
+	}
+	isbsvcRolloutName := pipelineSpec.GetISBSvcName()
+
+	isbServiceRollout := &apiv1.ISBServiceRollout{}
+	err := r.client.Get(ctx, k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: isbsvcRolloutName}, isbServiceRollout)
+	return isbServiceRollout, err
 }
 
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
+	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
@@ -783,18 +812,57 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	if err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpec); err != nil {
 		return nil, err
 	}
+
+	// use the imcoming spec from the PipelineRollout as is, except replace the InterstepBufferServiceName with the one that's dynamically derived
 	pipelineDef.Object["spec"] = pipelineSpec
+
+	if err := numaflowtypes.PipelineWithISBServiceName(pipelineDef, isbsvcName); err != nil {
+		return nil, err
+	}
 
 	return pipelineDef, nil
 }
 
-func (r *PipelineRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-	return r.makePipelineDefinition(pipelineRollout, name, metadata)
+
+	// which InterstepBufferServiceName should we use?
+	// If there is an upgrading isbsvc, use that
+	// Otherwise, use the promoted one
+
+	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
+	if err != nil || isbsvcRollout == nil {
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	}
+
+	isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradeInProgress, false, r.client)
+	if err != nil {
+		return nil, err
+	}
+	if isbsvc == nil {
+		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
+		isbsvc, err = progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
+		if isbsvc == nil || err != nil {
+			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted', err=%v", err)
+		}
+	}
+
+	pipeline, err := r.makePipelineDefinition(pipelineRollout, name, isbsvc.GetName(), metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := pipeline.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	pipeline.SetLabels(labels)
+
+	return pipeline, nil
 }
 
 func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
@@ -872,12 +940,12 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	fromCopy := from.DeepCopy()
 	toCopy := to.DeepCopy()
 	// remove lifecycle.desiredPhase field from comparison to test for equality
-	numaflowtypes.WithoutDesiredPhase(fromCopy)
-	numaflowtypes.WithoutDesiredPhase(toCopy)
+	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
+	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
 
 	specsEqual := reflect.DeepEqual(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, fromCopy, toCopy)
+		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
