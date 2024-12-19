@@ -697,7 +697,7 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch PipelineRollouts
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.PipelineRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.PipelineRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.PipelineRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.PipelineRollout]{}, ctlrcommon.TypedGenerationChangedPredicate[*apiv1.PipelineRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch PipelineRollouts: %v", err)
 	}
 
