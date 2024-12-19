@@ -37,11 +37,9 @@ import (
 )
 
 const (
-	isbServiceRolloutName = "test-isbservice-rollout"
-	pipelineRolloutName   = "test-pipeline-rollout"
-	// pipelineName                     = "test-pipeline-rollout-0"
-	monoVertexRolloutName = "test-monovertex-rollout"
-	// monoVertexName                   = "test-monovertex-rollout-0"
+	isbServiceRolloutName            = "test-isbservice-rollout"
+	pipelineRolloutName              = "test-pipeline-rollout"
+	monoVertexRolloutName            = "test-monovertex-rollout"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.4.0"
 	initialJetstreamVersion          = "2.10.17"
@@ -392,7 +390,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("verifying Pipeline stays in paused or otherwise pausing")
 		Consistently(func() bool {
 			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
+			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
 			if err != nil {
 				return false
 			}
@@ -598,7 +596,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
 		verifyNotPausing := func() bool {
-			_, _, retrievedPipelineStatus, err := getPipelineFromK8S(Namespace, pipelineRolloutName)
+			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
 			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
