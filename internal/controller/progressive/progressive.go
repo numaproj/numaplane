@@ -49,9 +49,6 @@ type progressiveController interface {
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
-
-	// Merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
-	Merge(existingObj, newObj *unstructured.Unstructured) (*unstructured.Unstructured, error)
 }
 
 // return whether we're done, and error if any

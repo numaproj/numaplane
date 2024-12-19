@@ -249,10 +249,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef, err := r.Merge(existingISBServiceDef, newISBServiceDef)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error merging existing ISBService: %v", err)
-		}
+		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
@@ -333,10 +330,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				return false, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
 			}
 		}
-		newISBServiceDef, err = r.Merge(existingISBServiceDef, newISBServiceDef)
-		if err != nil {
-			return false, fmt.Errorf("error merging ISBService definitions: %v", err)
-		}
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 	}
 
 	switch inProgressStrategy {
@@ -761,10 +755,10 @@ func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, ex
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
-func (r *ISBServiceRolloutReconciler) Merge(existingISBService, newISBService *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
 	resultISBService := existingISBService.DeepCopy()
 	resultISBService.Object["spec"] = newISBService.Object["spec"]
 	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
 	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
-	return resultISBService, nil
+	return resultISBService
 }

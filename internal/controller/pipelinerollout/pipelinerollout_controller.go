@@ -395,7 +395,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		return false, existingPipelineDef, errors.New(errStr)
 	}
 
-	newPipelineDefResult, err := r.Merge(existingPipelineDef, newPipelineDef)
+	newPipelineDefResult, err := r.merge(existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, nil, err
 	}
@@ -419,7 +419,7 @@ func checkOwnerRef(ownerRefs []metav1.OwnerReference, uid k8stypes.UID) bool {
 }
 
 // take the existing pipeline and merge anything needed from the new pipeline definition
-func (r *PipelineRolloutReconciler) Merge(existingPipeline, newPipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (r *PipelineRolloutReconciler) merge(existingPipeline, newPipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultPipeline := existingPipeline.DeepCopy()
 
 	var specAsMap map[string]interface{}
@@ -505,7 +505,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return false, fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
 		}
-		newPipelineDef, err = r.Merge(existingPipelineDef, newPipelineDef)
+		newPipelineDef, err = r.merge(existingPipelineDef, newPipelineDef)
 		if err != nil {
 			return false, err
 		}

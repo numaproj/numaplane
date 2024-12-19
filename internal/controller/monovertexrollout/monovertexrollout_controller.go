@@ -236,7 +236,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef, err = r.Merge(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -360,7 +360,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 
 	var specAsMap map[string]interface{}

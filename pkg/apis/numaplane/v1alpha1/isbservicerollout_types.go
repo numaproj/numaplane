@@ -44,7 +44,7 @@ type ISBServiceRolloutStatus struct {
 	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
 
 	// NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
-	// identify a isbsvc.
+	// identify an isbsvc.
 	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
