@@ -212,7 +212,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
-	newMonoVertexDef, err := r.makeRunningMonoVertexDefinition(ctx, monoVertexRollout)
+	newMonoVertexDef, err := r.makePromotedMonoVertexDefinition(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -481,7 +481,7 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 }
 
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
-func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
+func (r *MonoVertexRolloutReconciler) makePromotedMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
@@ -532,13 +532,22 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 
 }
 
-func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
 	if err != nil {
 		return nil, err
 	}
-	return r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
+	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := monoVertex.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	monoVertex.SetLabels(labels)
+
+	return monoVertex, nil
 }
 
 func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {

@@ -200,7 +200,7 @@ func Test_WithDesiredPhase(t *testing.T) {
 			assert.NoError(t, err)
 			pipeline.Object["spec"] = originalYamlSpec
 
-			_ = WithDesiredPhase(pipeline, "Paused")
+			_ = PipelineWithDesiredPhase(pipeline, "Paused")
 
 			// marshal expected yaml into a map so we can compare them
 			var expectedYamlSpec map[string]interface{}
@@ -251,7 +251,7 @@ func Test_WithoutDesiredPhase(t *testing.T) {
 			assert.NoError(t, err)
 			pipeline.Object["spec"] = originalYamlSpec
 
-			WithoutDesiredPhase(pipeline)
+			PipelineWithoutDesiredPhase(pipeline)
 
 			// marshal expected yaml into a map so we can compare them
 			var expectedYamlSpec map[string]interface{}
