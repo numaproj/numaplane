@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -30,6 +31,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	clog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -111,12 +113,16 @@ func main() {
 
 	ctx := logger.WithLogger(context.Background(), numaLogger)
 
+	syncPeriod := 15 * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   metricsAddr,
 			SecureServing: secureMetrics,
 			TLSOpts:       tlsOpts,
+		},
+		Cache: cache.Options{
+			SyncPeriod: &syncPeriod,
 		},
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
@@ -230,7 +236,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 func loadConfigs() {
