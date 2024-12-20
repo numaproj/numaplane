@@ -39,6 +39,7 @@ type TypedGenerationChangedPredicate[object metav1.Object] struct {
 }
 
 func (p TypedGenerationChangedPredicate[object]) Update(e event.TypedUpdateEvent[object]) bool {
+	// It will effectively check of ObjectOld and ObjectNew does not exist or if the name of the object is empty
 	if e.ObjectOld.GetName() == "" || e.ObjectNew.GetName() == "" {
 		return false
 	}
