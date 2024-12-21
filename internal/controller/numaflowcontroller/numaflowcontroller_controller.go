@@ -252,39 +252,9 @@ func (r *NumaflowControllerReconciler) reconcile(
 		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
 
-	existingDeployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
+	_, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	newVersion := controller.Spec.Version
-	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
-	}
-
-	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
-
-	// If a Deployment already exists for the NumaflowController and the new version differs from the current Deployment version,
-	// delete all the NumaflowController child resources and recreate them at the next reconciliation
-	if deploymentExists {
-		currentVersion, err := getControllerDeploymentVersion(existingDeployment)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while getting the version of the existing NumaflowController Deployment: %w", err)
-		}
-
-		childResourcesNeedToBeDeleted := controller.Spec.Version != currentVersion
-		if childResourcesNeedToBeDeleted {
-			numaLogger.Debugf("current Deployment image tag=%q differs from desired %q", currentVersion, controller.Spec.Version)
-
-			err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
-			}
-
-			// No need to explicitly requeue since a new reconciliation will occur due to changes in watched child resources
-			return ctrl.Result{}, nil
-		}
 	}
 
 	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
@@ -292,11 +262,12 @@ func (r *NumaflowControllerReconciler) reconcile(
 	// - new Controller
 	// - auto healing
 	// - somebody changed the manifest associated with the Controller version (shouldn't happen but could)
-	phase, err := r.sync(controller, namespace, numaLogger, newVersionTargetObjs)
+	phase, err := r.sync(controller, namespace, numaLogger)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
+	// phase = gitopsSyncCommon.OperationFailed // TTODO: for testing special case, remove afterwards
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
@@ -470,12 +441,33 @@ func (r *NumaflowControllerReconciler) sync(
 	controller *apiv1.NumaflowController,
 	namespace string,
 	numaLogger *logger.NumaLogger,
-	targetObjs []*unstructured.Unstructured,
 ) (gitopsSyncCommon.OperationPhase, error) {
 
-	reconciliationResult, diffResults, err := r.compareState(controller, namespace, targetObjs, numaLogger)
+	newVersion := controller.Spec.Version
+	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion)
+	if err != nil {
+		return gitopsSyncCommon.OperationError, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
+	}
+
+	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
+
+	reconciliationResult, diffResults, liveObjectsMap, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
+	}
+
+	// Delete current resources if any of the specs differ
+	childResourcesNeedToBeDeleted := diffResults.Modified
+	if childResourcesNeedToBeDeleted {
+		numaLogger.Debugf("current NumaflowController resources differs from desired")
+
+		// err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
+		err := r.deleteNumaflowControllerChildren(liveObjectsMap, namespace)
+		if err != nil {
+			return gitopsSyncCommon.OperationError, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
+		}
+
+		return gitopsSyncCommon.OperationRunning, nil
 	}
 
 	opts := []gitopsSync.SyncOpt{
@@ -525,16 +517,16 @@ func (r *NumaflowControllerReconciler) compareState(
 	namespace string,
 	targetObjs []*unstructured.Unstructured,
 	numaLogger *logger.NumaLogger,
-) (gitopsSync.ReconciliationResult, *diff.DiffResultList, error) {
+) (gitopsSync.ReconciliationResult, *diff.DiffResultList, map[kubeUtil.ResourceKey]*unstructured.Unstructured, error) {
 	var infoProvider kubeUtil.ResourceInfoProvider
 	clusterCache, err := r.stateCache.GetClusterCache()
 	if err != nil {
-		return gitopsSync.ReconciliationResult{}, nil, err
+		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
 	infoProvider = clusterCache
 	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, targetObjs)
 	if err != nil {
-		return gitopsSync.ReconciliationResult{}, nil, err
+		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
 	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
 
@@ -547,7 +539,7 @@ func (r *NumaflowControllerReconciler) compareState(
 
 	resourceOps, cleanup, err := r.getResourceOperations()
 	if err != nil {
-		return gitopsSync.ReconciliationResult{}, nil, err
+		return gitopsSync.ReconciliationResult{}, nil, liveObjByKey, err
 	}
 	defer cleanup()
 
@@ -561,10 +553,10 @@ func (r *NumaflowControllerReconciler) compareState(
 
 	diffResults, err := sync.StateDiffs(reconciliationResult.Target, reconciliationResult.Live, overrides, diffOpts)
 	if err != nil {
-		return reconciliationResult, nil, err
+		return reconciliationResult, nil, liveObjByKey, err
 	}
 
-	return reconciliationResult, diffResults, nil
+	return reconciliationResult, diffResults, liveObjByKey, nil
 }
 
 // getResourceOperations will return the kubectl implementation of the ResourceOperations
@@ -791,81 +783,32 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 	return false
 }
 
-// get the tag of the numaflow container
-func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
-
-	c, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return "", fmt.Errorf("error getting ConfigMap: %w", err)
-	}
-	imageNames := []string{DefaultNumaflowControllerImageName}
-	if len(c.NumaflowControllerImageNames) > 0 {
-		imageNames = c.NumaflowControllerImageNames
-	}
-
-	// in case the Deployment has sidecars, find the container whose image is named "numaflow"
-	containers := deployment.Spec.Template.Spec.Containers
-	for _, c := range containers {
-		imageName := c.Image
-		tag := ""
-		colon := strings.Index(c.Image, ":")
-		if colon != -1 {
-			imageName = c.Image[0:colon]
-			tag = c.Image[colon+1:]
-		}
-		finalSlash := strings.LastIndex(imageName, "/")
-		if finalSlash != -1 {
-			imageName = imageName[finalSlash+1:]
-
-		}
-		// is this is the Numaflow Controller itself?
-		isNumaflowController := false
-		for _, nfControllerImageName := range imageNames {
-			if imageName == nfControllerImageName {
-				isNumaflowController = true
-				break
-			}
-		}
-		if isNumaflowController {
-			if tag == "" {
-				return "", fmt.Errorf("no tag found in image path %q from Deployment %+v", c.Image, deployment)
-			} else {
-				// expect first letter to be a "v"
-				if tag[0] != 'v' {
-					return "", fmt.Errorf("expected numaflow-controller tag to start with 'v': %q", tag)
-				}
-				return tag[1:], nil
-			}
-		}
-	}
-	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
-}
-
 // deleteNumaflowControllerChildren deletes child resources associated with a NumaflowController
 // for a specified version and namespace. It determines the target objects to delete and attempts
 // to remove them using the Kubernetes client. If a resource is not found, it continues with the
 // next one. Returns an error if unable to determine target objects or delete a resource.
 func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
-	ctx context.Context,
-	controller *apiv1.NumaflowController,
-	currentVersion string,
+	// ctx context.Context,
+	// controller *apiv1.NumaflowController,
+	// currentVersion string,
+	liveObjectsMap map[kubeUtil.ResourceKey]*unstructured.Unstructured,
 	namespace string,
-	newVersionTargetObjs []*unstructured.Unstructured,
+	// newVersionTargetObjs []*unstructured.Unstructured,
 ) error {
 
-	numaLogger := logger.FromContext(ctx)
+	// numaLogger := logger.FromContext(ctx)
 
-	targetObjs, err := determineTargetObjects(controller, currentVersion)
-	if err != nil {
-		numaLogger.Warnf("unable to determine the target objects for the current version %s (will attempt using target objects from new version): %s", currentVersion, err.Error())
-		targetObjs = newVersionTargetObjs
-	}
+	// targetObjs, err := determineTargetObjects(controller, currentVersion)
+	// if err != nil {
+	// 	numaLogger.Warnf("unable to determine the target objects for the current version %s (will attempt using target objects from new version): %s", currentVersion, err.Error())
+	// 	targetObjs = newVersionTargetObjs
+	// }
 
 	// TODO: instead of using the client to delete the child resources, try using the gitops-engine if possible
 	deletionGracePeriod := int64(0)
-	for _, obj := range targetObjs {
+	for _, obj := range liveObjectsMap {
 		obj.SetNamespace(namespace)
-		err = r.client.Delete(context.TODO(), obj, &client.DeleteOptions{
+		err := r.client.Delete(context.TODO(), obj, &client.DeleteOptions{
 			GracePeriodSeconds: &deletionGracePeriod,
 			// PropagationPolicy: v1.DeletePropagationOrphan, // TODO: should we change the default propagation policy?
 		})
