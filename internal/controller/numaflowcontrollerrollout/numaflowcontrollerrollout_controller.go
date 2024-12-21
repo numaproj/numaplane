@@ -508,11 +508,13 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 			healthyChildCond.Status == metav1.ConditionTrue {
 
 			nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
+		} else if existingNumaflowControllerDef.GetGeneration() > healthyChildCond.ObservedGeneration {
+			nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing", "observedGeneration < generation", nfcRollout.Generation)
 		} else {
 			if healthyChildCond != nil {
 				nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
 			} else {
-				nfcRollout.Status.MarkChildResourcesUnhealthy(apiv1.ProgressingReasonString, "Progressing", nfcRollout.Generation)
+				nfcRollout.Status.MarkChildResourcesUnhealthy("Unhealthy", "Unhealthy", nfcRollout.Generation)
 			}
 		}
 	}
