@@ -144,7 +144,7 @@ jobs:
       - name: Create a cluster
         run: |
           export PATH=$PATH:/usr/local/bin
-          k3d cluster create e2e
+          k3d cluster create e2e  --runtime-ulimit "nofile=65535:65535"
           k3d kubeconfig get e2e > ~/.kube/config
           echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
           echo 'Waiting for the cluster to be ready...'

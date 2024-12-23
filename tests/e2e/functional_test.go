@@ -38,7 +38,6 @@ import (
 
 const (
 	isbServiceRolloutName            = "test-isbservice-rollout"
-	isbsvcName                       = "test-isbservice-rollout-0"
 	pipelineRolloutName              = "test-pipeline-rollout"
 	monoVertexRolloutName            = "test-monovertex-rollout"
 	initialNumaflowControllerVersion = "1.3.3"
@@ -229,7 +228,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
-		verifyISBSvcReady(Namespace, isbsvcName, 3)
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	})
 
@@ -571,13 +570,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		}
 
-		verifyISBServiceSpec(Namespace, isbsvcName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
-		verifyISBSvcReady(Namespace, isbsvcName, 3)
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
@@ -615,13 +614,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 
-		verifyISBServiceSpec(Namespace, isbsvcName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
 
-		verifyISBSvcReady(Namespace, isbsvcName, 3)
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
 
@@ -732,6 +731,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying ISBServiceRollout deletion")
 
+		isbService, err := getISBService(Namespace, isbServiceRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		Eventually(func() bool {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -746,7 +748,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying ISBService deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
+			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbService.GetName(), metav1.GetOptions{})
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					Fail("An unexpected error occurred when fetching the ISBService: " + err.Error())

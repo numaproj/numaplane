@@ -30,6 +30,10 @@ func getGVRForISBService() schema.GroupVersionResource {
 	}
 }
 
+func getISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
+	return getChildResource(getGVRForISBService(), namespace, isbServiceRolloutName)
+}
+
 // Get ISBServiceSpec from Unstructured type
 func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceSpec, error) {
 	specMap := u.Object["spec"]
@@ -38,12 +42,12 @@ func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBuffer
 	return isbServiceSpec, err
 }
 
-func verifyISBServiceSpec(namespace string, name string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
+func verifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
 
 	document("verifying ISBService Spec")
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
 	Eventually(func() bool {
-		unstruct, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		unstruct, err := getISBService(namespace, isbServiceRolloutName)
 		if err != nil {
 			return false
 		}
@@ -83,10 +87,16 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 
 }
 
-func verifyISBSvcReady(namespace string, isbsvcName string, nodeSize int) {
+func verifyISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize int) {
+
+	var isbsvcName string
+
 	document("Verifying that the ISBService exists")
 	Eventually(func() error {
-		_, err := dynamicClient.Resource(getGVRForISBService()).Namespace(namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
+		unstruct, err := getISBService(namespace, isbServiceRolloutName)
+		if err == nil {
+			isbsvcName = unstruct.GetName()
+		}
 		return err
 	}, testTimeout, testPollingInterval).Should(Succeed())
 
