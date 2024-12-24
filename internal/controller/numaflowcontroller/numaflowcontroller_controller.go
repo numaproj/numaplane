@@ -317,7 +317,6 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// phase = gitopsSyncCommon.OperationFailed // TTODO: for testing special case, remove afterwards
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
