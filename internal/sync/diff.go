@@ -204,6 +204,7 @@ func StateDiffs(
 
 	diffOpts = append(diffOpts, diff.WithNormalizer(diffNormalizer))
 
+	fmt.Printf("deletethis: calling DiffArray(): configs=%+v, lives=%+v\n", configs, lives)
 	array, err := diff.DiffArray(configs, lives, diffOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate diff: %w", err)

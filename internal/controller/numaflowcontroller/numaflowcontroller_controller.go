@@ -28,6 +28,7 @@ import (
 	"github.com/argoproj/gitops-engine/pkg/diff"
 	gitopsSync "github.com/argoproj/gitops-engine/pkg/sync"
 	gitopsSyncCommon "github.com/argoproj/gitops-engine/pkg/sync/common"
+	"github.com/argoproj/gitops-engine/pkg/utils/kube"
 	kubeUtil "github.com/argoproj/gitops-engine/pkg/utils/kube"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -247,7 +248,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
+	// add Finalizer so we can ensure that we take appropriate action when CR is deleted
 	if !controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
 		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
@@ -409,6 +410,7 @@ Returns:
 func determineTargetObjects(
 	controller *apiv1.NumaflowController,
 	version string,
+	namespace string,
 ) ([]*unstructured.Unstructured, error) {
 
 	// Get the target manifests based on the given version and throw an error if the definition does not have that version
@@ -429,7 +431,7 @@ func determineTargetObjects(
 	if err != nil {
 		return nil, fmt.Errorf("can not parse file data, err: %w", err)
 	}
-	manifestsWithOwnership, err := applyOwnershipToManifests(manifests, controller)
+	/*manifestsWithOwnership, err := applyOwnershipToManifests(manifests, controller)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply ownership reference, %w", err)
 	}
@@ -437,6 +439,13 @@ func determineTargetObjects(
 	targetObjs, err := toUnstructuredAndApplyLabel(manifestsWithOwnership, controller.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse the manifest, %w", err)
+	}*/
+	targetObjs, err := toUnstructuredAndApplyLabel(manifests, controller.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse the manifest, %w", err)
+	}
+	for _, obj := range targetObjs {
+		obj.SetNamespace(namespace)
 	}
 
 	return targetObjs, nil
@@ -449,7 +458,7 @@ func (r *NumaflowControllerReconciler) sync(
 ) (gitopsSyncCommon.OperationPhase, bool, error) {
 
 	newVersion := controller.Spec.Version
-	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion)
+	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion, namespace)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, false, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
@@ -537,13 +546,23 @@ func (r *NumaflowControllerReconciler) compareState(
 		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
 	fmt.Printf("deletethis: after calling GetManagedLiveObjs(), liveObjByKey=%+v\n", liveObjByKey)
-	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
-	fmt.Printf("deletethis: after calling Reconcile(), liveObjByKey=%+v, targetObjs=%+v\n", liveObjByKey, targetObjs)
-	for _, targetObj := range targetObjs {
-
-		fmt.Printf("deletethis: after calling Reconcile(), targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
+	liveObjByKeyClone := make(map[kube.ResourceKey]*unstructured.Unstructured)
+	for k, v := range liveObjByKey {
+		liveObjByKeyClone[k] = v
 	}
+	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
+	fmt.Printf("deletethis: after calling Reconcile(), reconciliationResult.Target=%+v, reconciliationResult.Live=%+v\n", reconciliationResult.Target, reconciliationResult.Live)
+	for i, targetObj := range reconciliationResult.Target {
 
+		fmt.Printf("deletethis: after calling Reconcile(), targetObject index=%d, targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", i, targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
+	}
+	for i, liveObj := range reconciliationResult.Live {
+		if liveObj == nil {
+			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d=nil", i)
+		} else {
+			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d: liveObj.GetKind()=%s, liveObj.GetNamespace()=%s, liveObj.GetName()=%s\n", i, liveObj.GetKind(), liveObj.GetNamespace(), liveObj.GetName())
+		}
+	}
 	// Ignore `status` field for all comparison.
 	// TODO: make it configurable
 	overrides := map[string]sync.ResourceOverride{
@@ -567,10 +586,10 @@ func (r *NumaflowControllerReconciler) compareState(
 
 	diffResults, err := sync.StateDiffs(reconciliationResult.Target, reconciliationResult.Live, overrides, diffOpts)
 	if err != nil {
-		return reconciliationResult, nil, liveObjByKey, err
+		return reconciliationResult, nil, liveObjByKeyClone, err
 	}
 
-	return reconciliationResult, diffResults, liveObjByKey, nil
+	return reconciliationResult, diffResults, liveObjByKeyClone, nil
 }
 
 // getResourceOperations will return the kubectl implementation of the ResourceOperations
