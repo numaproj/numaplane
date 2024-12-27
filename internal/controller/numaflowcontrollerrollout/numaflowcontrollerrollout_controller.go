@@ -321,7 +321,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 	}
 
 	numaLogger.
-		WithValues("numaflowControllerNeedsToUpdate", numaflowControllerNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		WithValues("numaflowControllerNeedsToUpdate", numaflowControllerNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType, "numaflowControllerIsUpdating", numaflowControllerIsUpdating).
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"

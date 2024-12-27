@@ -666,17 +666,17 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 			msg := fmt.Sprintf("Deployment %q exceeded its progress deadline", deployment.Name)
 			return false, "Degraded", msg
 		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
 			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
 			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
 			return false, apiv1.ProgressingReasonString, msg
 		}
 	} else {
-		msg := "Waiting for Deployment  to finish: observed deployment generation less than desired generation"
+		msg := "Waiting for Deployment to finish: observed deployment generation less than desired generation"
 		return false, apiv1.ProgressingReasonString, msg
 	}
 
