@@ -469,9 +469,9 @@ func (r *NumaflowControllerReconciler) sync(
 	if err != nil {
 		return gitopsSyncCommon.OperationError, false, err
 	}
-	fmt.Printf("deletethis: diffResults.Modified=%t\n", diffResults.Modified)
+	fmt.Printf("deletethis: diffResults.Modified=%t, liveObjectsMap=%+v\n", diffResults.Modified, liveObjectsMap)
 
-	allDeleted := true
+	allDeleted := len(liveObjectsMap) == 0
 
 	// Delete current resources if any of the specs differ
 	childResourcesNeedToBeDeleted := diffResults.Modified && !allDeleted
@@ -553,12 +553,16 @@ func (r *NumaflowControllerReconciler) compareState(
 	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
 	fmt.Printf("deletethis: after calling Reconcile(), reconciliationResult.Target=%+v, reconciliationResult.Live=%+v\n", reconciliationResult.Target, reconciliationResult.Live)
 	for i, targetObj := range reconciliationResult.Target {
+		if targetObj == nil {
 
-		fmt.Printf("deletethis: after calling Reconcile(), targetObject index=%d, targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", i, targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
+			fmt.Printf("deletethis: after calling Reconcile(), targetObj at index %d=nil\n", i)
+		} else {
+			fmt.Printf("deletethis: after calling Reconcile(), targetObject index=%d, targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", i, targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
+		}
 	}
 	for i, liveObj := range reconciliationResult.Live {
 		if liveObj == nil {
-			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d=nil", i)
+			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d=nil\n", i)
 		} else {
 			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d: liveObj.GetKind()=%s, liveObj.GetNamespace()=%s, liveObj.GetName()=%s\n", i, liveObj.GetKind(), liveObj.GetNamespace(), liveObj.GetName())
 		}
@@ -570,16 +574,17 @@ func (r *NumaflowControllerReconciler) compareState(
 			IgnoreDifferences: sync.OverrideIgnoreDiff{JSONPointers: []string{"/status"}}},
 	}
 
-	resourceOps, cleanup, err := r.getResourceOperations()
+	/*resourceOps, cleanup, err := r.getResourceOperations()
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, liveObjByKey, err
 	}
-	defer cleanup()
+	defer cleanup()*/
 
 	diffOpts := []diff.Option{
 		diff.WithLogr(*numaLogger.LogrLogger),
-		diff.WithServerSideDiff(true),
-		diff.WithServerSideDryRunner(diff.NewK8sServerSideDryRunner(resourceOps)),
+		diff.WithServerSideDiff(false),
+		//diff.WithServerSideDiff(true),
+		//diff.WithServerSideDryRunner(diff.NewK8sServerSideDryRunner(resourceOps)),
 		diff.WithManager(common.SSAManager),
 		diff.WithGVKParser(clusterCache.GetGVKParser()),
 	}
