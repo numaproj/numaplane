@@ -265,7 +265,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 	// - new Controller
 	// - auto healing
 	// - somebody changed the manifest associated with the Controller version (shouldn't happen but could)
-	phase, needsRequeue, err := r.sync(controller, namespace, numaLogger)
+	phase, needsRequeue, err := r.sync(ctx, controller, namespace, numaLogger)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -452,6 +452,7 @@ func determineTargetObjects(
 }
 
 func (r *NumaflowControllerReconciler) sync(
+	ctx context.Context,
 	controller *apiv1.NumaflowController,
 	namespace string,
 	numaLogger *logger.NumaLogger,
@@ -471,20 +472,23 @@ func (r *NumaflowControllerReconciler) sync(
 	}
 	fmt.Printf("deletethis: diffResults.Modified=%t, liveObjectsMap=%+v\n", diffResults.Modified, liveObjectsMap)
 
-	allDeleted := len(liveObjectsMap) == 0
+	// Delete current resources if any of the specs differ, before applying the new ones (this can take care of issues where "apply" doesn't work)
+	if diffResults.Modified {
+		numaLogger.Debugf("detecting a difference between target and live specs; number of objects remaining to delete first=%d", len(liveObjectsMap))
 
-	// Delete current resources if any of the specs differ
-	childResourcesNeedToBeDeleted := diffResults.Modified && !allDeleted
-	if childResourcesNeedToBeDeleted {
-		numaLogger.Debugf("current NumaflowController resources differs from desired")
+		// see if we still need to delete some of the resources beforehand
+		childResourcesNeedToBeDeleted := len(liveObjectsMap) > 0
+		if childResourcesNeedToBeDeleted {
+			numaLogger.Debugf("current NumaflowController resources differs from desired")
 
-		// err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
-		err := r.deleteNumaflowControllerChildren(liveObjectsMap, namespace)
-		if err != nil {
-			return gitopsSyncCommon.OperationError, false, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
+			// err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
+			err := r.deleteNumaflowControllerChildren(ctx, liveObjectsMap, namespace)
+			if err != nil {
+				return gitopsSyncCommon.OperationError, false, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
+			}
+
+			return gitopsSyncCommon.OperationRunning, true, nil
 		}
-
-		return gitopsSyncCommon.OperationRunning, true, nil
 	}
 
 	opts := []gitopsSync.SyncOpt{
@@ -706,6 +710,7 @@ func (r *NumaflowControllerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	}
 
 	// Watch for changes to secondary resources(Deployment) so we can requeue the owner NumaflowController
+	// TODO: seems like Reconcile() isn't being called when I update Deployment - is self-healing even working?
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
 		handler.TypedEnqueueRequestForOwner[*appsv1.Deployment](mgr.GetScheme(), mgr.GetRESTMapper(),
 			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*appsv1.Deployment]{})); err != nil {
@@ -826,7 +831,7 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 // to remove them using the Kubernetes client. If a resource is not found, it continues with the
 // next one. Returns an error if unable to determine target objects or delete a resource.
 func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
-	// ctx context.Context,
+	ctx context.Context,
 	// controller *apiv1.NumaflowController,
 	// currentVersion string,
 	liveObjectsMap map[kubeUtil.ResourceKey]*unstructured.Unstructured,
@@ -834,7 +839,7 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 	// newVersionTargetObjs []*unstructured.Unstructured,
 ) error {
 
-	// numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx)
 
 	// targetObjs, err := determineTargetObjects(controller, currentVersion)
 	// if err != nil {
@@ -846,16 +851,20 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 	deletionGracePeriod := int64(0)
 	for _, obj := range liveObjectsMap {
 		obj.SetNamespace(namespace)
-		err := r.client.Delete(context.TODO(), obj, &client.DeleteOptions{
+		err := r.client.Delete(ctx, obj, &client.DeleteOptions{
 			GracePeriodSeconds: &deletionGracePeriod,
 			// PropagationPolicy: v1.DeletePropagationOrphan, // TODO: should we change the default propagation policy?
 		})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
+
+				numaLogger.Debugf("cannot delete %s/%s/%s as it doesn't exist", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 				continue
 			} else {
 				return fmt.Errorf("unable to delete NumaflowController child resource %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 			}
+		} else {
+			numaLogger.Debugf("successfully deleted %s/%s/%s", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 		}
 	}
 
