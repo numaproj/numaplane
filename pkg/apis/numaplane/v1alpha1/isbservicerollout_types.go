@@ -39,8 +39,13 @@ type InterStepBufferService struct {
 
 // ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
 type ISBServiceRolloutStatus struct {
-	Status             `json:",inline"`
+	Status `json:",inline"`
+
 	PauseRequestStatus PauseStatus `json:"pauseRequestStatus,omitempty"`
+
+	// NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
+	// identify an isbsvc.
+	NameCount *int32 `json:"nameCount,omitempty"`
 }
 
 // +genclient
@@ -87,7 +92,7 @@ func (isbServiceRollout *ISBServiceRollout) GetChildGVR() metav1.GroupVersionRes
 }
 
 func (isbServiceRollout *ISBServiceRollout) GetChildGVK() schema.GroupVersionKind {
-	return numaflowv1.PipelineGroupVersionKind
+	return numaflowv1.ISBGroupVersionKind
 }
 
 func (isbServiceRollout *ISBServiceRollout) GetRolloutObjectMeta() *metav1.ObjectMeta {

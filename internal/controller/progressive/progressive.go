@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -37,8 +38,8 @@ import (
 // taking down the original child once the new one is healthy
 type progressiveController interface {
 
-	// CreateBaseChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name
-	CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
+	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
+	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
 	IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error)
@@ -48,9 +49,6 @@ type progressiveController interface {
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
-
-	// Merge is able to take an existing child object and override anything needed from the new one into it to create a revised new object
-	Merge(existingObj, newObj *unstructured.Unstructured) (*unstructured.Unstructured, error)
 }
 
 // return whether we're done, and error if any
@@ -84,7 +82,7 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 			return false, err
 		}
 	}
-	if currentUpgradingChildDef == nil { // nothing to do
+	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
 		return true, err
 	}
 
@@ -115,14 +113,10 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 		return nil, err
 	}
 	numaLogger.Debugf("Upgrading child: %s", childName)
-	upgradingChild, err := controller.CreateBaseChildDefinition(rolloutObject, childName)
+	upgradingChild, err := controller.CreateUpgradingChildDefinition(ctx, rolloutObject, childName)
 	if err != nil {
 		return nil, err
 	}
-
-	labels := upgradingChild.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
-	upgradingChild.SetLabels(labels)
 
 	return upgradingChild, nil
 }
@@ -163,14 +157,15 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		return nil, err
 	}
 
-	numaLogger.Debugf("looking for children of upgrade state=%v, found: %s", upgradeState, kubernetes.ExtractResourceNames(children))
+	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, found: %s",
+		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
 		recycleList := []*unstructured.Unstructured{}
-		mostCurrentIndex := -1
+		mostCurrentIndex := math.MinInt
 		for _, child := range children.Items {
-			childIndex, err := getChildIndex(child.GetName())
+			childIndex, err := getChildIndex(rolloutObject.GetRolloutObjectMeta().Name, child.GetName())
 			if err != nil {
 				// something is improperly named for some reason - don't touch it just in case?
 				numaLogger.Warn(err.Error())
@@ -189,7 +184,8 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		}
 		// recycle the previous children
 		for _, recyclableChild := range recycleList {
-			numaLogger.Debugf("found multiple children of upgrade state=%q, marking recyclable: %s", upgradeState, recyclableChild.GetName())
+			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
+				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
 			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
 		}
 		return mostCurrentChild, nil
@@ -200,13 +196,28 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 	}
 }
 
-// get the index of the child following the dash in the name
-func getChildIndex(childName string) (int, error) {
-	dash := strings.LastIndex(childName, "-")
-	if dash == -1 {
-		return 0, fmt.Errorf("child name %q doesn't contain a dash", childName)
+// Get the index of the child following the dash in the name
+// childName should be the rolloutName + '-<integer>'
+// For backward compatibility, support child resources whose names were equivalent to rollout names, returning -1 index
+func getChildIndex(rolloutName string, childName string) (int, error) {
+	// verify that the initial part of the child name is the rolloutName
+	if !strings.HasPrefix(childName, rolloutName) {
+		return 0, fmt.Errorf("child name %q should begin with rollout name %q", childName, rolloutName)
 	}
-	suffix := childName[dash+1:]
+	// backward compatibility for older naming convention (before the '-<integer>' suffix was introduced - if it's the same name, consider it to essentially be the smallest index
+	if childName == rolloutName {
+		return -1, nil
+	}
+
+	// next character should be a dash
+	dash := childName[len(rolloutName)]
+	if dash != '-' {
+		return 0, fmt.Errorf("child name %q should begin with rollout name %q, followed by '-<integer>'", childName, rolloutName)
+	}
+
+	// remaining characters should be the integer index
+	suffix := childName[len(rolloutName)+1:]
+
 	childIndex, err := strconv.Atoi(suffix)
 	if err != nil {
 		return 0, fmt.Errorf("child name %q has a suffix which is not an integer", childName)

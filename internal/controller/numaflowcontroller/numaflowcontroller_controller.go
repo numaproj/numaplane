@@ -52,6 +52,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/sync"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -705,7 +706,7 @@ func (r *NumaflowControllerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 
 	// Watch for changes to primary resource NumaflowController
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowController{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowController]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowController]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowController]{}, ctlrcommon.TypedGenerationChangedPredicate[*apiv1.NumaflowController]{})); err != nil {
 		return fmt.Errorf("failed to watch NumaflowController: %w", err)
 	}
 

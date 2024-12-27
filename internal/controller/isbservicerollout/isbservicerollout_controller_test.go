@@ -18,7 +18,6 @@ package isbservicerollout
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +28,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -54,7 +52,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	ctx := context.Background()
 
 	numaLogger := logger.New()
-	numaLogger.SetLevel(3)
+	numaLogger.SetLevel(4)
 	logger.SetBaseLogger(numaLogger)
 	ctx = logger.WithLogger(ctx, numaLogger)
 
@@ -107,7 +105,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	}{
 		{
 			name:                   "new ISBService",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.3"),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.3"),
 			existingISBSvcDef:      nil,
 			existingStatefulSetDef: nil,
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
@@ -120,13 +118,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.3"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.3"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 		},
 		{
 			name:                   "existing ISBService - no change",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.3"),
-			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.3"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -136,12 +134,12 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedPauseRequest:      &falseValue,
 			expectedRolloutPhase:      apiv1.PhaseDeployed,
 			expectedConditionsSet:     map[apiv1.ConditionType]metav1.ConditionStatus{}, // some Conditions may be set from before, but in any case nothing new to verify
-			expectedISBSvcSpec:        createDefaultISBServiceSpec("2.10.3"),
+			expectedISBSvcSpec:        ctlrcommon.CreateDefaultISBServiceSpec("2.10.3"),
 		},
 		{
 			name:                   "existing ISBService - new spec - pipelines not paused",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -151,13 +149,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedPauseRequest:       &trueValue,
 			expectedRolloutPhase:       apiv1.PhasePending,
 			expectedConditionsSet:      map[apiv1.ConditionType]metav1.ConditionStatus{},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.3"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.3"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                   "existing ISBService - new spec - pipelines paused",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -169,13 +167,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                   "existing ISBService - new spec - pipelines failed",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.3", numaflowv1.ISBSvcPhaseRunning, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -187,13 +185,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                   "existing ISBService - new spec - pipelines set to allow data loss",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.3", numaflowv1.ISBSvcPhasePending, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.3", numaflowv1.ISBSvcPhasePending, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{common.LabelKeyAllowDataLoss: "true"}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -205,13 +203,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                   "existing ISBService - spec already updated - isbsvc reconciling",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, false),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, false),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.3", false),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -221,13 +219,13 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedPauseRequest:       &trueValue,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
 			expectedConditionsSet:      map[apiv1.ConditionType]metav1.ConditionStatus{},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyPPND,
 		},
 		{
 			name:                   "existing ISBService - spec already updated - isbsvc done reconciling",
-			newISBSvcSpec:          createDefaultISBServiceSpec("2.10.11"),
-			existingISBSvcDef:      createDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true),
+			newISBSvcSpec:          ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingISBSvcDef:      ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true),
 			existingStatefulSetDef: createDefaultISBStatefulSet("2.10.11", true),
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}),
@@ -239,7 +237,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			expectedConditionsSet: map[apiv1.ConditionType]metav1.ConditionStatus{
 				apiv1.ConditionChildResourceDeployed: metav1.ConditionTrue,
 			},
-			expectedISBSvcSpec:         createDefaultISBServiceSpec("2.10.11"),
+			expectedISBSvcSpec:         ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 		},
 	}
@@ -248,10 +246,11 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// first delete any previous resources if they already exist, in Kubernetes
-			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.DeleteOptions{})
-			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName), metav1.DeleteOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestISBSvcName, metav1.DeleteOptions{})
+			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).Delete(ctx, deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcName), metav1.DeleteOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Delete(ctx, ctlrcommon.DefaultTestPipelineName, metav1.DeleteOptions{})
 			_ = client.Delete(ctx, &apiv1.PipelineRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}})
+			_ = client.Delete(ctx, &apiv1.ISBServiceRollout{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestISBSvcRolloutName}})
 
 			isbsvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
@@ -264,7 +263,8 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			assert.Len(t, pipelineList.Items, 0)
 
 			// create ISBServiceRollout definition
-			rollout := createISBServiceRollout(tc.newISBSvcSpec)
+			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec)
+			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, rollout)
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
@@ -303,7 +303,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			// Check In-Progress Strategy
 			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
 			// Check isbsvc
-			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestISBSvcRolloutName, metav1.GetOptions{})
+			resultISBSVC, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestISBSvcName, metav1.GetOptions{})
 			assert.NoError(t, err)
 			assert.NotNil(t, resultISBSVC)
 			assert.Equal(t, tc.expectedISBSvcSpec, resultISBSVC.Spec)
@@ -324,42 +324,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	}
 }
 
-func createDefaultISBServiceSpec(jetstreamVersion string) numaflowv1.InterStepBufferServiceSpec {
-	return numaflowv1.InterStepBufferServiceSpec{
-		Redis: &numaflowv1.RedisBufferService{},
-		JetStream: &numaflowv1.JetStreamBufferService{
-			Version:     jetstreamVersion,
-			Persistence: nil,
-		},
-	}
-}
-
-func createDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPhase, fullyReconciled bool) *numaflowv1.InterStepBufferService {
-	status := numaflowv1.InterStepBufferServiceStatus{
-		Phase: phase,
-	}
-	if fullyReconciled {
-		status.ObservedGeneration = 1
-	} else {
-		status.ObservedGeneration = 0
-	}
-	return &numaflowv1.InterStepBufferService{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       common.NumaflowISBServiceKind,
-			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ctlrcommon.DefaultTestISBSvcRolloutName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-			Labels: map[string]string{
-				common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
-			},
-		},
-		Spec:   createDefaultISBServiceSpec(jetstreamVersion),
-		Status: status,
-	}
-}
-
 func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) *appsv1.StatefulSet {
 	var status appsv1.StatefulSetStatus
 	if fullyReconciled {
@@ -375,13 +339,13 @@ func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) 
 		"app.kubernetes.io/component":      "isbsvc",
 		"app.kubernetes.io/managed-by":     "isbsvc-controller",
 		"app.kubernetes.io/part-of":        "numaflow",
-		"numaflow.numaproj.io/isbsvc-name": ctlrcommon.DefaultTestISBSvcRolloutName,
+		"numaflow.numaproj.io/isbsvc-name": ctlrcommon.DefaultTestISBSvcName,
 		"numaflow.numaproj.io/isbsvc-type": "jetstream",
 	}
 	selector := metav1.LabelSelector{MatchLabels: labels}
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcRolloutName),
+			Name:      deriveISBSvcStatefulSetName(ctlrcommon.DefaultTestISBSvcName),
 			Namespace: ctlrcommon.DefaultTestNamespace,
 			Labels:    labels,
 		},
@@ -404,24 +368,4 @@ func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) 
 
 func deriveISBSvcStatefulSetName(isbsvcName string) string {
 	return fmt.Sprintf("isbsvc-%s-js", isbsvcName)
-}
-
-func createISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
-	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
-	return &apiv1.ISBServiceRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:         ctlrcommon.DefaultTestNamespace,
-			Name:              ctlrcommon.DefaultTestISBSvcRolloutName,
-			UID:               "some-uid",
-			CreationTimestamp: metav1.NewTime(time.Now()),
-			Generation:        1,
-		},
-		Spec: apiv1.ISBServiceRolloutSpec{
-			InterStepBufferService: apiv1.InterStepBufferService{
-				Spec: k8sruntime.RawExtension{
-					Raw: isbsSpecRaw,
-				},
-			},
-		},
-	}
 }

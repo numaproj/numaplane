@@ -46,6 +46,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -223,7 +224,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ppnd.GetPauseModule().NewPauseRequest(isbsvcKey)
 	}
 
-	newISBServiceDef, err := generateNewISBServiceDef(isbServiceRollout)
+	newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 	}
@@ -248,7 +249,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
+		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
 		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
@@ -268,15 +269,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 // for the purpose of logging
 func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 	return "interstepbufferservice"
-}
-
-// take the existing ISBService and merge anything needed from the new ISBService definition
-func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
-	resultISBService := existingISBService.DeepCopy()
-	resultISBService.Object["spec"] = newISBService.Object["spec"]
-	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
-	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
-	return resultISBService
 }
 
 // process an existing ISBService
@@ -465,7 +457,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
-		client.MatchingLabels{common.LabelKeyISBServiceNameForPipeline: rolloutName},
+		client.MatchingLabels{common.LabelKeyISBServiceRONameForPipeline: rolloutName},
 		client.HasLabels{common.LabelKeyParentRollout},
 	)
 }
@@ -606,7 +598,7 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch ISBServiceRollouts
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.ISBServiceRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.ISBServiceRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.ISBServiceRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.ISBServiceRollout]{}, ctlrcommon.TypedGenerationChangedPredicate[*apiv1.ISBServiceRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch ISBServiceRollout: %v", err)
 	}
 
@@ -640,26 +632,133 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBS
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
 
-func generateNewISBServiceDef(isbServiceRollout *apiv1.ISBServiceRollout) (*unstructured.Unstructured, error) {
+// Create an InterstepBufferService definition of "promoted" state
+func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
+	ctx context.Context,
+	isbServiceRollout *apiv1.ISBServiceRollout,
+) (*unstructured.Unstructured, error) {
+	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
+	isbsvcName, err := progressive.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// set Labels and Annotations
+	metadata, err := getBaseISBSVCMetadata(isbServiceRollout)
+	if err != nil {
+		return nil, err
+	}
+	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+
+	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
+}
+
+func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
+	isbServiceRollout *apiv1.ISBServiceRollout,
+	isbsvcName string,
+	metadata apiv1.Metadata,
+) (*unstructured.Unstructured, error) {
 	newISBServiceDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	newISBServiceDef.SetName(isbServiceRollout.Name)
-	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
-	newISBServiceDef.SetAnnotations(isbServiceRollout.Spec.InterStepBufferService.Annotations)
-	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
 	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
 	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
-	// Update label of ISBService to include the parent rollout name
-	existingLabel := isbServiceRollout.Spec.InterStepBufferService.Labels
-	if existingLabel == nil {
-		existingLabel = make(map[string]string)
-	}
-	existingLabel[common.LabelKeyParentRollout] = isbServiceRollout.Name
-	newISBServiceDef.SetLabels(existingLabel)
+	newISBServiceDef.SetName(isbsvcName)
+	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
+	newISBServiceDef.SetLabels(metadata.Labels)
+	newISBServiceDef.SetAnnotations(metadata.Annotations)
+	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
 	// Update spec of ISBService to match the ISBServiceRollout spec
 	var isbServiceSpec map[string]interface{}
 	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
 		return nil, err
 	}
 	newISBServiceDef.Object["spec"] = isbServiceSpec
+
 	return newISBServiceDef, nil
+}
+
+// take the Metadata (Labels and Annotations) specified in the ISBServiceRollout plus any others that apply to all InterstepBufferServices
+func getBaseISBSVCMetadata(isbServiceRollout *apiv1.ISBServiceRollout) (apiv1.Metadata, error) {
+	labelMapping := map[string]string{}
+	for key, val := range isbServiceRollout.Spec.InterStepBufferService.Labels {
+		labelMapping[key] = val
+	}
+	labelMapping[common.LabelKeyParentRollout] = isbServiceRollout.Name
+
+	return apiv1.Metadata{Labels: labelMapping, Annotations: isbServiceRollout.Spec.InterStepBufferService.Annotations}, nil
+
+}
+
+// Implemented functions for the progressiveController interface:
+
+// CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
+func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
+	if err != nil {
+		return nil, err
+	}
+	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := isbsvc.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	isbsvc.SetLabels(labels)
+
+	return isbsvc, nil
+}
+
+func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	if isbsvcRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *isbsvcRollout.Status.NameCount, true
+	}
+}
+
+func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	isbsvcRollout.Status.NameCount = &nameCount
+	return r.updateISBServiceRolloutStatus(ctx, isbsvcRollout)
+}
+
+// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
+func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+// Recycle deletes child
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error {
+	// TODO: Implement
+	return nil
+}
+
+// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
+func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
+	// TODO: Implement
+	return false, nil
+}
+
+// take the existing ISBService and merge anything needed from the new ISBService definition
+func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *unstructured.Unstructured) *unstructured.Unstructured {
+	resultISBService := existingISBService.DeepCopy()
+	resultISBService.Object["spec"] = newISBService.Object["spec"]
+	resultISBService.SetAnnotations(util.MergeMaps(existingISBService.GetAnnotations(), newISBService.GetAnnotations()))
+	resultISBService.SetLabels(util.MergeMaps(existingISBService.GetLabels(), newISBService.GetLabels()))
+	return resultISBService
 }

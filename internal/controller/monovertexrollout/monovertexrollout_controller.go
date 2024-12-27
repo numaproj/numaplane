@@ -212,7 +212,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
-	newMonoVertexDef, err := r.makeRunningMonoVertexDefinition(ctx, monoVertexRollout)
+	newMonoVertexDef, err := r.makePromotedMonoVertexDefinition(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -236,7 +236,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	} else {
 		// merge and update
 		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef, err = r.Merge(existingMonoVertexDef, newMonoVertexDef)
+		newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -340,7 +340,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch MonoVertexRollouts
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.MonoVertexRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.MonoVertexRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.MonoVertexRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.MonoVertexRollout]{}, ctlrcommon.TypedGenerationChangedPredicate[*apiv1.MonoVertexRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch MonoVertexRollouts: %w", err)
 	}
 
@@ -360,7 +360,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (r *MonoVertexRolloutReconciler) Merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	resultMonoVertex := existingMonoVertex.DeepCopy()
 
 	var specAsMap map[string]interface{}
@@ -481,7 +481,7 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 }
 
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
-func (r *MonoVertexRolloutReconciler) makeRunningMonoVertexDefinition(
+func (r *MonoVertexRolloutReconciler) makePromotedMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
@@ -532,13 +532,22 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 
 }
 
-func (r *MonoVertexRolloutReconciler) CreateBaseChildDefinition(rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	metadata, err := getBaseMonoVertexMetadata(monoVertexRollout)
 	if err != nil {
 		return nil, err
 	}
-	return r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
+	monoVertex, err := r.makeMonoVertexDefinition(monoVertexRollout, name, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := monoVertex.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	monoVertex.SetLabels(labels)
+
+	return monoVertex, nil
 }
 
 func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {

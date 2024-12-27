@@ -16,7 +16,7 @@ spec:
           source:
             # A self data generating source
             generator:
-              rpu: 5
+              rpu: 500
               duration: 1s
         - name: cat
           udf:
