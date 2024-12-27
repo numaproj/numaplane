@@ -65,7 +65,7 @@ var (
 )
 
 type ResourceInfo struct {
-	Name string
+	OwnerName string
 
 	Health       *health.HealthStatus
 	manifestHash string
@@ -219,8 +219,9 @@ func (c *liveStateCache) PopulateResourceInfo(un *unstructured.Unstructured, isR
 	res.Health, _ = health.GetResourceHealth(un, settings.clusterSettings.ResourceHealthOverride)
 
 	numaplaneInstanceName := getNumaplaneInstanceName(un)
-	if isRoot && numaplaneInstanceName != "" {
-		res.Name = numaplaneInstanceName
+	fmt.Printf("deletethis: PopulateResourceInfo(): numaplaneInstanceName=%q, isRoot=%t\n", numaplaneInstanceName, isRoot)
+	if /*isRoot &&*/ numaplaneInstanceName != "" { // TODO: why was "isRoot" there?
+		res.OwnerName = numaplaneInstanceName
 	}
 
 	gvk := un.GroupVersionKind()
@@ -236,7 +237,7 @@ func (c *liveStateCache) PopulateResourceInfo(un *unstructured.Unstructured, isR
 
 	// edge case. we do not label CRDs, so they miss the tracking label we inject. But we still
 	// want the full resource to be available in our cache (to diff), so we store all CRDs
-	return res, res.Name != "" || gvk.Kind == kube.CustomResourceDefinitionKind
+	return res, res.OwnerName != "" || gvk.Kind == kube.CustomResourceDefinitionKind
 }
 
 // getNumaplaneInstanceName gets the Numaplane Object that owns the resource from a label in the resource
@@ -433,7 +434,7 @@ func (c *liveStateCache) GetClusterCache() (clustercache.ClusterCache, error) {
 }
 
 func (c *liveStateCache) GetManagedLiveObjs(
-	name, namespace string,
+	ownerName, namespace string,
 	targetObjs []*unstructured.Unstructured,
 ) (map[kube.ResourceKey]*unstructured.Unstructured, error) {
 	clusterInfo, err := c.getSyncedCluster()
@@ -441,8 +442,11 @@ func (c *liveStateCache) GetManagedLiveObjs(
 		return nil, fmt.Errorf("failed to get cluster info: %w", err)
 	}
 	liveObjs, err := clusterInfo.GetManagedLiveObjs(targetObjs, func(r *clustercache.Resource) bool {
+		matches := resInfo(r).OwnerName == ownerName && r.Ref.Namespace == namespace
+		fmt.Printf("deletethis: viewing live objects, I see: r.Ref.Kind=%q, r.Ref.Name=%q, r.Ref.Namespace=%q, resInfo(r)=%+v, checking against namespace=%q, ownerName=%q, matches=%t\n",
+			r.Ref.Kind, r.Ref.Name, r.Ref.Namespace, resInfo(r), namespace, ownerName, matches)
 		// distinguish it by numaplane resource's name and namespace
-		return resInfo(r).Name == name && r.Ref.Namespace == namespace
+		return matches
 	})
 	c.customMetrics.KubeResourceMonitored.WithLabelValues().Set(float64(len(liveObjs)))
 	return liveObjs, err

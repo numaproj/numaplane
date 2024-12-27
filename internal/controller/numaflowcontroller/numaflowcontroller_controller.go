@@ -252,6 +252,8 @@ func (r *NumaflowControllerReconciler) reconcile(
 		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
 
+	// TODO: we need to be in "Pending" if we haven't deployed yet
+
 	_, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -262,9 +264,12 @@ func (r *NumaflowControllerReconciler) reconcile(
 	// - new Controller
 	// - auto healing
 	// - somebody changed the manifest associated with the Controller version (shouldn't happen but could)
-	phase, err := r.sync(controller, namespace, numaLogger)
+	phase, needsRequeue, err := r.sync(controller, namespace, numaLogger)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+	if needsRequeue {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	// phase = gitopsSyncCommon.OperationFailed // TTODO: for testing special case, remove afterwards
@@ -441,33 +446,36 @@ func (r *NumaflowControllerReconciler) sync(
 	controller *apiv1.NumaflowController,
 	namespace string,
 	numaLogger *logger.NumaLogger,
-) (gitopsSyncCommon.OperationPhase, error) {
+) (gitopsSyncCommon.OperationPhase, bool, error) {
 
 	newVersion := controller.Spec.Version
 	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion)
 	if err != nil {
-		return gitopsSyncCommon.OperationError, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
+		return gitopsSyncCommon.OperationError, false, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
 
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
 
 	reconciliationResult, diffResults, liveObjectsMap, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
 	if err != nil {
-		return gitopsSyncCommon.OperationError, err
+		return gitopsSyncCommon.OperationError, false, err
 	}
+	fmt.Printf("deletethis: diffResults.Modified=%t\n", diffResults.Modified)
+
+	allDeleted := true
 
 	// Delete current resources if any of the specs differ
-	childResourcesNeedToBeDeleted := diffResults.Modified
+	childResourcesNeedToBeDeleted := diffResults.Modified && !allDeleted
 	if childResourcesNeedToBeDeleted {
 		numaLogger.Debugf("current NumaflowController resources differs from desired")
 
 		// err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
 		err := r.deleteNumaflowControllerChildren(liveObjectsMap, namespace)
 		if err != nil {
-			return gitopsSyncCommon.OperationError, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
+			return gitopsSyncCommon.OperationError, false, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
 		}
 
-		return gitopsSyncCommon.OperationRunning, nil
+		return gitopsSyncCommon.OperationRunning, true, nil
 	}
 
 	opts := []gitopsSync.SyncOpt{
@@ -483,7 +491,7 @@ func (r *NumaflowControllerReconciler) sync(
 
 	clusterCache, err := r.stateCache.GetClusterCache()
 	if err != nil {
-		return gitopsSyncCommon.OperationError, err
+		return gitopsSyncCommon.OperationError, false, err
 	}
 	openAPISchema := clusterCache.GetOpenAPISchema()
 
@@ -499,7 +507,7 @@ func (r *NumaflowControllerReconciler) sync(
 	)
 	defer cleanup()
 	if err != nil {
-		return gitopsSyncCommon.OperationError, err
+		return gitopsSyncCommon.OperationError, false, err
 	}
 
 	syncCtx.Sync()
@@ -507,7 +515,7 @@ func (r *NumaflowControllerReconciler) sync(
 	controller.Status.MarkDeployed(controller.Generation)
 
 	phase, _, _ := syncCtx.GetState()
-	return phase, nil
+	return phase, false, nil
 }
 
 // compareState compares with desired state of the objects with the live state in the cluster
@@ -528,7 +536,13 @@ func (r *NumaflowControllerReconciler) compareState(
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
+	fmt.Printf("deletethis: after calling GetManagedLiveObjs(), liveObjByKey=%+v\n", liveObjByKey)
 	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
+	fmt.Printf("deletethis: after calling Reconcile(), liveObjByKey=%+v, targetObjs=%+v\n", liveObjByKey, targetObjs)
+	for _, targetObj := range targetObjs {
+
+		fmt.Printf("deletethis: after calling Reconcile(), targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
+	}
 
 	// Ignore `status` field for all comparison.
 	// TODO: make it configurable
