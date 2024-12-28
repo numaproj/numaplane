@@ -48,7 +48,6 @@ import (
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	sigsyaml "sigs.k8s.io/yaml"
@@ -242,6 +241,10 @@ func (r *NumaflowControllerReconciler) reconcile(
 				numaLogger.Warn("Dependent resources are not deleted yet, requeue after 5 seconds")
 				return ctrl.Result{Requeue: true}, nil
 			}
+			err := r.deleteChildren(ctx, controller.Namespace, controller.Name)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
 		}
 
@@ -276,7 +279,6 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// phase = gitopsSyncCommon.OperationFailed // TTODO: for testing special case, remove afterwards
 	if phase != gitopsSyncCommon.OperationSucceeded {
 		return ctrl.Result{}, fmt.Errorf("sync operation is not successful")
 	}
@@ -548,11 +550,11 @@ func (r *NumaflowControllerReconciler) compareState(
 		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
 	infoProvider = clusterCache
-	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, targetObjs)
+	liveObjByKey, err := r.stateCache.GetManagedLiveObjsFromResourceList(controller.Name, namespace, targetObjs)
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
-	fmt.Printf("deletethis: after calling GetManagedLiveObjs(), liveObjByKey=%+v\n", liveObjByKey)
+	fmt.Printf("deletethis: after calling GetManagedLiveObjsFromResourceList(), liveObjByKey=%+v\n", liveObjByKey)
 	liveObjByKeyClone := make(map[kube.ResourceKey]*unstructured.Unstructured)
 	for k, v := range liveObjByKey {
 		liveObjByKeyClone[k] = v
@@ -746,30 +748,89 @@ func (r *NumaflowControllerReconciler) SetupWithManager(ctx context.Context, mgr
 	}
 
 	// Watch for changes to secondary resources(ConfigMap) so we can requeue the owner NumaflowController
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
+	/*if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
 		handler.TypedEnqueueRequestForOwner[*corev1.ConfigMap](mgr.GetScheme(), mgr.GetRESTMapper(),
 			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*corev1.ConfigMap]{})); err != nil {
+		return fmt.Errorf("failed to watch ConfigMap: %w", err)
+	}*/
+
+	// Watch for changes to secondary resources(ConfigMap) so we can requeue the owner NumaflowController
+	err = controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *corev1.ConfigMap) []reconcile.Request {
+			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
+			if found && ownerName != "" {
+				numaLogger.Debugf("found ConfigMap labeled by %s/%s", a.Namespace, ownerName)
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: a.Namespace,
+					}},
+				}
+			}
+			return nil
+		}),
+	))
+	if err != nil {
 		return fmt.Errorf("failed to watch ConfigMap: %w", err)
 	}
 
 	// Watch for changes to secondary resources(ServiceAccount) so we can requeue the owner NumaflowController
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ServiceAccount{},
-		handler.TypedEnqueueRequestForOwner[*corev1.ServiceAccount](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*corev1.ServiceAccount]{})); err != nil {
+	err = controller.Watch(source.Kind(mgr.GetCache(), &corev1.ServiceAccount{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *corev1.ServiceAccount) []reconcile.Request {
+			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
+			if found && ownerName != "" {
+				numaLogger.Debugf("found ServiceAccount labeled by %s/%s", a.Namespace, ownerName)
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: a.Namespace,
+					}},
+				}
+			}
+			return nil
+		}),
+	))
+	if err != nil {
 		return fmt.Errorf("failed to watch ServiceAccount: %w", err)
 	}
 
 	// Watch for changes to secondary resources(Role) so we can requeue the owner NumaflowController
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.Role{},
-		handler.TypedEnqueueRequestForOwner[*rbacv1.Role](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*rbacv1.Role]{})); err != nil {
+	err = controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.Role{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *rbacv1.Role) []reconcile.Request {
+			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
+			if found && ownerName != "" {
+				numaLogger.Debugf("found Role labeled by %s/%s", a.Namespace, ownerName)
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: a.Namespace,
+					}},
+				}
+			}
+			return nil
+		}),
+	))
+	if err != nil {
 		return fmt.Errorf("failed to watch Role: %w", err)
 	}
 
 	// Watch for changes to secondary resources(RoleBinding) so we can requeue the owner NumaflowController
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.RoleBinding{},
-		handler.TypedEnqueueRequestForOwner[*rbacv1.RoleBinding](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*rbacv1.RoleBinding]{})); err != nil {
+	err = controller.Watch(source.Kind(mgr.GetCache(), &rbacv1.RoleBinding{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *rbacv1.RoleBinding) []reconcile.Request {
+			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
+			if found && ownerName != "" {
+				numaLogger.Debugf("found RoleBinding labeled by %s/%s", a.Namespace, ownerName)
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: a.Namespace,
+					}},
+				}
+			}
+			return nil
+		}),
+	))
+	if err != nil {
 		return fmt.Errorf("failed to watch RoleBinding: %w", err)
 	}
 
@@ -852,6 +913,22 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 	}
 
 	return false
+}
+
+func (r *NumaflowControllerReconciler) deleteChildren(ctx context.Context, namespace string, name string) error {
+	//numaLogger := logger.FromContext(ctx)
+
+	liveObjByKey, err := r.stateCache.GetManagedLiveObjects(name, namespace)
+	if err != nil {
+		return err
+	}
+	toUnstructuredMap := make(map[kubeUtil.ResourceKey]*unstructured.Unstructured)
+	for key, obj := range liveObjByKey {
+		toUnstructuredMap[key] = obj.Resource
+	}
+
+	r.deleteNumaflowControllerChildren(ctx, toUnstructuredMap, namespace)
+	return nil
 }
 
 // deleteNumaflowControllerChildren deletes child resources associated with a NumaflowController

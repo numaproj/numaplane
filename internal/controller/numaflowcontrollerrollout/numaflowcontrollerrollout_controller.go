@@ -503,13 +503,13 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 
 		healthyChildCond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
 
-		if existingNumaflowControllerStatus.IsHealthy() &&
-			healthyChildCond != nil && existingNumaflowControllerDef.GetGeneration() <= healthyChildCond.ObservedGeneration &&
-			healthyChildCond.Status == metav1.ConditionTrue {
-
+		if existingNumaflowControllerDef.GetGeneration() > existingNumaflowControllerStatus.ObservedGeneration {
+			nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing",
+				fmt.Sprintf("observedGeneration %d < generation %d", existingNumaflowControllerStatus.ObservedGeneration, existingNumaflowControllerDef.GetGeneration()),
+				nfcRollout.Generation)
+		} else if existingNumaflowControllerStatus.IsHealthy() &&
+			healthyChildCond != nil && healthyChildCond.Status == metav1.ConditionTrue {
 			nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
-		} else if existingNumaflowControllerDef.GetGeneration() > healthyChildCond.ObservedGeneration {
-			nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing", "observedGeneration < generation", nfcRollout.Generation)
 		} else {
 			if healthyChildCond != nil {
 				nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
@@ -549,7 +549,7 @@ func (r *NumaflowControllerRolloutReconciler) SetupWithManager(mgr ctrl.Manager)
 
 	// Watch NumaflowControllerRollout
 	if err := controller.Watch(source.Kind(mgr.GetCache(), &apiv1.NumaflowControllerRollout{},
-		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{}, predicate.TypedGenerationChangedPredicate[*apiv1.NumaflowControllerRollout]{})); err != nil {
+		&handler.TypedEnqueueRequestForObject[*apiv1.NumaflowControllerRollout]{}, ctlrcommon.TypedGenerationChangedPredicate[*apiv1.NumaflowControllerRollout]{})); err != nil {
 		return fmt.Errorf("failed to watch NumaflowControllerRollout: %w", err)
 	}
 
