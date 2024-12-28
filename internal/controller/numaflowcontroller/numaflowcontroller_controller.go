@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
@@ -48,6 +49,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -441,7 +443,7 @@ func determineTargetObjects(
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse the manifest, %w", err)
 	}*/
-	targetObjs, err := toUnstructuredAndApplyLabel(manifests, controller.Name)
+	targetObjs, err := toLabeledUnstructured(manifests, controller.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse the manifest, %w", err)
 	}
@@ -698,7 +700,10 @@ func (r *NumaflowControllerReconciler) processNumaflowControllerDeploymentStatus
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *NumaflowControllerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *NumaflowControllerReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+
+	numaLogger := logger.FromContext(ctx).WithName("numaflowcontroller-reconciler")
+
 	controller, err := runtimecontroller.New(ControllerNumaflowController, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
@@ -711,10 +716,32 @@ func (r *NumaflowControllerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	}
 
 	// Watch for changes to secondary resources(Deployment) so we can requeue the owner NumaflowController
-	// TODO: seems like Reconcile() isn't being called when I update Deployment - is self-healing even working?
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
+	/*if err := controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
 		handler.TypedEnqueueRequestForOwner[*appsv1.Deployment](mgr.GetScheme(), mgr.GetRESTMapper(),
 			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*appsv1.Deployment]{})); err != nil {
+		return fmt.Errorf("failed to watch Deployment: %w", err)
+	}*/
+
+	// TODO: trying to replicate this example: https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches
+
+	// copied from: https://github.com/kubernetes-sigs/controller-runtime/blob/main/pkg/handler/example_test.go
+	err = controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *appsv1.Deployment) []reconcile.Request {
+			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
+			if found && ownerName != "" {
+				numaLogger.Debugf("found Deployment labeled by %s/%s", a.Namespace, ownerName)
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: a.Namespace,
+					}},
+				}
+			}
+			return nil
+		}),
+	))
+
+	if err != nil {
 		return fmt.Errorf("failed to watch Deployment: %w", err)
 	}
 
@@ -771,7 +798,7 @@ func SplitYAMLToString(yamlData []byte) ([]string, error) {
 	return objs, nil
 }
 
-func toUnstructuredAndApplyLabel(manifests []string, name string) ([]*unstructured.Unstructured, error) {
+func toLabeledUnstructured(manifests []string, name string) ([]*unstructured.Unstructured, error) {
 	uns := make([]*unstructured.Unstructured, 0)
 	for _, m := range manifests {
 		obj := make(map[string]interface{})

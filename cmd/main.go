@@ -218,7 +218,7 @@ func main() {
 		numaLogger.Fatal(err, "Unable to create NumaflowController controller")
 	}
 
-	if err = numaflowControllerReconciler.SetupWithManager(mgr); err != nil {
+	if err = numaflowControllerReconciler.SetupWithManager(ctx, mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up NumaflowController controller")
 	}
 
