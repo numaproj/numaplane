@@ -173,7 +173,7 @@ metadata:
   labels:
     numaplane.numaproj.io/tracking-id: my-example`)
 
-	managedObjs, err := clusterCache.GetManagedLiveObjs(testName, testNamespace, []*unstructured.Unstructured{targetDeploy})
+	managedObjs, err := clusterCache.GetManagedLiveObjsFromResourceList(testName, testNamespace, []*unstructured.Unstructured{targetDeploy})
 	require.NoError(t, err)
 	assert.Equal(t, map[kube.ResourceKey]*unstructured.Unstructured{
 		kube.NewResourceKey("apps", "Deployment", "default", "my-app"): mustToUnstructured(testDeploy()),
