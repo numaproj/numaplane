@@ -772,6 +772,7 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 }
 
 // get the tag of the numaflow container
+/*
 func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, error) {
 
 	c, err := config.GetConfigManagerInstance().GetConfig()
@@ -819,7 +820,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 		}
 	}
 	return "", fmt.Errorf("couldn't find image named %q in Deployment %+v", DefaultNumaflowControllerImageName, deployment)
-}
+}*/
 
 // deleteNumaflowControllerChildren deletes child resources associated with a NumaflowController
 // for a specified version and namespace. It determines the target objects to delete and attempts
