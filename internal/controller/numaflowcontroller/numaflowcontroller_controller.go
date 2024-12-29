@@ -386,13 +386,14 @@ func (r *NumaflowControllerReconciler) sync(
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
 
 	// determine if there's a difference between what should be applied and what is live
-	reconciliationResult, diffResults, liveObjectsMap, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
+	//reconciliationResult, diffResults, liveObjectsMap, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
+	reconciliationResult, diffResults, _, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, false, err
 	}
 
 	// delete current resources if any of the specs differ, before applying the new ones (this can take care of issues where "apply" doesn't work)
-	if diffResults.Modified {
+	/*if diffResults.Modified {
 		numaLogger.Debugf("detecting a difference between target and live specs; number of objects remaining to delete first=%d", len(liveObjectsMap))
 
 		// see if we still need to delete some of the resources beforehand
@@ -407,7 +408,7 @@ func (r *NumaflowControllerReconciler) sync(
 
 			return gitopsSyncCommon.OperationRunning, true, nil
 		}
-	}
+	}*/
 
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
