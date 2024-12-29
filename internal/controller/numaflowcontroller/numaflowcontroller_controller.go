@@ -376,6 +376,7 @@ func (r *NumaflowControllerReconciler) sync(
 	numaLogger *logger.NumaLogger,
 ) (gitopsSyncCommon.OperationPhase, bool, error) {
 
+	// get the manifests that should be applied for the current version in the NumaflowController
 	newVersion := controller.Spec.Version
 	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion, namespace)
 	if err != nil {
@@ -384,12 +385,13 @@ func (r *NumaflowControllerReconciler) sync(
 
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
 
+	// determine if there's a difference between what should be applied and what is live
 	reconciliationResult, diffResults, liveObjectsMap, err := r.compareState(controller, namespace, newVersionTargetObjs, numaLogger)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, false, err
 	}
 
-	// Delete current resources if any of the specs differ, before applying the new ones (this can take care of issues where "apply" doesn't work)
+	// delete current resources if any of the specs differ, before applying the new ones (this can take care of issues where "apply" doesn't work)
 	if diffResults.Modified {
 		numaLogger.Debugf("detecting a difference between target and live specs; number of objects remaining to delete first=%d", len(liveObjectsMap))
 
@@ -398,7 +400,6 @@ func (r *NumaflowControllerReconciler) sync(
 		if childResourcesNeedToBeDeleted {
 			numaLogger.Debugf("current NumaflowController resources differs from desired")
 
-			// err := r.deleteNumaflowControllerChildren(ctx, controller, currentVersion, namespace, newVersionTargetObjs)
 			err := r.deleteNumaflowControllerChildren(ctx, liveObjectsMap, namespace)
 			if err != nil {
 				return gitopsSyncCommon.OperationError, false, fmt.Errorf("error deleting NumaflowController child resources: %w", err)
@@ -440,6 +441,7 @@ func (r *NumaflowControllerReconciler) sync(
 		return gitopsSyncCommon.OperationError, false, err
 	}
 
+	// now do an Apply if there's anything that needs to be changed
 	syncCtx.Sync()
 
 	controller.Status.MarkDeployed(controller.Generation)
