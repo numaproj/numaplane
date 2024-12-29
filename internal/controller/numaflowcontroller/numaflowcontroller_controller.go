@@ -475,7 +475,6 @@ func (r *NumaflowControllerReconciler) sync(
 	if err != nil {
 		return gitopsSyncCommon.OperationError, false, err
 	}
-	fmt.Printf("deletethis: diffResults.Modified=%t, liveObjectsMap=%+v\n", diffResults.Modified, liveObjectsMap)
 
 	// Delete current resources if any of the specs differ, before applying the new ones (this can take care of issues where "apply" doesn't work)
 	if diffResults.Modified {
@@ -554,28 +553,12 @@ func (r *NumaflowControllerReconciler) compareState(
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, nil, err
 	}
-	fmt.Printf("deletethis: after calling GetManagedLiveObjsFromResourceList(), liveObjByKey=%+v\n", liveObjByKey)
+	// clone liveObjByKey because the call to Reconcile() below will clear it
 	liveObjByKeyClone := make(map[kube.ResourceKey]*unstructured.Unstructured)
 	for k, v := range liveObjByKey {
 		liveObjByKeyClone[k] = v
 	}
 	reconciliationResult := gitopsSync.Reconcile(targetObjs, liveObjByKey, namespace, infoProvider)
-	fmt.Printf("deletethis: after calling Reconcile(), reconciliationResult.Target=%+v, reconciliationResult.Live=%+v\n", reconciliationResult.Target, reconciliationResult.Live)
-	for i, targetObj := range reconciliationResult.Target {
-		if targetObj == nil {
-
-			fmt.Printf("deletethis: after calling Reconcile(), targetObj at index %d=nil\n", i)
-		} else {
-			fmt.Printf("deletethis: after calling Reconcile(), targetObject index=%d, targetObj.GetKind()=%s, targetObj.GetNamespace()=%s, targetObj.GetName()=%s\n", i, targetObj.GetKind(), targetObj.GetNamespace(), targetObj.GetName())
-		}
-	}
-	for i, liveObj := range reconciliationResult.Live {
-		if liveObj == nil {
-			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d=nil\n", i)
-		} else {
-			fmt.Printf("deletethis: after calling Reconcile(), liveObj at index %d: liveObj.GetKind()=%s, liveObj.GetNamespace()=%s, liveObj.GetName()=%s\n", i, liveObj.GetKind(), liveObj.GetNamespace(), liveObj.GetName())
-		}
-	}
 	// Ignore `status` field for all comparison.
 	// TODO: make it configurable
 	overrides := map[string]sync.ResourceOverride{
@@ -583,17 +566,9 @@ func (r *NumaflowControllerReconciler) compareState(
 			IgnoreDifferences: sync.OverrideIgnoreDiff{JSONPointers: []string{"/status"}}},
 	}
 
-	/*resourceOps, cleanup, err := r.getResourceOperations()
-	if err != nil {
-		return gitopsSync.ReconciliationResult{}, nil, liveObjByKey, err
-	}
-	defer cleanup()*/
-
 	diffOpts := []diff.Option{
 		diff.WithLogr(*numaLogger.LogrLogger),
 		diff.WithServerSideDiff(false),
-		//diff.WithServerSideDiff(true),
-		//diff.WithServerSideDryRunner(diff.NewK8sServerSideDryRunner(resourceOps)),
 		diff.WithManager(common.SSAManager),
 		diff.WithGVKParser(clusterCache.GetGVKParser()),
 	}
@@ -945,12 +920,6 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 ) error {
 
 	numaLogger := logger.FromContext(ctx)
-
-	// targetObjs, err := determineTargetObjects(controller, currentVersion)
-	// if err != nil {
-	// 	numaLogger.Warnf("unable to determine the target objects for the current version %s (will attempt using target objects from new version): %s", currentVersion, err.Error())
-	// 	targetObjs = newVersionTargetObjs
-	// }
 
 	// TODO: instead of using the client to delete the child resources, try using the gitops-engine if possible
 	deletionGracePeriod := int64(0)
