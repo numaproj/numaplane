@@ -411,13 +411,13 @@ func (r *NumaflowControllerReconciler) sync(
 
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
-		gitopsSync.WithOperationSettings(false, true, false, false),
+		gitopsSync.WithOperationSettings(false, true, true, false),
 		gitopsSync.WithManifestValidation(true),
 		gitopsSync.WithPruneLast(false),
 		gitopsSync.WithResourceModificationChecker(true, diffResults),
-		gitopsSync.WithReplace(false),
-		gitopsSync.WithServerSideApply(true),
-		gitopsSync.WithServerSideApplyManager(common.SSAManager),
+		gitopsSync.WithReplace(true),
+		//gitopsSync.WithServerSideApply(true),
+		//gitopsSync.WithServerSideApplyManager(common.SSAManager),
 	}
 
 	clusterCache, err := r.stateCache.GetClusterCache()
