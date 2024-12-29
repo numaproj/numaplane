@@ -253,7 +253,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
 
-	existingDeployment, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
+	_, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -268,7 +268,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 
 	// If a Deployment already exists for the NumaflowController and the new version differs from the current Deployment version,
 	// delete all the NumaflowController child resources and recreate them at the next reconciliation
-	if deploymentExists {
+	/*if deploymentExists {
 		currentVersion, err := getControllerDeploymentVersion(existingDeployment)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while getting the version of the existing NumaflowController Deployment: %w", err)
@@ -286,7 +286,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 			// No need to explicitly requeue since a new reconciliation will occur due to changes in watched child resources
 			return ctrl.Result{}, nil
 		}
-	}
+	}*/
 
 	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
 	// (note that the cases above in which it is updating have a 'return' statement):
@@ -825,7 +825,7 @@ func getControllerDeploymentVersion(deployment *appsv1.Deployment) (string, erro
 // for a specified version and namespace. It determines the target objects to delete and attempts
 // to remove them using the Kubernetes client. If a resource is not found, it continues with the
 // next one. Returns an error if unable to determine target objects or delete a resource.
-func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
+/*func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 	ctx context.Context,
 	controller *apiv1.NumaflowController,
 	currentVersion string,
@@ -863,4 +863,4 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 	}
 
 	return nil
-}
+}*/
