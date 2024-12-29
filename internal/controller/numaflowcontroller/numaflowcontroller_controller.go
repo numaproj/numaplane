@@ -675,16 +675,10 @@ func (r *NumaflowControllerReconciler) SetupWithManager(ctx context.Context, mgr
 		return fmt.Errorf("failed to watch NumaflowController: %w", err)
 	}
 
+	// Perform Watch on child resources, using the label applied to each child which identifies which NumaflowController needs to be reconciled
+	// reference: https://github.com/kubernetes-sigs/controller-runtime/blob/main/pkg/handler/example_test.go
+
 	// Watch for changes to secondary resources(Deployment) so we can requeue the owner NumaflowController
-	/*if err := controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
-		handler.TypedEnqueueRequestForOwner[*appsv1.Deployment](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*appsv1.Deployment]{})); err != nil {
-		return fmt.Errorf("failed to watch Deployment: %w", err)
-	}*/
-
-	// TODO: trying to replicate this example: https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches
-
-	// copied from: https://github.com/kubernetes-sigs/controller-runtime/blob/main/pkg/handler/example_test.go
 	err = controller.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
 		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, a *appsv1.Deployment) []reconcile.Request {
 			ownerName, found := a.Labels[common.LabelKeyNumaplaneInstance]
@@ -704,13 +698,6 @@ func (r *NumaflowControllerReconciler) SetupWithManager(ctx context.Context, mgr
 	if err != nil {
 		return fmt.Errorf("failed to watch Deployment: %w", err)
 	}
-
-	// Watch for changes to secondary resources(ConfigMap) so we can requeue the owner NumaflowController
-	/*if err := controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
-		handler.TypedEnqueueRequestForOwner[*corev1.ConfigMap](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.NumaflowController{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*corev1.ConfigMap]{})); err != nil {
-		return fmt.Errorf("failed to watch ConfigMap: %w", err)
-	}*/
 
 	// Watch for changes to secondary resources(ConfigMap) so we can requeue the owner NumaflowController
 	err = controller.Watch(source.Kind(mgr.GetCache(), &corev1.ConfigMap{},
