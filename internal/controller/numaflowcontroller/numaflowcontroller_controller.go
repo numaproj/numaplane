@@ -581,23 +581,6 @@ func (r *NumaflowControllerReconciler) compareState(
 	return reconciliationResult, diffResults, liveObjByKeyClone, nil
 }
 
-// getResourceOperations will return the kubectl implementation of the ResourceOperations
-// interface that provides functionality to manage kubernetes resources. Returns a
-// cleanup function that must be called to remove the generated kube config for this
-// server.
-func (r *NumaflowControllerReconciler) getResourceOperations() (kubeUtil.ResourceOperations, func(), error) {
-	clusterCache, err := r.stateCache.GetClusterCache()
-	if err != nil {
-		return nil, nil, fmt.Errorf("error getting cluster cache: %w", err)
-	}
-
-	ops, cleanup, err := r.kubectl.ManageResources(r.restConfig, clusterCache.GetOpenAPISchema())
-	if err != nil {
-		return nil, nil, fmt.Errorf("error creating kubectl ResourceOperations: %w", err)
-	}
-	return ops, cleanup, nil
-}
-
 func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
 	for _, cond := range status.Conditions {
 		if cond.Type == condType {
@@ -902,8 +885,7 @@ func (r *NumaflowControllerReconciler) deleteChildren(ctx context.Context, names
 		toUnstructuredMap[key] = obj.Resource
 	}
 
-	r.deleteNumaflowControllerChildren(ctx, toUnstructuredMap, namespace)
-	return nil
+	return r.deleteNumaflowControllerChildren(ctx, toUnstructuredMap, namespace)
 }
 
 // deleteNumaflowControllerChildren deletes child resources associated with a NumaflowController
