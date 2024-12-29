@@ -14,21 +14,18 @@ data:
           kind: ServiceAccount
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-sa{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-sa{{ .InstanceSuffix }}
           ---
           apiVersion: rbac.authorization.k8s.io/v1
@@ -36,7 +33,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
             name: numaflow-dex-server{{ .InstanceSuffix }}
@@ -56,7 +52,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: controller-manager
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
             name: numaflow-role{{ .InstanceSuffix }}
@@ -164,7 +159,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
             name: numaflow-server-role{{ .InstanceSuffix }}
@@ -231,7 +225,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
             name: numaflow-server-secrets-role{{ .InstanceSuffix }}
@@ -251,7 +244,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
             name: numaflow-dex-server{{ .InstanceSuffix }}
@@ -268,7 +260,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: controller-manager
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-controller-manager
               app.kubernetes.io/part-of: numaflow
             name: numaflow-role-binding{{ .InstanceSuffix }}
@@ -285,7 +276,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
             name: numaflow-server-binding{{ .InstanceSuffix }}
@@ -302,7 +292,6 @@ data:
           metadata:
             labels:
               app.kubernetes.io/component: numaflow-ux
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
             name: numaflow-server-secrets-binding{{ .InstanceSuffix }}
@@ -321,7 +310,6 @@ data:
           kind: ConfigMap
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -478,11 +466,9 @@ data:
                       metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
                       configReloaderImage: natsio/nats-server-config-reloader:0.7.0
                       startCommand: /nats-server
-              instance: '{{ .InstanceID }}'
           kind: ConfigMap
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-controller-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -504,7 +490,6 @@ data:
           kind: ConfigMap
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -513,7 +498,6 @@ data:
           kind: ConfigMap
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-local-user-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
@@ -536,14 +520,12 @@ data:
           kind: ConfigMap
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-rbac-config{{ .InstanceSuffix }}
           ---
           apiVersion: v1
           kind: Secret
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-secrets{{ .InstanceSuffix }}
           stringData:
             dex-github-client-id: <GITHUB_CLIENT_ID>
@@ -553,7 +535,6 @@ data:
           kind: Secret
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server-secrets{{ .InstanceSuffix }}
           type: Opaque
           ---
@@ -561,7 +542,6 @@ data:
           kind: Service
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-dex-server{{ .InstanceSuffix }}
           spec:
             ports:
@@ -569,7 +549,6 @@ data:
                 targetPort: 5556
             selector:
               app.kubernetes.io/component: dex-server
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-dex-server
               app.kubernetes.io/part-of: numaflow
           ---
@@ -577,7 +556,6 @@ data:
           kind: Service
           metadata:
             labels:
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
             name: numaflow-server{{ .InstanceSuffix }}
           spec:
             ports:
@@ -585,7 +563,6 @@ data:
                 targetPort: 8443
             selector:
               app.kubernetes.io/component: numaflow-ux
-              app.kubernetes.io/instance: '{{ .InstanceID }}'
               app.kubernetes.io/name: numaflow-ux
               app.kubernetes.io/part-of: numaflow
             type: ClusterIP
@@ -783,7 +760,7 @@ data:
           apiVersion: apps/v1
           kind: Deployment
           metadata:
-            labels:
+            labels: 
             name: numaflow-server{{ .InstanceSuffix }}
           spec:
             replicas: 1
