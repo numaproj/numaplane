@@ -221,8 +221,7 @@ func (c *liveStateCache) PopulateResourceInfo(un *unstructured.Unstructured, isR
 	res.Health, _ = health.GetResourceHealth(un, settings.clusterSettings.ResourceHealthOverride)
 
 	numaplaneInstanceName := getNumaplaneInstanceName(un)
-	fmt.Printf("deletethis: PopulateResourceInfo(): numaplaneInstanceName=%q, isRoot=%t\n", numaplaneInstanceName, isRoot)
-	if /*isRoot &&*/ numaplaneInstanceName != "" { // TODO: why was "isRoot" there?
+	if /*isRoot &&*/ numaplaneInstanceName != "" { // TODO: can probably put this back now that we don't have OwnerRef - need to test
 		res.OwnerName = numaplaneInstanceName
 	}
 
