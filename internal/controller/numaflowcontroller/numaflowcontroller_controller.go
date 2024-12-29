@@ -259,7 +259,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 	}
 
 	newVersion := controller.Spec.Version
-	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion)
+	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion, namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
@@ -434,6 +434,7 @@ Returns:
 func determineTargetObjects(
 	controller *apiv1.NumaflowController,
 	version string,
+	namespace string,
 ) ([]*unstructured.Unstructured, error) {
 
 	// Get the target manifests based on the given version and throw an error if the definition does not have that version
@@ -464,6 +465,10 @@ func determineTargetObjects(
 		return nil, fmt.Errorf("failed to parse the manifest, %w", err)
 	}
 
+	for _, obj := range targetObjs {
+		obj.SetNamespace(namespace)
+	}
+
 	return targetObjs, nil
 }
 
@@ -481,13 +486,11 @@ func (r *NumaflowControllerReconciler) sync(
 
 	opts := []gitopsSync.SyncOpt{
 		gitopsSync.WithLogr(*numaLogger.LogrLogger),
-		gitopsSync.WithOperationSettings(false, true, false, false),
+		gitopsSync.WithOperationSettings(false, true, true, false),
 		gitopsSync.WithManifestValidation(true),
 		gitopsSync.WithPruneLast(false),
 		gitopsSync.WithResourceModificationChecker(true, diffResults),
-		gitopsSync.WithReplace(false),
-		gitopsSync.WithServerSideApply(true),
-		gitopsSync.WithServerSideApplyManager(common.SSAManager),
+		gitopsSync.WithReplace(true),
 	}
 
 	clusterCache, err := r.stateCache.GetClusterCache()
@@ -546,16 +549,9 @@ func (r *NumaflowControllerReconciler) compareState(
 			IgnoreDifferences: sync.OverrideIgnoreDiff{JSONPointers: []string{"/status"}}},
 	}
 
-	resourceOps, cleanup, err := r.getResourceOperations()
-	if err != nil {
-		return gitopsSync.ReconciliationResult{}, nil, err
-	}
-	defer cleanup()
-
 	diffOpts := []diff.Option{
 		diff.WithLogr(*numaLogger.LogrLogger),
-		diff.WithServerSideDiff(true),
-		diff.WithServerSideDryRunner(diff.NewK8sServerSideDryRunner(resourceOps)),
+		diff.WithServerSideDiff(false),
 		diff.WithManager(common.SSAManager),
 		diff.WithGVKParser(clusterCache.GetGVKParser()),
 	}
@@ -566,23 +562,6 @@ func (r *NumaflowControllerReconciler) compareState(
 	}
 
 	return reconciliationResult, diffResults, nil
-}
-
-// getResourceOperations will return the kubectl implementation of the ResourceOperations
-// interface that provides functionality to manage kubernetes resources. Returns a
-// cleanup function that must be called to remove the generated kube config for this
-// server.
-func (r *NumaflowControllerReconciler) getResourceOperations() (kubeUtil.ResourceOperations, func(), error) {
-	clusterCache, err := r.stateCache.GetClusterCache()
-	if err != nil {
-		return nil, nil, fmt.Errorf("error getting cluster cache: %w", err)
-	}
-
-	ops, cleanup, err := r.kubectl.ManageResources(r.restConfig, clusterCache.GetOpenAPISchema())
-	if err != nil {
-		return nil, nil, fmt.Errorf("error creating kubectl ResourceOperations: %w", err)
-	}
-	return ops, cleanup, nil
 }
 
 func getDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
@@ -633,17 +612,17 @@ func processDeploymentHealth(deployment *appsv1.Deployment) (bool, string, strin
 			msg := fmt.Sprintf("Deployment %q exceeded its progress deadline", deployment.Name)
 			return false, "Degraded", msg
 		} else if deploymentSpec.Replicas != nil && deploymentStatus.UpdatedReplicas < *deploymentSpec.Replicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d out of %d new replicas have been updated...", deploymentStatus.UpdatedReplicas, *deploymentSpec.Replicas)
 			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.Replicas > deploymentStatus.UpdatedReplicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d old replicas are pending termination...", deploymentStatus.Replicas-deploymentStatus.UpdatedReplicas)
 			return false, apiv1.ProgressingReasonString, msg
 		} else if deploymentStatus.AvailableReplicas < deploymentStatus.UpdatedReplicas {
-			msg := fmt.Sprintf("Waiting for Deployment  to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
+			msg := fmt.Sprintf("Waiting for Deployment to finish: %d of %d updated replicas are available...", deploymentStatus.AvailableReplicas, deploymentStatus.UpdatedReplicas)
 			return false, apiv1.ProgressingReasonString, msg
 		}
 	} else {
-		msg := "Waiting for Deployment  to finish: observed deployment generation less than desired generation"
+		msg := "Waiting for Deployment to finish: observed deployment generation less than desired generation"
 		return false, apiv1.ProgressingReasonString, msg
 	}
 
@@ -856,7 +835,7 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 
 	numaLogger := logger.FromContext(ctx)
 
-	targetObjs, err := determineTargetObjects(controller, currentVersion)
+	targetObjs, err := determineTargetObjects(controller, namespace, currentVersion)
 	if err != nil {
 		numaLogger.Warnf("unable to determine the target objects for the current version %s (will attempt using target objects from new version): %s", currentVersion, err.Error())
 		targetObjs = newVersionTargetObjs
@@ -872,10 +851,14 @@ func (r *NumaflowControllerReconciler) deleteNumaflowControllerChildren(
 		})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
+
+				numaLogger.Debugf("cannot delete %s/%s/%s as it doesn't exist", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 				continue
 			} else {
 				return fmt.Errorf("unable to delete NumaflowController child resource %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 			}
+		} else {
+			numaLogger.Debugf("successfully deleted %s/%s/%s", obj.GetKind(), obj.GetNamespace(), obj.GetName())
 		}
 	}
 
