@@ -83,7 +83,7 @@ func verifyNumaflowController(namespace string, f func(apiv1.NumaflowController)
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }*/
 
-func verifyNumaflowControllerReady(namespace string) {
+func verifyNumaflowControllerExists(namespace string) {
 	document("Verifying that the Numaflow Controller Deployment exists")
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
