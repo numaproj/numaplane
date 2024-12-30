@@ -45,6 +45,7 @@ var (
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
+	numaflowControllerClient        planepkg.NumaflowControllerInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
 	kubeClient                      clientgo.Interface
