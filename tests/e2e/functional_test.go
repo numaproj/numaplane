@@ -495,45 +495,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 
-		// new NumaflowController spec
-		updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
-		}
-
-		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
-			rollout.Spec = updatedNumaflowControllerROSpec
-			return rollout, nil
-		})
-
-		if ppnd == "true" {
-
-			document("Verify that in-progress-strategy gets set to PPND")
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-			verifyPipelinePaused(Namespace, pipelineRolloutName)
-
-			Eventually(func() bool {
-				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-				ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
-					return false
-				}
-				return true
-			}, testTimeout).Should(BeTrue())
-		}
-
-		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
-			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
-		})
-
-		verifyNumaflowControllerRolloutReady()
-
-		verifyNumaflowControllerReady(Namespace)
-
-		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		updateNumaflowControllerRolloutVersion(updatedNumaflowControllerVersion)
 
 	})
 
@@ -592,46 +554,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
 
-		// new NumaflowController spec
-		updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
-			Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
-		}
-
-		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
-			rollout.Spec = updatedNumaflowControllerROSpec
-			return rollout, nil
-		})
-
-		// TODO: remove duplicate logic from above
-		if ppnd == "true" {
-
-			document("Verify that in-progress-strategy gets set to PPND")
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-			verifyPipelinePaused(Namespace, pipelineRolloutName)
-
-			Eventually(func() bool {
-				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-				ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
-					return false
-				}
-				return true
-			}, testTimeout).Should(BeTrue())
-		}
-
-		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
-			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
-		})
-
-		verifyNumaflowControllerRolloutReady()
-
-		verifyNumaflowControllerReady(Namespace)
-
-		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		updateNumaflowControllerRolloutVersion(updatedNumaflowControllerVersion)
 
 	})
 
@@ -891,6 +814,49 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 })
+
+func updateNumaflowControllerRolloutVersion(version string) {
+	// new NumaflowController spec
+	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
+		Controller: apiv1.Controller{Version: version},
+	}
+
+	updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+		rollout.Spec = updatedNumaflowControllerROSpec
+		return rollout, nil
+	})
+
+	// TODO: remove duplicate logic from above
+	if ppnd == "true" {
+
+		document("Verify that in-progress-strategy gets set to PPND")
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+		verifyPipelinePaused(Namespace, pipelineRolloutName)
+
+		Eventually(func() bool {
+			ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+				return false
+			}
+			return true
+		}, testTimeout).Should(BeTrue())
+	}
+
+	verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+		colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+		return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+version
+	})
+
+	verifyNumaflowControllerRolloutReady()
+
+	verifyNumaflowControllerReady(Namespace)
+
+	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+}
 
 func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
 
