@@ -777,7 +777,6 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
-	// TODO: remove duplicate logic from above
 	if ppnd == "true" {
 
 		document("Verify that in-progress-strategy gets set to PPND")

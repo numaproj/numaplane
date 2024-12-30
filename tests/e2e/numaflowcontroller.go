@@ -70,19 +70,6 @@ func verifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowCont
 	}, testTimeout, testPollingInterval).Should(BeTrue())
 }
 
-/*
-// verify that the NumaflowController matches some criteria
-func verifyNumaflowController(namespace string, f func(apiv1.NumaflowController) bool) {
-	document("verifying Numaflow Controller")
-	Eventually(func() bool {
-		nc, err := numaflowControllerClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-		return f(*nc)
-	}, testTimeout, testPollingInterval).Should(BeTrue())
-}*/
-
 func verifyNumaflowControllerExists(namespace string) {
 	document("Verifying that the Numaflow Controller Deployment exists")
 	Eventually(func() error {
