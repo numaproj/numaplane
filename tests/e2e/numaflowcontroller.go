@@ -40,23 +40,48 @@ func verifyNumaflowControllerRolloutReady() {
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	if ppnd == "true" {
 		document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
 	}
 
 }
+
+// verify that the NumaflowControllerRollout matches some criteria
+func verifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowControllerRollout) bool) {
+	document("verifying Numaflow Controller Rollout")
+	Eventually(func() bool {
+		rollout, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		return f(*rollout)
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+}
+
+/*
+// verify that the NumaflowController matches some criteria
+func verifyNumaflowController(namespace string, f func(apiv1.NumaflowController) bool) {
+	document("verifying Numaflow Controller")
+	Eventually(func() bool {
+		nc, err := numaflowControllerClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		return f(*nc)
+	}, testTimeout, testPollingInterval).Should(BeTrue())
+}*/
 
 func verifyNumaflowControllerReady(namespace string) {
 	document("Verifying that the Numaflow Controller Deployment exists")

@@ -43,6 +43,7 @@ const (
 	monoVertexRolloutName            = "test-monovertex-rollout"
 	initialNumaflowControllerVersion = "1.3.3"
 	updatedNumaflowControllerVersion = "1.4.0"
+	invalidNumaflowControllerVersion = "99.99.99"
 	initialJetstreamVersion          = "2.10.17"
 	updatedJetstreamVersion          = "2.10.11"
 )
@@ -395,9 +396,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 			if err != nil {
 				return false
 			}
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
-		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
+		}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
@@ -457,9 +458,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 			if err != nil {
 				return false
 			}
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
 				(retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused)
-		}, 1*time.Minute, testPollingInterval).Should(BeTrue())
+		}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
@@ -495,12 +496,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 
 		// new NumaflowController spec
-		updatedNumaflowControllerSpec := apiv1.NumaflowControllerRolloutSpec{
+		updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
 			Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
 		}
 
 		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
-			rollout.Spec = updatedNumaflowControllerSpec
+			rollout.Spec = updatedNumaflowControllerROSpec
 			return rollout, nil
 		})
 
@@ -512,9 +513,107 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 			Eventually(func() bool {
 				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
-				ncCondStatus := getRolloutCondition(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
+		}
+
+		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
+		})
+
+		verifyNumaflowControllerRolloutReady()
+
+		verifyNumaflowControllerReady(Namespace)
+
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
+
+		// new NumaflowController spec
+		updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: invalidNumaflowControllerVersion},
+		}
+
+		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+			rollout.Spec = updatedNumaflowControllerROSpec
+			return rollout, nil
+		})
+
+		// TODO: remove duplicate logic from above
+		if ppnd == "true" {
+
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
+
+			Eventually(func() bool {
+				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+				ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
+				}
+				return true
+			}, testTimeout).Should(BeTrue())
+		}
+
+		// verify NumaflowControllerRollout ChildResourcesHealthy condition == false but NumaflowControllerRollout itself is marked "Deployed"
+		verifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
+			healthCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			return rollout.Status.Phase == apiv1.PhaseDeployed && healthCondition != nil && healthCondition.Status == metav1.ConditionFalse && healthCondition.Reason == "Failed"
+		})
+
+		// verify Pipeline running
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+
+		// verify Numaflow Controller is still running with its original version
+		verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
+		})
+
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
+
+		// new NumaflowController spec
+		updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
+		}
+
+		updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+			rollout.Spec = updatedNumaflowControllerROSpec
+			return rollout, nil
+		})
+
+		// TODO: remove duplicate logic from above
+		if ppnd == "true" {
+
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
+
+			Eventually(func() bool {
+				ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+				ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 				if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
 					return false
 				}
@@ -560,9 +659,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-				isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 				if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
 					return false
 				}
@@ -601,9 +700,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
 			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			isbCondStatus := getRolloutCondition(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			plCondStatus := getRolloutCondition(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
 				return false
 			}

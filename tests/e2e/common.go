@@ -46,8 +46,9 @@ var (
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
-	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
-	kubeClient                      clientgo.Interface
+	//numaflowControllerClient        planepkg.NumaflowControllerInterface
+	monoVertexRolloutClient planepkg.MonoVertexRolloutInterface
+	kubeClient              clientgo.Interface
 
 	wg     sync.WaitGroup
 	mutex  sync.RWMutex
@@ -131,13 +132,21 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 }
 
-func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) metav1.ConditionStatus {
+func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) *metav1.Condition {
 	for _, cond := range conditions {
 		if cond.Type == string(conditionType) {
-			return cond.Status
+			return &cond
 		}
 	}
-	return metav1.ConditionUnknown
+	return nil
+}
+
+func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv1.ConditionType) metav1.ConditionStatus {
+	c := getRolloutCondition(conditions, conditionType)
+	if c == nil {
+		return metav1.ConditionUnknown
+	}
+	return c.Status
 }
 
 func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
