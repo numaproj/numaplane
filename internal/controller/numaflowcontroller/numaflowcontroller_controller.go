@@ -530,7 +530,6 @@ func (r *NumaflowControllerReconciler) compareState(
 	diffOpts := []diff.Option{
 		diff.WithLogr(*numaLogger.LogrLogger),
 		diff.WithServerSideDiff(false),
-		diff.WithManager(common.SSAManager),
 		diff.WithGVKParser(clusterCache.GetGVKParser()),
 	}
 
