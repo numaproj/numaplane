@@ -21,6 +21,8 @@ type ISBServiceRolloutExpansion interface{}
 
 type MonoVertexRolloutExpansion interface{}
 
+type NumaflowControllerExpansion interface{}
+
 type NumaflowControllerRolloutExpansion interface{}
 
 type PipelineRolloutExpansion interface{}

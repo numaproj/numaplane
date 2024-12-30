@@ -56,6 +56,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Numaplane().V1alpha1().ISBServiceRollouts().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("monovertexrollouts"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Numaplane().V1alpha1().MonoVertexRollouts().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("numaflowcontrollers"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Numaplane().V1alpha1().NumaflowControllers().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("numaflowcontrollerrollouts"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Numaplane().V1alpha1().NumaflowControllerRollouts().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("pipelinerollouts"):
