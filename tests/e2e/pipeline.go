@@ -67,7 +67,7 @@ func verifyPipelineRolloutDeployed(pipelineRolloutName string) {
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 }
@@ -76,7 +76,7 @@ func verifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	document("Verifying that the PipelineRollout Child Condition is Healthy")
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
@@ -88,7 +88,7 @@ func verifyPipelineRunning(namespace string, pipelineRolloutName string, numVert
 		})
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout).Should(Not(Equal(metav1.ConditionTrue)))
 
 	// Get Pipeline Pods to verify they're all up
@@ -106,7 +106,7 @@ func verifyPipelinePaused(namespace string, pipelineRolloutName string) {
 	document("Verify that Pipeline Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	document("Verify that Pipeline is paused and fully drained")

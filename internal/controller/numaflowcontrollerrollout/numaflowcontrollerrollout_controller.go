@@ -321,7 +321,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 	}
 
 	numaLogger.
-		WithValues("numaflowControllerNeedsToUpdate", numaflowControllerNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		WithValues("numaflowControllerNeedsToUpdate", numaflowControllerNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType, "numaflowControllerIsUpdating", numaflowControllerIsUpdating).
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
@@ -501,20 +501,26 @@ func (r *NumaflowControllerRolloutReconciler) processNumaflowControllerStatus(
 			return err
 		}
 
-		healthyChildCond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
-
-		if existingNumaflowControllerStatus.IsHealthy() &&
-			healthyChildCond != nil && existingNumaflowControllerDef.GetGeneration() <= healthyChildCond.ObservedGeneration &&
-			healthyChildCond.Status == metav1.ConditionTrue {
-
-			nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
-		} else {
-			if healthyChildCond != nil {
-				nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
+		if existingNumaflowControllerDef.GetGeneration() > existingNumaflowControllerStatus.ObservedGeneration {
+			nfcRollout.Status.MarkChildResourcesUnhealthy("Progressing",
+				fmt.Sprintf("observedGeneration %d < generation %d", existingNumaflowControllerStatus.ObservedGeneration, existingNumaflowControllerDef.GetGeneration()),
+				nfcRollout.Generation)
+		} else if existingNumaflowControllerStatus.IsHealthy() {
+			// check the ChildResourcesHealthy Condition
+			healthyChildCond := existingNumaflowControllerStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
+			if healthyChildCond != nil && healthyChildCond.Status == metav1.ConditionTrue {
+				nfcRollout.Status.MarkChildResourcesHealthy(nfcRollout.Generation)
 			} else {
-				nfcRollout.Status.MarkChildResourcesUnhealthy(apiv1.ProgressingReasonString, "Progressing", nfcRollout.Generation)
+				if healthyChildCond != nil {
+					nfcRollout.Status.MarkChildResourcesUnhealthy(healthyChildCond.Reason, healthyChildCond.Message, nfcRollout.Generation)
+				} else {
+					nfcRollout.Status.MarkChildResourcesUnhealthy("Unhealthy", "Unhealthy", nfcRollout.Generation)
+				}
 			}
+		} else {
+			nfcRollout.Status.MarkChildResourcesUnhealthy("Failed", "Failed", nfcRollout.Generation)
 		}
+
 	}
 
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
