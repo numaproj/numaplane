@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"reflect"
 	"strings"
 	"time"
 
@@ -603,7 +602,7 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 		return false, err
 	}
 
-	specsEqual := reflect.DeepEqual(fromNew, toNew)
+	specsEqual := util.CompareStructWithoutNumKind(fromNew, toNew)
 	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
 		specsEqual, fromNew, toNew)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())

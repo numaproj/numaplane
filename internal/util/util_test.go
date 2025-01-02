@@ -119,3 +119,32 @@ func Test_ExtractPath(t *testing.T) {
 		})
 	}
 }
+
+func Test_CompareStructWithoutNumKind(t *testing.T) {
+	testCases := []struct {
+		name               string
+		a                  map[string]interface{}
+		b                  map[string]interface{}
+		expectedComparison bool
+	}{
+		{
+			name:               "equal structs - same number type",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": 1},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": float64(1)},
+			expectedComparison: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actualComparison := CompareStructWithoutNumKind(tc.a, tc.b)
+			assert.Equal(t, tc.expectedComparison, actualComparison)
+		})
+	}
+}

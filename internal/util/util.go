@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 // StructToStruct converts a struct type (src) into another (dst)
@@ -20,6 +22,50 @@ func StructToStruct(src any, dst any) error {
 	}
 
 	return nil
+}
+
+func CompareStructWithoutNumKind(src, dst any) bool {
+	numberComparer := cmp.Comparer(func(x, y any) bool {
+		vx, _ := toFloat64(x)
+		vy, _ := toFloat64(y)
+		return vx == vy
+	})
+
+	// Apply this custom comparison only to pairs of values where both are numbers
+	filterNumber := cmp.FilterValues(func(x, y any) bool {
+		return isNumber(x) && isNumber(y)
+	}, numberComparer)
+
+	equal := cmp.Equal(src, dst, filterNumber)
+	return equal
+}
+
+func isNumber(value any) bool {
+	v := reflect.TypeOf(value)
+	if v == nil {
+		return false
+	}
+	kind := v.Kind()
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func toFloat64(value any) (float64, bool) {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(rv.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return rv.Float(), true
+	default:
+		return 0, false
+	}
 }
 
 // RemovePaths removes all of the excludedPaths passed in from m, where each excludedPath is a string

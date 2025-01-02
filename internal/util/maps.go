@@ -16,8 +16,6 @@ limitations under the License.
 
 package util
 
-import "reflect"
-
 func MergeMaps(existing, new map[string]string) map[string]string {
 	merged := make(map[string]string)
 	if existing != nil {
@@ -35,5 +33,5 @@ func CompareMaps(existing, new map[string]string) bool {
 	if existing == nil || new == nil {
 		return len(existing) == len(new)
 	}
-	return reflect.DeepEqual(existing, new)
+	return CompareStructWithoutNumKind(existing, new)
 }

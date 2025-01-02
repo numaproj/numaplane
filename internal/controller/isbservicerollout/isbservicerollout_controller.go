@@ -19,7 +19,6 @@ package isbservicerollout
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -449,7 +448,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 		return false, false, err
 	}
 
-	isbServiceNeedsToUpdate := !reflect.DeepEqual(existingSpecAsMap, newSpecAsMap)
+	isbServiceNeedsToUpdate := !util.CompareStructWithoutNumKind(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }

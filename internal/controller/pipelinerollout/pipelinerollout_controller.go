@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -949,7 +948,7 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
 	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
 
-	specsEqual := reflect.DeepEqual(fromCopy.Object["spec"], toCopy.Object["spec"])
+	specsEqual := util.CompareStructWithoutNumKind(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
