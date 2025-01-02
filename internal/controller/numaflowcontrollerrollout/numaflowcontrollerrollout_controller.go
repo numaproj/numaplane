@@ -446,7 +446,7 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerUpdating(ctx c
 		return false, false, err
 	}
 
-	NumaflowControllerNeedsToUpdate := !util.CompareStructWithoutNumKind(existingSpecAsMap, newSpecAsMap)
+	NumaflowControllerNeedsToUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
 
 	return NumaflowControllerNeedsToUpdate, !numaflowControllerReconciled, nil
 }

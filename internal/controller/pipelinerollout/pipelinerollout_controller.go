@@ -948,7 +948,7 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
 	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
 
-	specsEqual := util.CompareStructWithoutNumKind(fromCopy.Object["spec"], toCopy.Object["spec"])
+	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())

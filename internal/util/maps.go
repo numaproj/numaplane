@@ -33,5 +33,5 @@ func CompareMaps(existing, new map[string]string) bool {
 	if existing == nil || new == nil {
 		return len(existing) == len(new)
 	}
-	return CompareStructWithoutNumKind(existing, new)
+	return CompareStructNumTypeAgnostic(existing, new)
 }

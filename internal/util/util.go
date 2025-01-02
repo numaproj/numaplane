@@ -24,7 +24,9 @@ func StructToStruct(src any, dst any) error {
 	return nil
 }
 
-func CompareStructWithoutNumKind(src, dst any) bool {
+// CompareStructNumTypeAgnostic compares two structs, ignoring the type of numbers
+// (e.g., int, float32, float64) and treating them as equal if their values are equal.
+func CompareStructNumTypeAgnostic(src, dst any) bool {
 	numberComparer := cmp.Comparer(func(x, y any) bool {
 		vx, _ := toFloat64(x)
 		vy, _ := toFloat64(y)
@@ -47,7 +49,9 @@ func isNumber(value any) bool {
 	}
 	kind := v.Kind()
 	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64:
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return true
 	default:
 		return false

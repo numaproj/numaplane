@@ -602,7 +602,7 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 		return false, err
 	}
 
-	specsEqual := util.CompareStructWithoutNumKind(fromNew, toNew)
+	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
 	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
 		specsEqual, fromNew, toNew)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())

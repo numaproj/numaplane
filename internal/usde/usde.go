@@ -53,11 +53,11 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// Get data loss fields config based on the spec type (Pipeline, ISBS)
 	dataLossFields := []config.SpecDataLossField{}
-	if util.CompareStructWithoutNumKind(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
+	if util.CompareStructNumTypeAgnostic(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
 		dataLossFields = usdeConfig.PipelineSpecDataLossFields
-	} else if util.CompareStructWithoutNumKind(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
+	} else if util.CompareStructNumTypeAgnostic(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
 		dataLossFields = usdeConfig.ISBServiceSpecDataLossFields
-	} else if util.CompareStructWithoutNumKind(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
+	} else if util.CompareStructNumTypeAgnostic(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
 		// TODO: for NumaflowController updates do we need to figure out which strategy to use based on the type of changes similarly done for Pipeline and ISBSvc?
 		// OR should we always return the user's preferred strategy?
 		// For now, make the entire spec a data loss field and include all its subfields
@@ -108,7 +108,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 		if dataLossField.IncludeSubfields {
 			// is the definition (fields + children) at all different?
-			if !util.CompareStructWithoutNumKind(newDefField, existingDefField) {
+			if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
 				return true, upgradeStrategy, nil
 			}
 		} else {
@@ -119,7 +119,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 					return true, upgradeStrategy, nil
 				}
 			} else {
-				if !util.CompareStructWithoutNumKind(newDefField, existingDefField) {
+				if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
 					return true, upgradeStrategy, nil
 				}
 			}
@@ -130,7 +130,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
-	if !util.CompareStructWithoutNumKind(newDef.Object["spec"], existingDef.Object["spec"]) {
+	if !util.CompareStructNumTypeAgnostic(newDef.Object["spec"], existingDef.Object["spec"]) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 
@@ -198,7 +198,7 @@ func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
 	if tempMap2 == nil {
 		tempMap2 = map[string]string{}
 	}
-	return util.CompareStructWithoutNumKind(tempMap1, tempMap2)
+	return util.CompareStructNumTypeAgnostic(tempMap1, tempMap2)
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss

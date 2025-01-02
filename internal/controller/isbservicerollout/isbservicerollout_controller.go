@@ -448,7 +448,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 		return false, false, err
 	}
 
-	isbServiceNeedsToUpdate := !util.CompareStructWithoutNumKind(existingSpecAsMap, newSpecAsMap)
+	isbServiceNeedsToUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }

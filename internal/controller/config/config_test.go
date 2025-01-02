@@ -175,7 +175,7 @@ func TestCloneWithSerialization(t *testing.T) {
 		t.Errorf("Cloned object points to the same instance as original")
 	}
 
-	if !util.CompareStructWithoutNumKind(original, cloned) {
+	if !util.CompareStructNumTypeAgnostic(original, cloned) {
 		t.Errorf("Cloned object is not deeply equal to the original")
 	}
 
