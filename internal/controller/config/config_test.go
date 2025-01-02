@@ -21,12 +21,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/numaproj/numaplane/internal/util"
 )
 
 func TestLoadConfigMatchValues(t *testing.T) {
@@ -174,7 +175,7 @@ func TestCloneWithSerialization(t *testing.T) {
 		t.Errorf("Cloned object points to the same instance as original")
 	}
 
-	if !reflect.DeepEqual(original, cloned) {
+	if !util.CompareStructNumTypeAgnostic(original, cloned) {
 		t.Errorf("Cloned object is not deeply equal to the original")
 	}
 

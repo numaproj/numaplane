@@ -109,7 +109,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 		if dataLossField.IncludeSubfields {
 			// is the definition (fields + children) at all different?
-			if !reflect.DeepEqual(newDefField, existingDefField) {
+			if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
 				return true, upgradeStrategy, nil
 			}
 		} else {
@@ -120,7 +120,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 					return true, upgradeStrategy, nil
 				}
 			} else {
-				if !reflect.DeepEqual(newDefField, existingDefField) {
+				if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
 					return true, upgradeStrategy, nil
 				}
 			}
@@ -131,7 +131,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
-	if !reflect.DeepEqual(newDef.Object["spec"], existingDef.Object["spec"]) {
+	if !util.CompareStructNumTypeAgnostic(newDef.Object["spec"], existingDef.Object["spec"]) {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 
@@ -199,7 +199,7 @@ func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
 	if tempMap2 == nil {
 		tempMap2 = map[string]string{}
 	}
-	return reflect.DeepEqual(tempMap1, tempMap2)
+	return util.CompareStructNumTypeAgnostic(tempMap1, tempMap2)
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss

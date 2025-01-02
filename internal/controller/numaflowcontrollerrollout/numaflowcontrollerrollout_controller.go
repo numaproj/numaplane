@@ -19,7 +19,6 @@ package numaflowcontrollerrollout
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -447,7 +446,7 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerUpdating(ctx c
 		return false, false, err
 	}
 
-	NumaflowControllerNeedsToUpdate := !reflect.DeepEqual(existingSpecAsMap, newSpecAsMap)
+	NumaflowControllerNeedsToUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
 
 	return NumaflowControllerNeedsToUpdate, !numaflowControllerReconciled, nil
 }
