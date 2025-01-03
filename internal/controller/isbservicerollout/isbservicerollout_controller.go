@@ -359,9 +359,17 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// requeue if done with PPND is false
 			return true, nil
 		}
-	// TODO: Progressive strategy should ideally be creating a second parallel isbsvc, and all Pipelines should be on it;
-	// for now we just create a 2nd ISBServiceRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyNoOp, apiv1.UpgradeStrategyProgressive:
+	case apiv1.UpgradeStrategyProgressive:
+		numaLogger.Debug("processing InterstepBufferService with Progressive")
+		done, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		if err != nil {
+			return false, err
+		}
+		if done {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+		}
+
+	case apiv1.UpgradeStrategyNoOp:
 		if isbServiceNeedsToUpdate {
 			// update ISBService
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
