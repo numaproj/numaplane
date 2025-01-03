@@ -486,7 +486,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 		}
 		if userPreferredStrategy == config.ProgressiveStrategyID {
-			if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+			/*if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
+				inProgressStrategy = apiv1.UpgradeStrategyProgressive
+				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, inProgressStrategy)
+			}*/
+			progressiveRequired, err := r.needProgressive(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyProgressive)
+			if err != nil {
+				return false, err
+			}
+			if progressiveRequired {
 				inProgressStrategy = apiv1.UpgradeStrategyProgressive
 				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, inProgressStrategy)
 			}
