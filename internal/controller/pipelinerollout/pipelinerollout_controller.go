@@ -767,22 +767,17 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 		return nil, err
 	}
 
-	// determine name of the InterstepBufferService by finding the "promoted" isbsvc for the ISBServiceRollout
-	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
-	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
-	}
-
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
 	// Otherwise, use the promoted one
+	// TODO: what if there's an "upgrading" one but we're using a non-Progressive strategy?
 	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return nil, err
 	}
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
 		if err != nil || isbsvc == nil {
 			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 		}

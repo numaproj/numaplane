@@ -42,7 +42,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	// get all PipelineRollouts using this ISBServiceRollout
 	pipelineRollouts, err := r.GetPipelineRolloutList(ctx, existingUpgradingChildDef.GetNamespace(), isbsvcRolloutName)
 	if err != nil {
-
+		return apiv1.AssessmentResultUnknown, fmt.Errorf("Error getting PipelineRollouts: %s", err.Error())
 	}
 	if len(pipelineRollouts) == 0 {
 		numaLogger.Warn("Found no PipelineRollouts using ISBServiceRollout: so isbsvc is deemed Successful") // not typical but could happen
@@ -56,7 +56,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 			existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err.Error())
 	}
 	if pipelines == nil {
-		// TODO: this should be an error?
+		numaLogger.Debugf("Can't assess isbsvc; didn't find any pipelines yet using this isbsvc")
+		return apiv1.AssessmentResultUnknown, nil
 	}
 	// map each PipelineRollout to its Pipeline - if we don't have a Pipeline for any of them, then we return "Unknown"
 	rolloutToPipeline := make(map[*apiv1.PipelineRollout]*unstructured.Unstructured)
@@ -83,7 +84,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	// if any Pipelines are still being assessed, return Unknown
 	for pipelineRollout, pipeline := range rolloutToPipeline {
 
-		// Look for this Pipeline in the PipelineRollout's Status
+		// Look for this Pipeline in the PipelineRollout's ProgressiveStatus
 		if pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.Name == pipeline.GetName() {
 			switch pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult {
 			case apiv1.AssessmentResultFailure:

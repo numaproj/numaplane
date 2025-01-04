@@ -149,6 +149,22 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade

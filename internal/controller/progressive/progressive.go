@@ -55,16 +55,19 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 }
 
-// return whether we're done, and error if any
+// return:
+// - whether we're done
+// - whether we just created a new child
+// - error if any
 func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommon.RolloutObject,
-	existingPromotedChild *unstructured.Unstructured, promotedDifference bool, controller progressiveController, c client.Client) (bool, error) {
+	existingPromotedChild *unstructured.Unstructured, promotedDifference bool, controller progressiveController, c client.Client) (bool, bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
@@ -72,22 +75,22 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
 		currentUpgradingChildDef, err = FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
 		if err != nil {
-			return false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
+			return false, false, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
 			// create object as it doesn't exist
 			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
-				return false, err
+				return false, false, err
 			}
 
 			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			return false, err
+			return false, true, err
 		}
 	}
 	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
-		return true, err
+		return true, false, err
 	}
 
 	// There's already an Upgrading child, now process it
@@ -95,15 +98,15 @@ func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommo
 	// Get the live resource so we don't have issues with an outdated cache
 	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildGVR().Resource)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	done, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
-		return false, err
+		return false, newChild, err
 	}
 
-	return done, nil
+	return done, newChild, nil
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
@@ -250,19 +253,22 @@ func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, c
 	}
 }
 
-// return whether we're done, and error if any
+// return:
+// - whether we're done
+// - whether we just created a new child
+// - error if any
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
-) (bool, error) {
+) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debugf("assessment returned: %v", assessment)
 
@@ -276,11 +282,11 @@ func processUpgradingChild(
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
@@ -288,37 +294,33 @@ func processUpgradingChild(
 			// create a definition for the "upgrading" child which has a new name (the definition created above had the previous child's name which was necessary for comparison)
 			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
-				return false, err
+				return false, false, err
 			}
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef)
 			if err != nil {
-				return false, err
+				return false, false, err
 			}
 
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			if err != nil {
-				return false, err
-			} else {
-				return false, nil
-			}
+			return false, true, err
 
 		}
 
-		return false, nil
+		return false, false, nil
 
 	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
 		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 
 		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
@@ -326,9 +328,9 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
-		return true, nil
+		return true, false, nil
 	default:
-		return false, nil
+		return false, false, nil
 	}
 }
 

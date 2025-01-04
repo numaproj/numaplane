@@ -362,12 +362,23 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
-		done, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, newChild, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+		} else {
+			if newChild {
+				pipelineRollouts, err := r.GetPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
+				if err != nil {
+					return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
+				}
+				for _, pipelineRollout := range pipelineRollouts {
+					numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
+					pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
+				}
+			}
 		}
 
 	case apiv1.UpgradeStrategyNoOp:
@@ -462,13 +473,13 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
-func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]apiv1.PipelineRollout, error) {
+func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbRolloutName string) ([]apiv1.PipelineRollout, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
 	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
 	// get all of the PipelineRollouts on the namespace and filter out any that aren't ties to this ISBServiceRollout
-	r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: rolloutNamespace})
+	r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
 	for _, pipelineRollout := range pipelineRolloutInNamespace.Items {
 		// which ISBServiceRollout is this PipelineRollout using?
 		var pipelineSpec numaflowtypes.PipelineSpec
@@ -480,7 +491,7 @@ func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context
 		if pipelineSpec.InterStepBufferServiceName != "" {
 			isbsvcRolloutName = pipelineSpec.InterStepBufferServiceName
 		}
-		if isbsvcRolloutName == rolloutName {
+		if isbsvcRolloutName == isbRolloutName {
 			pipelineRolloutsForISBSvc = append(pipelineRolloutsForISBSvc, pipelineRollout)
 		}
 	}
