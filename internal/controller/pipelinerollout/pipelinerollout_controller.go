@@ -793,6 +793,7 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
 	return r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
 }
@@ -872,6 +873,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 	labels := pipeline.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 	pipeline.SetLabels(labels)
 
 	return pipeline, nil

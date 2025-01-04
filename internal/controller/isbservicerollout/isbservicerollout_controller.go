@@ -18,6 +18,7 @@ package isbservicerollout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -461,10 +462,44 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
+func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, rolloutNamespace string, rolloutName string) ([]apiv1.PipelineRollout, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
+	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
+	// get all of the PipelineRollouts on the namespace and filter out any that aren't ties to this ISBServiceRollout
+	r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: rolloutNamespace})
+	for _, pipelineRollout := range pipelineRolloutInNamespace.Items {
+		// which ISBServiceRollout is this PipelineRollout using?
+		var pipelineSpec numaflowtypes.PipelineSpec
+		err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
+		if err != nil {
+			return pipelineRolloutsForISBSvc, err
+		}
+		isbsvcRolloutName := "default"
+		if pipelineSpec.InterStepBufferServiceName != "" {
+			isbsvcRolloutName = pipelineSpec.InterStepBufferServiceName
+		}
+		if isbsvcRolloutName == rolloutName {
+			pipelineRolloutsForISBSvc = append(pipelineRolloutsForISBSvc, pipelineRollout)
+		}
+	}
+	numaLogger.Debugf("found %d ISBServiceRollouts associated with PipelineRollout", len(pipelineRolloutsForISBSvc))
+	return pipelineRolloutsForISBSvc, nil
+}
+
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
 		client.MatchingLabels{common.LabelKeyISBServiceRONameForPipeline: rolloutName},
+		client.HasLabels{common.LabelKeyParentRollout},
+	)
+}
+
+func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.Context, namespace string, isbsvcName string) (*unstructured.UnstructuredList, error) {
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
+	return kubernetes.ListResources(ctx, r.client, gvk, namespace,
+		client.MatchingLabels{common.LabelKeyISBServiceChildNameForPipeline: isbsvcName},
 		client.HasLabels{common.LabelKeyParentRollout},
 	)
 }
@@ -756,9 +791,18 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
-func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
-	// TODO: Implement
-	return false, nil
+func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, from, to)
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition

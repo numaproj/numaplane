@@ -32,6 +32,7 @@ import (
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // progressiveController describes a Controller that can progressively roll out a second child alongside the original child,
@@ -49,6 +50,9 @@ type progressiveController interface {
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
+
+	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
+	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 }
 
 // return whether we're done, and error if any
@@ -256,16 +260,18 @@ func processUpgradingChild(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	assessment, err := assessUpgradingChild(ctx, existingUpgradingChildDef)
+	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 	numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debugf("assessment returned: %v", assessment)
 
 	switch assessment {
-	case AssessmentResultFailure:
+	case apiv1.AssessmentResultFailure:
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.Name = existingUpgradingChildDef.GetName()
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
@@ -302,7 +308,7 @@ func processUpgradingChild(
 
 		return false, nil
 
-	case AssessmentResultSuccess:
+	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
 		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
@@ -316,40 +322,14 @@ func processUpgradingChild(
 		}
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.Name = existingUpgradingChildDef.GetName()
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		return true, nil
 	default:
 		return false, nil
 	}
-}
-
-type AssessmentResult int
-
-const (
-	AssessmentResultSuccess = iota
-	AssessmentResultFailure
-	AssessmentResultUnknown
-)
-
-func assessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (AssessmentResult, error) {
-	numaLogger := logger.FromContext(ctx)
-	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
-	if err != nil {
-		return AssessmentResultUnknown, err
-	}
-
-	numaLogger.
-		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s", upgradingObjectStatus.Phase)
-
-	if upgradingObjectStatus.Phase == "Running" && isNumaflowChildReady(&upgradingObjectStatus) {
-		return AssessmentResultSuccess, nil
-	}
-	if upgradingObjectStatus.Phase == "Failed" {
-		return AssessmentResultFailure, nil
-	}
-	return AssessmentResultUnknown, nil
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
@@ -361,7 +341,7 @@ func updateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
 
-func isNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
+func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
 	if len(upgradingObjectStatus.Conditions) == 0 {
 		return false
 	}
