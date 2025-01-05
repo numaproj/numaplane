@@ -525,11 +525,17 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
 
-		done, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}
 		if done {
+			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
+			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
+			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+			if err != nil {
+				return false, err
+			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		}
 

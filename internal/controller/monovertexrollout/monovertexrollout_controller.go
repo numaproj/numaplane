@@ -303,7 +303,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 
 		numaLogger.Debug("processing MonoVertex with Progressive")
-		done, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResourceWithProgressive(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return err
 		}
