@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,23 +13,9 @@ import (
 
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
-	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, err
-	}
-
-	numaLogger.
-		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s", upgradingObjectStatus.Phase)
 
 	// TODO: we need to assess the isbsvc's health, but like with PipelineRollout and MonoVertexRollout,
 	// we need to do it over time and not all at once
-	/*if upgradingObjectStatus.Phase == "Running" && progressive.IsNumaflowChildReady(&upgradingObjectStatus) {
-		return progressive.AssessmentResultSuccess, nil
-	}
-	if upgradingObjectStatus.Phase == "Failed" {
-		return progressive.AssessmentResultFailure, nil
-	}*/
 
 	// Get the Pipelines using this "upgrading" isbsvc to determine if they're healthy
 	// First get all PipelineRollouts using this ISBServiceRollout - need to make sure all have created a Pipeline using this isbsvc

@@ -495,7 +495,7 @@ func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context
 			pipelineRolloutsForISBSvc = append(pipelineRolloutsForISBSvc, pipelineRollout)
 		}
 	}
-	numaLogger.Debugf("found %d ISBServiceRollouts associated with PipelineRollout", len(pipelineRolloutsForISBSvc))
+	numaLogger.Debugf("found %d PipelineRollouts associated with ISBServiceRollout", len(pipelineRolloutsForISBSvc))
 	return pipelineRolloutsForISBSvc, nil
 }
 

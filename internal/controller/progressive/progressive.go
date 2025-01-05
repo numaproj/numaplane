@@ -325,7 +325,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.Name = existingUpgradingChildDef.GetName()
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultSuccess
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		return true, false, nil
