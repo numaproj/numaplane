@@ -190,9 +190,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 
 	defer func() {
 		if isbServiceRollout.Status.IsHealthy() {
-			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(1)
+			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(1)
 		} else {
-			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name).Set(0)
+			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(0)
 		}
 	}()
 
@@ -209,7 +209,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name)
+		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase))
 		return ctrl.Result{}, nil
 	}
 

@@ -196,6 +196,11 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
@@ -411,6 +416,11 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
@@ -672,6 +682,11 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
@@ -871,6 +886,11 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string
@@ -1065,6 +1085,11 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
               message:
                 description: Message is added if Phase is PhaseFailed.
                 type: string

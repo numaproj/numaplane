@@ -666,6 +666,7 @@ func (in *Status) DeepCopyInto(out *Status) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	in.LastFailureTime.DeepCopyInto(&out.LastFailureTime)
 	out.ProgressiveStatus = in.ProgressiveStatus
 }
 
