@@ -73,7 +73,7 @@ type Status struct {
 	Phase Phase `json:"phase,omitempty"`
 
 	// LastFailureTime records the timestamp of the Last Failure (PhaseFailed)
-	LastFailureTime time.Time `json:"lastFailureTime,omitempty"`
+	LastFailureTime metav1.Time `json:"lastFailureTime,omitempty"`
 
 	// ObservedGeneration stores the generation value observed when setting the current Phase
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -96,7 +96,7 @@ type PauseStatus struct {
 
 func (status *Status) SetPhase(phase Phase, msg string) {
 	if phase == PhaseFailed {
-		status.LastFailureTime = time.Now()
+		status.LastFailureTime = metav1.NewTime(time.Now())
 	}
 
 	status.Phase = phase
