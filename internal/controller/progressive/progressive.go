@@ -276,8 +276,7 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultFailure:
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.Name = existingUpgradingChildDef.GetName()
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultFailure}
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
@@ -324,8 +323,7 @@ func processUpgradingChild(
 		}
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.Name = existingUpgradingChildDef.GetName()
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultSuccess}
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		return true, false, nil

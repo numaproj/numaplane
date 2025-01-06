@@ -112,7 +112,7 @@ type ChildStatus struct {
 
 type ProgressiveStatus struct {
 	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
-	UpgradingChildStatus ChildStatus `json:"upgradingChildStatus,omitempty"`
+	UpgradingChildStatus *ChildStatus `json:"upgradingChildStatus,omitempty"`
 }
 
 func (status *Status) SetPhase(phase Phase, msg string) {

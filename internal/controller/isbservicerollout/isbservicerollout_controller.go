@@ -481,11 +481,14 @@ func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context
 	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
 	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
 	// get all of the PipelineRollouts on the namespace and filter out any that aren't ties to this ISBServiceRollout
-	r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
+	err := r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
+	if err != nil {
+		return pipelineRolloutsForISBSvc, err
+	}
 	for _, pipelineRollout := range pipelineRolloutInNamespace.Items {
 		// which ISBServiceRollout is this PipelineRollout using?
 		var pipelineSpec numaflowtypes.PipelineSpec
-		err := json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
+		err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
 		if err != nil {
 			return pipelineRolloutsForISBSvc, err
 		}
