@@ -85,6 +85,7 @@ var (
 			},
 		},
 	}
+	numPipelineVertices = 2
 
 	updatedPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
@@ -247,7 +248,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(pipelineSpec.Vertices) == 2 // TODO: make less kludgey
+			return len(pipelineSpec.Vertices) == numPipelineVertices // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
@@ -255,7 +256,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
 	})
 
@@ -319,7 +320,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 2)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
 	})
 
@@ -350,10 +351,11 @@ var _ = Describe("Functional e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		document("Verifying Pipeline got updated")
+		numPipelineVertices = 3
 
 		// get Pipeline to check that spec has been updated to correct spec
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(retrievedPipelineSpec.Vertices) == 3
+			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
 		})
 
 		verifyPipelineRolloutDeployed(pipelineRolloutName)
@@ -361,7 +363,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
 	})
 
@@ -428,7 +430,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
@@ -552,7 +554,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
 	})
 
@@ -595,7 +597,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-		verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
 	})
 
@@ -819,7 +821,7 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 	}
 
 	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	verifyPipelineRunning(Namespace, pipelineRolloutName, 3)
+	verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 }
 
 func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
