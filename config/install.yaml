@@ -1924,26 +1924,6 @@ spec:
         volumeMounts:
         - mountPath: /etc/numaplane
           name: config-volume
-      initContainers:
-      - command:
-        - /bin/bash
-        - -c
-        - "#!/bin/bash\n\n# Get all namespaces\nnamespaces=$(kubectl get namespaces
-          -o jsonpath='{.items[*].metadata.name}')\n\n# Loop through each namespace\nfor
-          namespace in $namespaces; do\n  echo \"Processing namespace: $namespace\"\n
-          \ \n  # Get all isbsvc in the current namespace\n  interstepbuffersvcs=$(kubectl
-          get isbsvc -n $namespace -o json | jq -r '.items[] | select(.metadata.ownerReferences[]?.kind
-          == \"ISBServiceRollout\") | .metadata.name')\n  \n  # Loop through each
-          isbsvc\n  for isbsvc in $interstepbuffersvcs; do\n    echo \"Patching isbsvc:
-          $isbsvc in namespace: $namespace\"\n    \n    # Patch the isbsvc to add
-          the labels\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
-          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/upgrade-state\\\":
-          \\\"promoted\\\"}}}\"\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
-          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/parent-rollout-name\\\":
-          \\\"$isbsvc\\\"}}}\"\n  done\ndone\n\necho \"All interstepbufferservices
-          have been patched.\"\n"
-        image: bitnami/kubectl
-        name: label-isbsvc
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
       volumes:

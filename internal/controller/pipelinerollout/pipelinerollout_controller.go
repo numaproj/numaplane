@@ -861,7 +861,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	}
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
 		if err != nil || isbsvc == nil {
 			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 		}

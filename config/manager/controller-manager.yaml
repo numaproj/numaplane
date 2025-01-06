@@ -49,40 +49,6 @@ spec:
       # versions < 1.19 or on vendors versions which do NOT support this field by default (i.e. Openshift < 4.11 ).
       # seccompProfile:
       #   type: RuntimeDefault
-      initContainers:
-        
-        # temporary init container to patch all isbsvc on the cluster owned by ISBServiceRollout to add "promoted" label
-        # TODO: remove when no longer needed
-        - name: label-isbsvc
-          image: bitnami/kubectl
-          command: 
-
-            - "/bin/bash"
-            - "-c"
-            - |
-              #!/bin/bash
-
-              # Get all namespaces
-              namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
-
-              # Loop through each namespace
-              for namespace in $namespaces; do
-                echo "Processing namespace: $namespace"
-                
-                # Get all isbsvc in the current namespace
-                interstepbuffersvcs=$(kubectl get isbsvc -n $namespace -o json | jq -r '.items[] | select(.metadata.ownerReferences[]?.kind == "ISBServiceRollout") | .metadata.name')
-                
-                # Loop through each isbsvc
-                for isbsvc in $interstepbuffersvcs; do
-                  echo "Patching isbsvc: $isbsvc in namespace: $namespace"
-                  
-                  # Patch the isbsvc to add the labels
-                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p "{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/upgrade-state\": \"promoted\"}}}"
-                  kubectl patch isbsvc $isbsvc -n $namespace --type='merge' -p "{\"metadata\": {\"labels\": {\"numaplane.numaproj.io/parent-rollout-name\": \"$isbsvc\"}}}"
-                done
-              done
-
-              echo "All interstepbufferservices have been patched."
 
       containers:
         - command:

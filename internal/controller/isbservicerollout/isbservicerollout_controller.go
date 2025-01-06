@@ -379,6 +379,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 					pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
 				}
 			}
+			// requeue
+			return true, nil
 		}
 
 	case apiv1.UpgradeStrategyNoOp:
@@ -702,6 +704,7 @@ func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	fmt.Printf("deletethis: makePromotedISBServiceDef() has labels: %+v\n", metadata.Labels)
 
 	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
 }
@@ -736,6 +739,7 @@ func getBaseISBSVCMetadata(isbServiceRollout *apiv1.ISBServiceRollout) (apiv1.Me
 		labelMapping[key] = val
 	}
 	labelMapping[common.LabelKeyParentRollout] = isbServiceRollout.Name
+	fmt.Printf("deletethis: getBaseISBSVCMetadata(): LabelKeyParentRollout=%q\n", isbServiceRollout.Name)
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: isbServiceRollout.Spec.InterStepBufferService.Annotations}, nil
 
@@ -758,6 +762,7 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	labels := isbsvc.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
 	isbsvc.SetLabels(labels)
+	fmt.Printf("deletethis: CreateUpgradingChildDefinition() has labels: %+v\n", labels)
 
 	return isbsvc, nil
 }

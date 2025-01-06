@@ -44,11 +44,13 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		numaLogger.Debugf("Can't assess isbsvc; didn't find any pipelines yet using this isbsvc")
 		return apiv1.AssessmentResultUnknown, nil
 	}
+	fmt.Printf("deletethis: getPipelineListForChildISBSvc %s/%s returned pipelines: %+v\n", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), pipelines.Items)
 	// map each PipelineRollout to its Pipeline - if we don't have a Pipeline for any of them, then we return "Unknown"
 	rolloutToPipeline := make(map[*apiv1.PipelineRollout]*unstructured.Unstructured)
 	for _, pipelineRollout := range pipelineRollouts {
 		foundPipeline := false
 		for _, pipeline := range pipelines.Items {
+			fmt.Printf("deletethis: testing if pipeline %q is child of pipelineRollout %q\n", pipeline.GetName(), pipelineRollout.Name)
 			if isPipelineChildOfPipelineRollout(pipeline.GetName(), pipelineRollout.Name) {
 				rolloutToPipeline[&pipelineRollout] = &pipeline
 				foundPipeline = true
@@ -85,7 +87,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 }
 
 func isPipelineChildOfPipelineRollout(pipelineName string, pipelineRolloutName string) bool {
-	if len(pipelineRolloutName) <= len(pipelineName) {
+	if len(pipelineRolloutName) >= len(pipelineName) {
 		return false
 	}
 
