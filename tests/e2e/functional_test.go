@@ -632,8 +632,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		document("Verifying PipelineRollout deletion")
-		pipeline, err := getPipeline(Namespace, pipelineRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
 		Eventually(func() bool {
 			_, err := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 			if err != nil {
@@ -648,15 +646,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying Pipeline deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).Get(ctx, pipeline.GetName(), metav1.GetOptions{})
+			list, err := dynamicClient.Resource(pipelinegvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
-				if !errors.IsNotFound(err) {
-					Fail("An unexpected error occurred when fetching the Pipeline: " + err.Error())
-				}
 				return false
 			}
-			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The Pipeline should have been deleted but it was found.")
+			if len(list.Items) == 0 {
+				return true
+			}
+			return false
+		}).WithTimeout(testTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 
 	})
 
@@ -668,9 +666,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		document("Verifying MonoVertexRollout deletion")
-
-		monoVertex, err := getMonoVertex(Namespace, monoVertexRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
 			_, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
@@ -686,15 +681,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying MonoVertex deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).Get(ctx, monoVertex.GetName(), metav1.GetOptions{})
+			list, err := dynamicClient.Resource(monovertexgvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
-				if !errors.IsNotFound(err) {
-					Fail("An unexpected error occurred when fetching the MonoVertex: " + err.Error())
-				}
 				return false
 			}
-			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertex should have been deleted but it was found.")
+			if len(list.Items) == 0 {
+				return true
+			}
+			return false
+		}).WithTimeout(testTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
 	})
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
@@ -705,9 +700,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		document("Verifying ISBServiceRollout deletion")
-
-		isbService, err := getISBService(Namespace, isbServiceRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
 
 		Eventually(func() bool {
 			_, err := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -723,15 +715,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("Verifying ISBService deletion")
 
 		Eventually(func() bool {
-			_, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).Get(ctx, isbService.GetName(), metav1.GetOptions{})
+			list, err := dynamicClient.Resource(isbservicegvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
-				if !errors.IsNotFound(err) {
-					Fail("An unexpected error occurred when fetching the ISBService: " + err.Error())
-				}
 				return false
 			}
-			return true
-		}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBService should have been deleted but it was found.")
+			if len(list.Items) == 0 {
+				return true
+			}
+			return false
+		}).WithTimeout(testTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
 
 	})
 
