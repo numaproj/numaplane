@@ -362,23 +362,24 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
-		done, newChild, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
-			if newChild {
-				pipelineRollouts, err := r.GetPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
-				if err != nil {
-					return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
-				}
-				for _, pipelineRollout := range pipelineRollouts {
-					numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
-					pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
-				}
+
+			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
+			pipelineRollouts, err := r.GetPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
+			if err != nil {
+				return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
 			}
+			for _, pipelineRollout := range pipelineRollouts {
+				numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
+				pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
+			}
+
 			// requeue
 			return true, nil
 		}

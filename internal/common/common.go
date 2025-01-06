@@ -70,7 +70,7 @@ const (
 	LabelValueNamespaceConfig = "namespace-level-config"
 
 	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
-	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name" // TODO: can I deprecate this and create a label for isbsvc-rollout-name?
+	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name" // TODO: this is still named "isbsvc-name" instead of "isbsvc-rollout-name" - consider deprecating this and creating a separate label for isbsvc-rollout-name?
 
 	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
 	LabelKeyISBServiceChildNameForPipeline = "numaplane.numaproj.io/isbsvc-child-name"
