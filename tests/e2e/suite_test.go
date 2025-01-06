@@ -59,7 +59,8 @@ var _ = BeforeSuite(func() {
 
 	stopCh = make(chan struct{})
 
-	ppnd = os.Getenv("PPND")
+	upgradeStrategy := getUpgradeStrategy()
+	Expect(upgradeStrategy).ToNot(Equal("invalid"))
 
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 

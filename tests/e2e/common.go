@@ -53,7 +53,7 @@ var (
 	mutex  sync.RWMutex
 	stopCh chan struct{}
 
-	ppnd                 string
+	upgradeStrategy      string
 	disableTestArtifacts string
 	enablePodLogs        string
 
@@ -386,4 +386,18 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 
 	return &unstructList.Items[0], nil
 
+}
+
+func getUpgradeStrategy() string {
+
+	var validStrategies = []string{"ppnd", "progressive", "no-strategy", ""}
+
+	strategy := strings.ToLower(os.Getenv("STRATEGY"))
+	for _, validStrategy := range validStrategies {
+		if strategy == validStrategy {
+			return strategy
+		}
+	}
+
+	return "invalid"
 }
