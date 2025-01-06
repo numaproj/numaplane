@@ -112,21 +112,21 @@ var (
 		Name:        "numaplane_pipeline_rollout_health",
 		Help:        "A metric to indicate whether the pipeline rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelPipeline})
+	}, []string{LabelNamespace, LabelPipeline, LabelPhase})
 
 	// isbServicesRolloutHealth indicates whether the ISB service rollouts are healthy (from k8s resource perspective).
 	isbServicesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_isb_services_rollout_health",
 		Help:        "A metric to indicate whether the isb services rollout is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelISBService})
+	}, []string{LabelNamespace, LabelISBService, LabelPhase})
 
 	// monoVerticesRolloutHealth indicates whether the mono vertices are healthy (from k8s resource perspective).
 	monoVerticesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaplane_monovertex_rollout_health",
 		Help:        "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelMonoVertex})
+	}, []string{LabelNamespace, LabelMonoVertex, LabelPhase})
 
 	// pipelineRolloutsRunning indicates the number of PipelineRollouts
 	pipelineRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
