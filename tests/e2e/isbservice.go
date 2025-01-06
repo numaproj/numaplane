@@ -69,19 +69,19 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, 4*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	if ppnd == "true" {
 		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 		}, testTimeout, testPollingInterval).Should(Or(Equal(metav1.ConditionFalse), Equal(metav1.ConditionUnknown)))
 	}
 

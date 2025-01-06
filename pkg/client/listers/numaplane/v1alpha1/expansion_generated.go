@@ -33,6 +33,14 @@ type MonoVertexRolloutListerExpansion interface{}
 // MonoVertexRolloutNamespaceLister.
 type MonoVertexRolloutNamespaceListerExpansion interface{}
 
+// NumaflowControllerListerExpansion allows custom methods to be added to
+// NumaflowControllerLister.
+type NumaflowControllerListerExpansion interface{}
+
+// NumaflowControllerNamespaceListerExpansion allows custom methods to be added to
+// NumaflowControllerNamespaceLister.
+type NumaflowControllerNamespaceListerExpansion interface{}
+
 // NumaflowControllerRolloutListerExpansion allows custom methods to be added to
 // NumaflowControllerRolloutLister.
 type NumaflowControllerRolloutListerExpansion interface{}

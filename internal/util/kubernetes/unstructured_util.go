@@ -58,29 +58,7 @@ func GetLiveResource(
 		return nil, err
 	}
 	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", object.GetNamespace(), object.GetName(), gvr, unstruc.Object)
-
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstruc.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstruc.Object = resultObject
-
-	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
-	// instead of the expected int64 type after using the StructToStruct conversion func.
-	// This fix allows us to use GetGeneration() func of an Unstructured object.
-	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstruc.Object, "metadata", "generation")
-	if err != nil {
-		numaLogger.Warnf("expected generation field to be set to float64 but it's not: unstruc.Object=%+v", unstruc.Object)
-		return unstruc, nil
-	}
-	if foundAsFloat {
-		err = unstructured.SetNestedField(unstruc.Object, int64(generationAsFloat), "metadata", "generation")
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return unstruc, err
+	return unstruc, nil
 }
 
 func ListLiveResource(
@@ -202,29 +180,8 @@ func GetResource(ctx context.Context, c client.Client, gvk schema.GroupVersionKi
 	if err := c.Get(ctx, namespacedName, unstructuredObj); err != nil {
 		return nil, err
 	}
-
-	var resultObject map[string]interface{}
-	if err := util.StructToStruct(unstructuredObj.Object, &resultObject); err != nil {
-		return nil, err
-	}
-	unstructuredObj.Object = resultObject
-
-	// TODO: this is a temporary workaround to avoid the data type conversion issue in which the generation field becomes a float64
-	// instead of the expected int64 type after using the StructToStruct conversion func.
-	// This fix allows us to use GetGeneration() func of an Unstructured object.
-	generationAsFloat, foundAsFloat, err := unstructured.NestedFloat64(unstructuredObj.Object, "metadata", "generation")
-	if err != nil {
-		numaLogger.Warnf("expected generation field to be set to float64 but it's not: name=%v,unstructuredObj.Object=%+v", namespacedName, unstructuredObj.Object)
-		return unstructuredObj, nil
-	}
-	if foundAsFloat {
-		err = unstructured.SetNestedField(unstructuredObj.Object, int64(generationAsFloat), "metadata", "generation")
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return unstructuredObj, err
+	numaLogger.Verbosef("retrieved resource %s/%s of type %+v with value %+v", namespacedName.Namespace, namespacedName.Name, gvk, unstructuredObj.Object)
+	return unstructuredObj, nil
 }
 
 // UpdateResource updates the resource in the kubernetes cluster

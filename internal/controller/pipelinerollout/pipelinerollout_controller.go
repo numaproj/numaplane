@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -563,10 +562,16 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
 	if existingPipelineDef == nil {
-		pipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
+		// determine name of the promoted Pipeline
+		pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 		if err != nil {
-			return err
+			return fmt.Errorf("Unable to process pipeline status: err=%s", err)
 		}
+		pipelineDef := &unstructured.Unstructured{}
+		pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+		pipelineDef.SetNamespace(pipelineRollout.Namespace)
+		pipelineDef.SetName(pipelineName)
+
 		livePipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -943,7 +948,7 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
 	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
 
-	specsEqual := reflect.DeepEqual(fromCopy.Object["spec"], toCopy.Object["spec"])
+	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())

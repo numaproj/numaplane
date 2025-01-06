@@ -119,3 +119,92 @@ func Test_ExtractPath(t *testing.T) {
 		})
 	}
 }
+
+func Test_CompareStructNumTypeAgnostic(t *testing.T) {
+	testCases := []struct {
+		name               string
+		a                  map[string]interface{}
+		b                  map[string]interface{}
+		expectedComparison bool
+	}{
+		{
+			name:               "equal structs - same number type",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": 1},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Int8",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": int8(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Int16",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": int16(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Int32",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": int32(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Int64",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": int64(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Float32",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": float32(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as float64",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": float64(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Uint",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": uint(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Uint8",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": uint8(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Uint16",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": uint16(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Uint32",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": uint32(1)},
+			expectedComparison: true,
+		},
+		{
+			name:               "equal structs - different number type as Uint64",
+			a:                  map[string]interface{}{"number": 1},
+			b:                  map[string]interface{}{"number": uint64(1)},
+			expectedComparison: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actualComparison := CompareStructNumTypeAgnostic(tc.a, tc.b)
+			assert.Equal(t, tc.expectedComparison, actualComparison)
+		})
+	}
+}

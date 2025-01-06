@@ -66,12 +66,12 @@ func verifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
@@ -189,7 +189,7 @@ func verifyMonoVertexPaused(namespace string, monoVertexRolloutName string) {
 	document("Verify that MonoVertex Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused)
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	document("Verify that MonoVertex is paused")
@@ -239,7 +239,7 @@ func verifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
 	document("Verifying that the MonoVertexRollout Child Condition is Healthy")
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
@@ -252,7 +252,7 @@ func verifyMonoVertexRolloutDeployed(monoVertexRolloutName string) {
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 }
