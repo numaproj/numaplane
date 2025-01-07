@@ -368,7 +368,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
-			return false, fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyNoOp, err)
+			return false, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	case apiv1.UpgradeStrategyNoOp:

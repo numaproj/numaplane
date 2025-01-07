@@ -378,7 +378,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 		// update NumaflowController
 		err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
 		if err != nil {
-			return false, fmt.Errorf("error updating NumaflowController, %s: %v", apiv1.UpgradeStrategyNoOp, err)
+			return false, fmt.Errorf("error updating NumaflowController, %s: %v", inProgressStrategy, err)
 		}
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	case apiv1.UpgradeStrategyNoOp:
