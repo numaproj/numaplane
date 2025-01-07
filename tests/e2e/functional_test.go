@@ -579,8 +579,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
 				return false
 			}
-			if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
-				return false
+			if upgradeStrategy == "progressive" {
+				if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyProgressive || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+					return false
+				}
+			} else {
+				if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+					return false
+				}
 			}
 			return true
 		}

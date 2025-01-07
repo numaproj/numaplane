@@ -59,7 +59,7 @@ var _ = BeforeSuite(func() {
 
 	stopCh = make(chan struct{})
 
-	upgradeStrategy := getUpgradeStrategy()
+	upgradeStrategy = getUpgradeStrategy()
 	Expect(upgradeStrategy).ToNot(Equal("invalid"))
 
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
