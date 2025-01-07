@@ -48,7 +48,7 @@ func verifyNumaflowControllerRolloutReady() {
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	if upgradeStrategy == "ppnd" {
+	if upgradeStrategy == "pause-and-drain" {
 		document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
