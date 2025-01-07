@@ -105,8 +105,11 @@ const (
 	AssessmentResultUnknown = ""
 )
 
+// ChildStatus describes the status of an upgrading child
 type ChildStatus struct {
-	Name             string           `json:"name"`
+	// Name of the upgrading child
+	Name string `json:"name"`
+	// whether it's failed or succeeded or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 }
 

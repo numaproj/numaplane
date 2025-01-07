@@ -12,29 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Determine if we need to start the Progressive rollout process for this PipelineRollout
-// (Either the pipeline requires it or there's an "upgrading" isbsvc)
-/*func (r *PipelineRolloutReconciler) needProgressive(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, pipelineUpdateRequiringProgressive bool) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	// is there an "upgrading" isbsvc associated with our ISBServiceRollout, which we're not already using?
-
-	upgradingISBSvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
-	if err != nil {
-		return false, err
-	}
-	// check if pipeline is already using the "upgrading" isbsvc
-	upgradingISBSvcUnused := false
-	if upgradingISBSvc != nil {
-
-	}
-
-	needProgressive := pipelineUpdateRequiringProgressive || upgradingISBSvc != nil
-	numaLogger.Debugf("needProgressive=%t, pipelineUpdateRequiringProgressive=%t, upgrading isbsvc=%t", needProgressive, pipelineUpdateRequiringProgressive, upgradingISBSvc != nil)
-
-	return needProgressive, nil
-}*/
-
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label
 func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
@@ -49,6 +26,8 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 	return isbsvc, nil
 }
 
+// make an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// TODO: fix this assessment not to return an immediate result as soon as things are healthy or unhealthy
 func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 
 	numaLogger := logger.FromContext(ctx)

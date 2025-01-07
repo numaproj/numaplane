@@ -776,7 +776,6 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
 	// Otherwise, use the promoted one
-	// TODO: what if there's an "upgrading" one but we're using a non-Progressive strategy?
 	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return nil, err

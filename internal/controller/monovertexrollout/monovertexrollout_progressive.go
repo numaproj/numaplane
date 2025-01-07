@@ -10,8 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// TODO: can move other progressive interface functions here as well? (same with PipelineRollout)
+// TODO: can move other progressive interface functions here as well? (same with PipelineRollout, ISBServiceRollout)
 
+// make an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // TODO: fix this assessment not to return an immediate result as soon as things are healthy or unhealthy
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx)
