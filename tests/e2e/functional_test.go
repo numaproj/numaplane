@@ -298,7 +298,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return pipelineSpec, nil
 		})
 
-		if upgradeStrategy == "ppnd" {
+		if upgradeStrategy == "pause-and-drain" {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
 			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
@@ -337,7 +337,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if upgradeStrategy == "ppnd" {
+		if upgradeStrategy == "pause-and-drain" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
@@ -523,7 +523,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if upgradeStrategy == "ppnd" {
+		if upgradeStrategy == "pause-and-drain" {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
@@ -771,7 +771,7 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
-	if upgradeStrategy == "ppnd" {
+	if upgradeStrategy == "pause-and-drain" {
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)

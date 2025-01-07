@@ -390,7 +390,7 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 
 func getUpgradeStrategy() string {
 
-	var validStrategies = []string{"ppnd", "progressive", "no-strategy", ""}
+	var validStrategies = []string{"pause-and-drain", "progressive", "no-strategy", ""}
 
 	strategy := strings.ToLower(os.Getenv("STRATEGY"))
 	for _, validStrategy := range validStrategies {
