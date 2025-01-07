@@ -190,9 +190,9 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 
 	defer func() {
 		if nfcRollout.Status.IsHealthy() {
-			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(1)
+			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase)).Set(1)
 		} else {
-			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name).Set(0)
+			r.customMetrics.NumaflowControllerRolloutsHealth.WithLabelValues(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase)).Set(0)
 		}
 	}()
 
@@ -209,7 +209,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		// generate the metrics for the numaflow controller rollout deletion.
 		r.customMetrics.DecNumaflowControllerRollouts(nfcRollout.Name, nfcRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.NumaflowControllerRolloutsHealth.DeleteLabelValues(nfcRollout.Namespace, nfcRollout.Name)
+		r.customMetrics.NumaflowControllerRolloutsHealth.DeleteLabelValues(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
 
 		return ctrl.Result{}, nil
 	}
