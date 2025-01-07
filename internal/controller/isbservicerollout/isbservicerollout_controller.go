@@ -476,12 +476,12 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
-func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbRolloutName string) ([]apiv1.PipelineRollout, error) {
+func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
 	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
-	// get all of the PipelineRollouts on the namespace and filter out any that aren't ties to this ISBServiceRollout
+	// get all of the PipelineRollouts on the namespace and filter out any that aren't tied to this ISBServiceRollout
 	err := r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
 	if err != nil {
 		return pipelineRolloutsForISBSvc, err
@@ -493,11 +493,11 @@ func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context
 		if err != nil {
 			return pipelineRolloutsForISBSvc, err
 		}
-		isbsvcRolloutName := "default"
+		isbsvcROUsed := "default"
 		if pipelineSpec.InterStepBufferServiceName != "" {
-			isbsvcRolloutName = pipelineSpec.InterStepBufferServiceName
+			isbsvcROUsed = pipelineSpec.InterStepBufferServiceName
 		}
-		if isbsvcRolloutName == isbRolloutName {
+		if isbsvcROUsed == isbsvcRolloutName {
 			pipelineRolloutsForISBSvc = append(pipelineRolloutsForISBSvc, pipelineRollout)
 		}
 	}
@@ -708,7 +708,6 @@ func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
-	fmt.Printf("deletethis: makePromotedISBServiceDef() has labels: %+v\n", metadata.Labels)
 
 	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
 }
@@ -743,7 +742,6 @@ func getBaseISBSVCMetadata(isbServiceRollout *apiv1.ISBServiceRollout) (apiv1.Me
 		labelMapping[key] = val
 	}
 	labelMapping[common.LabelKeyParentRollout] = isbServiceRollout.Name
-	fmt.Printf("deletethis: getBaseISBSVCMetadata(): LabelKeyParentRollout=%q\n", isbServiceRollout.Name)
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: isbServiceRollout.Spec.InterStepBufferService.Annotations}, nil
 
@@ -766,7 +764,6 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	labels := isbsvc.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
 	isbsvc.SetLabels(labels)
-	fmt.Printf("deletethis: CreateUpgradingChildDefinition() has labels: %+v\n", labels)
 
 	return isbsvc, nil
 }

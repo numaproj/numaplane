@@ -3,9 +3,9 @@ package isbservicerollout
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,11 +14,12 @@ import (
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 
-	// TODO: we need to assess the isbsvc's health, but like with PipelineRollout and MonoVertexRollout,
-	// we need to do it over time and not all at once
+	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
 
 	// Get the Pipelines using this "upgrading" isbsvc to determine if they're healthy
-	// First get all PipelineRollouts using this ISBServiceRollout - need to make sure all have created a Pipeline using this isbsvc
+	// First get all PipelineRollouts using this ISBServiceRollout - need to make sure all have created a Pipeline using this isbsvc, otherwise we're not ready to assess
+
+	// What is the name of the ISBServiceRollout?
 	isbsvcRolloutName, found := existingUpgradingChildDef.GetLabels()[common.LabelKeyParentRollout]
 	if !found {
 		return apiv1.AssessmentResultUnknown, fmt.Errorf("There is no Label named %q for isbsvc %s/%s; can't make assessment for progressive",
@@ -44,14 +45,17 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		numaLogger.Debugf("Can't assess isbsvc; didn't find any pipelines yet using this isbsvc")
 		return apiv1.AssessmentResultUnknown, nil
 	}
-	fmt.Printf("deletethis: getPipelineListForChildISBSvc %s/%s returned pipelines: %+v\n", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), pipelines.Items)
-	// map each PipelineRollout to its Pipeline - if we don't have a Pipeline for any of them, then we return "Unknown"
+
+	// map each PipelineRollout to its Pipeline - if we don't have a Pipeline for any of them, it is probably still being created, so we return "Unknown"
 	rolloutToPipeline := make(map[*apiv1.PipelineRollout]*unstructured.Unstructured)
 	for _, pipelineRollout := range pipelineRollouts {
 		foundPipeline := false
 		for _, pipeline := range pipelines.Items {
-			fmt.Printf("deletethis: testing if pipeline %q is child of pipelineRollout %q\n", pipeline.GetName(), pipelineRollout.Name)
-			if isPipelineChildOfPipelineRollout(pipeline.GetName(), pipelineRollout.Name) {
+			pipelineParent, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
+			if err != nil {
+				return apiv1.AssessmentResultUnknown, err
+			}
+			if pipelineParent == pipelineRollout.Name {
 				rolloutToPipeline[&pipelineRollout] = &pipeline
 				foundPipeline = true
 				break
@@ -84,22 +88,4 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		}
 	}
 	return apiv1.AssessmentResultSuccess, nil
-}
-
-func isPipelineChildOfPipelineRollout(pipelineName string, pipelineRolloutName string) bool {
-	if len(pipelineRolloutName) >= len(pipelineName) {
-		return false
-	}
-
-	pipelineNamePrefix := pipelineName[:len(pipelineRolloutName)]
-	if pipelineNamePrefix != pipelineRolloutName {
-		return false
-	}
-
-	if pipelineName[len(pipelineRolloutName)] != '-' {
-		return false
-	}
-	pipelineNameSuffix := pipelineName[len(pipelineRolloutName)+1:]
-	_, err := strconv.Atoi(pipelineNameSuffix)
-	return err == nil
 }
