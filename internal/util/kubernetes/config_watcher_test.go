@@ -76,13 +76,21 @@ func Test_watchConfigMaps(t *testing.T) {
 			},
 		},
 		Data: map[string]string{
-			"pipelineSpecDataLossFields": `
-        - path: "abc"
-        - path: "abcde/xyz"
-        - path: "path/array/sample"
+			"pipeline": `
+        dataLoss:
+          - path: "abc"
+          - path: "abcde/xyz"
+          - path: "path/array/sample"
+        recreate:
+        - path: "recreate/path"
       `,
-			"isbServiceSpecDataLossFields": `
-        - path: "invalid"
+			"isbService": `
+        dataLoss:
+          - path: "invalid"
+        progressive:
+          - path: "progressive/path/a"
+          - path: "progressive/path/b"
+          - path: "progressive/path/c"
       `,
 		},
 	}
@@ -93,8 +101,14 @@ func Test_watchConfigMaps(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	expectedUSDEConfig := config.USDEConfig{
-		PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "abc"}, {Path: "abcde/xyz"}, {Path: "path/array/sample"}},
-		ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "invalid"}},
+		Pipeline: config.USDEResourceConfig{
+			DataLoss: []config.SpecField{{Path: "abc"}, {Path: "abcde/xyz"}, {Path: "path/array/sample"}},
+			Recreate: []config.SpecField{{Path: "recreate/path"}},
+		},
+		ISBService: config.USDEResourceConfig{
+			DataLoss:    []config.SpecField{{Path: "invalid"}},
+			Progressive: []config.SpecField{{Path: "progressive/path/a"}, {Path: "progressive/path/b"}, {Path: "progressive/path/c"}},
+		},
 	}
 
 	actualUSDEConfig := config.GetConfigManagerInstance().GetUSDEConfig()

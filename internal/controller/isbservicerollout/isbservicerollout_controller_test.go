@@ -68,7 +68,9 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	assert.NoError(t, err)
 
 	usdeConfig := config.USDEConfig{
-		ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec", IncludeSubfields: true}},
+		ISBService: config.USDEResourceConfig{
+			DataLoss: []config.SpecField{{Path: "spec", IncludeSubfields: true}},
+		},
 	}
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
