@@ -346,6 +346,9 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
 			r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
 		}
+		if upgradeStrategyType == apiv1.UpgradeStrategyApply {
+			inProgressStrategy = apiv1.UpgradeStrategyApply
+		}
 	}
 
 	switch inProgressStrategy {
@@ -371,15 +374,15 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 		}
 	// TODO: Progressive strategy should ideally be creating a second parallel NumaflowController, and all Pipelines should be on it;
 	// for now we just create a 2nd NumaflowControllerRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyNoOp, apiv1.UpgradeStrategyProgressive:
-		if numaflowControllerNeedsToUpdate {
-			// update NumaflowController
-			err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
-			if err != nil {
-				return false, fmt.Errorf("error updating NumaflowController, %s: %v", apiv1.UpgradeStrategyNoOp, err)
-			}
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyApply, apiv1.UpgradeStrategyProgressive:
+		// update NumaflowController
+		err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
+		if err != nil {
+			return false, fmt.Errorf("error updating NumaflowController, %s: %v", inProgressStrategy, err)
 		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyNoOp:
+		break
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
