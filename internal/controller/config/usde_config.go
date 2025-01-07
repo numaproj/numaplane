@@ -18,17 +18,25 @@ package config
 
 import (
 	"fmt"
+
 	"github.com/rs/zerolog/log"
 )
 
-type SpecDataLossField struct {
+type SpecField struct {
 	Path             string `json:"path" yaml:"path"`
 	IncludeSubfields bool   `json:"includeSubfields,omitempty" yaml:"includeSubfields,omitempty"`
 }
 
+type USDEResourceConfig struct {
+	DataLoss    []SpecField `json:"dataLoss" yaml:"dataLoss"`
+	Recreate    []SpecField `json:"recreate" yaml:"recreate"`
+	Progressive []SpecField `json:"progressive" yaml:"progressive"`
+}
+
 type USDEConfig struct {
-	PipelineSpecDataLossFields   []SpecDataLossField `json:"pipelineSpecDataLossFields,omitempty" yaml:"pipelineSpecDataLossFields,omitempty"`
-	ISBServiceSpecDataLossFields []SpecDataLossField `json:"isbServiceSpecDataLossFields,omitempty" yaml:"isbServiceSpecDataLossFields,omitempty"`
+	Pipeline   USDEResourceConfig `json:"pipeline" yaml:"pipeline"`
+	ISBService USDEResourceConfig `json:"isbService" yaml:"isbService"`
+	Monovertex USDEResourceConfig `json:"monovertex" yaml:"monovertex"`
 }
 
 func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {

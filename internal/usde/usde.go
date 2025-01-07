@@ -16,6 +16,15 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+var (
+	strategyRating map[apiv1.UpgradeStrategy]int = map[apiv1.UpgradeStrategy]int{
+		apiv1.UpgradeStrategyNoOp:        0,
+		apiv1.UpgradeStrategyApply:       1,
+		apiv1.UpgradeStrategyPPND:        2,
+		apiv1.UpgradeStrategyProgressive: 2,
+	}
+)
+
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns whether an update is needed and the strategy to use
@@ -53,16 +62,16 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
 	// Get data loss fields config based on the spec type (Pipeline, ISBS)
-	dataLossFields := []config.SpecDataLossField{}
+	dataLossFields := []config.SpecField{}
 	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
-		dataLossFields = usdeConfig.PipelineSpecDataLossFields
+		dataLossFields = usdeConfig.Pipeline.DataLoss
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
-		dataLossFields = usdeConfig.ISBServiceSpecDataLossFields
+		dataLossFields = usdeConfig.ISBService.DataLoss
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
 		// TODO: for NumaflowController updates do we need to figure out which strategy to use based on the type of changes similarly done for Pipeline and ISBSvc?
 		// OR should we always return the user's preferred strategy?
 		// For now, make the entire spec a data loss field and include all its subfields
-		dataLossFields = []config.SpecDataLossField{
+		dataLossFields = []config.SpecField{
 			{
 				Path:             "spec",
 				IncludeSubfields: true,
@@ -150,15 +159,6 @@ func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.Upgra
 	}
 	return strategy
 }
-
-var (
-	strategyRating map[apiv1.UpgradeStrategy]int = map[apiv1.UpgradeStrategy]int{
-		apiv1.UpgradeStrategyNoOp:        0,
-		apiv1.UpgradeStrategyApply:       1,
-		apiv1.UpgradeStrategyPPND:        2,
-		apiv1.UpgradeStrategyProgressive: 2,
-	}
-)
 
 func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
