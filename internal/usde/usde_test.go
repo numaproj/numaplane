@@ -197,7 +197,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: false,
@@ -212,7 +214,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -227,7 +231,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -238,7 +244,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: false,
@@ -253,7 +261,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -268,7 +278,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "invalid"},
 			expectedNeedsUpdating: true,
@@ -283,7 +295,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -299,7 +313,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator", IncludeSubfields: true}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator", IncludeSubfields: true}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -315,7 +331,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator.rpu"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator.rpu"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -331,7 +349,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink.log"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.sink.log"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -347,7 +367,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -363,7 +385,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.sink"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -379,7 +403,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.sink", IncludeSubfields: true}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.sink", IncludeSubfields: true}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -390,7 +416,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: false,
@@ -405,8 +433,12 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
-				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
+				},
+				ISBService: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.jetstream.containerTemplate.resources.limits"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -421,8 +453,12 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields:   []config.SpecDataLossField{{Path: "spec.vertices.source.something"}},
-				ISBServiceSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.jetstream.containerTemplate.resources.limits", IncludeSubfields: true}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
+				},
+				ISBService: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.jetstream.containerTemplate.resources.limits", IncludeSubfields: true}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -441,7 +477,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -464,7 +502,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.interStepBufferServiceName"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
+				},
 			},
 			namespaceConfig:       nil,
 			expectedNeedsUpdating: true,
@@ -480,7 +520,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec1),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
@@ -496,7 +538,9 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec2),
 			usdeConfig: config.USDEConfig{
-				PipelineSpecDataLossFields: []config.SpecDataLossField{{Path: "spec.vertices.source.generator"}},
+				Pipeline: config.USDEResourceConfig{
+					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator"}},
+				},
 			},
 			namespaceConfig:       &config.NamespaceConfig{UpgradeStrategy: "pause-and-drain"},
 			expectedNeedsUpdating: true,
