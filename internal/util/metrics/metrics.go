@@ -128,6 +128,20 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{LabelNamespace, LabelMonoVertex, LabelPhase})
 
+	// numaflowControllersHealth indicates whether the NumaflowControllers are healthy (from k8s resource perspective)
+	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_health",
+		Help:        "A metric to indicate whether the NumaflowController is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelNumaflowController, LabelPhase})
+
+	// numaflowControllerRolloutsHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective)
+	numaflowControllerRolloutsHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "numaflow_controller_rollout_health",
+		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelNumaflowController, LabelPhase})
+
 	// pipelineRolloutsRunning indicates the number of PipelineRollouts
 	pipelineRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "pipeline_rollouts_running",
@@ -219,13 +233,6 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
-	// numaflowControllerRolloutsHealth indicates whether the numaflow controller rollouts are healthy (from k8s resource perspective)
-	numaflowControllerRolloutsHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_controller_rollout_health",
-		Help:        "A metric to indicate whether the numaflow controller rollout is healthy. '1' means healthy, '0' means unhealthy",
-		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelNumaflowController})
-
 	// numaflowControllerRolloutsRunning is the gauge for the number of running numaflow controller rollouts
 	numaflowControllerRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "numaflow_controller_rollouts_running",
@@ -253,13 +260,6 @@ var (
 		Help:        "Duration a NumaflowControllerRollout paused pipelines for",
 		ConstLabels: defaultLabels,
 	}, []string{LabelName})
-
-	// numaflowControllersHealth indicates whether the NumaflowControllers are healthy (from k8s resource perspective)
-	numaflowControllersHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "numaflow_controller_health",
-		Help:        "A metric to indicate whether the NumaflowController is healthy. '1' means healthy, '0' means unhealthy",
-		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelNumaflowController})
 
 	// numaflowControllerSyncErrors is the total number of NumaflowController reconciliation errors
 	numaflowControllerSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
