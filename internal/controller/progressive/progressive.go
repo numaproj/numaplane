@@ -328,6 +328,8 @@ func processUpgradingChild(
 
 		return true, false, nil
 	default:
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultUnknown}
+
 		return false, false, nil
 	}
 }

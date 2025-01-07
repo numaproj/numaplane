@@ -776,6 +776,8 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
 	// Otherwise, use the promoted one
+	// TODO: consider case that there's an "upgrading" isbsvc, but the preferred strategy has just changed to something
+	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
 	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return nil, err
@@ -873,7 +875,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 	labels := pipeline.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
-	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
+	labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 	pipeline.SetLabels(labels)
 
 	return pipeline, nil

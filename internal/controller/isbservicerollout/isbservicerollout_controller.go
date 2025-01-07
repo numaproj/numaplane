@@ -396,6 +396,11 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
+	// clean up recyclable interstepbufferservices
+	err = progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return false, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
+	}
 
 	return false, nil
 }
@@ -802,16 +807,30 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 }
 
 // Recycle deletes child
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error {
-	// TODO: Implement
-	return nil
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) error {
+	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
+
+	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
+	// Pipelines using it
+
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+	}
+	if pipelines != nil && len(pipelines.Items) > 0 {
+		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
+		return nil
+	}
+	// okay to delete now
+	numaLogger.Debug("deleting isbsvc")
+	return kubernetes.DeleteResource(ctx, c, isbsvc)
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
+	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, from, to)
 	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
