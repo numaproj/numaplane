@@ -745,7 +745,8 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 		return apiv1.Metadata{}, fmt.Errorf("failed to unmarshal pipeline spec: %v", err)
 	}
 
-	labelMapping[common.LabelKeyISBServiceRONameForPipeline] = pipelineSpec.GetISBSvcName()
+	labelMapping[common.LabelKeyISBServiceRONameForPipeline] = pipelineSpec.GetISBSvcName() // DEPRECATED label, still used for backward compatibility temporarily
+	labelMapping[common.LabelKeyISBServiceRolloutNameForPipeline] = pipelineSpec.GetISBSvcName()
 	labelMapping[common.LabelKeyParentRollout] = pipelineRollout.Name
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: pipelineRollout.Spec.Pipeline.Annotations}, nil
