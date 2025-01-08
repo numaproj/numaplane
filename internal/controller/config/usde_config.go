@@ -30,7 +30,7 @@ type SpecField struct {
 type USDEResourceConfig struct {
 	DataLoss    []SpecField `json:"dataLoss,omitempty" yaml:"dataLoss,omitempty"`
 	Recreate    []SpecField `json:"recreate,omitempty" yaml:"recreate,omitempty"`
-	Progressive []SpecField `json:"progressive,omitempty" yaml:"progressive,omitempty"` // TTODO: I don't think we need this anymore (even for Monovertex)
+	Progressive []SpecField `json:"progressive,omitempty" yaml:"progressive,omitempty"`
 }
 
 type USDEConfig map[string]USDEResourceConfig
