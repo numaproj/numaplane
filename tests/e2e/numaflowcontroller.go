@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -48,7 +49,7 @@ func verifyNumaflowControllerRolloutReady() {
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	if upgradeStrategy == "pause-and-drain" {
+	if upgradeStrategy == config.PPNDStrategyID {
 		document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})

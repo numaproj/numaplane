@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientgo "k8s.io/client-go/kubernetes"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -53,9 +54,9 @@ var (
 	mutex  sync.RWMutex
 	stopCh chan struct{}
 
-	upgradeStrategy      string
 	disableTestArtifacts string
 	enablePodLogs        string
+	upgradeStrategy      config.USDEUserStrategy
 
 	openFiles map[string]*os.File
 )
@@ -388,16 +389,6 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 
 }
 
-func getUpgradeStrategy() string {
-
-	var validStrategies = []string{"pause-and-drain", "progressive", "no-strategy", ""}
-
-	strategy := strings.ToLower(os.Getenv("STRATEGY"))
-	for _, validStrategy := range validStrategies {
-		if strategy == validStrategy {
-			return strategy
-		}
-	}
-
-	return "invalid"
+func getUpgradeStrategy() config.USDEUserStrategy {
+	return config.USDEUserStrategy(strings.ToLower(os.Getenv("STRATEGY")))
 }

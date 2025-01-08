@@ -18,6 +18,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -77,7 +78,7 @@ func verifyISBSvcRolloutReady(isbServiceRolloutName string) {
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}, 4*time.Minute, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 
-	if upgradeStrategy == "pause-and-drain" {
+	if upgradeStrategy == config.PPNDStrategyID {
 		document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
