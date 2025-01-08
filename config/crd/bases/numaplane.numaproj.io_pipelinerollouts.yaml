@@ -203,8 +203,10 @@ spec:
                       or otherwise the most recent "upgrading" child
                     properties:
                       assessmentResult:
+                        description: whether it's failed or succeeded or to be determined
                         type: string
                       name:
+                        description: Name of the upgrading child
                         type: string
                     required:
                     - name

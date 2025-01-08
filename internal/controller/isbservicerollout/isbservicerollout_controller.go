@@ -317,6 +317,9 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			inProgressStrategy = apiv1.UpgradeStrategyProgressive
 			r.inProgressStrategyMgr.SetStrategy(ctx, isbServiceRollout, inProgressStrategy)
 		}
+		if upgradeStrategyType == apiv1.UpgradeStrategyApply {
+			inProgressStrategy = apiv1.UpgradeStrategyApply
+		}
 	}
 
 	// don't risk out-of-date cache while performing PPND or Progressive strategy - get
@@ -383,16 +386,15 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// requeue
 			return true, nil
 		}
-
-	case apiv1.UpgradeStrategyNoOp:
-		if isbServiceNeedsToUpdate {
-			// update ISBService
-			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
-			if err != nil {
-				return false, fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyNoOp, err)
-			}
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyApply:
+		// update ISBService
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+		if err != nil {
+			return false, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
+		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+	case apiv1.UpgradeStrategyNoOp:
+		break
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}

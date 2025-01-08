@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -299,7 +300,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return pipelineSpec, nil
 		})
 
-		if ppnd == "true" {
+		if upgradeStrategy == config.PPNDStrategyID {
 			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
 			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
@@ -338,7 +339,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if ppnd == "true" {
+		if upgradeStrategy == config.PPNDStrategyID {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
@@ -525,7 +526,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		if ppnd == "true" {
+		if upgradeStrategy == config.PPNDStrategyID {
 
 			document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
@@ -569,25 +570,27 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return rollout, nil
 		})
 
-		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
-		verifyNotPausing := func() bool {
-			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
-			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-				return false
+		if upgradeStrategy == config.PPNDStrategyID {
+			document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+			verifyNotPausing := func() bool {
+				_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
+				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+					return false
+				}
+				if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+					return false
+				}
+				return true
 			}
-			if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
-				return false
-			}
-			return true
-		}
 
-		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+			Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
@@ -773,7 +776,7 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
-	if ppnd == "true" {
+	if upgradeStrategy == config.PPNDStrategyID {
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
