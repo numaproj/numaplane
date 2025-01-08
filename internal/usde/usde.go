@@ -3,12 +3,10 @@ package usde
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
@@ -27,18 +25,22 @@ var (
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
-// It returns whether an update is needed and the strategy to use
-func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
+// It returns the following parameters:
+// - bool: Indicates whether the resource needs an update.
+// - apiv1.UpgradeStrategy: The most conservative upgrade strategy to be used for updating the resource.
+// - bool: Indicates if the controller managed resources should be recreated (delete-recreate).
+// - error: Any error encountered during the function execution.
+func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
+		return false, apiv1.UpgradeStrategyError, false, err
 	}
 
-	specNeedsUpdating, specUpgradeStrategy, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
+	specNeedsUpdating, specUpgradeStrategy, recreate, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
+		return false, apiv1.UpgradeStrategyError, false, err
 	}
 
 	numaLogger.WithValues(
@@ -47,10 +49,10 @@ func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructure
 	).Debug("upgrade strategies")
 
 	if !metadataNeedsUpdating && !specNeedsUpdating {
-		return false, apiv1.UpgradeStrategyNoOp, nil
+		return false, apiv1.UpgradeStrategyNoOp, false, nil
 	}
 
-	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy}), nil
+	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy}), recreate, nil
 
 }
 
@@ -67,33 +69,11 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	// Get USDE Config
 	usdeConfig := config.GetConfigManagerInstance().GetUSDEConfig()
 
-	// Get data loss fields config based on the spec type (Pipeline, ISBS)
-	dataLossFields := []config.SpecField{}
-	progressiveFields := []config.SpecField{}
-	recreateFields := []config.SpecField{}
-	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
-		dataLossFields = usdeConfig.Pipeline.DataLoss
-		progressiveFields = usdeConfig.Pipeline.Progressive
-		recreateFields = usdeConfig.Pipeline.Recreate
-	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
-		dataLossFields = usdeConfig.ISBService.DataLoss
-		progressiveFields = usdeConfig.ISBService.Progressive
-		recreateFields = usdeConfig.ISBService.Recreate
-	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.MonoVertexGroupVersionKind) {
-		dataLossFields = usdeConfig.Monovertex.DataLoss
-		progressiveFields = usdeConfig.Monovertex.Progressive
-		recreateFields = usdeConfig.Monovertex.Recreate
-	} else if reflect.DeepEqual(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
-		// TODO: for NumaflowController updates do we need to figure out which strategy to use based on the type of changes similarly done for Pipeline and ISBSvc?
-		// OR should we always return the user's preferred strategy?
-		// For now, make the entire spec a data loss field and include all its subfields
-		dataLossFields = []config.SpecField{
-			{
-				Path:             "spec",
-				IncludeSubfields: true,
-			},
-		}
-	}
+	// Get data loss fields config based on the spec type (Pipeline, ISBS, etc.)
+	usdeConfigMapKey := strings.ToLower(newDef.GetKind())
+	dataLossFields := usdeConfig[usdeConfigMapKey].DataLoss
+	progressiveFields := usdeConfig[usdeConfigMapKey].Progressive
+	recreateFields := usdeConfig[usdeConfigMapKey].Recreate
 
 	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
 	if err != nil {
@@ -103,13 +83,12 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	numaLogger.WithValues(
 		"usdeConfig", usdeConfig,
 		"dataLossFields", dataLossFields,
+		"progressiveFields", progressiveFields,
+		"recreateFields", recreateFields,
 		"upgradeStrategy", upgradeStrategy,
 		"newDefUnstr", newDef,
 		"existingDefUnstr", existingDef,
 	).Debug("started deriving upgrade strategy")
-
-	// TODOs:
-	// - the below code is valid for Pipeline, Monovertex, and ISBSvc but we need to make an exception (at least for now) for NumaflowController
 
 	switch upgradeStrategy {
 	case apiv1.UpgradeStrategyProgressive:

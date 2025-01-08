@@ -68,7 +68,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	assert.NoError(t, err)
 
 	usdeConfig := config.USDEConfig{
-		ISBService: config.USDEResourceConfig{
+		"interstepbufferservice": config.USDEResourceConfig{
 			DataLoss: []config.SpecField{{Path: "spec", IncludeSubfields: true}},
 		},
 	}

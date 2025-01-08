@@ -197,7 +197,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{},
 				},
 			},
@@ -214,7 +214,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{},
 				},
 			},
@@ -231,7 +231,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -244,7 +244,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -261,7 +261,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -278,7 +278,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -295,7 +295,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -313,7 +313,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator", IncludeSubfields: true}},
 				},
 			},
@@ -331,7 +331,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator.rpu"}},
 				},
 			},
@@ -349,7 +349,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.sink.log"}},
 				},
 			},
@@ -367,7 +367,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices"}},
 				},
 			},
@@ -385,7 +385,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.sink"}},
 				},
 			},
@@ -403,7 +403,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makePipelineDefinition(*newPipelineDef)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.sink", IncludeSubfields: true}},
 				},
 			},
@@ -416,7 +416,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition:      *pipelineDefn.DeepCopy(),
 			existingDefinition: *pipelineDefn.DeepCopy(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
 				},
 			},
@@ -433,10 +433,10 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
 				},
-				ISBService: config.USDEResourceConfig{
+				"interstepbufferservice": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.jetstream.containerTemplate.resources.limits"}},
 				},
 			},
@@ -453,10 +453,10 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.something"}},
 				},
-				ISBService: config.USDEResourceConfig{
+				"interstepbufferservice": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.jetstream.containerTemplate.resources.limits", IncludeSubfields: true}},
 				},
 			},
@@ -477,7 +477,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{},
 				},
 			},
@@ -502,7 +502,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				return pipelineDef
 			}(),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.interStepBufferServiceName"}},
 				},
 			},
@@ -520,7 +520,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec1),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator"}},
 				},
 			},
@@ -538,7 +538,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}(),
 			existingDefinition: makePipelineDefinition(existingPipelineSpec2),
 			usdeConfig: config.USDEConfig{
-				Pipeline: config.USDEResourceConfig{
+				"pipeline": config.USDEResourceConfig{
 					DataLoss: []config.SpecField{{Path: "spec.vertices.source.generator"}},
 				},
 			},
@@ -557,7 +557,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				configManager.UnsetNamespaceConfig(defaultNamespace)
 			}
 
-			needsUpdating, strategy, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition)
+			// TTODO: add some recreate test cases
+			needsUpdating, strategy, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			assert.Equal(t, tc.expectedStrategy, strategy)

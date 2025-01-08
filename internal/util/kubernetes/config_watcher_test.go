@@ -101,11 +101,11 @@ func Test_watchConfigMaps(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	expectedUSDEConfig := config.USDEConfig{
-		Pipeline: config.USDEResourceConfig{
+		"pipeline": config.USDEResourceConfig{
 			DataLoss: []config.SpecField{{Path: "abc"}, {Path: "abcde/xyz"}, {Path: "path/array/sample"}},
 			Recreate: []config.SpecField{{Path: "recreate/path"}},
 		},
-		ISBService: config.USDEResourceConfig{
+		"interstepbufferservice": config.USDEResourceConfig{
 			DataLoss:    []config.SpecField{{Path: "invalid"}},
 			Progressive: []config.SpecField{{Path: "progressive/path/a"}, {Path: "progressive/path/b"}, {Path: "progressive/path/c"}},
 		},

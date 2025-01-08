@@ -445,7 +445,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	}
 
 	// does the Resource need updating, and if so how?
-	pipelineNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	// TODO: handle recreate parameter
+	pipelineNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
 	if err != nil {
 		return false, err
 	}

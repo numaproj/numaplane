@@ -13,9 +13,6 @@ data:
       - path: spec.edges.conditions
         includeSubfields: true
 
-      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
-      - path: spec.interStepBufferServiceName
-
       # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
       - path: spec.vertices.source.generator
       - path: spec.vertices.source.kafka
@@ -66,11 +63,10 @@ data:
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
     recreate:
-      # TODO: add the recreate fields
+      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
+      # Furthermore, this change needs to recreate the pipeline so that ISB buckets and buffers are also recreated.
       - path: spec.interStepBufferServiceName
-    progressive:
-      # TODO: add the progressive fields
-  isbService: |
+  interstepbufferservice: |
     dataLoss:
       # Principal: Update to StatefulSet may not be backward compatible to understand the data on the PVC
       - path: spec.jetstream.version
@@ -79,13 +75,17 @@ data:
       - path: spec.redis.external.sentinelUrl
       - path: spec.redis.external.masterName
     recreate:
-      # TODO: add the recreate fields
-    progressive:
-      # TODO: add the progressive fields
+      # TTODO: add the recreate fields: PVC and replicas
   monovertex: |
     dataLoss:
-      # TODO: add the data-loss fields
+      # TTODO: add the data-loss fields (if any)
     recreate:
-      # TODO: add the recreate fields
+      # TTODO: add the recreate fields (if any)
     progressive:
-      # TODO: add the progressive fields
+      # TTODO: add the progressive fields (if any)
+  numaflowcontroller: |
+    # Idependently of the USDE strategy, the NumaflowController will be deleted and recreated even if the USDE logic will not specify to recreate.
+    # The NumaflowController controller will always process a USDE response to update the spec by recreating the NumaflowController.
+    recreate:
+      - path: spec
+        includeSubfields: true
