@@ -48,8 +48,6 @@ type CustomMetrics struct {
 	NumaflowControllerRolloutsHealth *prometheus.GaugeVec
 	// NumaflowControllerRolloutsRunning is the gauge for the number of running NumaflowControllerRollouts
 	NumaflowControllerRolloutsRunning *prometheus.GaugeVec
-	// NumaflowControllerRolloutsCounterMap contains the information of all running NumaflowControllerRollouts
-	NumaflowControllerRolloutsCounterMap map[string]map[string]struct{}
 	// NumaflowControllerRolloutSyncErrors is the counter for the total number of NumaflowControllerRollout reconciliation errors
 	NumaflowControllerRolloutSyncErrors *prometheus.CounterVec
 	// NumaflowControllerRolloutSyncs is the counter for the total number of NumaflowControllerRollout reconciliations
@@ -101,11 +99,10 @@ const (
 )
 
 var (
-	defaultLabels                 = prometheus.Labels{LabelIntuit: "true"}
-	pipelineLock                  sync.Mutex
-	isbServiceLock                sync.Mutex
-	monoVertexLock                sync.Mutex
-	numaflowControllerRolloutLock sync.Mutex
+	defaultLabels  = prometheus.Labels{LabelIntuit: "true"}
+	pipelineLock   sync.Mutex
+	isbServiceLock sync.Mutex
+	monoVertexLock sync.Mutex
 
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -238,7 +235,7 @@ var (
 		Name:        "numaflow_controller_rollouts_running",
 		Help:        "Number of NumaflowControllerRollouts",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace})
+	}, []string{LabelName, LabelNamespace, LabelVersion})
 
 	// numaflowControllerRolloutSyncErrors is the total number of NumaflowControllerRollout reconciliation errors
 	numaflowControllerRolloutSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -348,7 +345,6 @@ func RegisterCustomMetrics() *CustomMetrics {
 		MonoVertexROSyncErrors:                    monoVertexROSyncErrors,
 		NumaflowControllerRolloutsHealth:          numaflowControllerRolloutsHealth,
 		NumaflowControllerRolloutsRunning:         numaflowControllerRolloutsRunning,
-		NumaflowControllerRolloutsCounterMap:      make(map[string]map[string]struct{}),
 		NumaflowControllerRolloutSyncs:            numaflowControllerRolloutSyncs,
 		NumaflowControllerRolloutSyncErrors:       numaflowControllerRolloutSyncErrors,
 		NumaflowControllerRolloutPausedSeconds:    numaflowControllerRolloutPausedSeconds,
@@ -433,28 +429,5 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	delete(m.MonoVerticesCounterMap[namespace], name)
 	for ns, monoVertices := range m.MonoVerticesCounterMap {
 		m.MonoVertexRolloutsRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
-	}
-}
-
-// IncNumaflowControllerRollouts increments the NumaflowControllerRollout counter if it doesn't already know about it
-func (m *CustomMetrics) IncNumaflowControllerRollouts(name, namespace string) {
-	numaflowControllerRolloutLock.Lock()
-	defer numaflowControllerRolloutLock.Unlock()
-	if _, ok := m.NumaflowControllerRolloutsCounterMap[namespace]; !ok {
-		m.NumaflowControllerRolloutsCounterMap[namespace] = make(map[string]struct{})
-	}
-	m.NumaflowControllerRolloutsCounterMap[namespace][name] = struct{}{}
-	for ns, numaflowControllerRollouts := range m.NumaflowControllerRolloutsCounterMap {
-		m.NumaflowControllerRolloutsRunning.WithLabelValues(ns).Set(float64(len(numaflowControllerRollouts)))
-	}
-}
-
-// DecNumaflowControllerRollouts decrements the NumaflowControllerRollout counter
-func (m *CustomMetrics) DecNumaflowControllerRollouts(name, namespace string) {
-	numaflowControllerRolloutLock.Lock()
-	defer numaflowControllerRolloutLock.Unlock()
-	delete(m.NumaflowControllerRolloutsCounterMap[namespace], name)
-	for ns, numaflowControllerRollouts := range m.NumaflowControllerRolloutsCounterMap {
-		m.NumaflowControllerRolloutsRunning.WithLabelValues(ns).Set(float64(len(numaflowControllerRollouts)))
 	}
 }
