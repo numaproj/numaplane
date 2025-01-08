@@ -43,11 +43,11 @@ TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive
 
 TEST_MANIFEST_DIR := $(TEST_NOSTRATEGY_MANIFEST_DIR)
 
-ifeq ($(PPND), true)
+ifeq ($(STRATEGY), pause-and-drain)
 TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_DEFAULT)
 endif
 
-ifeq ($(PROGRESSIVE), true)
+ifeq ($(STRATEGY), progressive)
 TEST_MANIFEST_DIR := $(TEST_PROGRESSIVE_MANIFEST_DIR)
 endif
 
