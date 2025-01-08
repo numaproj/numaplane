@@ -169,8 +169,8 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		}
 	}
 
-	// generate metrics for NumaflowControllerRollout
-	r.customMetrics.IncNumaflowControllerRollouts(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace)
+	// generate metrics for NumaflowControllerRollout.
+	r.customMetrics.NumaflowControllerRolloutsRunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
 
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
@@ -207,7 +207,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		}
 
 		// generate the metrics for the numaflow controller rollout deletion.
-		r.customMetrics.DecNumaflowControllerRollouts(nfcRollout.Name, nfcRollout.Namespace)
+		r.customMetrics.NumaflowControllerRolloutsRunning.DeleteLabelValues(nfcRollout.Name, nfcRollout.Namespace, nfcRollout.Spec.Controller.Version)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.NumaflowControllerRolloutsHealth.DeleteLabelValues(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
 
