@@ -54,7 +54,13 @@ func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructure
 
 }
 
-func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
+// resourceSpecNeedsUpdating determines if a resource specification needs updating.
+// It returns the following parameters:
+// - bool: Indicates whether the resource specification needs an update.
+// - apiv1.UpgradeStrategy: The strategy to be used for upgrading the resource.
+// - bool: Indicates if the controller managed resources should be recreated (delete-recreate).
+// - error: Any error encountered during the function execution.
+func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -91,7 +97,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
+		return false, apiv1.UpgradeStrategyError, false, err
 	}
 
 	numaLogger.WithValues(
@@ -103,7 +109,6 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	).Debug("started deriving upgrade strategy")
 
 	// TODOs:
-	// - wrap errors below when returning errors
 	// - the below code is valid for Pipeline, Monovertex, and ISBSvc but we need to make an exception (at least for now) for NumaflowController
 
 	switch upgradeStrategy {
@@ -115,47 +120,47 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 		specNeedsUpdating, err := checkFieldsList(ctx, mergedSpecFieldLists, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, err
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using full USDE Config (strategy '%s'): %w", upgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			return specNeedsUpdating, upgradeStrategy, nil
+			return specNeedsUpdating, upgradeStrategy, false, nil
 		}
 	case apiv1.UpgradeStrategyPPND:
 		// Use the recreate fields list from config
 		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, err
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			// TODO: also return a "recreate" value (could be an enum that defines what to "recreate")
-			return specNeedsUpdating, upgradeStrategy, nil
+			// Also return "recreate" true to communicate to the controller to recreate the appropriate resources
+			return specNeedsUpdating, upgradeStrategy, true, nil
 		}
 
 		// Use the dataLoss fields list from config
 		specNeedsUpdating, err = checkFieldsList(ctx, dataLossFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, err
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'dataLoss' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			return specNeedsUpdating, upgradeStrategy, nil
+			return specNeedsUpdating, upgradeStrategy, false, nil
 		}
 
 		// Use the progressive fields list from config and return direct-apply strategy if the spec needs to update
 		specNeedsUpdating, err = checkFieldsList(ctx, progressiveFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, err
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'progressive' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			return specNeedsUpdating, apiv1.UpgradeStrategyApply, nil
+			return specNeedsUpdating, apiv1.UpgradeStrategyApply, false, nil
 		}
 	case apiv1.UpgradeStrategyApply:
 		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, err
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			// TODO: also return a "recreate" value (could be an enum that defines what to "recreate")
-			return specNeedsUpdating, upgradeStrategy, nil
+			// Also return "recreate" true to communicate to the controller to recreate the appropriate resources
+			return specNeedsUpdating, upgradeStrategy, true, nil
 		}
 	}
 
@@ -164,13 +169,13 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
 	if !util.CompareStructNumTypeAgnostic(newDef.Object["spec"], existingDef.Object["spec"]) {
-		return true, apiv1.UpgradeStrategyApply, nil
+		return true, apiv1.UpgradeStrategyApply, false, nil
 	}
 
 	numaLogger.Debug("the specs are equal, no update needed")
 
 	// Return NoOp if no differences were found between the new and existing specs
-	return false, apiv1.UpgradeStrategyNoOp, nil
+	return false, apiv1.UpgradeStrategyNoOp, false, nil
 }
 
 func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef, existingDef *unstructured.Unstructured) (bool, error) {
