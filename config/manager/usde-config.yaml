@@ -67,6 +67,7 @@ data:
         includeSubfields: true
     recreate:
       # TODO: add the recreate fields
+      - path: spec.interStepBufferServiceName
     progressive:
       # TODO: add the progressive fields
   isbService: |

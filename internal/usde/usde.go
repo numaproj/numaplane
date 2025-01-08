@@ -63,10 +63,20 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// Get data loss fields config based on the spec type (Pipeline, ISBS)
 	dataLossFields := []config.SpecField{}
+	progressiveFields := []config.SpecField{}
+	recreateFields := []config.SpecField{}
 	if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.PipelineGroupVersionKind) {
 		dataLossFields = usdeConfig.Pipeline.DataLoss
+		progressiveFields = usdeConfig.Pipeline.Progressive
+		recreateFields = usdeConfig.Pipeline.Recreate
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.ISBGroupVersionKind) {
 		dataLossFields = usdeConfig.ISBService.DataLoss
+		progressiveFields = usdeConfig.ISBService.Progressive
+		recreateFields = usdeConfig.ISBService.Recreate
+	} else if reflect.DeepEqual(newDef.GroupVersionKind(), numaflowv1.MonoVertexGroupVersionKind) {
+		dataLossFields = usdeConfig.Monovertex.DataLoss
+		progressiveFields = usdeConfig.Monovertex.Progressive
+		recreateFields = usdeConfig.Monovertex.Recreate
 	} else if reflect.DeepEqual(newDef.GroupVersionKind(), apiv1.NumaflowControllerGroupVersionKind) {
 		// TODO: for NumaflowController updates do we need to figure out which strategy to use based on the type of changes similarly done for Pipeline and ISBSvc?
 		// OR should we always return the user's preferred strategy?
@@ -92,51 +102,64 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 		"existingDefUnstr", existingDef,
 	).Debug("started deriving upgrade strategy")
 
-	// Loop through all the data loss fields from config to see if any changes based on those fields require a data loss prevention strategy
-	for _, dataLossField := range dataLossFields {
-		// newDefField is a map starting with the first field specified in the path
-		// newIsMap describes the inner most element(s) described by the path
-		newDefField, newIsMap, err := util.ExtractPath(newDef.Object, strings.Split(dataLossField.Path, "."))
+	// TODOs:
+	// - wrap errors below when returning errors
+	// - the below code is valid for Pipeline, Monovertex, and ISBSvc but we need to make an exception (at least for now) for NumaflowController
+
+	switch upgradeStrategy {
+	case apiv1.UpgradeStrategyProgressive:
+		mergedSpecFieldLists := []config.SpecField{}
+		mergedSpecFieldLists = append(mergedSpecFieldLists, dataLossFields...)
+		mergedSpecFieldLists = append(mergedSpecFieldLists, progressiveFields...)
+		mergedSpecFieldLists = append(mergedSpecFieldLists, recreateFields...)
+
+		specNeedsUpdating, err := checkFieldsList(ctx, mergedSpecFieldLists, newDef, existingDef)
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
-
-		// existingDefField is a map starting with the first field specified in the path
-		// existingIsMap describes the inner most element(s) described by the path
-		existingDefField, existingIsMap, err := util.ExtractPath(existingDef.Object, strings.Split(dataLossField.Path, "."))
+		if specNeedsUpdating {
+			return specNeedsUpdating, upgradeStrategy, nil
+		}
+	case apiv1.UpgradeStrategyPPND:
+		// Use the recreate fields list from config
+		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
 		if err != nil {
 			return false, apiv1.UpgradeStrategyError, err
 		}
+		if specNeedsUpdating {
+			// TODO: also return a "recreate" value (could be an enum that defines what to "recreate")
+			return specNeedsUpdating, upgradeStrategy, nil
+		}
 
-		numaLogger.WithValues(
-			"dataLossField", dataLossField,
-			"newDefField", newDefField,
-			"existingDefField", existingDefField,
-			"newIsMap", newIsMap,
-			"existingIsMap", existingIsMap,
-		).Debug("checking data loss field differences")
+		// Use the dataLoss fields list from config
+		specNeedsUpdating, err = checkFieldsList(ctx, dataLossFields, newDef, existingDef)
+		if err != nil {
+			return false, apiv1.UpgradeStrategyError, err
+		}
+		if specNeedsUpdating {
+			return specNeedsUpdating, upgradeStrategy, nil
+		}
 
-		if dataLossField.IncludeSubfields {
-			// is the definition (fields + children) at all different?
-			if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
-				return true, upgradeStrategy, nil
-			}
-		} else {
-			isMap := newIsMap || existingIsMap
-			// if it's a map, since we don't care about subfields, we just need to know if it's present in one and not the other
-			if isMap {
-				if !newIsMap || !existingIsMap { // this means that one of them is nil
-					return true, upgradeStrategy, nil
-				}
-			} else {
-				if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
-					return true, upgradeStrategy, nil
-				}
-			}
+		// Use the progressive fields list from config and return direct-apply strategy if the spec needs to update
+		specNeedsUpdating, err = checkFieldsList(ctx, progressiveFields, newDef, existingDef)
+		if err != nil {
+			return false, apiv1.UpgradeStrategyError, err
+		}
+		if specNeedsUpdating {
+			return specNeedsUpdating, apiv1.UpgradeStrategyApply, nil
+		}
+	case apiv1.UpgradeStrategyApply:
+		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
+		if err != nil {
+			return false, apiv1.UpgradeStrategyError, err
+		}
+		if specNeedsUpdating {
+			// TODO: also return a "recreate" value (could be an enum that defines what to "recreate")
+			return specNeedsUpdating, upgradeStrategy, nil
 		}
 	}
 
-	numaLogger.Debug("no data loss field changes detected, comparing specs for any Apply-type of changes")
+	numaLogger.Debug("no USDE Config field changes detected, comparing specs for any DirectApply-type of changes")
 
 	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
@@ -148,6 +171,57 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// Return NoOp if no differences were found between the new and existing specs
 	return false, apiv1.UpgradeStrategyNoOp, nil
+}
+
+func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef, existingDef *unstructured.Unstructured) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// Loop through all the spec fields from config to see if any changes based on those fields require the specified upgrade strategy
+	for _, specField := range specFields {
+		// newDefField is a map starting with the first field specified in the path
+		// newIsMap describes the inner most element(s) described by the path
+		newDefField, newIsMap, err := util.ExtractPath(newDef.Object, strings.Split(specField.Path, "."))
+		if err != nil {
+			return false, err
+		}
+
+		// existingDefField is a map starting with the first field specified in the path
+		// existingIsMap describes the inner most element(s) described by the path
+		existingDefField, existingIsMap, err := util.ExtractPath(existingDef.Object, strings.Split(specField.Path, "."))
+		if err != nil {
+			return false, err
+		}
+
+		numaLogger.WithValues(
+			"specField", specField,
+			"newDefField", newDefField,
+			"existingDefField", existingDefField,
+			"newIsMap", newIsMap,
+			"existingIsMap", existingIsMap,
+		).Debug("checking spec field differences")
+
+		if specField.IncludeSubfields {
+			// is the definition (fields + children) at all different?
+			if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
+				return true, nil
+			}
+		} else {
+			isMap := newIsMap || existingIsMap
+			// if it's a map, since we don't care about subfields, we just need to know if it's present in one and not the other
+			if isMap {
+				if !newIsMap || !existingIsMap { // this means that one of them is nil
+					return true, nil
+				}
+			} else {
+				if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
+					return true, nil
+				}
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.UpgradeStrategy {
