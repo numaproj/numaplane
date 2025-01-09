@@ -591,7 +591,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 		}
 
 		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return *retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
+			return retrievedISBServiceSpec.JetStream != nil &&
+				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
+				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
+				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		})
 
 		verifyISBSvcRolloutReady(isbServiceRolloutName)
