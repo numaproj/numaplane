@@ -1,4 +1,4 @@
-logLevel: 4
+logLevel: 3
 numaflowControllerImageNames:
   - numaflow
   - numaflow-rc
