@@ -448,6 +448,7 @@ func TestBasePipelineMetadata(t *testing.T) {
 				Labels: map[string]string{
 					"key": "val",
 					common.LabelKeyISBServiceRolloutNameForPipeline: "buffer-service",
+					common.LabelKeyISBServiceRONameForPipeline:      "buffer-service",
 					common.LabelKeyParentRollout:                    pipelineRolloutName,
 				},
 				Annotations: map[string]string{"key": "val"},
@@ -461,6 +462,7 @@ func TestBasePipelineMetadata(t *testing.T) {
 			expectedPipelineMetadata: apiv1.Metadata{
 				Labels: map[string]string{
 					common.LabelKeyISBServiceRolloutNameForPipeline: "default",
+					common.LabelKeyISBServiceRONameForPipeline:      "default",
 					common.LabelKeyParentRollout:                    pipelineRolloutName,
 				},
 			},
