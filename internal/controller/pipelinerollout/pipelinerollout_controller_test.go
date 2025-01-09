@@ -447,9 +447,8 @@ func TestBasePipelineMetadata(t *testing.T) {
 			expectedPipelineMetadata: apiv1.Metadata{
 				Labels: map[string]string{
 					"key": "val",
-					common.LabelKeyISBServiceRolloutNameForPipeline: "buffer-service",
-					common.LabelKeyISBServiceRONameForPipeline:      "buffer-service",
-					common.LabelKeyParentRollout:                    pipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: "buffer-service",
+					common.LabelKeyParentRollout:               pipelineRolloutName,
 				},
 				Annotations: map[string]string{"key": "val"},
 			},
@@ -461,9 +460,8 @@ func TestBasePipelineMetadata(t *testing.T) {
 			rolloutSpecifiedMetadata: apiv1.Metadata{},
 			expectedPipelineMetadata: apiv1.Metadata{
 				Labels: map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: "default",
-					common.LabelKeyISBServiceRONameForPipeline:      "default",
-					common.LabelKeyParentRollout:                    pipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: "default",
+					common.LabelKeyParentRollout:               pipelineRolloutName,
 				},
 			},
 			expectError: false,
@@ -835,9 +833,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: nil,
 			initialRolloutPhase:        apiv1.PhaseDeployed,
@@ -859,9 +857,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
@@ -876,9 +874,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
@@ -900,9 +898,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
@@ -917,9 +915,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
@@ -941,9 +939,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
@@ -958,9 +956,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhasePending,
@@ -983,9 +981,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				true,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
@@ -993,9 +991,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,
@@ -1015,9 +1013,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
@@ -1025,9 +1023,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				numaflowv1.Status{},
 				false,
 				map[string]string{
-					common.LabelKeyISBServiceRolloutNameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyUpgradeState:                     string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                    ctlrcommon.DefaultTestPipelineRolloutName,
+					common.LabelKeyISBServiceRONameForPipeline: ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyUpgradeState:                string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:               ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:        apiv1.PhaseDeployed,

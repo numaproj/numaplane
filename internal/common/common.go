@@ -69,11 +69,8 @@ const (
 	// LabelValueNamespaceConfig is the label value used to identify the user's namespace-level ConfigMap
 	LabelValueNamespaceConfig = "namespace-level-config"
 
-	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with - this is DEPRECATED and should be removed later
-	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name"
-
-	// LabelKeyISBServiceRolloutNameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
-	LabelKeyISBServiceRolloutNameForPipeline = "numaplane.numaproj.io/isbsvc-rollout-name"
+	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
+	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name" // TODO: this is still named "isbsvc-name" instead of "isbsvc-rollout-name" - consider deprecating this and creating a separate label for isbsvc-rollout-name?
 
 	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
 	LabelKeyISBServiceChildNameForPipeline = "numaplane.numaproj.io/isbsvc-child-name"
