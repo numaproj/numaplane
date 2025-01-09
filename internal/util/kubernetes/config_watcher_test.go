@@ -84,7 +84,7 @@ func Test_watchConfigMaps(t *testing.T) {
         recreate:
         - path: "recreate/path"
       `,
-			"isbService": `
+			"interstepbufferservice": `
         dataLoss:
           - path: "invalid"
         progressive:

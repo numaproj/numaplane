@@ -67,6 +67,14 @@ func Test_reconcile_NumaflowControllerRollout_PPND(t *testing.T) {
 	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
 	assert.NoError(t, err)
 
+	usdeConfig := config.USDEConfig{
+		"numaflowcontroller": config.USDEResourceConfig{
+			Recreate: []config.SpecField{{Path: "spec", IncludeSubfields: true}},
+		},
+	}
+
+	config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
+
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
 		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
