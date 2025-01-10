@@ -374,7 +374,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		} else {
 
 			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
-			pipelineRollouts, err := r.GetPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
+			pipelineRollouts, err := r.getPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
 			if err != nil {
 				return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
 			}
@@ -483,7 +483,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
-func (r *ISBServiceRolloutReconciler) GetPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
+func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
