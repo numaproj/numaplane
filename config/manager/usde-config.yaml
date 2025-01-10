@@ -83,6 +83,9 @@ data:
         includeSubfields: true
       - path: spec.redis.native.persistence
         includeSubfields: true
+      
+      # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
+      - path: spec
   monovertex: |
     progressive:
       - path: spec.initContainers.image
@@ -110,7 +113,7 @@ data:
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
-    # Idependently of the USDE strategy, the NumaflowController will be deleted and recreated even if the USDE logic will not specify to recreate.
+    # Independently of the USDE strategy, the NumaflowController will be deleted and recreated even if the USDE logic will not specify to recreate.
     # The NumaflowController controller will always process a USDE response to update the spec by recreating the NumaflowController.
     recreate:
       - path: spec

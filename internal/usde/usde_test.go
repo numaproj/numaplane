@@ -557,7 +557,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 				configManager.UnsetNamespaceConfig(defaultNamespace)
 			}
 
-			// TTODO: add some recreate test cases
+			// TODO: add some recreate test cases
 			needsUpdating, strategy, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)

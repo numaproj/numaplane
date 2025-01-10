@@ -123,15 +123,6 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 		if specNeedsUpdating {
 			return specNeedsUpdating, upgradeStrategy, false, nil
 		}
-
-		// Use the progressive fields list from config and return direct-apply strategy if the spec needs to update
-		specNeedsUpdating, err = checkFieldsList(ctx, progressiveFields, newDef, existingDef)
-		if err != nil {
-			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'progressive' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
-		}
-		if specNeedsUpdating {
-			return specNeedsUpdating, apiv1.UpgradeStrategyApply, false, nil
-		}
 	case apiv1.UpgradeStrategyApply:
 		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
 		if err != nil {
@@ -145,7 +136,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	numaLogger.Debug("no USDE Config field changes detected, comparing specs for any DirectApply-type of changes")
 
-	// If there were no changes in the data loss fields, there could be changes in other fields of the specs.
+	// If there were no changes in the dataLoss, recreate, and progressive fields, there could be changes in other fields of the specs.
 	// Therefore, check if there are any differences in any field of the specs and return Apply strategy if any.
 	if !util.CompareStructNumTypeAgnostic(newDef.Object["spec"], existingDef.Object["spec"]) {
 		return true, apiv1.UpgradeStrategyApply, false, nil
