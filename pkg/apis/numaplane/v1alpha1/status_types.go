@@ -109,7 +109,7 @@ const (
 type ChildStatus struct {
 	// Name of the upgrading child
 	Name string `json:"name"`
-	// whether it's failed or succeeded or to be determined
+	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 }
 
