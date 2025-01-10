@@ -6,15 +6,16 @@ metadata:
     numaplane.numaproj.io/config: usde-config
 data:
   pipeline: |
+    recreate:
+      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
+      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
+      - path: spec.interStepBufferServiceName
     dataLoss:
       # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
       - path: spec.edges.from
       - path: spec.edges.to
       - path: spec.edges.conditions
         includeSubfields: true
-
-      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
-      - path: spec.interStepBufferServiceName
 
       # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
       - path: spec.vertices.source.generator
@@ -65,11 +66,20 @@ data:
       # Principal: TBD
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
+  interstepbufferservice: |
     recreate:
-      # TODO: add the recreate fields
-    progressive:
-      # TODO: add the progressive fields
-  isbService: |
+      # Changing persistence settings and number of replicas needs to recreate both the ISBSvc and also the pipelines associated to it to 
+      # recreate the buckets and buffers which are only recreated when a pipeline is started.
+      - path: spec.jetstream.replicas
+      - path: spec.redis.native.replicas
+      - path: spec.jetstream.persistence
+        includeSubfields: true
+      - path: spec.redis.native.persistence
+        includeSubfields: true
+      
+      # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
+      - path: spec.jetstream
+      - path: spec.redis
     dataLoss:
       # Principal: Update to StatefulSet may not be backward compatible to understand the data on the PVC
       - path: spec.jetstream.version
@@ -77,14 +87,32 @@ data:
       - path: spec.redis.external.url
       - path: spec.redis.external.sentinelUrl
       - path: spec.redis.external.masterName
-    recreate:
-      # TODO: add the recreate fields
-    progressive:
-      # TODO: add the progressive fields
   monovertex: |
-    dataLoss:
-      # TODO: add the data-loss fields
-    recreate:
-      # TODO: add the recreate fields
     progressive:
-      # TODO: add the progressive fields
+      - path: spec.initContainers.image
+      - path: spec.initContainers.command
+      - path: spec.initContainers.args
+      - path: spec.initContainers.env
+      - path: spec.sidecars.image
+      - path: spec.sidecars.command
+      - path: spec.sidecars.args
+      - path: spec.sidecars.env
+      - path: spec.sink.fallback.udsink.container.image
+      - path: spec.sink.fallback.udsink.container.command
+      - path: spec.sink.fallback.udsink.container.args
+      - path: spec.sink.fallback.udsink.container.env
+      - path: spec.sink.udsink.container.image
+      - path: spec.sink.udsink.container.command
+      - path: spec.sink.udsink.container.args
+      - path: spec.sink.udsink.container.env
+      - path: spec.source.transformer.container.image
+      - path: spec.source.transformer.container.command
+      - path: spec.source.transformer.container.args
+      - path: spec.source.transformer.container.env
+      - path: spec.source.udsource.container.image
+      - path: spec.source.udsource.container.command
+      - path: spec.source.udsource.container.args
+      - path: spec.source.udsource.container.env
+  numaflowcontroller: |
+    dataLoss:
+     - path: spec.version

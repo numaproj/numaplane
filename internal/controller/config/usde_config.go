@@ -28,16 +28,18 @@ type SpecField struct {
 }
 
 type USDEResourceConfig struct {
-	DataLoss    []SpecField `json:"dataLoss" yaml:"dataLoss"`
-	Recreate    []SpecField `json:"recreate" yaml:"recreate"`
-	Progressive []SpecField `json:"progressive" yaml:"progressive"`
+	// Recreate indicates fields that require the resource to be recreated upon modification.
+	// For PPND strategy, this list is checked before the other two lists.
+	Recreate []SpecField `json:"recreate,omitempty" yaml:"recreate,omitempty"`
+	// DataLoss represents fields that, when changed, may result in data loss.
+	// For PPND strategy, this list is checked after the 'recreate' list.
+	DataLoss []SpecField `json:"dataLoss,omitempty" yaml:"dataLoss,omitempty"`
+	// Progressive contains fields that can be updated without requiring a full resource recreation and by performing an in-place update.
+	// For PPND strategy, this list is checked after the other two lists.
+	Progressive []SpecField `json:"progressive,omitempty" yaml:"progressive,omitempty"`
 }
 
-type USDEConfig struct {
-	Pipeline   USDEResourceConfig `json:"pipeline" yaml:"pipeline"`
-	ISBService USDEResourceConfig `json:"isbService" yaml:"isbService"`
-	Monovertex USDEResourceConfig `json:"monovertex" yaml:"monovertex"`
-}
+type USDEConfig map[string]USDEResourceConfig
 
 func (cm *ConfigManager) UpdateUSDEConfig(config USDEConfig) {
 	cm.usdeConfigLock.Lock()

@@ -260,7 +260,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	mvNeedsToUpdate, upgradeStrategyType, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
+	mvNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
 	if err != nil {
 		return err
 	}

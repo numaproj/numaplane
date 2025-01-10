@@ -129,20 +129,15 @@ func handleUSDEConfigMapEvent(configMap *corev1.ConfigMap, event watch.Event) er
 		}
 
 		usdeConfig := config.USDEConfig{}
+		for key, val := range configMap.Data {
+			usdeResourceConfig := config.USDEResourceConfig{}
 
-		err := yaml.Unmarshal([]byte(configMap.Data["pipeline"]), &usdeConfig.Pipeline)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE Config for Pipeline: %v", err)
-		}
+			err := yaml.Unmarshal([]byte(val), &usdeResourceConfig)
+			if err != nil {
+				return fmt.Errorf("error unmarshalling USDE Config for '%s': %v", key, err)
+			}
 
-		err = yaml.Unmarshal([]byte(configMap.Data["isbService"]), &usdeConfig.ISBService)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE Config for ISBService: %v", err)
-		}
-
-		err = yaml.Unmarshal([]byte(configMap.Data["monovertex"]), &usdeConfig.Monovertex)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling USDE Config for Monovertex: %v", err)
+			usdeConfig[key] = usdeResourceConfig
 		}
 
 		config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)

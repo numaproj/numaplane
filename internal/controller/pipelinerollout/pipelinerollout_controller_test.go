@@ -532,7 +532,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	assert.NoError(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		Pipeline: config.USDEResourceConfig{
+		"pipeline": config.USDEResourceConfig{
 			DataLoss: []config.SpecField{{Path: "spec.vertices", IncludeSubfields: true}},
 		},
 	})
@@ -789,7 +789,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	assert.NoError(t, err)
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
-		Pipeline: config.USDEResourceConfig{
+		"pipeline": config.USDEResourceConfig{
 			DataLoss: []config.SpecField{{Path: "spec.vertices", IncludeSubfields: true}},
 		},
 	})
