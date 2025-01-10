@@ -1855,7 +1855,6 @@ data:
         includeSubfields: true
 
       # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
-      # TODO: this will actually become a "recreate" field instead
       - path: spec.interStepBufferServiceName
 
       # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
