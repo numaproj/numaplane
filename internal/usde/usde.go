@@ -71,9 +71,9 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	// Get data loss fields config based on the spec type (Pipeline, ISBS, etc.)
 	usdeConfigMapKey := strings.ToLower(newDef.GetKind())
+	recreateFields := usdeConfig[usdeConfigMapKey].Recreate
 	dataLossFields := usdeConfig[usdeConfigMapKey].DataLoss
 	progressiveFields := usdeConfig[usdeConfigMapKey].Progressive
-	recreateFields := usdeConfig[usdeConfigMapKey].Recreate
 
 	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
 	if err != nil {
@@ -82,9 +82,9 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	numaLogger.WithValues(
 		"usdeConfig", usdeConfig,
+		"recreateFields", recreateFields,
 		"dataLossFields", dataLossFields,
 		"progressiveFields", progressiveFields,
-		"recreateFields", recreateFields,
 		"upgradeStrategy", upgradeStrategy,
 		"newDefUnstr", newDef,
 		"existingDefUnstr", existingDef,
@@ -93,9 +93,9 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	switch upgradeStrategy {
 	case apiv1.UpgradeStrategyProgressive:
 		mergedSpecFieldLists := []config.SpecField{}
+		mergedSpecFieldLists = append(mergedSpecFieldLists, recreateFields...)
 		mergedSpecFieldLists = append(mergedSpecFieldLists, dataLossFields...)
 		mergedSpecFieldLists = append(mergedSpecFieldLists, progressiveFields...)
-		mergedSpecFieldLists = append(mergedSpecFieldLists, recreateFields...)
 
 		specNeedsUpdating, err := checkFieldsList(ctx, mergedSpecFieldLists, newDef, existingDef)
 		if err != nil {

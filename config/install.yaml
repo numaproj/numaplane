@@ -1737,18 +1737,18 @@ metadata:
 ---
 apiVersion: v1
 data:
-  interstepbufferservice: "dataLoss:\n  # Principal: Update to StatefulSet may not
-    be backward compatible to understand the data on the PVC\n  - path: spec.jetstream.version\n
-    \ - path: spec.redis.native.version\n  - path: spec.redis.external.url\n  - path:
-    spec.redis.external.sentinelUrl\n  - path: spec.redis.external.masterName\nrecreate:\n
-    \ # Changing persistence settings and number of replicas needs to recreate both
-    the ISBSvc and also the pipelines associated to it to \n  # recreate the buckets
-    and buffers which are only recreated when a pipeline is started.\n  - path: spec.jetstream.replicas\n
-    \ - path: spec.redis.native.replicas\n  - path: spec.jetstream.persistence\n    includeSubfields:
-    true\n  - path: spec.redis.native.persistence\n    includeSubfields: true\n  \n
-    \ # This checks if the spec changed from jetstream to redis and viceversa. In
-    this case, the ISBSvc and associated pipelines will need to be recreated.\n  -
-    path: spec.jetstream\n  - path: spec.redis\n"
+  interstepbufferservice: "recreate:\n  # Changing persistence settings and number
+    of replicas needs to recreate both the ISBSvc and also the pipelines associated
+    to it to \n  # recreate the buckets and buffers which are only recreated when
+    a pipeline is started.\n  - path: spec.jetstream.replicas\n  - path: spec.redis.native.replicas\n
+    \ - path: spec.jetstream.persistence\n    includeSubfields: true\n  - path: spec.redis.native.persistence\n
+    \   includeSubfields: true\n  \n  # This checks if the spec changed from jetstream
+    to redis and viceversa. In this case, the ISBSvc and associated pipelines will
+    need to be recreated.\n  - path: spec.jetstream\n  - path: spec.redis\ndataLoss:\n
+    \ # Principal: Update to StatefulSet may not be backward compatible to understand
+    the data on the PVC\n  - path: spec.jetstream.version\n  - path: spec.redis.native.version\n
+    \ - path: spec.redis.external.url\n  - path: spec.redis.external.sentinelUrl\n
+    \ - path: spec.redis.external.masterName\n"
   monovertex: |
     progressive:
       - path: spec.initContainers.image
@@ -1779,6 +1779,10 @@ data:
     dataLoss:
       - path: spec.controller.version
   pipeline: |
+    recreate:
+      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
+      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
+      - path: spec.interStepBufferServiceName
     dataLoss:
       # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
       - path: spec.edges.from
@@ -1835,10 +1839,6 @@ data:
       # Principal: TBD
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
-    recreate:
-      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
-      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
-      - path: spec.interStepBufferServiceName
 kind: ConfigMap
 metadata:
   labels:

@@ -28,12 +28,12 @@ type SpecField struct {
 }
 
 type USDEResourceConfig struct {
-	// DataLoss represents fields that, when changed, may result in data loss.
-	// For PPND strategy, this list is checked after the 'recreate' list.
-	DataLoss []SpecField `json:"dataLoss,omitempty" yaml:"dataLoss,omitempty"`
 	// Recreate indicates fields that require the resource to be recreated upon modification.
 	// For PPND strategy, this list is checked before the other two lists.
 	Recreate []SpecField `json:"recreate,omitempty" yaml:"recreate,omitempty"`
+	// DataLoss represents fields that, when changed, may result in data loss.
+	// For PPND strategy, this list is checked after the 'recreate' list.
+	DataLoss []SpecField `json:"dataLoss,omitempty" yaml:"dataLoss,omitempty"`
 	// Progressive contains fields that can be updated without requiring a full resource recreation and by performing an in-place update.
 	// For PPND strategy, this list is checked after the other two lists.
 	Progressive []SpecField `json:"progressive,omitempty" yaml:"progressive,omitempty"`

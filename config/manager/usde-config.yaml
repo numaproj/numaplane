@@ -6,6 +6,10 @@ metadata:
     numaplane.numaproj.io/config: usde-config
 data:
   pipeline: |
+    recreate:
+      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
+      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
+      - path: spec.interStepBufferServiceName
     dataLoss:
       # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
       - path: spec.edges.from
@@ -62,18 +66,7 @@ data:
       # Principal: TBD
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
-    recreate:
-      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
-      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
-      - path: spec.interStepBufferServiceName
   interstepbufferservice: |
-    dataLoss:
-      # Principal: Update to StatefulSet may not be backward compatible to understand the data on the PVC
-      - path: spec.jetstream.version
-      - path: spec.redis.native.version
-      - path: spec.redis.external.url
-      - path: spec.redis.external.sentinelUrl
-      - path: spec.redis.external.masterName
     recreate:
       # Changing persistence settings and number of replicas needs to recreate both the ISBSvc and also the pipelines associated to it to 
       # recreate the buckets and buffers which are only recreated when a pipeline is started.
@@ -87,6 +80,13 @@ data:
       # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
       - path: spec.jetstream
       - path: spec.redis
+    dataLoss:
+      # Principal: Update to StatefulSet may not be backward compatible to understand the data on the PVC
+      - path: spec.jetstream.version
+      - path: spec.redis.native.version
+      - path: spec.redis.external.url
+      - path: spec.redis.external.sentinelUrl
+      - path: spec.redis.external.masterName
   monovertex: |
     progressive:
       - path: spec.initContainers.image
