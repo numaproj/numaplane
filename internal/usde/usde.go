@@ -82,6 +82,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	numaLogger.WithValues(
 		"usdeConfig", usdeConfig,
+		"usdeConfigMapKey", usdeConfigMapKey,
 		"recreateFields", recreateFields,
 		"dataLossFields", dataLossFields,
 		"progressiveFields", progressiveFields,

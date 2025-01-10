@@ -1777,7 +1777,7 @@ data:
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
     dataLoss:
-      - path: spec.controller.version
+     - path: spec.version
   pipeline: |
     recreate:
       # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.

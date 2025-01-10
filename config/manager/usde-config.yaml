@@ -115,4 +115,4 @@ data:
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
     dataLoss:
-      - path: spec.controller.version
+     - path: spec.version
