@@ -85,7 +85,8 @@ data:
         includeSubfields: true
       
       # This checks if the spec changed from jetstream to redis and viceversa. In this case, the ISBSvc and associated pipelines will need to be recreated.
-      - path: spec
+      - path: spec.jetstream
+      - path: spec.redis
   monovertex: |
     progressive:
       - path: spec.initContainers.image
@@ -114,5 +115,4 @@ data:
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
     dataLoss:
-      - path: spec
-        includeSubfields: true
+      - path: spec.controller.version

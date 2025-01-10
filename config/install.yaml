@@ -1748,7 +1748,7 @@ data:
     true\n  - path: spec.redis.native.persistence\n    includeSubfields: true\n  \n
     \ # This checks if the spec changed from jetstream to redis and viceversa. In
     this case, the ISBSvc and associated pipelines will need to be recreated.\n  -
-    path: spec\n"
+    path: spec.jetstream\n  - path: spec.redis\n"
   monovertex: |
     progressive:
       - path: spec.initContainers.image
@@ -1777,8 +1777,7 @@ data:
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
     dataLoss:
-      - path: spec
-        includeSubfields: true
+      - path: spec.controller.version
   pipeline: |
     dataLoss:
       # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
