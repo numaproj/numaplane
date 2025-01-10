@@ -390,5 +390,10 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 }
 
 func getUpgradeStrategy() config.USDEUserStrategy {
-	return config.USDEUserStrategy(strings.ToLower(os.Getenv("STRATEGY")))
+	userStrategy := config.USDEUserStrategy(strings.ToLower(os.Getenv("STRATEGY")))
+	if userStrategy == "" {
+		return config.NoStrategyID
+	} else {
+		return userStrategy
+	}
 }
