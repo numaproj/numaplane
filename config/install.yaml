@@ -1776,9 +1776,7 @@ data:
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
   numaflowcontroller: |
-    # Independently of the USDE strategy, the NumaflowController will be deleted and recreated even if the USDE logic will not specify to recreate.
-    # The NumaflowController controller will always process a USDE response to update the spec by recreating the NumaflowController.
-    recreate:
+    dataLoss:
       - path: spec
         includeSubfields: true
   pipeline: |
