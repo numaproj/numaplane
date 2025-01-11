@@ -59,7 +59,7 @@ type progressiveController interface {
 // - whether we're done
 // - whether we just created a new child
 // - error if any
-func ProcessResourceWithProgressive(ctx context.Context, rolloutObject ctlrcommon.RolloutObject,
+func ProcessResource(ctx context.Context, rolloutObject ctlrcommon.RolloutObject,
 	existingPromotedChild *unstructured.Unstructured, promotedDifference bool, controller progressiveController, c client.Client) (bool, bool, error) {
 
 	numaLogger := logger.FromContext(ctx)

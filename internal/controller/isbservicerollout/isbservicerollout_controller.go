@@ -365,7 +365,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
-		done, _, err := progressive.ProcessResourceWithProgressive(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}

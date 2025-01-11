@@ -525,7 +525,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
 
-		done, _, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}
