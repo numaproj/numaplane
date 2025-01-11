@@ -80,6 +80,9 @@ type Status struct {
 
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
+
+	// ProgressiveStatus stores fields related to the Progressive strategy
+	ProgressiveStatus ProgressiveStatus `json:"progressiveStatus,omitempty"`
 }
 
 // PauseStatus is a common structure used to communicate how long Pipelines are paused.
@@ -92,6 +95,27 @@ type PauseStatus struct {
 
 	// The end timestamp for the last pause of the Pipeline.
 	LastPauseEndTime metav1.Time `json:"lastPauseEndTime,omitempty"`
+}
+
+type AssessmentResult string
+
+const (
+	AssessmentResultSuccess = "Success"
+	AssessmentResultFailure = "Failure"
+	AssessmentResultUnknown = ""
+)
+
+// ChildStatus describes the status of an upgrading child
+type ChildStatus struct {
+	// Name of the upgrading child
+	Name string `json:"name"`
+	// AssessmentResult described whether it's failed or succeeded, or to be determined
+	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
+}
+
+type ProgressiveStatus struct {
+	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
+	UpgradingChildStatus *ChildStatus `json:"upgradingChildStatus,omitempty"`
 }
 
 func (status *Status) SetPhase(phase Phase, msg string) {

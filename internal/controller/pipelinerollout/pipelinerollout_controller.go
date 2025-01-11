@@ -525,11 +525,18 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
-		done, err := progressive.ProcessResourceWithProgressive(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+
+		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}
 		if done {
+			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
+			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
+			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+			if err != nil {
+				return false, err
+			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		}
 
@@ -759,21 +766,29 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	// determine name of the Pipeline
 	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
 
-	// determine name of the InterstepBufferService by finding the "promoted" isbsvc for the ISBServiceRollout
-	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
-	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	// which InterstepBufferServiceName should we use?
+	// If there is an upgrading isbsvc, use that
+	// Otherwise, use the promoted one
+	// TODO: consider case that there's an "upgrading" isbsvc, but the preferred strategy has just changed to something
+	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
+	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
+	if err != nil {
+		return nil, err
 	}
-
-	promotedISBSvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
-	if err != nil || promotedISBSvc == nil {
-		return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
+	if isbsvc == nil {
+		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		if err != nil || isbsvc == nil {
+			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
+		}
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
@@ -781,8 +796,9 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
+	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
-	return r.makePipelineDefinition(pipelineRollout, pipelineName, promotedISBSvc.GetName(), metadata)
+	return r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
 }
 
 func (r *PipelineRolloutReconciler) getISBSvcRollout(
@@ -841,21 +857,15 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
 	// Otherwise, use the promoted one
-
-	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
-	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
-	}
-
-	isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradeInProgress, false, r.client)
+	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
 		return nil, err
 	}
 	if isbsvc == nil {
 		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
-		isbsvc, err = progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, common.LabelValueUpgradePromoted, false, r.client)
-		if isbsvc == nil || err != nil {
-			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted', err=%v", err)
+		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
+		if err != nil || isbsvc == nil {
+			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 		}
 	}
 
@@ -866,6 +876,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 	labels := pipeline.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 	pipeline.SetLabels(labels)
 
 	return pipeline, nil

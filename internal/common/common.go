@@ -70,7 +70,10 @@ const (
 	LabelValueNamespaceConfig = "namespace-level-config"
 
 	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
-	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name"
+	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name" // TODO: this is still named "isbsvc-name" instead of "isbsvc-rollout-name" - consider deprecating this and creating a separate label for isbsvc-rollout-name?
+
+	// LabelKeyISBServiceChildNameForPipeline is the label key used to identify the InterstepBufferService that a Pipeline is associated with
+	LabelKeyISBServiceChildNameForPipeline = "numaplane.numaproj.io/isbsvc-child-name"
 
 	// LabelKeyParentRollout is the label key used to identify the Rollout that a child Resource is managed by
 	// This is useful as a Label to quickly locate all children of a given Rollout

@@ -241,6 +241,25 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -427,6 +446,25 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -689,6 +727,25 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -859,6 +916,25 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -1066,6 +1142,25 @@ spec:
                 - Deployed
                 - Failed
                 type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  upgradingChildStatus:
+                    description: UpgradingChildStatus represents either the current
+                      or otherwise the most recent "upgrading" child
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -1904,26 +1999,6 @@ spec:
         volumeMounts:
         - mountPath: /etc/numaplane
           name: config-volume
-      initContainers:
-      - command:
-        - /bin/bash
-        - -c
-        - "#!/bin/bash\n\n# Get all namespaces\nnamespaces=$(kubectl get namespaces
-          -o jsonpath='{.items[*].metadata.name}')\n\n# Loop through each namespace\nfor
-          namespace in $namespaces; do\n  echo \"Processing namespace: $namespace\"\n
-          \ \n  # Get all isbsvc in the current namespace\n  interstepbuffersvcs=$(kubectl
-          get isbsvc -n $namespace -o json | jq -r '.items[] | select(.metadata.ownerReferences[]?.kind
-          == \"ISBServiceRollout\") | .metadata.name')\n  \n  # Loop through each
-          isbsvc\n  for isbsvc in $interstepbuffersvcs; do\n    echo \"Patching isbsvc:
-          $isbsvc in namespace: $namespace\"\n    \n    # Patch the isbsvc to add
-          the labels\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
-          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/upgrade-state\\\":
-          \\\"promoted\\\"}}}\"\n    kubectl patch isbsvc $isbsvc -n $namespace --type='merge'
-          -p \"{\\\"metadata\\\": {\\\"labels\\\": {\\\"numaplane.numaproj.io/parent-rollout-name\\\":
-          \\\"$isbsvc\\\"}}}\"\n  done\ndone\n\necho \"All interstepbufferservices
-          have been patched.\"\n"
-        image: bitnami/kubectl
-        name: label-isbsvc
       serviceAccountName: numaplane-sa
       terminationGracePeriodSeconds: 10
       volumes:

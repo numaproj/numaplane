@@ -18,6 +18,7 @@ package isbservicerollout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -363,9 +364,30 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// requeue if done with PPND is false
 			return true, nil
 		}
-	// TODO: Progressive strategy should ideally be creating a second parallel isbsvc, and all Pipelines should be on it;
-	// for now we just create a 2nd ISBServiceRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyApply, apiv1.UpgradeStrategyProgressive:
+	case apiv1.UpgradeStrategyProgressive:
+		numaLogger.Debug("processing InterstepBufferService with Progressive")
+		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		if err != nil {
+			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
+		}
+		if done {
+			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+		} else {
+
+			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
+			pipelineRollouts, err := r.getPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
+			if err != nil {
+				return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
+			}
+			for _, pipelineRollout := range pipelineRollouts {
+				numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
+				pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
+			}
+
+			// requeue
+			return true, nil
+		}
+	case apiv1.UpgradeStrategyApply:
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
@@ -376,6 +398,11 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		break
 	default:
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
+	}
+	// clean up recyclable interstepbufferservices
+	err = progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return false, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
 
 	return false, nil
@@ -457,10 +484,47 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
 }
 
+func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	pipelineRolloutsForISBSvc := make([]apiv1.PipelineRollout, 0)
+	var pipelineRolloutInNamespace apiv1.PipelineRolloutList
+	// get all of the PipelineRollouts on the namespace and filter out any that aren't tied to this ISBServiceRollout
+	err := r.client.List(ctx, &pipelineRolloutInNamespace, &client.ListOptions{Namespace: isbRolloutNamespace})
+	if err != nil {
+		return pipelineRolloutsForISBSvc, err
+	}
+	for _, pipelineRollout := range pipelineRolloutInNamespace.Items {
+		// which ISBServiceRollout is this PipelineRollout using?
+		var pipelineSpec numaflowtypes.PipelineSpec
+		err = json.Unmarshal(pipelineRollout.Spec.Pipeline.Spec.Raw, &pipelineSpec)
+		if err != nil {
+			return pipelineRolloutsForISBSvc, err
+		}
+		isbsvcROUsed := "default"
+		if pipelineSpec.InterStepBufferServiceName != "" {
+			isbsvcROUsed = pipelineSpec.InterStepBufferServiceName
+		}
+		if isbsvcROUsed == isbsvcRolloutName {
+			pipelineRolloutsForISBSvc = append(pipelineRolloutsForISBSvc, pipelineRollout)
+		}
+	}
+	numaLogger.Debugf("found %d PipelineRollouts associated with ISBServiceRollout", len(pipelineRolloutsForISBSvc))
+	return pipelineRolloutsForISBSvc, nil
+}
+
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
 		client.MatchingLabels{common.LabelKeyISBServiceRONameForPipeline: rolloutName},
+		client.HasLabels{common.LabelKeyParentRollout},
+	)
+}
+
+func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.Context, namespace string, isbsvcName string) (*unstructured.UnstructuredList, error) {
+	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
+	return kubernetes.ListResources(ctx, r.client, gvk, namespace,
+		client.MatchingLabels{common.LabelKeyISBServiceChildNameForPipeline: isbsvcName},
 		client.HasLabels{common.LabelKeyParentRollout},
 	)
 }
@@ -746,15 +810,38 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 }
 
 // Recycle deletes child
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error {
-	// TODO: Implement
-	return nil
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) error {
+	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
+
+	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
+	// Pipelines using it
+
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+	}
+	if pipelines != nil && len(pipelines.Items) > 0 {
+		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
+		return nil
+	}
+	// okay to delete now
+	numaLogger.Debug("deleting isbsvc")
+	return kubernetes.DeleteResource(ctx, c, isbsvc)
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
-func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
-	// TODO: Implement
-	return false, nil
+func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, from, to)
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 // take the existing ISBService and merge anything needed from the new ISBService definition
