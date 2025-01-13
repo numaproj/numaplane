@@ -509,6 +509,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if err != nil {
 			return false, err
 		}
+
+		// TTODO
+		// if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+		// 	// 1. Get the PipelineRollout live resource and replace pipelineRollout with it
+
+		// 	// 2. if no NextAssessmentTime is set already, calculate it:
+		// 	//		2a. get the time delay from ConfigMap
+		// 	//		2b. add to the current time the delay and set the NextAssessmentTime in the PipelineRollout
+		// }
 	}
 
 	// now do whatever the inProgressStrategy is
@@ -855,12 +864,12 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 		switch cond.Type {
 		case "VerticesHealthy", "SideInputsManagersHealthy", "DaemonServiceHealthy":
 			// if any child resource unhealthy return status (false/unknown)
-			if cond.Status != "True" {
+			if cond.Status != metav1.ConditionTrue {
 				return cond.Status, cond.Reason
 			}
 		}
 	}
-	return "True", ""
+	return metav1.ConditionTrue, ""
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {

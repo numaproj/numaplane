@@ -266,6 +266,9 @@ func processUpgradingChild(
 ) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	// TTODO: use the NextAssessmentTime to check if it's time to AssessUpgradingChild.
+	// Only call AssessUpgradingChild if the time is >= and if the AssessmentResult hasn't been set or if it is Unknown
+
 	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {
 		return false, false, err

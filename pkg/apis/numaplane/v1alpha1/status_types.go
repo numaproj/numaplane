@@ -111,6 +111,8 @@ type ChildStatus struct {
 	Name string `json:"name"`
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
+	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
+	NextAssessmentTime metav1.Time `json:"nextAssessmentTime,omitempty"`
 }
 
 type ProgressiveStatus struct {

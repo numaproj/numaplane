@@ -470,12 +470,12 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 	for _, cond := range conditions {
 		switch cond.Type {
 		case "DaemonHealthy", "PodsHealthy":
-			if cond.Status != "True" {
+			if cond.Status != metav1.ConditionTrue {
 				return cond.Status, cond.Reason
 			}
 		}
 	}
-	return "True", ""
+	return metav1.ConditionTrue, ""
 }
 
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
