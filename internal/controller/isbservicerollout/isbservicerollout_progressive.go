@@ -9,7 +9,101 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
+
+// Implemented functions for the progressiveController interface:
+
+// CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
+func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
+	if err != nil {
+		return nil, err
+	}
+	isbsvc, err := r.makeISBServiceDefinition(isbsvcRollout, name, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := isbsvc.GetLabels()
+	labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
+	isbsvc.SetLabels(labels)
+
+	return isbsvc, nil
+}
+
+func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	if isbsvcRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *isbsvcRollout.Status.NameCount, true
+	}
+}
+
+func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	isbsvcRollout.Status.NameCount = &nameCount
+	return r.updateISBServiceRolloutStatus(ctx, isbsvcRollout)
+}
+
+// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
+func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+// Recycle deletes child
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) error {
+	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
+
+	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
+	// Pipelines using it
+
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+	}
+	if pipelines != nil && len(pipelines.Items) > 0 {
+		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
+		return nil
+	}
+	// okay to delete now
+	numaLogger.Debug("deleting isbsvc")
+	return kubernetes.DeleteResource(ctx, c, isbsvc)
+}
+
+// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
+func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, from, to)
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+}
 
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
