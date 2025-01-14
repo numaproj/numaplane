@@ -239,13 +239,13 @@ func (status *Status) NextAssessmentTimeHasBeenSet() bool {
 
 // CanAssessChildStatus determines if the child status can be assessed.
 // It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
-// the NextAssessmentTime is in the future, and the AssessmentResult is unknown.
-// If the AssessmentResult is not unknown and the NextAssessmentTime is in the future
+// the NextAssessmentTime is in the future, and the AssessmentResult is not successful.
+// If the AssessmentResult is successful and the NextAssessmentTime is in the future
 // we should not check again since the assessment has already been performed.
 func (status *Status) CanAssessChildStatus() bool {
 	return status != nil && status.ProgressiveStatus.UpgradingChildStatus != nil &&
 		status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime.After(time.Now()) &&
-		status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult == AssessmentResultUnknown
+		status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult != AssessmentResultSuccess
 }
 
 // setCondition sets a condition
