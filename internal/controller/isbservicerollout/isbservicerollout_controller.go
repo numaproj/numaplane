@@ -652,7 +652,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
 		}
-		if reconciled && isbsvcChildResourceStatus == "True" {
+		if reconciled && isbsvcChildResourceStatus == metav1.ConditionTrue {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
 			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
