@@ -542,7 +542,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
 
 			// Add to the current time the delay and set the NextAssessmentTime in the PipelineRollout
-			pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+			pipelineRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
 		}
 
 		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)

@@ -384,7 +384,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
 
 			// Add to the current time the delay and set the NextAssessmentTime in the ISBServiceRollout
-			isbServiceRollout.Status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+			isbServiceRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
 		}
 
 		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)

@@ -306,7 +306,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
 
 			// Add to the current time the delay and set the NextAssessmentTime in the MonoVertexRollout
-			monoVertexRollout.Status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+			monoVertexRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
 		}
 
 		// don't risk out-of-date cache while performing Progressive strategy - get

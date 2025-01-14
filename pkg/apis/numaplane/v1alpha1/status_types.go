@@ -229,6 +229,18 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
+func (status *Status) SetNextAssessmentTime(nextAssessmentTime metav1.Time) {
+	if status.ProgressiveStatus.UpgradingChildStatus == nil {
+		status.ProgressiveStatus.UpgradingChildStatus = &ChildStatus{
+			Name:               "Unknown",
+			AssessmentResult:   AssessmentResultUnknown,
+			NextAssessmentTime: nextAssessmentTime,
+		}
+	} else {
+		status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = nextAssessmentTime
+	}
+}
+
 // NextAssessmentTimeHasBeenSet checks if the NextAssessmentTime field in the
 // UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
 // Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
