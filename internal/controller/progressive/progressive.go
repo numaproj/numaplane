@@ -268,7 +268,7 @@ func processUpgradingChild(
 
 	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
 	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
-	// and if the AssessmentResult hasn't been set yet (it is Unknown).
+	// and if the AssessmentResult hasn't been deemed successful yet.
 	if !rolloutObject.GetRolloutStatus().CanAssessChildStatus() {
 		return false, false, nil
 	}
