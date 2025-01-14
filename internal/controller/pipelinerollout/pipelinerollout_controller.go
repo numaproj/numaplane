@@ -510,14 +510,26 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return false, err
 		}
 
-		// TTODO
-		// if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
-		// 	// 1. Get the PipelineRollout live resource and replace pipelineRollout with it
+		if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+			// Get the PipelineRollout live resource
+			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
+			}
 
-		// 	// 2. if no NextAssessmentTime is set already, calculate it:
-		// 	//		2a. get the time delay from ConfigMap
-		// 	//		2b. add to the current time the delay and set the NextAssessmentTime in the PipelineRollout
-		// }
+			// If no NextAssessmentTime has been set already, calculate it and set it
+			if !livePipelineRollout.Status.NextAssessmentTimeHasBeenSet() {
+				// Get the delay from Numaplane ConfigMap
+				globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+				if err != nil {
+					return false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+				}
+				delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
+
+				// Add to the current time the delay and set the NextAssessmentTime in the PipelineRollout
+				pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+			}
+		}
 	}
 
 	// now do whatever the inProgressStrategy is

@@ -266,8 +266,12 @@ func processUpgradingChild(
 ) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// TTODO: use the NextAssessmentTime to check if it's time to AssessUpgradingChild.
-	// Only call AssessUpgradingChild if the time is >= and if the AssessmentResult hasn't been set or if it is Unknown
+	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
+	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
+	// and if the AssessmentResult hasn't been set yet (it is Unknown).
+	if !rolloutObject.GetRolloutStatus().CanAssessChildStatus() {
+		return false, false, nil
+	}
 
 	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {

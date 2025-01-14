@@ -229,6 +229,25 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
+// NextAssessmentTimeHasBeenSet checks if the NextAssessmentTime field in the
+// UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
+// Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
+// non-nil and NextAssessmentTime is not the zero value of time.Time.
+func (status *Status) NextAssessmentTimeHasBeenSet() bool {
+	return status != nil && status.ProgressiveStatus.UpgradingChildStatus != nil && status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime != metav1.NewTime(time.Time{})
+}
+
+// CanAssessChildStatus determines if the child status can be assessed.
+// It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
+// the NextAssessmentTime is in the future, and the AssessmentResult is unknown.
+// If the AssessmentResult is not unknown and the NextAssessmentTime is in the future
+// we should not check again since the assessment has already been performed.
+func (status *Status) CanAssessChildStatus() bool {
+	return status != nil && status.ProgressiveStatus.UpgradingChildStatus != nil &&
+		status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime.After(time.Now()) &&
+		status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult == AssessmentResultUnknown
+}
+
 // setCondition sets a condition
 func (s *Status) setCondition(condition metav1.Condition) {
 	var conditions []metav1.Condition
