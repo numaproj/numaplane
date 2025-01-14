@@ -205,6 +205,11 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
+                        type: string
                     required:
                     - name
                     type: object
