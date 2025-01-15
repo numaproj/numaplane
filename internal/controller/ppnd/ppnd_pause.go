@@ -121,7 +121,7 @@ func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipelin
 
 		isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.GetNamespace(), isbsvcName)]
 		if isbsvcPauseRequest != nil && *isbsvcPauseRequest {
-			// somebody is requesting to pause - can't run
+			// isbsvc is requesting to pause - can't run
 			return fmt.Errorf("new pause request from InterstepBufferService, can't resume pipeline at this time; will try again later")
 		}
 	}
