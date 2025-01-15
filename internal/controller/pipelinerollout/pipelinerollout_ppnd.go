@@ -55,7 +55,8 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, err
 	}
 
-	needsPaused, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
+	// Should Pipeline be paused? If it should be resumed, should that be forced with no additional checking?
+	needsPaused, forceResume, err := r.shouldBePaused(ctx, pipelineRollout, existingPipelineDef, newPipelineDef, pipelineNeedsToUpdate)
 	if err != nil {
 		return false, err
 	}
@@ -63,8 +64,14 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
 	shouldBePaused := *needsPaused
-	if err := r.setPipelineLifecycle(ctx, shouldBePaused, pipelineRollout, existingPipelineDef); err != nil {
-		return false, err
+	if shouldBePaused {
+		if err := r.setPipelineLifecyclePaused(ctx, pipelineRollout, existingPipelineDef); err != nil {
+			return false, err
+		}
+	} else {
+		if err := r.setPipelineLifecycleRunning(ctx, pipelineRollout, existingPipelineDef, forceResume); err != nil {
+			return false, err
+		}
 	}
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
@@ -116,28 +123,31 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 //	any pause request coming from isbsvc or Numaflow Controller
 //	spec says to pause
 //
-// return whether to pause, not to pause, or otherwise unknown
-func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *unstructured.Unstructured, pipelineNeedsToUpdate bool) (*bool, error) {
+// return:
+//   - whether to pause, not to pause, or otherwise unknown (nil)
+//   - whether we can't pause due to some requirement
+//   - error if any
+func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef, newPipelineDef *unstructured.Unstructured, pipelineNeedsToUpdate bool) (*bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	var newPipelineSpec numaflowtypes.PipelineSpec
 	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object["spec"], err)
+		return nil, false, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object["spec"], err)
 	}
 	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert existing Pipeline spec %v into PipelineSpec type, err=%v", existingPipelineDef.Object["spec"], err)
+		return nil, false, fmt.Errorf("failed to convert existing Pipeline spec %v into PipelineSpec type, err=%v", existingPipelineDef.Object["spec"], err)
 	}
 
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Is either Numaflow Controller or ISBService trying to update (such that we need to pause)?
 	externalPauseRequest, pauseRequestsKnown, err := r.checkForPauseRequest(ctx, pipelineRollout, isbsvcRollout.Name)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// check to see if the PipelineRollout spec itself says to Pause
@@ -154,10 +164,10 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// that it's okay to run
 	if !shouldBePaused && !pauseRequestsKnown {
 		numaLogger.Debugf("incomplete pause request information")
-		return nil, nil
+		return nil, wontPause, nil
 	}
 
-	return &shouldBePaused, nil
+	return &shouldBePaused, wontPause, nil
 }
 
 // do we need to start the PPND process, if we haven't already?
@@ -230,8 +240,8 @@ func (r *PipelineRolloutReconciler) checkForPauseRequest(ctx context.Context, pi
 	return controllerRequestsPause || isbsvcRequestsPause, true, nil
 }
 
-// make sure our Pipeline's Lifecycle is what we need it to be
-func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pause bool, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *unstructured.Unstructured) error {
+// set Pipeline Lifecycle to be paused
+func (r *PipelineRolloutReconciler) setPipelineLifecyclePaused(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 	var existingPipelineSpec numaflowtypes.PipelineSpec
 	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
@@ -239,13 +249,26 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 	}
 	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
 
-	if pause && !lifeCycleIsPaused {
+	if !lifeCycleIsPaused {
 		numaLogger.Info("pausing pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelinePause", "pausing pipeline")
 		if err := ppnd.GetPauseModule().PausePipeline(ctx, r.client, existingPipelineDef); err != nil {
 			return err
 		}
-	} else if !pause && lifeCycleIsPaused {
+	}
+	return nil
+}
+
+// set Pipeline Lifecycle to be running
+func (r *PipelineRolloutReconciler) setPipelineLifecycleRunning(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *unstructured.Unstructured, force bool) error {
+	numaLogger := logger.FromContext(ctx)
+	var existingPipelineSpec numaflowtypes.PipelineSpec
+	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
+		return err
+	}
+	lifeCycleIsPaused := existingPipelineSpec.Lifecycle.DesiredPhase == string(numaflowv1.PipelinePhasePaused)
+
+	if lifeCycleIsPaused {
 		numaLogger.Info("resuming pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
@@ -254,7 +277,7 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycle(ctx context.Context, pa
 			return err
 		}
 
-		run, err := ppnd.GetPauseModule().RunPipelineIfSafe(ctx, r.client, existingPipelineDef, isbsvcRollout.Name)
+		run, err := ppnd.GetPauseModule().RunPipeline(ctx, r.client, existingPipelineDef, isbsvcRollout.Name, force)
 		if err != nil {
 			return err
 		}
