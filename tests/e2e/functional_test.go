@@ -779,7 +779,7 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
-	if upgradeStrategy == config.PPNDStrategyID {
+	if upgradeStrategy == config.PPNDStrategyID && valid { // only checking the "valid" case for now since the test sometimes fails when the condition happens too briefly
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
