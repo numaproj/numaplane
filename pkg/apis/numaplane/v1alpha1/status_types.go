@@ -229,35 +229,21 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
-func (status *Status) SetNextAssessmentTime(nextAssessmentTime metav1.Time) {
-	if status.ProgressiveStatus.UpgradingChildStatus == nil {
-		status.ProgressiveStatus.UpgradingChildStatus = &ChildStatus{
-			Name:               "Unknown",
-			AssessmentResult:   AssessmentResultUnknown,
-			NextAssessmentTime: nextAssessmentTime,
-		}
-	} else {
-		status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime = nextAssessmentTime
-	}
-}
-
-// NextAssessmentTimeHasBeenSet checks if the NextAssessmentTime field in the
+// IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
 // UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
 // Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
 // non-nil and NextAssessmentTime is not the zero value of time.Time.
-func (status *Status) NextAssessmentTimeHasBeenSet() bool {
-	return status != nil && status.ProgressiveStatus.UpgradingChildStatus != nil && status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime != metav1.NewTime(time.Time{})
+func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
+	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
 }
 
-// CanAssessChildStatus determines if the child status can be assessed.
+// CanAssess determines if the child status can be assessed.
 // It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
 // the NextAssessmentTime is in the future, and the AssessmentResult is not successful.
 // If the AssessmentResult is successful and the NextAssessmentTime is in the future
 // we should not check again since the assessment has already been performed.
-func (status *Status) CanAssessChildStatus() bool {
-	return status != nil && status.ProgressiveStatus.UpgradingChildStatus != nil &&
-		status.ProgressiveStatus.UpgradingChildStatus.NextAssessmentTime.After(time.Now()) &&
-		status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult != AssessmentResultSuccess
+func (cs *ChildStatus) CanAssess() bool {
+	return cs != nil && cs.NextAssessmentTime.After(time.Now()) && cs.AssessmentResult != AssessmentResultSuccess
 }
 
 // setCondition sets a condition

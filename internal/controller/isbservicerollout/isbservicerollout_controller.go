@@ -44,7 +44,6 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
-	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -374,20 +373,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return false, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		// If no NextAssessmentTime has been set already, calculate it and set it
-		if !liveISBServiceRollout.Status.NextAssessmentTimeHasBeenSet() {
-			// Get the delay from Numaplane ConfigMap
-			globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-			if err != nil {
-				return false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
-			}
-			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
-
-			// Add to the current time the delay and set the NextAssessmentTime in the ISBServiceRollout
-			isbServiceRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
-		}
-
-		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}

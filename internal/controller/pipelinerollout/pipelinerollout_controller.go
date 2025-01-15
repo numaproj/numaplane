@@ -532,20 +532,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return false, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
 		}
 
-		// If no NextAssessmentTime has been set already, calculate it and set it
-		if !livePipelineRollout.Status.NextAssessmentTimeHasBeenSet() {
-			// Get the delay from Numaplane ConfigMap
-			globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-			if err != nil {
-				return false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
-			}
-			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
-
-			// Add to the current time the delay and set the NextAssessmentTime in the PipelineRollout
-			pipelineRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
-		}
-
-		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}

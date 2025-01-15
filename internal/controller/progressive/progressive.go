@@ -22,6 +22,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -59,8 +61,15 @@ type progressiveController interface {
 // - whether we're done
 // - whether we just created a new child
 // - error if any
-func ProcessResource(ctx context.Context, rolloutObject ctlrcommon.RolloutObject,
-	existingPromotedChild *unstructured.Unstructured, promotedDifference bool, controller progressiveController, c client.Client) (bool, bool, error) {
+func ProcessResource(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
+	existingPromotedChild *unstructured.Unstructured,
+	promotedDifference bool,
+	controller progressiveController,
+	c client.Client,
+) (bool, bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -101,7 +110,7 @@ func ProcessResource(ctx context.Context, rolloutObject ctlrcommon.RolloutObject
 		return false, false, err
 	}
 
-	done, newChild, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, newChild, err
 	}
@@ -260,16 +269,39 @@ func GetChildName(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, c
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	childStatus := liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus
+	if childStatus == nil {
+		childStatus = &apiv1.ChildStatus{
+			Name:             existingUpgradingChildDef.GetName(),
+			AssessmentResult: apiv1.AssessmentResultUnknown,
+		}
+	}
+
+	// If no NextAssessmentTime has been set already, calculate it and set it
+	if !childStatus.IsNextAssessmentTimeSet() {
+		// Get the delay from Numaplane ConfigMap
+		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+		if err != nil {
+			return false, false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+		}
+		delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
+
+		// Add to the current time the delay and set the NextAssessmentTime in the Rollout object
+		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+	}
+
 	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
 	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
 	// and if the AssessmentResult hasn't been deemed successful yet.
-	if !rolloutObject.GetRolloutStatus().CanAssessChildStatus() {
+	if !childStatus.CanAssess() {
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 		return false, false, nil
 	}
 
@@ -283,7 +315,8 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultFailure:
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultFailure}
+		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
@@ -330,12 +363,14 @@ func processUpgradingChild(
 		}
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultSuccess}
+		childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		return true, false, nil
 	default:
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = &apiv1.ChildStatus{Name: existingUpgradingChildDef.GetName(), AssessmentResult: apiv1.AssessmentResultUnknown}
+		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 
 		return false, false, nil
 	}

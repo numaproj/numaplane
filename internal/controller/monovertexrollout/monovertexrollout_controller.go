@@ -43,7 +43,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -290,23 +289,12 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	}
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
+		numaLogger.Debug("processing MonoVertex with Progressive")
+
 		// Get the MonoVertexRollout live resource
 		liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("error getting the live MonoVertexRollout for assessment processing: %w", err)
-		}
-
-		// If no NextAssessmentTime has been set already, calculate it and set it
-		if !liveMonoVertexRollout.Status.NextAssessmentTimeHasBeenSet() {
-			// Get the delay from Numaplane ConfigMap
-			globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-			if err != nil {
-				return fmt.Errorf("error getting the global config for assessment processing: %w", err)
-			}
-			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
-
-			// Add to the current time the delay and set the NextAssessmentTime in the MonoVertexRollout
-			monoVertexRollout.Status.SetNextAssessmentTime(metav1.NewTime(time.Now().Add(delay)))
 		}
 
 		// don't risk out-of-date cache while performing Progressive strategy - get
@@ -320,8 +308,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		numaLogger.Debug("processing MonoVertex with Progressive")
-		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return err
 		}
