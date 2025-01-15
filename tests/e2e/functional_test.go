@@ -62,10 +62,12 @@ var (
 			{
 				Name: "in",
 				Source: &numaflowv1.Source{
-					Generator: &numaflowv1.GeneratorSource{
+					HTTP: &numaflowv1.HTTPSource{},
+
+					/*Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
 						Duration: &pipelineSpecSourceDuration,
-					},
+					},*/
 				},
 				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
@@ -94,10 +96,11 @@ var (
 			{
 				Name: "in",
 				Source: &numaflowv1.Source{
-					Generator: &numaflowv1.GeneratorSource{
+					HTTP: &numaflowv1.HTTPSource{},
+					/*Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
 						Duration: &pipelineSpecSourceDuration,
-					},
+					},*/
 				},
 				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
