@@ -314,6 +314,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
+			monoVertexRollout.Status.ProgressiveStatus.ClearUpgradingChildStatus()
 		}
 
 	default:

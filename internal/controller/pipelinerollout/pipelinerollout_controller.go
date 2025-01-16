@@ -544,6 +544,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return false, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+			pipelineRollout.Status.ProgressiveStatus.ClearUpgradingChildStatus()
 		}
 
 	default:

@@ -229,6 +229,10 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
+func (ps *ProgressiveStatus) ClearUpgradingChildStatus() {
+	ps.UpgradingChildStatus = nil
+}
+
 // IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
 // UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
 // Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
