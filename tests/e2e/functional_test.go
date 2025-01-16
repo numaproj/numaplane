@@ -779,6 +779,8 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
+	// NOTE: we are only checking the "valid" case because in the "non-valid" case the pipeline pausing conditions on
+	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
 	if upgradeStrategy == config.PPNDStrategyID && valid {
 
 		document("Verify that in-progress-strategy gets set to PPND")
