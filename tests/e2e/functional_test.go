@@ -861,12 +861,15 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 		return rollout, nil
 	})
 
-	if upgradeStrategy == config.PPNDStrategyID && valid { // only checking the "valid" case for now since the test sometimes fails when the condition happens too briefly
+	// NOTE: we are only checking the "valid" case because in the "non-valid" case the pipeline pausing conditions on
+	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
+	if upgradeStrategy == config.PPNDStrategyID && valid {
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 		verifyPipelinePaused(Namespace, pipelineRolloutName)
 
+		document("Verify that the pipelines are unpaused by checking the PPND conditions on NumaflowController Rollout and PipelineRollout")
 		Eventually(func() bool {
 			ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)

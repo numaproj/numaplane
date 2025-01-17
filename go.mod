@@ -14,7 +14,7 @@ require (
 	github.com/go-swagger/go-swagger v0.31.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/go-cmp v0.6.0
-	github.com/numaproj/numaflow v0.0.0-20241024150937-8e98c0854bc3
+	github.com/numaproj/numaflow v1.4.2
 	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.2
 	github.com/prometheus/client_golang v1.19.1
