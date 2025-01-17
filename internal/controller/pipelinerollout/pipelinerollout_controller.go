@@ -532,7 +532,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return false, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
 		}
 
-		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, true, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}

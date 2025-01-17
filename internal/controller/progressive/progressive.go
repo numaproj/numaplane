@@ -65,7 +65,6 @@ func ProcessResource(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	liveRolloutObject ctlrcommon.RolloutObject,
-	delayAssessment bool,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
 	controller progressiveController,
@@ -111,7 +110,7 @@ func ProcessResource(
 		return false, false, err
 	}
 
-	done, newChild, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, delayAssessment, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, newChild, err
 	}
@@ -272,7 +271,6 @@ Parameters:
 - ctx: The context for managing request-scoped values, cancellation, and timeouts.
 - rolloutObject: The current rollout object (this could be from cache).
 - liveRolloutObject: The live rollout object reflecting the current state of the rollout.
-- delayAssessment: A boolean indicating whether to delay the assessment of the child resource.
 - controller: The progressive controller responsible for managing the upgrade process.
 - existingPromotedChildDef: The definition of the currently promoted child resource.
 - existingUpgradingChildDef: The definition of the child resource currently being upgraded.
@@ -287,7 +285,6 @@ func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	liveRolloutObject ctlrcommon.RolloutObject,
-	delayAssessment bool,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
@@ -302,27 +299,25 @@ func processUpgradingChild(
 		}
 	}
 
-	if delayAssessment {
-		// If no NextAssessmentTime has been set already, calculate it and set it
-		if !childStatus.IsNextAssessmentTimeSet() {
-			// Get the delay from Numaplane ConfigMap
-			globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-			if err != nil {
-				return false, false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
-			}
-			delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
-
-			// Add to the current time the delay and set the NextAssessmentTime in the Rollout object
-			childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+	// If no NextAssessmentTime has been set already, calculate it and set it
+	if !childStatus.IsNextAssessmentTimeSet() {
+		// Get the delay from Numaplane ConfigMap
+		globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+		if err != nil {
+			return false, false, fmt.Errorf("error getting the global config for assessment processing: %w", err)
 		}
+		delay := time.Duration(globalConfig.ChildStatusAssessmentDelaySeconds) * time.Second
 
-		// Use the NextAssessmentTime to check if it's time to assess the child resource status.
-		// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
-		// and if the AssessmentResult hasn't been deemed successful yet.
-		if !childStatus.CanAssess() {
-			rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
-			return false, false, nil
-		}
+		// Add to the current time the delay and set the NextAssessmentTime in the Rollout object
+		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+	}
+
+	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
+	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
+	// and if the AssessmentResult hasn't been deemed successful yet.
+	if !childStatus.CanAssess() {
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		return false, false, nil
 	}
 
 	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
