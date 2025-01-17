@@ -292,11 +292,16 @@ func processUpgradingChild(
 	numaLogger := logger.FromContext(ctx)
 
 	childStatus := liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus
-	if childStatus == nil {
+	// Create a new childStatus object if not present in the live rollout object or
+	// if it is that of a previous progressive upgrade.
+	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
 		childStatus = &apiv1.ChildStatus{
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}
+		numaLogger.WithValues("childStatus", childStatus).Debug("live upgrading child not yet set")
+	} else {
+		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
 	}
 
 	// If no NextAssessmentTime has been set already, calculate it and set it
@@ -310,15 +315,19 @@ func processUpgradingChild(
 
 		// Add to the current time the delay and set the NextAssessmentTime in the Rollout object
 		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child nextAssessmentTime")
 	}
 
 	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
 	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
 	// and if the AssessmentResult hasn't been deemed successful yet.
 	if !childStatus.CanAssess() {
+		numaLogger.WithValues("childStatus", *childStatus).Debug("skipping upgrading child assessment: too soon to check or already successful")
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 		return false, false, nil
 	}
+
+	numaLogger.WithValues("childStatus", *childStatus).Debug("performing upgrading child assessment")
 
 	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
 	if err != nil {

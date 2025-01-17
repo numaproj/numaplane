@@ -229,10 +229,6 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
-func (ps *ProgressiveStatus) ClearUpgradingChildStatus() {
-	ps.UpgradingChildStatus = nil
-}
-
 // IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
 // UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
 // Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
@@ -247,7 +243,7 @@ func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
 // If the AssessmentResult is successful and the NextAssessmentTime is in the future
 // we should not check again since the assessment has already been performed.
 func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil && cs.NextAssessmentTime.After(time.Now()) && cs.AssessmentResult != AssessmentResultSuccess
+	return cs != nil && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
 }
 
 // setCondition sets a condition

@@ -379,7 +379,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
-			isbServiceRollout.Status.ProgressiveStatus.ClearUpgradingChildStatus()
 		} else {
 
 			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
