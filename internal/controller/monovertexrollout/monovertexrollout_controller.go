@@ -308,7 +308,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, true, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return err
 		}

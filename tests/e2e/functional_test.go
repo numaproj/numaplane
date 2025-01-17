@@ -533,6 +533,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
+			document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
