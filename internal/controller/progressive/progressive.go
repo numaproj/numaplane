@@ -299,7 +299,7 @@ func processUpgradingChild(
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}
-		numaLogger.WithValues("childStatus", childStatus).Debug("live upgrading child not yet set")
+		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child not yet set")
 	} else {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
 	}
@@ -319,7 +319,7 @@ func processUpgradingChild(
 	}
 
 	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
-	// Only assess the child if if the NextAssessmentTime is after the current time plus the delay
+	// Only assess the child if the NextAssessmentTime is after the current time plus the delay
 	// and if the AssessmentResult hasn't been deemed successful yet.
 	if !childStatus.CanAssess() {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("skipping upgrading child assessment: too soon to check or already successful")

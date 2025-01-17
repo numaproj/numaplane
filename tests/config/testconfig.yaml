@@ -6,4 +6,4 @@ includedResources: "group=apps,kind=Deployment;\
 group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;group=,kind=Namespace;\
 group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
 defaultUpgradeStrategy: "pause-and-drain"
-childStatusAssessmentDelaySeconds: 30
+childStatusAssessmentDelaySeconds: 0
