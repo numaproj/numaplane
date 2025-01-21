@@ -313,6 +313,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			return err
 		}
 		if done {
+			// NEW: we need to prevent the possibility that we're done but we fail to update the Progressive Status
+			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
+			err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
+			if err != nil {
+				return err
+			}
+
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 		}
 
