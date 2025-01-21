@@ -373,9 +373,8 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	time.Sleep(2 * time.Second)
 
-	// TODO: maybe move this into a ppnd-specific test suite?
-	// Can include tests for allowing data loss which involve all 3 pause requesters (isbsvc, numaflow controller, and pipeline itself)
-
+	// TODO: https://github.com/numaproj/numaplane/issues/509:
+	// move this into a ppnd-specific test suite
 	It("Should allow data loss in the Pipeline if requested (PPND)", func() {
 
 		if upgradeStrategy == config.PPNDStrategyID {
