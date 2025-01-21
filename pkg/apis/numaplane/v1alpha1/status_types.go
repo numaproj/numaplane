@@ -243,7 +243,7 @@ func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
 // If the AssessmentResult is successful and the NextAssessmentTime is in the future
 // we should not check again since the assessment has already been performed.
 func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
+	return cs != nil && cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
 }
 
 // setCondition sets a condition
