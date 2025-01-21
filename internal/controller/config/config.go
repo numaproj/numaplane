@@ -90,6 +90,8 @@ type GlobalConfig struct {
 	NumaflowControllerImageNames []string `json:"numaflowControllerImageNames" mapstructure:"numaflowControllerImageNames"`
 	// If user's config doesn't exist or doesn't specify strategy, this is the default
 	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
+	// ChildStatusAssessmentDelaySeconds indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
+	ChildStatusAssessmentDelaySeconds int `json:"childStatusAssessmentDelaySeconds" mapstructure:"childStatusAssessmentDelaySeconds"`
 }
 
 type NumaflowControllerDefinitionConfig struct {

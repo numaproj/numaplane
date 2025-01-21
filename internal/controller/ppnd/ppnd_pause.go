@@ -103,28 +103,30 @@ func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipel
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) RunPipelineIfSafe(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, isbsvcName string) (bool, error) {
+func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, isbsvcName string, force bool) error {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
-	// verify that all requests are still to pause, if not we can't run right now
-	controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.GetNamespace())]
-	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
-		return false, err
+	if !force {
+		// verify that all requests are still to pause, if not we can't run right now
+		controllerPauseRequest := pm.PauseRequests[pm.GetNumaflowControllerKey(pipeline.GetNamespace())]
+		var existingPipelineSpec numaflowtypes.PipelineSpec
+		if err := util.StructToStruct(pipeline.Object["spec"], &existingPipelineSpec); err != nil {
+			return err
+		}
+		if controllerPauseRequest != nil && *controllerPauseRequest {
+			// controller is requesting to pause - can't run
+			return fmt.Errorf("new pause request from NumaflowController, can't resume pipeline at this time; will try again later")
+		}
+
+		isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.GetNamespace(), isbsvcName)]
+		if isbsvcPauseRequest != nil && *isbsvcPauseRequest {
+			// isbsvc is requesting to pause - can't run
+			return fmt.Errorf("new pause request from InterstepBufferService, can't resume pipeline at this time; will try again later")
+		}
 	}
 
-	isbsvcPauseRequest := pm.PauseRequests[pm.GetISBServiceKey(pipeline.GetNamespace(), isbsvcName)]
-	if (controllerPauseRequest != nil && *controllerPauseRequest) || (isbsvcPauseRequest != nil && *isbsvcPauseRequest) {
-		// somebody is requesting to pause - can't run
-		return false, nil
-	}
-
-	err := pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Running")
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Running")
 }
 
 func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase string) error {

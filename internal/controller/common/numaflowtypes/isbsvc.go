@@ -69,9 +69,9 @@ func GetISBSvcStatefulSetFromK8s(ctx context.Context, c client.Client, isbsvc *u
 
 func GetISBServiceChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
 	for _, cond := range conditions {
-		if cond.Type == "ChildrenResourcesHealthy" && cond.Status != "True" {
+		if cond.Type == "ChildrenResourcesHealthy" && cond.Status != metav1.ConditionTrue {
 			return cond.Status, cond.Reason
 		}
 	}
-	return "True", ""
+	return metav1.ConditionTrue, ""
 }
