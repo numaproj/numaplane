@@ -238,8 +238,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime); err != nil {
+		needsRequeue, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
+		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
+		}
+		if needsRequeue {
+			return common.DefaultDelayedRequeue, nil
 		}
 	}
 
@@ -250,8 +254,9 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 }
 
+// return whether we should requeue, and return error if any (if returning an error, we will requeue anyway)
 func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
-	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) error {
+	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -261,7 +266,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// and capability to rollback an unhealthy one
 	mvNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
 	if err != nil {
-		return err
+		return false, err
 	}
 	numaLogger.
 		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
@@ -297,14 +302,14 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("monoVertexDefinition", *existingMonoVertexDef).Warn("MonoVertex not found.")
 			} else {
-				return fmt.Errorf("error getting MonoVertex for status processing: %v", err)
+				return false, fmt.Errorf("error getting MonoVertex for status processing: %v", err)
 			}
 		}
 
 		numaLogger.Debug("processing MonoVertex with Progressive")
 		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
@@ -314,18 +319,19 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if mvNeedsToUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 			if err != nil {
-				return err
+				return false, err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
 	}
 	// clean up recyclable monovertices
-	err = progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	// we need to requeue if we haven't deleted everything
+	return !allDeleted, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
