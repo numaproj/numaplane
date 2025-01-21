@@ -90,34 +90,36 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
+// Recycle deletes child; returns true if it was in fact deleted
+
 func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	c client.Client,
-) error {
+) (bool, error) {
 
 	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
 	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if pausedOrWontPause {
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		return err
+		return true, err
 	}
 	// make sure we request Paused if we haven't yet
 	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
 		_ = r.drain(ctx, pipeline)
-		return nil
+		return false, nil
 	}
-	return nil
+	return false, nil
 
 }
 

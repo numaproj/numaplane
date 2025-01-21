@@ -238,14 +238,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-
 		needsRequeue, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 		}
-
 		if needsRequeue {
-			return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+			return common.DefaultDelayedRequeue, nil
 		}
 	}
 
@@ -255,6 +253,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	return ctrl.Result{}, nil
 }
 
+// return whether we should requeue, and return error if any (if returning an error, we will requeue anyway)
 func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
 	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
 
@@ -292,6 +291,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			r.inProgressStrategyMgr.SetStrategy(ctx, monoVertexRollout, inProgressStrategy)
 		}
 	}
+
+	requeue := false
+
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing MonoVertex with Progressive")
@@ -327,7 +329,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 		} else {
-			return true, nil
+			requeue = true
 		}
 
 	default:
@@ -340,12 +342,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 	// clean up recyclable monovertices
-	err = progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
 		return false, err
 	}
+	requeue = requeue || !allDeleted // if any haven't been deleted, requeue
 
-	return false, nil
+	return requeue, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

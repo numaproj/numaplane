@@ -237,7 +237,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	if requeue {
-		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+		return common.DefaultDelayedRequeue, nil
 	}
 
 	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
@@ -559,10 +559,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 	// clean up recyclable pipelines
-	err = progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 	if err != nil {
 		return false, err
 	}
+	requeue = requeue || !allDeleted // if any haven't been deleted, requeue
 
 	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())

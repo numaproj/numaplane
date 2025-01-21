@@ -407,12 +407,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 	// clean up recyclable interstepbufferservices
-	err = progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
 		return false, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
 
-	return false, nil
+	// if any haven't been deleted, requeue
+	return !allDeleted, nil
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {

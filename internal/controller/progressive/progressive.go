@@ -47,8 +47,8 @@ type progressiveController interface {
 	// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
 	IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error)
 
-	// Recycle deletes child
-	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) error
+	// Recycle deletes child; returns true if it was in fact deleted
+	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
@@ -421,27 +421,32 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 	return true
 }
 
+// Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
 func GarbageCollectChildren(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
 	c client.Client,
-) error {
+) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	recyclableObjects, err := getRecyclableObjects(ctx, rolloutObject, c)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	numaLogger.WithValues("recylableObjects", recyclableObjects).Debug("recycling")
 
+	allDeleted := true
 	for _, recyclableChild := range recyclableObjects.Items {
-		err = controller.Recycle(ctx, &recyclableChild, c)
+		deleted, err := controller.Recycle(ctx, &recyclableChild, c)
 		if err != nil {
-			return err
+			return false, err
+		}
+		if !deleted {
+			allDeleted = false
 		}
 	}
-	return nil
+	return allDeleted, nil
 }
 func getRecyclableObjects(
 	ctx context.Context,
