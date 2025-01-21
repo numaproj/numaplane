@@ -511,6 +511,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
+	requeue := false
+
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
@@ -544,6 +546,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return false, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+		} else {
+			requeue = true
 		}
 
 	default:
@@ -563,7 +567,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
-	return false, nil
+
+	return requeue, nil
 }
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	return generation <= observedGeneration

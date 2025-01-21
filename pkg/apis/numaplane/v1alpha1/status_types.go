@@ -102,7 +102,7 @@ type AssessmentResult string
 const (
 	AssessmentResultSuccess = "Success"
 	AssessmentResultFailure = "Failure"
-	AssessmentResultUnknown = ""
+	AssessmentResultUnknown = "Unknown"
 )
 
 // ChildStatus describes the status of an upgrading child
