@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -282,233 +283,233 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 	currentMonoVertexSpec = initialMonoVertexSpec
-	/*
-		time.Sleep(2 * time.Second)
 
-		It("Should automatically heal a Pipeline if it is updated directly", func() {
+	time.Sleep(2 * time.Second)
 
-			document("Updating Pipeline directly")
+	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
-			// update child Pipeline
-			updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
-				pipelineSpec.Watermark.Disabled = true
-				return pipelineSpec, nil
-			})
+		document("Updating Pipeline directly")
 
-			if upgradeStrategy == config.PPNDStrategyID {
-				document("Verify that child Pipeline is not paused when an update not requiring pause is made")
-				verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-					return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
-				})
-			}
-
-			// allow time for self healing to reconcile
-			time.Sleep(5 * time.Second)
-
-			// get updated Pipeline again to compare spec
-			document("Verifying self-healing")
-			verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-				return !retrievedPipelineSpec.Watermark.Disabled
-			})
-
-			verifyPipelineRolloutDeployed(pipelineRolloutName)
-			verifyPipelineRolloutHealthy(pipelineRolloutName)
-
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-
-			verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
-
+		// update child Pipeline
+		updatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
+			pipelineSpec.Watermark.Disabled = true
+			return pipelineSpec, nil
 		})
 
-		time.Sleep(2 * time.Second)
-
-		It("Should update the child Pipeline if the PipelineRollout is updated", func() {
-
-			document("Updating Pipeline spec in PipelineRollout")
-			rawSpec, err := json.Marshal(updatedPipelineSpec)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// update the PipelineRollout
-			updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-				rollout.Spec.Pipeline.Spec.Raw = rawSpec
-				return rollout, nil
+		if upgradeStrategy == config.PPNDStrategyID {
+			document("Verify that child Pipeline is not paused when an update not requiring pause is made")
+			verifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
+		}
 
-			if upgradeStrategy == config.PPNDStrategyID {
+		// allow time for self healing to reconcile
+		time.Sleep(5 * time.Second)
 
-				document("Verify that in-progress-strategy gets set to PPND")
-				verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-
-				verifyPipelinePaused(Namespace, pipelineRolloutName)
-
-			}
-
-			// wait for update to reconcile
-			time.Sleep(5 * time.Second)
-
-			document("Verifying Pipeline got updated")
-			numPipelineVertices = 3
-
-			// get Pipeline to check that spec has been updated to correct spec
-			verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-				return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-			})
-
-			verifyPipelineRolloutDeployed(pipelineRolloutName)
-			verifyPipelineRolloutHealthy(pipelineRolloutName)
-
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-
-			verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
-
+		// get updated Pipeline again to compare spec
+		document("Verifying self-healing")
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return !retrievedPipelineSpec.Watermark.Disabled
 		})
 
-		currentPipelineSpec = updatedPipelineSpec
+		verifyPipelineRolloutDeployed(pipelineRolloutName)
+		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		time.Sleep(2 * time.Second)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		// TODO: https://github.com/numaproj/numaplane/issues/509:
-		// move this into a ppnd-specific test suite
-		It("Should allow data loss in the Pipeline if requested (PPND)", func() {
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
-			if upgradeStrategy == config.PPNDStrategyID {
+	})
 
-				slowPipelineRolloutName := "slow-pipeline-rollout"
+	time.Sleep(2 * time.Second)
 
-				document("Creating a slow pipeline")
-				slowPipelineSpec := updatedPipelineSpec.DeepCopy()
-				highRPU := int64(10000)
-				readBatchSize := uint64(1)
-				slowPipelineSpec.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: &readBatchSize}
-				slowPipelineSpec.Vertices[0].Source.Generator.RPU = &highRPU
-				slowPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
-				}}
+	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
-				pipelineRolloutSpec := createPipelineRolloutSpec(slowPipelineRolloutName, Namespace, *slowPipelineSpec)
-				_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
-				Expect(err).ShouldNot(HaveOccurred())
+		document("Updating Pipeline spec in PipelineRollout")
+		rawSpec, err := json.Marshal(updatedPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
 
-				document("Verifying that the Pipeline was created")
-				verifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-					return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
-				})
-
-				verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
-				verifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-
-				document("Updating Pipeline Topology to cause a PPND change")
-				slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
-				slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
-				slowPipelineSpec.Edges = []numaflowv1.Edge{
-					{
-						From: "in",
-						To:   "out",
-					},
-				}
-				rawSpec, err := json.Marshal(slowPipelineSpec)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-					rollout.Spec.Pipeline.Spec.Raw = rawSpec
-					return rollout, nil
-				})
-
-				document("Verifying that Pipeline tries to pause")
-				verifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-					return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
-				})
-				document("Verifying that Pipeline keeps trying to pause")
-				verifyPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
-					return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
-				})
-
-				document("Updating PipelineRollout to allow data loss")
-
-				// update the PipelineRollout to allow data loss temporarily
-				updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-					if rollout.Annotations == nil {
-						rollout.Annotations = make(map[string]string)
-					}
-					rollout.Annotations[common.LabelKeyAllowDataLoss] = "true"
-					return rollout, nil
-				})
-
-				document("Verifying that Pipeline has stopped trying to pause")
-				verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
-
-				document("Deleting Slow PipelineRollout")
-
-				err = pipelineRolloutClient.Delete(ctx, slowPipelineRolloutName, metav1.DeleteOptions{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-			}
+		// update the PipelineRollout
+		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return rollout, nil
 		})
 
-		time.Sleep(2 * time.Second)
+		if upgradeStrategy == config.PPNDStrategyID {
 
-		It("Should pause the Pipeline if user requests it", func() {
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 
-			currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
-
-			document("setting desiredPhase=Paused")
-
-			rawSpec, err := json.Marshal(currentPipelineSpec)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// update the PipelineRollout
-			updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-				rollout.Spec.Pipeline.Spec.Raw = rawSpec
-				return rollout, nil
-			})
-			document("verifying PipelineRollout spec deployed")
-			verifyPipelineRolloutDeployed(pipelineRolloutName)
-
-			// Give it a little while to get to Paused and then verify that it stays in Paused (or otherwise Pausing)
 			verifyPipelinePaused(Namespace, pipelineRolloutName)
-			document("verifying Pipeline stays in paused or otherwise pausing")
-			Consistently(func() bool {
-				rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
-				if err != nil {
-					return false
-				}
-				return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
-					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
-			}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		}
 
-			pipeline, err := getPipeline(Namespace, pipelineRolloutName)
-			Expect(err).ShouldNot(HaveOccurred())
-			verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
+		// wait for update to reconcile
+		time.Sleep(5 * time.Second)
+
+		document("Verifying Pipeline got updated")
+		numPipelineVertices = 3
+
+		// get Pipeline to check that spec has been updated to correct spec
+		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
 		})
 
-		time.Sleep(2 * time.Second)
+		verifyPipelineRolloutDeployed(pipelineRolloutName)
+		verifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		It("Should resume the Pipeline if user requests it", func() {
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-			currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 
-			document("setting desiredPhase=Running")
+	})
 
-			rawSpec, err := json.Marshal(currentPipelineSpec)
+	currentPipelineSpec = updatedPipelineSpec
+
+	time.Sleep(2 * time.Second)
+
+	// TODO: https://github.com/numaproj/numaplane/issues/509:
+	// move this into a ppnd-specific test suite
+	It("Should allow data loss in the Pipeline if requested (PPND)", func() {
+
+		if upgradeStrategy == config.PPNDStrategyID {
+
+			slowPipelineRolloutName := "slow-pipeline-rollout"
+
+			document("Creating a slow pipeline")
+			slowPipelineSpec := updatedPipelineSpec.DeepCopy()
+			highRPU := int64(10000)
+			readBatchSize := uint64(1)
+			slowPipelineSpec.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: &readBatchSize}
+			slowPipelineSpec.Vertices[0].Source.Generator.RPU = &highRPU
+			slowPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
+				Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
+			}}
+
+			pipelineRolloutSpec := createPipelineRolloutSpec(slowPipelineRolloutName, Namespace, *slowPipelineSpec)
+			_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// update the PipelineRollout
-			updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			document("Verifying that the Pipeline was created")
+			verifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
+			})
+
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
+			verifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+			document("Updating Pipeline Topology to cause a PPND change")
+			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
+			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
+			slowPipelineSpec.Edges = []numaflowv1.Edge{
+				{
+					From: "in",
+					To:   "out",
+				},
+			}
+			rawSpec, err := json.Marshal(slowPipelineSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 				rollout.Spec.Pipeline.Spec.Raw = rawSpec
 				return rollout, nil
 			})
-			document("verifying PipelineRollout spec deployed")
 
-			verifyPipelineRolloutDeployed(pipelineRolloutName)
-			verifyPipelineRolloutHealthy(pipelineRolloutName)
+			document("Verifying that Pipeline tries to pause")
+			verifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
+			})
+			document("Verifying that Pipeline keeps trying to pause")
+			verifyPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
+			})
 
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
+			document("Updating PipelineRollout to allow data loss")
+
+			// update the PipelineRollout to allow data loss temporarily
+			updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+				if rollout.Annotations == nil {
+					rollout.Annotations = make(map[string]string)
+				}
+				rollout.Annotations[common.LabelKeyAllowDataLoss] = "true"
+				return rollout, nil
+			})
+
+			document("Verifying that Pipeline has stopped trying to pause")
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
+
+			document("Deleting Slow PipelineRollout")
+
+			err = pipelineRolloutClient.Delete(ctx, slowPipelineRolloutName, metav1.DeleteOptions{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+		}
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should pause the Pipeline if user requests it", func() {
+
+		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+
+		document("setting desiredPhase=Paused")
+
+		rawSpec, err := json.Marshal(currentPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// update the PipelineRollout
+		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return rollout, nil
 		})
-	*/
+		document("verifying PipelineRollout spec deployed")
+		verifyPipelineRolloutDeployed(pipelineRolloutName)
+
+		// Give it a little while to get to Paused and then verify that it stays in Paused (or otherwise Pausing)
+		verifyPipelinePaused(Namespace, pipelineRolloutName)
+		document("verifying Pipeline stays in paused or otherwise pausing")
+		Consistently(func() bool {
+			rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
+			if err != nil {
+				return false
+			}
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
+		}, 15*time.Second, testPollingInterval).Should(BeTrue())
+
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		pipeline, err := getPipeline(Namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+		verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should resume the Pipeline if user requests it", func() {
+
+		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+
+		document("setting desiredPhase=Running")
+
+		rawSpec, err := json.Marshal(currentPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// update the PipelineRollout
+		updatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+		document("verifying PipelineRollout spec deployed")
+
+		verifyPipelineRolloutDeployed(pipelineRolloutName)
+		verifyPipelineRolloutHealthy(pipelineRolloutName)
+
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
+	})
+
 	It("Should pause the MonoVertex if user requests it", func() {
 
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
@@ -567,122 +568,122 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 	})
-	/*
-		time.Sleep(2 * time.Second)
 
-		It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
-			updateNumaflowControllerRolloutVersion(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, true)
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+		updateNumaflowControllerRolloutVersion(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, true)
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
+		updateNumaflowControllerRolloutVersion(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, false)
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
+		updateNumaflowControllerRolloutVersion(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, true)
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
+
+		// new ISBService spec
+		updatedISBServiceSpec := isbServiceSpec
+		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
+		rawSpec, err := json.Marshal(updatedISBServiceSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+			rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+			return rollout, nil
 		})
 
-		time.Sleep(2 * time.Second)
+		if upgradeStrategy == config.PPNDStrategyID {
 
-		It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
-			updateNumaflowControllerRolloutVersion(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, false)
-		})
+			document("Verify that in-progress-strategy gets set to PPND")
+			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
-		time.Sleep(2 * time.Second)
-
-		It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
-			updateNumaflowControllerRolloutVersion(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, true)
-		})
-
-		time.Sleep(2 * time.Second)
-
-		It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
-
-			// new ISBService spec
-			updatedISBServiceSpec := isbServiceSpec
-			updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
-			rawSpec, err := json.Marshal(updatedISBServiceSpec)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-				rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-				return rollout, nil
-			})
-
-			if upgradeStrategy == config.PPNDStrategyID {
-
-				document("Verify that in-progress-strategy gets set to PPND")
-				verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
-				verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-				verifyPipelinePaused(Namespace, pipelineRolloutName)
-
-				document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
-				Eventually(func() bool {
-					isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-					isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-					plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-					plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-					if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
-						return false
-					}
-					return true
-				}, testTimeout).Should(BeTrue())
-
-			}
-
-			verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-				return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-			})
-
-			verifyISBSvcRolloutReady(isbServiceRolloutName)
-
-			verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
-
-			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
-
-		})
-
-		It("Should update the child ISBService updating a no-data-loss field", func() {
-
-			// new ISBService spec
-			rawSpec, err := json.Marshal(ISBServiceSpecNoDataLossField)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-				rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-				return rollout, nil
-			})
-
-			if upgradeStrategy == config.PPNDStrategyID {
-				document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
-				verifyNotPausing := func() bool {
-					_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
-					isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
-					isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-					plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-					plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-					if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-						return false
-					}
-					if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
-						return false
-					}
-					return true
+			document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
+			Eventually(func() bool {
+				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+					return false
 				}
+				return true
+			}, testTimeout).Should(BeTrue())
 
-				Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+		}
+
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+		})
+
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
+
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
+
+	})
+
+	It("Should update the child ISBService updating a no-data-loss field", func() {
+
+		// new ISBService spec
+		rawSpec, err := json.Marshal(ISBServiceSpecNoDataLossField)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+			rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+			return rollout, nil
+		})
+
+		if upgradeStrategy == config.PPNDStrategyID {
+			document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+			verifyNotPausing := func() bool {
+				_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
+				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+					return false
+				}
+				if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+					return false
+				}
+				return true
 			}
 
-			verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-				return retrievedISBServiceSpec.JetStream != nil &&
-					retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
-					retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
-					*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-			})
+			Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+		}
 
-			verifyISBSvcRolloutReady(isbServiceRolloutName)
-
-			verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
-
-			verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
-
+		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream != nil &&
+				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
+				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
+				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		})
-	*/
+
+		verifyISBSvcRolloutReady(isbServiceRolloutName)
+
+		verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+
+		verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
+
+	})
+
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
 		// new MonoVertex spec
