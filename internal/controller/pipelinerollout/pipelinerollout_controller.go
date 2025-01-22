@@ -237,7 +237,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
 	if requeue {
-		return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+		return common.DefaultDelayedRequeue, nil
 	}
 
 	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
@@ -511,6 +511,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
+	requeue := false
+
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
@@ -526,7 +528,13 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
 
-		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		// Get the PipelineRollout live resource
+		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
+		}
+
+		done, _, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, err
 		}
@@ -538,6 +546,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return false, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+		} else {
+			requeue = true
 		}
 
 	default:
@@ -549,15 +559,17 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 	// clean up recyclable pipelines
-	err = progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 	if err != nil {
 		return false, err
 	}
+	requeue = requeue || !allDeleted // if any haven't been deleted, requeue
 
 	if pipelineNeedsToUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
-	return false, nil
+
+	return requeue, nil
 }
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	return generation <= observedGeneration
@@ -855,12 +867,12 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 		switch cond.Type {
 		case "VerticesHealthy", "SideInputsManagersHealthy", "DaemonServiceHealthy":
 			// if any child resource unhealthy return status (false/unknown)
-			if cond.Status != "True" {
+			if cond.Status != metav1.ConditionTrue {
 				return cond.Status, cond.Reason
 			}
 		}
 	}
-	return "True", ""
+	return metav1.ConditionTrue, ""
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {

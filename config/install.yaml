@@ -256,6 +256,11 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
+                        type: string
                     required:
                     - name
                     type: object
@@ -460,6 +465,11 @@ spec:
                         type: string
                       name:
                         description: Name of the upgrading child
+                        type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
                         type: string
                     required:
                     - name
@@ -742,6 +752,11 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
+                        type: string
                     required:
                     - name
                     type: object
@@ -930,6 +945,11 @@ spec:
                         type: string
                       name:
                         description: Name of the upgrading child
+                        type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
                         type: string
                     required:
                     - name
@@ -1156,6 +1176,11 @@ spec:
                         type: string
                       name:
                         description: Name of the upgrading child
+                        type: string
+                      nextAssessmentTime:
+                        description: NextAssessmentTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
                         type: string
                     required:
                     - name
@@ -1825,6 +1850,7 @@ data:
     group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
     defaultUpgradeStrategy: "pause-and-drain"
+    childStatusAssessmentDelaySeconds: 30
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config

@@ -70,11 +70,16 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 	return currentNameCount, nil
 }
 
+// Recycle deletes child; returns true if it was in fact deleted
 func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 	monoVertexDef *unstructured.Unstructured,
 	c client.Client,
-) error {
-	return kubernetes.DeleteResource(ctx, c, monoVertexDef)
+) (bool, error) {
+	err := kubernetes.DeleteResource(ctx, c, monoVertexDef)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison

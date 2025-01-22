@@ -366,7 +366,14 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
-		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+
+		// Get the ISBServiceRollout live resource
+		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
+		}
+
+		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
 			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}
@@ -400,12 +407,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 	// clean up recyclable interstepbufferservices
-	err = progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
 		return false, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
 
-	return false, nil
+	// if any haven't been deleted, requeue
+	return !allDeleted, nil
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
@@ -631,7 +639,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
 		}
-		if reconciled && isbsvcChildResourceStatus == "True" {
+		if reconciled && isbsvcChildResourceStatus == metav1.ConditionTrue {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
 			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)

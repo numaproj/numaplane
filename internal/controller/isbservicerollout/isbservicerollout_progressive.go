@@ -70,8 +70,8 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 	return currentNameCount, nil
 }
 
-// Recycle deletes child
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) error {
+// Recycle deletes child; returns true if it was in fact deleted
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
 
 	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
@@ -79,15 +79,19 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstr
 
 	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
 	if err != nil {
-		return fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+		return false, fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
 	}
 	if pipelines != nil && len(pipelines.Items) > 0 {
 		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
-		return nil
+		return false, nil
 	}
 	// okay to delete now
 	numaLogger.Debug("deleting isbsvc")
-	return kubernetes.DeleteResource(ctx, c, isbsvc)
+	err = kubernetes.DeleteResource(ctx, c, isbsvc)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update

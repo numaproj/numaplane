@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -56,7 +57,7 @@ var (
 	numVertices         = int32(1)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
-	pipelineSpec        = numaflowv1.PipelineSpec{
+	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -159,17 +160,12 @@ var (
 	}
 
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
-	monoVertexSpec        = numaflowv1.MonoVertexSpec{
+	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Replicas: ptr.To(int32(1)),
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
-				},
-			},
-			UDTransformer: &numaflowv1.UDTransformer{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
 				},
 			},
 		},
@@ -177,7 +173,7 @@ var (
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
 					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
 					},
 				},
 			},
@@ -237,7 +233,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should create the PipelineRollout if it does not exist", func() {
 
-		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, Namespace)
+		pipelineRolloutSpec := createPipelineRolloutSpec(pipelineRolloutName, Namespace, initialPipelineSpec)
 		_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -249,7 +245,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying that the Pipeline was created")
 		verifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(pipelineSpec.Vertices) == numPipelineVertices // TODO: make less kludgey
+			return len(initialPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices) // TODO: make less kludgey
 			//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
 		})
 
@@ -261,7 +257,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	currentPipelineSpec = pipelineSpec
+	currentPipelineSpec = initialPipelineSpec
 
 	It("Should create the MonoVertexRollout if it does not exist", func() {
 
@@ -277,7 +273,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying that the MonoVertex was created")
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return monoVertexSpec.Source != nil
+			return initialMonoVertexSpec.Source != nil
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
@@ -286,7 +282,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	currentMonoVertexSpec = monoVertexSpec
+	currentMonoVertexSpec = initialMonoVertexSpec
 
 	time.Sleep(2 * time.Second)
 
@@ -369,6 +365,86 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 	currentPipelineSpec = updatedPipelineSpec
+
+	time.Sleep(2 * time.Second)
+
+	// TODO: https://github.com/numaproj/numaplane/issues/509:
+	// move this into a ppnd-specific test suite
+	It("Should allow data loss in the Pipeline if requested (PPND)", func() {
+
+		if upgradeStrategy == config.PPNDStrategyID {
+
+			slowPipelineRolloutName := "slow-pipeline-rollout"
+
+			document("Creating a slow pipeline")
+			slowPipelineSpec := updatedPipelineSpec.DeepCopy()
+			highRPU := int64(10000)
+			readBatchSize := uint64(1)
+			slowPipelineSpec.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: &readBatchSize}
+			slowPipelineSpec.Vertices[0].Source.Generator.RPU = &highRPU
+			slowPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
+				Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
+			}}
+
+			pipelineRolloutSpec := createPipelineRolloutSpec(slowPipelineRolloutName, Namespace, *slowPipelineSpec)
+			_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			document("Verifying that the Pipeline was created")
+			verifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
+			})
+
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
+			verifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+			document("Updating Pipeline Topology to cause a PPND change")
+			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
+			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
+			slowPipelineSpec.Edges = []numaflowv1.Edge{
+				{
+					From: "in",
+					To:   "out",
+				},
+			}
+			rawSpec, err := json.Marshal(slowPipelineSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+				rollout.Spec.Pipeline.Spec.Raw = rawSpec
+				return rollout, nil
+			})
+
+			document("Verifying that Pipeline tries to pause")
+			verifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
+			})
+			document("Verifying that Pipeline keeps trying to pause")
+			verifyPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+				return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
+			})
+
+			document("Updating PipelineRollout to allow data loss")
+
+			// update the PipelineRollout to allow data loss temporarily
+			updatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+				if rollout.Annotations == nil {
+					rollout.Annotations = make(map[string]string)
+				}
+				rollout.Annotations[common.LabelKeyAllowDataLoss] = "true"
+				return rollout, nil
+			})
+
+			document("Verifying that Pipeline has stopped trying to pause")
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, len(slowPipelineSpec.Vertices))
+
+			document("Deleting Slow PipelineRollout")
+
+			err = pipelineRolloutClient.Delete(ctx, slowPipelineRolloutName, metav1.DeleteOptions{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+		}
+	})
 
 	time.Sleep(2 * time.Second)
 
@@ -533,6 +609,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			verifyPipelinePaused(Namespace, pipelineRolloutName)
 
+			document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
@@ -610,8 +687,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
 		// new MonoVertex spec
-		updatedMonoVertexSpec := monoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-python/simple-source:stable"
+		updatedMonoVertexSpec := initialMonoVertexSpec
+		updatedMonoVertexSpec.Source.UDSource = nil
+		rpu := int64(10)
+		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -621,7 +700,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
+			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
@@ -825,7 +904,7 @@ func updateNumaflowControllerRolloutVersion(originalVersion, newVersion string, 
 	verifyPipelineRunning(Namespace, pipelineRolloutName, numPipelineVertices)
 }
 
-func createPipelineRolloutSpec(name, namespace string) *apiv1.PipelineRollout {
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -901,7 +980,7 @@ func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollou
 
 func createMonoVertexRolloutSpec(name, namespace string) *apiv1.MonoVertexRollout {
 
-	rawSpec, err := json.Marshal(monoVertexSpec)
+	rawSpec, err := json.Marshal(initialMonoVertexSpec)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{

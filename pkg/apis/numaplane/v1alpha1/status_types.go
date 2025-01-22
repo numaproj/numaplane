@@ -102,7 +102,7 @@ type AssessmentResult string
 const (
 	AssessmentResultSuccess = "Success"
 	AssessmentResultFailure = "Failure"
-	AssessmentResultUnknown = ""
+	AssessmentResultUnknown = "Unknown"
 )
 
 // ChildStatus describes the status of an upgrading child
@@ -111,6 +111,8 @@ type ChildStatus struct {
 	Name string `json:"name"`
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
+	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
+	NextAssessmentTime metav1.Time `json:"nextAssessmentTime,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -225,6 +227,23 @@ func (status *Status) SetUpgradeInProgress(upgradeStrategy UpgradeStrategy) {
 
 func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
+}
+
+// IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
+// UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
+// Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
+// non-nil and NextAssessmentTime is not the zero value of time.Time.
+func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
+	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
+}
+
+// CanAssess determines if the child status can be assessed.
+// It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
+// the NextAssessmentTime is in the future, and the AssessmentResult is not successful.
+// If the AssessmentResult is successful and the NextAssessmentTime is in the future
+// we should not check again since the assessment has already been performed.
+func (cs *ChildStatus) CanAssess() bool {
+	return cs != nil && cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
 }
 
 // setCondition sets a condition

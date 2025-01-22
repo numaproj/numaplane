@@ -7,4 +7,4 @@ metadata:
 spec:
   controller:
     #instanceID: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
-    version: "1.4.0"  
+    version: "1.4.2"
