@@ -160,17 +160,12 @@ var (
 	}
 
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
-	monoVertexSpec        = numaflowv1.MonoVertexSpec{
+	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Replicas: ptr.To(int32(1)),
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
-				},
-			},
-			UDTransformer: &numaflowv1.UDTransformer{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
 				},
 			},
 		},
@@ -178,7 +173,7 @@ var (
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
 					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
 					},
 				},
 			},
@@ -278,7 +273,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		document("Verifying that the MonoVertex was created")
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return monoVertexSpec.Source != nil
+			return initialMonoVertexSpec.Source != nil
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
@@ -287,7 +282,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
-	currentMonoVertexSpec = monoVertexSpec
+	currentMonoVertexSpec = initialMonoVertexSpec
 
 	time.Sleep(2 * time.Second)
 
@@ -692,8 +687,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
 		// new MonoVertex spec
-		updatedMonoVertexSpec := monoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-python/simple-source:stable"
+		updatedMonoVertexSpec := initialMonoVertexSpec
+		updatedMonoVertexSpec.Source.UDSource = nil
+		rpu := int64(10)
+		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -703,7 +700,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		verifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-python/simple-source:stable"
+			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
 		})
 
 		verifyMonoVertexRolloutReady(monoVertexRolloutName)
@@ -983,7 +980,7 @@ func createISBServiceRolloutSpec(name, namespace string) *apiv1.ISBServiceRollou
 
 func createMonoVertexRolloutSpec(name, namespace string) *apiv1.MonoVertexRollout {
 
-	rawSpec, err := json.Marshal(monoVertexSpec)
+	rawSpec, err := json.Marshal(initialMonoVertexSpec)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	monoVertexRollout := &apiv1.MonoVertexRollout{
