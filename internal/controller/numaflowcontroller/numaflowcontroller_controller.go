@@ -414,12 +414,9 @@ func determineTargetObjects(
 	version string,
 	namespace string,
 ) ([]*unstructured.Unstructured, error) {
-
-	// Get the target manifests based on the given version and throw an error if the definition does not have that version
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
-	manifest, manifestExists := definition[version]
-	if !manifestExists {
-		return nil, fmt.Errorf("no controller definition found for version %s", version)
+	manifest, err := getNumaflowControllerDefinition(namespace, version)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get controller definition: %w", err)
 	}
 
 	// Update templated manifest with information from the NumaflowController definition
@@ -448,6 +445,22 @@ func determineTargetObjects(
 	}
 
 	return targetObjs, nil
+}
+
+// getNumaflowControllerDefinition looks up the controller definition from user namespace, if not found then use from global namespace.
+func getNumaflowControllerDefinition(namespace, version string) (string, error) {
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
+	key := fmt.Sprintf("%s/%s", namespace, version)
+	manifest, manifestExists := definition[key]
+	if !manifestExists {
+		key = fmt.Sprintf("%s/%s", common.NumaplaneSystemNamespace, version)
+		manifest, manifestExists = definition[key]
+		if !manifestExists {
+			return "", fmt.Errorf("no controller definition found for version %s", version)
+		}
+	}
+
+	return manifest, nil
 }
 
 func (r *NumaflowControllerReconciler) sync(

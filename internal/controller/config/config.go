@@ -46,6 +46,7 @@ type ConfigManager struct {
 }
 
 type NumaflowControllerDefinitionsManager struct {
+	// rolloutConfig is a map of controller version to its full spec where key is namespace/version
 	rolloutConfig map[string]string
 	lock          *sync.RWMutex
 }
@@ -109,24 +110,27 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig, namespace string) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
-	// Add or update the controller definition config based on a version
+	// Add or update the controller definition config based on a version and namespace as key
 	for _, controller := range config.ControllerDefinitions {
-		cm.rolloutConfig[controller.Version] = controller.FullSpec
+		key := fmt.Sprintf("%s/%s", namespace, controller.Version)
+		cm.rolloutConfig[key] = controller.FullSpec
 
 		log.Debug().Msg(fmt.Sprintf("Added/Updated Controller definition Config, version: %s", config)) // due to cyclical dependency, we can't call logger
 	}
 }
 
-func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig, namespace string) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
+	// Remove the controller definition config based on a version and namespace as key
 	for _, controller := range config.ControllerDefinitions {
-		delete(cm.rolloutConfig, controller.Version)
+		key := fmt.Sprintf("%s/%s", namespace, controller.Version)
+		delete(cm.rolloutConfig, key)
 
 		log.Debug().Msg(fmt.Sprintf("Removed Controller definition Config, version: %s", controller.Version)) // due to cyclical dependency, we can't call logger
 	}

@@ -158,7 +158,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 	definitions, err := ctlrcommon.GetNumaflowControllerDefinitions("../../tests/config/controller-definitions-config.yaml")
 	Expect(err).ToNot(HaveOccurred())
-	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions)
+	config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(*definitions, "")
 
 	go func() {
 		defer GinkgoRecover()

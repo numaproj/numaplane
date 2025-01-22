@@ -67,12 +67,7 @@ func watchConfigMaps(ctx context.Context, client kubernetes.Interface, numaplane
 		switch labelVal {
 
 		case common.LabelValueNumaflowControllerDefinitions:
-
-			// Only handle this kind of ConfigMap if it is in the Numaplane namespace
-			if configMap.Namespace != numaplaneNamespace {
-				break
-			}
-
+			// Handle all namespace configmaps
 			handleNumaflowControllerDefinitionsConfigMapEvent(ctx, configMap, event)
 
 		case common.LabelValueUSDEConfig:
@@ -115,9 +110,9 @@ func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, conf
 
 		// controller config definition is immutable, so no need to update the existing config
 		if event.Type == watch.Added {
-			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig)
+			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig, configMap.Namespace)
 		} else if event.Type == watch.Deleted {
-			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig)
+			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig, configMap.Namespace)
 		}
 	}
 }
