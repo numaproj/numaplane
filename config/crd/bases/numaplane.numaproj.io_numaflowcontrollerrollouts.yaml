@@ -208,6 +208,9 @@ spec:
                 type: string
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: The metadata name must start with 'numaflow-controller'
+          rule: matches(self.metadata.name, '^numaflow-controller.*')
     served: true
     storage: true
     subresources:
