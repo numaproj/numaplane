@@ -424,7 +424,7 @@ func (r *NumaflowControllerRolloutReconciler) MarkRolloutPaused(ctx context.Cont
 
 func (r *NumaflowControllerRolloutReconciler) updatePauseMetric(nfcRollout *apiv1.NumaflowControllerRollout) {
 	timeElapsed := time.Since(nfcRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time)
-	r.customMetrics.NumaflowControllerRolloutPausedSeconds.WithLabelValues(nfcRollout.Name).Set(timeElapsed.Seconds())
+	r.customMetrics.NumaflowControllerRolloutPausedSeconds.WithLabelValues(nfcRollout.Name, nfcRollout.Namespace).Set(timeElapsed.Seconds())
 }
 
 // return:

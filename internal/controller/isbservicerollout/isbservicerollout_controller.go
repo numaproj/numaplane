@@ -453,7 +453,7 @@ func (r *ISBServiceRolloutReconciler) MarkRolloutPaused(ctx context.Context, rol
 
 func (r *ISBServiceRolloutReconciler) updatePauseMetric(isbServiceRollout *apiv1.ISBServiceRollout) {
 	timeElapsed := time.Since(isbServiceRollout.Status.PauseRequestStatus.LastPauseBeginTime.Time)
-	r.customMetrics.ISBServicePausedSeconds.WithLabelValues(isbServiceRollout.Name).Set(timeElapsed.Seconds())
+	r.customMetrics.ISBServicePausedSeconds.WithLabelValues(isbServiceRollout.Name, isbServiceRollout.Namespace).Set(timeElapsed.Seconds())
 }
 
 func (r *ISBServiceRolloutReconciler) GetRolloutKey(rolloutNamespace string, rolloutName string) string {

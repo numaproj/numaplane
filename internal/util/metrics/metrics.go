@@ -207,7 +207,7 @@ var (
 		Name:        "numaflow_isbservice_paused_seconds",
 		Help:        "Duration an ISBService paused resources for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelName})
+	}, []string{LabelName, LabelNamespace})
 
 	// monoVertexRolloutsRunning is the gauge for the number of MonoVertexRollouts.
 	monoVertexRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -256,7 +256,7 @@ var (
 		Name:        "numaflow_controller_rollout_paused_seconds",
 		Help:        "Duration a NumaflowControllerRollout paused pipelines for",
 		ConstLabels: defaultLabels,
-	}, []string{LabelName})
+	}, []string{LabelName, LabelNamespace})
 
 	// numaflowControllerSyncErrors is the total number of NumaflowController reconciliation errors
 	numaflowControllerSyncErrors = promauto.NewCounterVec(prometheus.CounterOpts{
