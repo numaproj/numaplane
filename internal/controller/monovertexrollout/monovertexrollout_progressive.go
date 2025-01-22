@@ -107,7 +107,11 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 
 }
 
-// make an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// Assessment:
+// Success: phase must be "Running" and all conditions must be True
+// Failure: phase is "Failed" or any condition is False
+// Unknowk: neither of the above if met
 // TODO: fix this assessment not to return an immediate result as soon as things are healthy or unhealthy
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -123,8 +127,10 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	if upgradingObjectStatus.Phase == "Running" && progressive.IsNumaflowChildReady(&upgradingObjectStatus) {
 		return apiv1.AssessmentResultSuccess, nil
 	}
-	if upgradingObjectStatus.Phase == "Failed" {
+
+	if upgradingObjectStatus.Phase == "Failed" || !progressive.IsNumaflowChildReady(&upgradingObjectStatus) {
 		return apiv1.AssessmentResultFailure, nil
 	}
+
 	return apiv1.AssessmentResultUnknown, nil
 }
