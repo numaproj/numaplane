@@ -238,12 +238,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		needsRequeue, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
+		requeueDelay, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 		}
-		if needsRequeue {
-			return common.DefaultDelayedRequeue, nil
+		if requeueDelay > 0 {
+			return ctrl.Result{RequeueAfter: requeueDelay}, nil
 		}
 	}
 
@@ -255,7 +255,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 // return whether we should requeue, and return error if any (if returning an error, we will requeue anyway)
 func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
-	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
+	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -265,7 +265,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// and capability to rollback an unhealthy one
 	mvNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	numaLogger.
 		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
@@ -292,7 +292,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 
-	requeue := false
+	requeueDelay := time.Duration(0)
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
@@ -301,7 +301,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		// Get the MonoVertexRollout live resource
 		liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
-			return false, fmt.Errorf("error getting the live MonoVertexRollout for assessment processing: %w", err)
+			return 0, fmt.Errorf("error getting the live MonoVertexRollout for assessment processing: %w", err)
 		}
 
 		// don't risk out-of-date cache while performing Progressive strategy - get
@@ -311,32 +311,32 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("monoVertexDefinition", *existingMonoVertexDef).Warn("MonoVertex not found.")
 			} else {
-				return false, fmt.Errorf("error getting MonoVertex for status processing: %v", err)
+				return 0, fmt.Errorf("error getting MonoVertex for status processing: %v", err)
 			}
 		}
 
-		done, _, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		if done {
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
 			if err != nil {
-				return false, err
+				return 0, err
 			}
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 		} else {
-			requeue = true
+			requeueDelay = progressiveRequeueDelay
 		}
 
 	default:
 		if mvNeedsToUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 			if err != nil {
-				return false, err
+				return 0, err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
@@ -344,11 +344,14 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// clean up recyclable monovertices
 	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	requeue = requeue || !allDeleted // if any haven't been deleted, requeue
 
-	return requeue, nil
+	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
+		requeueDelay = common.DefaultRequeueDelay
+	}
+
+	return requeueDelay, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

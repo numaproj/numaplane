@@ -250,12 +250,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists
 		// perform logic related to updating
 		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
-		needsRequeue, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
+		requeueDelay, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
 		}
-		if needsRequeue {
-			return common.DefaultDelayedRequeue, nil
+		if requeueDelay > 0 {
+			return ctrl.Result{RequeueAfter: requeueDelay}, nil
 		}
 	}
 
@@ -276,7 +276,7 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 // - true if needs a requeue
 // - error if any
 func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout,
-	existingISBServiceDef, newISBServiceDef *unstructured.Unstructured, syncStartTime time.Time) (bool, error) {
+	existingISBServiceDef, newISBServiceDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -289,7 +289,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// TODO: handle recreate parameter
 	isbServiceNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	numaLogger.
 		WithValues("isbserviceNeedsToUpdate", isbServiceNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
@@ -331,7 +331,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("isbsvcDefinition", *newISBServiceDef).Warn("InterstepBufferService not found.")
 			} else {
-				return false, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
+				return 0, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
 			}
 		}
 		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
@@ -342,7 +342,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 		_, isbServiceIsUpdating, err := r.isISBServiceUpdating(ctx, isbServiceRollout, existingISBServiceDef, true)
 		if err != nil {
-			return false, fmt.Errorf("error determining if ISBService is updating: %v", err)
+			return 0, fmt.Errorf("error determining if ISBService is updating: %v", err)
 		}
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
@@ -356,13 +356,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		},
 			pipelinerollout.PipelineROReconciler.EnqueuePipeline)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
 			// requeue if done with PPND is false
-			return true, nil
+			return common.DefaultRequeueDelay, nil
 		}
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
@@ -370,12 +370,12 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		// Get the ISBServiceRollout live resource
 		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
-			return false, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
+			return 0, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		done, _, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
-			return false, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
+			return 0, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
@@ -384,36 +384,40 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
 			pipelineRollouts, err := r.getPipelineRolloutList(ctx, isbServiceRollout.Namespace, isbServiceRollout.Name)
 			if err != nil {
-				return false, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
+				return 0, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
 			}
 			for _, pipelineRollout := range pipelineRollouts {
 				numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
 				pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
 			}
 
-			// requeue
-			return true, nil
+			// requeue using the provided delay
+			return progressiveRequeueDelay, nil
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
 		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
 		if err != nil {
-			return false, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
+			return 0, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	case apiv1.UpgradeStrategyNoOp:
 		break
 	default:
-		return false, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
+		return 0, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 	// clean up recyclable interstepbufferservices
 	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
-		return false, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
+		return 0, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
 
 	// if any haven't been deleted, requeue
-	return !allDeleted, nil
+	if !allDeleted {
+		return common.DefaultRequeueDelay, nil
+	}
+
+	return 0, nil
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
