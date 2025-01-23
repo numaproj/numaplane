@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -112,6 +110,6 @@ var (
 		Resource: "pipelines",
 	}
 
-	// default requeue time used by Reconcilers
-	DefaultDelayedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
+	// DefaultRequeueDelay indicates the default requeue time (in seconds) used by Reconcilers
+	DefaultRequeueDelay = 20 * time.Second
 )

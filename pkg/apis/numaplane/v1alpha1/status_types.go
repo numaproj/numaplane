@@ -113,6 +113,8 @@ type ChildStatus struct {
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
 	NextAssessmentTime metav1.Time `json:"nextAssessmentTime,omitempty"`
+	// AssessUntil indicates the time after which no more assessments will be performed
+	AssessUntil metav1.Time `json:"assessUntil,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -229,21 +231,25 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
-// IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
-// UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
-// Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
-// non-nil and NextAssessmentTime is not the zero value of time.Time.
+// IsNextAssessmentTimeSet checks if the NextAssessmentTime field is set to a non-zero value.
 func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
 	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
 }
 
+// IsAssessUntilSet checks if the AssessUntil field is set to a non-zero value.
+func (cs *ChildStatus) IsAssessUntilSet() bool {
+	return cs != nil && cs.AssessUntil != metav1.NewTime(time.Time{})
+}
+
 // CanAssess determines if the child status can be assessed.
-// It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
-// the NextAssessmentTime is in the future, and the AssessmentResult is not successful.
-// If the AssessmentResult is successful and the NextAssessmentTime is in the future
-// we should not check again since the assessment has already been performed.
+// If the AssessmentResult has not been deemed failed already
+// and the current time is after NextAssessmentTime and before AssessUntil,
+// the assessment can be performed.
 func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil && cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
+	return cs != nil &&
+		cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) &&
+		cs.AssessUntil.Time.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) &&
+		cs.AssessmentResult != AssessmentResultFailure
 }
 
 // setCondition sets a condition
