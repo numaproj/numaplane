@@ -305,7 +305,7 @@ func (r *PipelineRolloutReconciler) processQueueKey(ctx context.Context, key str
 			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue", namespacedName)
 			r.Queue.AddRateLimited(key)
 		} else if result.RequeueAfter > 0 {
-			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %d seconds", namespacedName, result.RequeueAfter)
+			numaLogger.Debugf("PipelineRollout %v reconcile requests requeue after %.0f seconds", namespacedName, result.RequeueAfter.Seconds())
 			r.Queue.AddAfter(key, result.RequeueAfter)
 		} else {
 			numaLogger.Debugf("PipelineRollout %v reconcile complete", namespacedName)
