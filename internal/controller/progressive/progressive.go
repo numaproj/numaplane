@@ -311,6 +311,7 @@ func processUpgradingChild(
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}
+		childStatus.InitAssessUntil()
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child not yet set")
 	} else {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")

@@ -236,9 +236,20 @@ func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
 	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
 }
 
+var assessUntilInitValue = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// InitAssessUntil initializes the AssessUntil field to a large value.
+func (cs *ChildStatus) InitAssessUntil() {
+	if cs == nil {
+		cs = &ChildStatus{}
+	}
+
+	cs.AssessUntil = metav1.NewTime(assessUntilInitValue)
+}
+
 // IsAssessUntilSet checks if the AssessUntil field is set to a non-zero value.
 func (cs *ChildStatus) IsAssessUntilSet() bool {
-	return cs != nil && cs.AssessUntil != metav1.NewTime(time.Time{})
+	return cs != nil && cs.AssessUntil.After(time.Time{}) && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
 }
 
 // CanAssess determines if the child status can be assessed.
@@ -247,8 +258,8 @@ func (cs *ChildStatus) IsAssessUntilSet() bool {
 // the assessment can be performed.
 func (cs *ChildStatus) CanAssess() bool {
 	return cs != nil &&
-		cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) &&
-		cs.AssessUntil.Time.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) &&
+		cs.NextAssessmentTime.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) &&
+		cs.AssessUntil.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) &&
 		cs.AssessmentResult != AssessmentResultFailure
 }
 
