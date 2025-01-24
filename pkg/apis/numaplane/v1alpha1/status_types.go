@@ -256,11 +256,14 @@ func (cs *ChildStatus) IsAssessUntilSet() bool {
 // If the AssessmentResult has not been deemed failed already
 // and the current time is after NextAssessmentTime and before AssessUntil,
 // the assessment can be performed.
+// NOTE: the assessment can also be performed if the current time is past the
+// end time of the window but the previous assessment was a failure. This allows us to
+// fix a failed upgrade by using a new rollout version with the fix.
 func (cs *ChildStatus) CanAssess() bool {
 	return cs != nil &&
 		cs.NextAssessmentTime.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) &&
-		cs.AssessUntil.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) &&
-		cs.AssessmentResult != AssessmentResultFailure
+		((cs.AssessUntil.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) && cs.AssessmentResult != AssessmentResultFailure) ||
+			cs.AssessmentResult == AssessmentResultFailure)
 }
 
 // setCondition sets a condition

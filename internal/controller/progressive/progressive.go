@@ -336,7 +336,7 @@ func processUpgradingChild(
 			return true, false, 0, nil
 		}
 
-		numaLogger.WithValues("childStatus", *childStatus).Debug("skipping upgrading child assessment: either outside the assessment time window or already assessed failed")
+		numaLogger.WithValues("childStatus", *childStatus).Debug("skipping upgrading child assessment: either outside the assessment time window or already assessed failed for this upgrade version")
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 		// Since we haven't reached the next assessment time yet, return the default requeue delay
 		return false, false, common.DefaultRequeueDelay, nil
