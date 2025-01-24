@@ -388,10 +388,10 @@ func processUpgradingChild(
 			}
 
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			return true, true, 0, err
+			return false, true, 0, err
 		}
 
-		return true, false, 0, nil
+		return false, false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
