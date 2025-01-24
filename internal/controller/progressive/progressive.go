@@ -411,13 +411,15 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
-		return false, false, assessEvery, nil
+		// if we are still in the assessment window, return we are not done
+		return !childStatus.CanAssess(), false, assessEvery, nil
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 
-		return false, false, assessEvery, nil
+		// if we are still in the assessment window, return we are not done
+		return !childStatus.CanAssess(), false, assessEvery, nil
 	}
 }
 
