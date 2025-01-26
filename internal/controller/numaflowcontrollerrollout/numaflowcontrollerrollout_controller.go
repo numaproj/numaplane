@@ -343,8 +343,11 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 			r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyProgressive {
-			inProgressStrategy = apiv1.UpgradeStrategyProgressive
-			r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
+			// TODO: Progressive strategy
+			// for now, we just do "Apply" strategy
+			upgradeStrategyType = apiv1.UpgradeStrategyApply
+			//inProgressStrategy = apiv1.UpgradeStrategyProgressive
+			//r.inProgressStrategyMgr.SetStrategy(ctx, nfcRollout, inProgressStrategy)
 		}
 		if upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			inProgressStrategy = apiv1.UpgradeStrategyApply
@@ -372,9 +375,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 			// requeue if done with PPND is false
 			return true, nil
 		}
-	// TODO: Progressive strategy should ideally be creating a second parallel NumaflowController, and all Pipelines should be on it;
-	// for now we just create a 2nd NumaflowControllerRollout, so we need the Apply path to work
-	case apiv1.UpgradeStrategyApply, apiv1.UpgradeStrategyProgressive:
+	case apiv1.UpgradeStrategyApply:
 		// update NumaflowController
 		err = r.updateNumaflowController(ctx, nfcRollout, newNumaflowControllerDef)
 		if err != nil {
