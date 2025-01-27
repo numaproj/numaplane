@@ -318,41 +318,31 @@ func processUpgradingChild(
 	}
 
 	// If no NextAssessmentTime has been set already, calculate it and set it
-	if !childStatus.IsNextAssessmentTimeSet() {
+	if childStatus.NextAssessmentTime == nil {
 		// Add to the current time the assessmentDelay and set the NextAssessmentTime in the Rollout object
-		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(assessmentDelay))
+		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentDelay))
+		childStatus.NextAssessmentTime = &nextAssessmentTime
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child nextAssessmentTime")
 	}
 
-	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
-	// Only assess the child if the NextAssessmentTime is after the current time plus the assessmentDelay
-	// and if the AssessmentResult hasn't been deemed successful yet.
-	if !childStatus.CanAssess() {
-		if childStatus.AssessUntil.Time.After(time.Time{}) && time.Now().After(childStatus.AssessUntil.Time) {
-			// Reached the end of the assessment window. Stop performing any further assessment.
-			// The assessed value will be the last one assessed (either Success or Unknown).
-			// No more requeues are necessary, so return a 0 requeue delay.
-			numaLogger.WithValues("childStatus", *childStatus).Debug("reached the end of the assessment window")
-			return true, false, 0, nil
+	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
+	// Otherwise, assess the previous child status.
+	assessment := childStatus.AssessmentResult
+	if childStatus.CanAssess() {
+		assessment, err = controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
+		if err != nil {
+			return false, false, 0, err
 		}
 
-		numaLogger.WithValues("childStatus", *childStatus).Debug("skipping upgrading child assessment: either outside the assessment time window or already assessed failed for this upgrade version")
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
-		// Since we haven't reached the next assessment time yet, return the default requeue delay
-		return false, false, common.DefaultRequeueDelay, nil
+		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debugf("performing upgrading child assessment, assessment returned: %v", assessment)
+	} else {
+		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("skipping upgrading child assessment but assessing previous child status")
 	}
-
-	numaLogger.WithValues("childStatus", *childStatus).Debug("performing upgrading child assessment")
-
-	assessment, err := controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
-	if err != nil {
-		return false, false, 0, err
-	}
-	numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debugf("assessment returned: %v", assessment)
 
 	// Once a "not unknown" assessment is reached, set the assessments end time (if not set yet)
 	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessUntilSet() {
-		childStatus.AssessUntil = metav1.NewTime(time.Now().Add(assessmentPeriod))
+		assessUntil := metav1.NewTime(time.Now().Add(assessmentPeriod))
+		childStatus.AssessUntil = &assessUntil
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child assessUntil")
 	}
 
@@ -418,8 +408,7 @@ func processUpgradingChild(
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 
-		// if we are still in the assessment window, return we are not done
-		return !childStatus.CanAssess(), false, assessmentInterval, nil
+		return false, false, assessmentInterval, nil
 	}
 }
 

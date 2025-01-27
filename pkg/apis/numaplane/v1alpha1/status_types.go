@@ -112,9 +112,9 @@ type ChildStatus struct {
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
-	NextAssessmentTime metav1.Time `json:"nextAssessmentTime,omitempty"`
+	NextAssessmentTime *metav1.Time `json:"nextAssessmentTime,omitempty"`
 	// AssessUntil indicates the time after which no more assessments will be performed
-	AssessUntil metav1.Time `json:"assessUntil,omitempty"`
+	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -231,12 +231,8 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
-// IsNextAssessmentTimeSet checks if the NextAssessmentTime field is set to a non-zero value.
-func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
-	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
-}
-
-var assessUntilInitValue = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+// assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
+var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 2, time.UTC)
 
 // InitAssessUntil initializes the AssessUntil field to a large value.
 func (cs *ChildStatus) InitAssessUntil() {
@@ -244,26 +240,23 @@ func (cs *ChildStatus) InitAssessUntil() {
 		cs = &ChildStatus{}
 	}
 
-	cs.AssessUntil = metav1.NewTime(assessUntilInitValue)
+	assessUntil := metav1.NewTime(assessUntilInitValue)
+	cs.AssessUntil = &assessUntil
 }
 
-// IsAssessUntilSet checks if the AssessUntil field is set to a non-zero value.
+// IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
 func (cs *ChildStatus) IsAssessUntilSet() bool {
-	return cs != nil && cs.AssessUntil.After(time.Time{}) && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
+	return cs != nil && cs.AssessUntil != nil && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
 }
 
-// CanAssess determines if the child status can be assessed.
-// If the AssessmentResult has not been deemed failed already
-// and the current time is after NextAssessmentTime and before AssessUntil,
-// the assessment can be performed.
-// NOTE: the assessment can also be performed if the current time is past the
-// end time of the window but the previous assessment was a failure. This allows us to
-// fix a failed upgrade by using a new rollout version with the fix.
+// CanAssess determines if the ChildStatus instance is eligible for assessment.
+// It checks that the current time is after the NextAssessmentTime and
+// before the AssessUntil time, and the AssessmentResult is not a failure.
 func (cs *ChildStatus) CanAssess() bool {
 	return cs != nil &&
-		cs.NextAssessmentTime.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) &&
-		((cs.AssessUntil.After(time.Time{}) && time.Now().Before(cs.AssessUntil.Time) && cs.AssessmentResult != AssessmentResultFailure) ||
-			cs.AssessmentResult == AssessmentResultFailure)
+		cs.NextAssessmentTime != nil && time.Now().After(cs.NextAssessmentTime.Time) &&
+		cs.AssessUntil != nil && time.Now().Before(cs.AssessUntil.Time) &&
+		cs.AssessmentResult != AssessmentResultFailure
 }
 
 // setCondition sets a condition
