@@ -862,6 +862,26 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
+// ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	fromCopy := from.DeepCopy()
+	toCopy := to.DeepCopy()
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
+	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
+
+	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+}
+
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
 	for _, cond := range conditions {
 		switch cond.Type {
