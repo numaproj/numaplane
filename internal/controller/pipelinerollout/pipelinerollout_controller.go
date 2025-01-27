@@ -432,7 +432,7 @@ func (r *PipelineRolloutReconciler) merge(existingPipeline, newPipeline *unstruc
 	return resultPipeline, nil
 }
 
-// return a requeue delay if requeue is needed, and return error if any (if returning an error, we will requeue anyway)
+// return a requeue delay greater than 0 if requeue is needed, and return error if any (if returning an error, we will requeue anyway)
 func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout,
 	existingPipelineDef, newPipelineDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {
 
@@ -511,7 +511,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 	}
 
-	requeueDelay := time.Duration(0)
+	requeueDelay := time.Duration(0) // 0 means "no requeue"
 
 	// now do whatever the inProgressStrategy is
 	switch inProgressStrategy {

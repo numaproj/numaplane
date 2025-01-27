@@ -339,7 +339,7 @@ func processUpgradingChild(
 		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("skipping upgrading child assessment but assessing previous child status")
 	}
 
-	// Once a "not unknown" assessment is reached, set the assessments end time (if not set yet)
+	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
 	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessUntilSet() {
 		assessUntil := metav1.NewTime(time.Now().Add(assessmentPeriod))
 		childStatus.AssessUntil = &assessUntil

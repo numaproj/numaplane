@@ -251,7 +251,8 @@ func (cs *ChildStatus) IsAssessUntilSet() bool {
 
 // CanAssess determines if the ChildStatus instance is eligible for assessment.
 // It checks that the current time is after the NextAssessmentTime and
-// before the AssessUntil time, and the AssessmentResult is not a failure.
+// before the AssessUntil time, and that it hasn't already previously failed
+// (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
 func (cs *ChildStatus) CanAssess() bool {
 	return cs != nil &&
 		cs.NextAssessmentTime != nil && time.Now().After(cs.NextAssessmentTime.Time) &&

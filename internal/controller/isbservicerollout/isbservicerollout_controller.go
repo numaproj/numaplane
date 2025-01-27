@@ -273,7 +273,7 @@ func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 
 // process an existing ISBService
 // return:
-// - true if needs a requeue
+// - a requeue delay greater than 0 if requeue is needed
 // - error if any
 func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout,
 	existingISBServiceDef, newISBServiceDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {

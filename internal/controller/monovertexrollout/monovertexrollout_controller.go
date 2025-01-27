@@ -253,7 +253,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	return ctrl.Result{}, nil
 }
 
-// return whether we should requeue, and return error if any (if returning an error, we will requeue anyway)
+// return a requeue delay greater than 0 if requeue is needed, and return error if any (if returning an error, we will requeue anyway)
 func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout,
 	existingMonoVertexDef, newMonoVertexDef *unstructured.Unstructured, syncStartTime time.Time) (time.Duration, error) {
 
@@ -292,7 +292,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 
-	requeueDelay := time.Duration(0)
+	requeueDelay := time.Duration(0) // 0 means "no requeue"
 
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyProgressive:
