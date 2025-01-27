@@ -96,10 +96,10 @@ type GlobalConfig struct {
 
 	// ChildStatusAssessmentSchedule defines time information used when assessing a child health status.
 	// It is a string with 3 comma-separated integer values representing the following:
-	// 1. Delay: indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
-	// 2. AssessFor: indicates the amount of seconds to perform assessments for after the first assessment has been performed
-	// 3. AssessEvery: indicates how often to assess the child status once the first assessment has been performed and before the end
-	// of the assessments window defined by adding the Delay seconds to the AssessFor seconds
+	// 1. AssessmentDelay: indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
+	// 2. AssessmentPeriod: indicates the amount of seconds to perform assessments for after the first assessment has been performed
+	// 3. AssessmentInterval: indicates how often to assess the child status once the first assessment has been performed and before the end
+	// of the assessments window defined by adding the AssessmentDelay seconds to the AssessmentPeriod seconds
 	// NOTE: the order of the values is important since each value represents a specific amount of time
 	// Example: ChildStatusAssessmentSchedule = "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
 	ChildStatusAssessmentSchedule string `json:"childStatusAssessmentSchedule" mapstructure:"childStatusAssessmentSchedule"`
@@ -259,8 +259,8 @@ func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 	return &nsConfigMap
 }
 
-// GetChildStatusAssessmentSchedule parses the GlobalConfig ChildStatusAssessmentSchedule string and returns the delay, assessFor, and assessEvery durations.
-func (gc *GlobalConfig) GetChildStatusAssessmentSchedule() (delay, assessFor, assessEvery time.Duration, err error) {
+// GetChildStatusAssessmentSchedule parses the GlobalConfig ChildStatusAssessmentSchedule string and returns the assessmentDelay, assessmentPeriod, and assessmentInterval durations.
+func (gc *GlobalConfig) GetChildStatusAssessmentSchedule() (assessmentDelay, assessmentPeriod, assessmentInterval time.Duration, err error) {
 	// Split the schedule string by commas
 	parts := strings.Split(gc.ChildStatusAssessmentSchedule, ",")
 	if len(parts) != 3 {
@@ -268,23 +268,23 @@ func (gc *GlobalConfig) GetChildStatusAssessmentSchedule() (delay, assessFor, as
 	}
 
 	// Convert each part to an integer and then to a time.Duration
-	delaySeconds, err := strconv.Atoi(parts[0])
+	assessmentDelaySeconds, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid delay value: %w", err)
+		return 0, 0, 0, fmt.Errorf("invalid assessmentDelay value: %w", err)
 	}
-	assessForSeconds, err := strconv.Atoi(parts[1])
+	assessmentPeriodSeconds, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid assessFor value: %w", err)
+		return 0, 0, 0, fmt.Errorf("invalid assessmentPeriod value: %w", err)
 	}
-	assessEverySeconds, err := strconv.Atoi(parts[2])
+	assessmentIntervalSeconds, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid assessEvery value: %w", err)
+		return 0, 0, 0, fmt.Errorf("invalid assessmentInterval value: %w", err)
 	}
 
 	// Convert seconds to time.Duration
-	delay = time.Duration(delaySeconds) * time.Second
-	assessFor = time.Duration(assessForSeconds) * time.Second
-	assessEvery = time.Duration(assessEverySeconds) * time.Second
+	assessmentDelay = time.Duration(assessmentDelaySeconds) * time.Second
+	assessmentPeriod = time.Duration(assessmentPeriodSeconds) * time.Second
+	assessmentInterval = time.Duration(assessmentIntervalSeconds) * time.Second
 
-	return delay, assessFor, assessEvery, nil
+	return assessmentDelay, assessmentPeriod, assessmentInterval, nil
 }

@@ -298,7 +298,7 @@ func processUpgradingChild(
 		return false, false, 0, fmt.Errorf("error getting the global config for assessment processing: %w", err)
 	}
 
-	delay, assessFor, assessEvery, err := globalConfig.GetChildStatusAssessmentSchedule()
+	assessmentDelay, assessmentPeriod, assessmentInterval, err := globalConfig.GetChildStatusAssessmentSchedule()
 	if err != nil {
 		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
 	}
@@ -319,13 +319,13 @@ func processUpgradingChild(
 
 	// If no NextAssessmentTime has been set already, calculate it and set it
 	if !childStatus.IsNextAssessmentTimeSet() {
-		// Add to the current time the delay and set the NextAssessmentTime in the Rollout object
-		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(delay))
+		// Add to the current time the assessmentDelay and set the NextAssessmentTime in the Rollout object
+		childStatus.NextAssessmentTime = metav1.NewTime(time.Now().Add(assessmentDelay))
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child nextAssessmentTime")
 	}
 
 	// Use the NextAssessmentTime to check if it's time to assess the child resource status.
-	// Only assess the child if the NextAssessmentTime is after the current time plus the delay
+	// Only assess the child if the NextAssessmentTime is after the current time plus the assessmentDelay
 	// and if the AssessmentResult hasn't been deemed successful yet.
 	if !childStatus.CanAssess() {
 		if childStatus.AssessUntil.Time.After(time.Time{}) && time.Now().After(childStatus.AssessUntil.Time) {
@@ -352,7 +352,7 @@ func processUpgradingChild(
 
 	// Once a "not unknown" assessment is reached, set the assessments end time (if not set yet)
 	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessUntilSet() {
-		childStatus.AssessUntil = metav1.NewTime(time.Now().Add(assessFor))
+		childStatus.AssessUntil = metav1.NewTime(time.Now().Add(assessmentPeriod))
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child assessUntil")
 	}
 
@@ -412,14 +412,14 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// if we are still in the assessment window, return we are not done
-		return !childStatus.CanAssess(), false, assessEvery, nil
+		return !childStatus.CanAssess(), false, assessmentInterval, nil
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
 
 		// if we are still in the assessment window, return we are not done
-		return !childStatus.CanAssess(), false, assessEvery, nil
+		return !childStatus.CanAssess(), false, assessmentInterval, nil
 	}
 }
 
