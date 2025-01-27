@@ -179,6 +179,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined

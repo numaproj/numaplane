@@ -260,7 +260,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("error processing existing NumaflowController: %v", err)
 	}
 	if needsRequeue {
-		return common.DefaultDelayedRequeue, nil
+		return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
 	}
 
 	return ctrl.Result{}, nil

@@ -249,6 +249,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -459,6 +464,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -745,6 +755,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -939,6 +954,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -1170,6 +1190,11 @@ spec:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
                     properties:
+                      assessUntil:
+                        description: AssessUntil indicates the time after which no
+                          more assessments will be performed
+                        format: date-time
+                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -1850,7 +1875,7 @@ data:
     group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
     defaultUpgradeStrategy: "pause-and-drain"
-    childStatusAssessmentDelaySeconds: 30
+    childStatusAssessmentSchedule: "120,60,10"
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config

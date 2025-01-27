@@ -112,7 +112,9 @@ type ChildStatus struct {
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
-	NextAssessmentTime metav1.Time `json:"nextAssessmentTime,omitempty"`
+	NextAssessmentTime *metav1.Time `json:"nextAssessmentTime,omitempty"`
+	// AssessUntil indicates the time after which no more assessments will be performed
+	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -229,21 +231,33 @@ func (status *Status) ClearUpgradeInProgress() {
 	status.UpgradeInProgress = ""
 }
 
-// IsNextAssessmentTimeSet checks if the NextAssessmentTime field in the
-// UpgradingChildStatus of the ProgressiveStatus is set to a non-zero value.
-// Returns true if the Status, ProgressiveStatus, and UpgradingChildStatus are
-// non-nil and NextAssessmentTime is not the zero value of time.Time.
-func (cs *ChildStatus) IsNextAssessmentTimeSet() bool {
-	return cs != nil && cs.NextAssessmentTime != metav1.NewTime(time.Time{})
+// assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
+var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 2, time.UTC)
+
+// InitAssessUntil initializes the AssessUntil field to a large value.
+func (cs *ChildStatus) InitAssessUntil() {
+	if cs == nil {
+		cs = &ChildStatus{}
+	}
+
+	assessUntil := metav1.NewTime(assessUntilInitValue)
+	cs.AssessUntil = &assessUntil
 }
 
-// CanAssess determines if the child status can be assessed.
-// It checks if the Status object is not nil, the UpgradingChildStatus is not nil,
-// the NextAssessmentTime is in the future, and the AssessmentResult is not successful.
-// If the AssessmentResult is successful and the NextAssessmentTime is in the future
-// we should not check again since the assessment has already been performed.
+// IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
+func (cs *ChildStatus) IsAssessUntilSet() bool {
+	return cs != nil && cs.AssessUntil != nil && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
+}
+
+// CanAssess determines if the ChildStatus instance is eligible for assessment.
+// It checks that the current time is after the NextAssessmentTime and
+// before the AssessUntil time, and that it hasn't already previously failed
+// (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
 func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil && cs.NextAssessmentTime.Time.After(time.Time{}) && time.Now().After(cs.NextAssessmentTime.Time) && cs.AssessmentResult != AssessmentResultSuccess
+	return cs != nil &&
+		cs.NextAssessmentTime != nil && time.Now().After(cs.NextAssessmentTime.Time) &&
+		cs.AssessUntil != nil && time.Now().Before(cs.AssessUntil.Time) &&
+		cs.AssessmentResult != AssessmentResultFailure
 }
 
 // setCondition sets a condition
