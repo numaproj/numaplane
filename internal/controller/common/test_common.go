@@ -354,6 +354,40 @@ func CreateDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 	}
 }
 
+func CreateTestISBService(
+	jetstreamVersion string,
+	name string,
+	phase numaflowv1.ISBSvcPhase,
+	//status numaflowv1.Status,
+	fullyReconciled bool,
+	labels map[string]string,
+	annotations map[string]string,
+) *numaflowv1.InterStepBufferService {
+	isbsvcStatus := numaflowv1.InterStepBufferServiceStatus{
+		Phase: phase,
+	}
+	if fullyReconciled {
+		isbsvcStatus.ObservedGeneration = 1
+	} else {
+		isbsvcStatus.ObservedGeneration = 0
+	}
+	return &numaflowv1.InterStepBufferService{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   DefaultTestNamespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec:   CreateDefaultISBServiceSpec(jetstreamVersion),
+		Status: isbsvcStatus,
+	}
+
+}
+
 func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
 	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
 	return &apiv1.ISBServiceRollout{

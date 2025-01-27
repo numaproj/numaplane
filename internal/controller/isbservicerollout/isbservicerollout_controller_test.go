@@ -31,6 +31,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -324,6 +325,180 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 		})
 	}
+}
+
+func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
+	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	config.GetConfigManagerInstance().UpdateUSDEConfig(config.USDEConfig{
+		"interstepbufferservice": config.USDEResourceConfig{
+			DataLoss: []config.SpecField{{Path: "spec.jetstream.version", IncludeSubfields: false}},
+		},
+	})
+	ctx := context.Background()
+
+	// other tests may call this, but it fails if called more than once
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewISBServiceRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	defaultPromotedISBSvc := *ctlrcommon.CreateTestISBService(
+		"2.10.3",
+		ctlrcommon.DefaultTestISBSvcName,
+		numaflowv1.ISBSvcPhaseRunning,
+		true,
+		map[string]string{
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+		},
+		map[string]string{},
+	)
+
+	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+
+	testCases := []struct {
+		name                           string
+		newISBSvcSpec                  numaflowv1.InterStepBufferServiceSpec
+		existingPromotedISBSvcDef      numaflowv1.InterStepBufferService
+		existingPromotedStatefulSetDef appsv1.StatefulSet
+		//existingUpgradingStatefulSetDef *appsv1.StatefulSet
+		existingUpgradingISBSvcDef *numaflowv1.InterStepBufferService
+		existingPipelineRollout    *apiv1.PipelineRollout
+		//existingPromotedPipelineDef  *numaflowv1.Pipeline
+		existingUpgradingPipelineDef *numaflowv1.Pipeline
+		initialRolloutPhase          apiv1.Phase
+		initialRolloutNameCount      int
+		initialInProgressStrategy    *apiv1.UpgradeStrategy
+
+		expectedInProgressStrategy apiv1.UpgradeStrategy
+		expectedRolloutPhase       apiv1.Phase
+
+		expectedISBServices map[string]common.UpgradeState // after reconcile(), these are the only interstepbufferservices we expect to exist along with their expected UpgradeState
+
+	}{
+		{
+			name:                           "spec difference results in Progressive",
+			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedStatefulSetDef: *createDefaultISBStatefulSet("2.10.3", true),
+			existingUpgradingISBSvcDef:     nil,
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
+				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}, nil),
+			existingUpgradingPipelineDef: nil,
+			initialRolloutPhase:          apiv1.PhaseDeployed,
+			initialRolloutNameCount:      1,
+			initialInProgressStrategy:    nil,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedISBServices: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-0": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-1": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name: "Progressive succeeds",
+			// TODO: check if this does garbage collection
+		},
+		{
+			name: "Progressive fails",
+		},
+		{
+			name: "Progressive succeeds after it previously failed",
+			// TODO: check if this does garbage collection
+		},
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+
+			// create ISBServiceRollout in K8S
+			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec)
+
+			rollout.Status.Init(rollout.Generation)
+
+			rollout.Status.Phase = tc.initialRolloutPhase
+			if rollout.Status.NameCount == nil {
+				rollout.Status.NameCount = new(int32)
+			}
+			*rollout.Status.NameCount = int32(tc.initialRolloutNameCount)
+			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, rollout)
+
+			// create both "promoted" and "upgrading" interstepbufferservice (if it exists) in K8S
+			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, &tc.existingPromotedISBSvcDef)
+			if tc.existingUpgradingISBSvcDef != nil {
+				ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, tc.existingUpgradingISBSvcDef)
+			}
+
+			// create "promoted" StatefulSet in K8S
+			// note: we don't bother to create the "upgrading" StatefulSet, since what happens will not be dependent on it
+			ctlrcommon.CreateStatefulSetInK8S(ctx, t, k8sClientSet, &tc.existingPromotedStatefulSetDef)
+
+			// create PipelineRollout in K8S
+			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, tc.existingPipelineRollout)
+
+			// create "upgrading" pipeline if it exists, in K8S
+			// note: we don't bother to create the "promoted" Pipeline, since what happens will not be dependent on it
+			if tc.existingUpgradingPipelineDef != nil {
+				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, tc.existingUpgradingPipelineDef)
+			}
+
+			// Set the In-Progress Strategy
+			if tc.initialInProgressStrategy != nil {
+				rollout.Status.UpgradeInProgress = *tc.initialInProgressStrategy
+				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, *tc.initialInProgressStrategy)
+			} else {
+				rollout.Status.UpgradeInProgress = apiv1.UpgradeStrategyNoOp
+				r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestPipelineRolloutName}, apiv1.UpgradeStrategyNoOp)
+			}
+
+			// call reconcile()
+			_, err = r.reconcile(ctx, rollout, time.Now())
+			assert.NoError(t, err)
+
+			////// check results:
+			// Check Phase of Rollout:
+			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
+			// Check In-Progress Strategy
+			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+
+			resultISBSvcList, err := numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Equal(t, len(tc.expectedISBServices), len(resultISBSvcList.Items), resultISBSvcList.Items)
+
+			for _, isbsvc := range resultISBSvcList.Items {
+				expectedUpgradeState, found := tc.expectedISBServices[isbsvc.Name]
+				assert.True(t, found)
+				resultUpgradeState, found := isbsvc.Labels[common.LabelKeyUpgradeState]
+				assert.True(t, found)
+				assert.Equal(t, string(expectedUpgradeState), resultUpgradeState)
+			}
+		})
+	}
+
 }
 
 func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) *appsv1.StatefulSet {
