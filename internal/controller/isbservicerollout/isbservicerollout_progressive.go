@@ -12,7 +12,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
@@ -92,21 +91,6 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstr
 		return false, err
 	}
 	return true, nil
-}
-
-// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
-func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, from, to)
-	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
-	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
-	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
-
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {

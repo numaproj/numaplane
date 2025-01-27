@@ -43,6 +43,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -553,5 +554,30 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 	labelMapping[common.LabelKeyParentRollout] = monoVertexRollout.Name
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: monoVertexRollout.Spec.MonoVertex.Annotations}, nil
+
+}
+
+// ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	// remove "replicas" field from comparison to test for equality
+	fromNew, err := numaflowtypes.MonoVertexWithoutReplicas(from)
+	if err != nil {
+		return false, err
+	}
+	toNew, err := numaflowtypes.MonoVertexWithoutReplicas(to)
+	if err != nil {
+		return false, err
+	}
+
+	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
+	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
+		specsEqual, fromNew, toNew)
+	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 
 }

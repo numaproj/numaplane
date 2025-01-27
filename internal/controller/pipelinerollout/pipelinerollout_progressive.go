@@ -15,7 +15,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
-	"github.com/numaproj/numaplane/internal/util"
 )
 
 // Implemented functions for the progressiveController interface:
@@ -121,26 +120,6 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	}
 	return false, nil
 
-}
-
-// ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
-func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-	fromCopy := from.DeepCopy()
-	toCopy := to.DeepCopy()
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
-	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
-
-	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
-	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
-	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
-	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
-
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label
