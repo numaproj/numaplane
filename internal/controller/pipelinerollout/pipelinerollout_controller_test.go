@@ -756,7 +756,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			}
 
 			// create ISBServiceRollout and isbsvc in Kubernetes
-			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"))
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
 			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
 			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
@@ -1124,7 +1124,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			}
 
 			// create ISBServiceRollout and isbsvc in Kubernetes
-			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"))
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
 			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
 			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)

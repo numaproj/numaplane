@@ -265,7 +265,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 			assert.Len(t, pipelineList.Items, 0)
 
 			// create ISBServiceRollout definition
-			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec)
+			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec, nil)
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, rollout)
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
@@ -418,6 +418,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		initialRolloutPhase            apiv1.Phase
 		initialRolloutNameCount        int
 		initialInProgressStrategy      *apiv1.UpgradeStrategy
+		initialUpgradingChildStatus    *apiv1.ChildStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -440,6 +441,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhaseDeployed,
 			initialRolloutNameCount:      1,
 			initialInProgressStrategy:    nil,
+			initialUpgradingChildStatus:  nil,
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:         apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
@@ -482,8 +484,14 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			initialUpgradingChildStatus: &apiv1.ChildStatus{
+				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+				AssessmentResult:   apiv1.AssessmentResultSuccess,
+			},
+			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:       apiv1.PhaseDeployed,
 			expectedISBServices: map[string]common.UpgradeState{
 				// note: the original isbsvc got garbage collected so it's no longer there
 				defaultUpgradingISBSvcName: common.LabelValueUpgradePromoted,
@@ -514,8 +522,14 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			expectedInProgressStrategy:   progressiveUpgradeStrategy,
-			expectedRolloutPhase:         apiv1.PhasePending,
+			initialUpgradingChildStatus: &apiv1.ChildStatus{
+				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+				AssessmentResult:   apiv1.AssessmentResultFailure,
+			},
+			expectedInProgressStrategy: progressiveUpgradeStrategy,
+			expectedRolloutPhase:       apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
@@ -547,8 +561,14 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			expectedInProgressStrategy:   progressiveUpgradeStrategy,
-			expectedRolloutPhase:         apiv1.PhasePending,
+			initialUpgradingChildStatus: &apiv1.ChildStatus{
+				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+				AssessmentResult:   apiv1.AssessmentResultFailure,
+			},
+			expectedInProgressStrategy: progressiveUpgradeStrategy,
+			expectedRolloutPhase:       apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
@@ -569,7 +589,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 
 			// create ISBServiceRollout in K8S
-			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec)
+			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec, &apiv1.ISBServiceRolloutStatus{
+				Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}}})
 			rollout.Status.Init(rollout.Generation)
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {

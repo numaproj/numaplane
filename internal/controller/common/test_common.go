@@ -387,8 +387,14 @@ func CreateTestISBService(
 
 }
 
-func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
+func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec, optionalStatus *apiv1.ISBServiceRolloutStatus) *apiv1.ISBServiceRollout {
 	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
+
+	isbSvcRolloutStatus := apiv1.ISBServiceRolloutStatus{}
+	if optionalStatus != nil {
+		isbSvcRolloutStatus = *optionalStatus
+	}
+
 	return &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         DefaultTestNamespace,
@@ -403,6 +409,7 @@ func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *
 				},
 			},
 		},
+		Status: isbSvcRolloutStatus,
 	}
 }
 
