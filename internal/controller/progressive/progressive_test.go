@@ -234,10 +234,7 @@ func Test_processUpgradingChild(t *testing.T) {
 
 	testCases := []struct {
 		name                      string
-		rolloutObject             ctlrcommon.RolloutObject
 		liveRolloutObject         ctlrcommon.RolloutObject
-		controller                progressiveController
-		existingPromotedChildDef  *unstructured.Unstructured
 		existingUpgradingChildDef *unstructured.Unstructured
 		expectedDone              bool
 		expectedNewChildCreated   bool
@@ -246,10 +243,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	}{
 		{
 			name:                      "no upgrading child status on the live rollout",
-			rolloutObject:             defaultMonoVertexRollout.DeepCopy(),
 			liveRolloutObject:         defaultMonoVertexRollout.DeepCopy(),
-			controller:                fakeProgressiveController{},
-			existingPromotedChildDef:  nil,
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -258,10 +252,7 @@ func Test_processUpgradingChild(t *testing.T) {
 		},
 		{
 			name:                      "preset upgrading child status on the live rollout - different name",
-			rolloutObject:             defaultMonoVertexRollout.DeepCopy(),
 			liveRolloutObject:         setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{Name: "test"}),
-			controller:                fakeProgressiveController{},
-			existingPromotedChildDef:  nil,
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-1"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -269,15 +260,12 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedError:             nil,
 		},
 		{
-			name:          "preset upgrading child status on the live rollout - same name, can assess, success",
-			rolloutObject: defaultMonoVertexRollout.DeepCopy(),
+			name: "preset upgrading child status on the live rollout - same name, can assess, success",
 			liveRolloutObject: setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{
 				Name:               "test-success",
 				AssessmentResult:   apiv1.AssessmentResultUnknown,
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 			}),
-			controller:                fakeProgressiveController{},
-			existingPromotedChildDef:  nil,
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-success"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -285,15 +273,12 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedError:             nil,
 		},
 		{
-			name:          "preset upgrading child status on the live rollout - same name, failure",
-			rolloutObject: defaultMonoVertexRollout.DeepCopy(),
+			name: "preset upgrading child status on the live rollout - same name, failure",
 			liveRolloutObject: setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{
 				Name:               "test-failure",
 				AssessmentResult:   apiv1.AssessmentResultFailure,
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 			}),
-			controller:                fakeProgressiveController{},
-			existingPromotedChildDef:  nil,
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-failure"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -305,7 +290,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, tc.rolloutObject, tc.liveRolloutObject, tc.controller, tc.existingPromotedChildDef, tc.existingUpgradingChildDef, client)
+				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, nil, tc.existingUpgradingChildDef, client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)
