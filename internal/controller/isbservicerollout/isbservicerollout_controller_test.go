@@ -359,9 +359,13 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		ctlrcommon.TestCustomMetrics,
 		recorder)
 
+	defaultPromotedISBSvcName := ctlrcommon.DefaultTestISBSvcRolloutName + "-0"
+	defaultUpgradingISBSvcName := ctlrcommon.DefaultTestISBSvcRolloutName + "-1"
+	defaultPromotedPipelineName := ctlrcommon.DefaultTestPipelineRolloutName + "-0"
+	defaultUpgradingPipelineName := ctlrcommon.DefaultTestPipelineRolloutName + "-1"
 	defaultPromotedISBSvc := *ctlrcommon.CreateTestISBService(
 		"2.10.3",
-		ctlrcommon.DefaultTestISBSvcName,
+		defaultPromotedISBSvcName,
 		numaflowv1.ISBSvcPhaseRunning,
 		true,
 		map[string]string{
@@ -370,8 +374,24 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		},
 		map[string]string{},
 	)
+	defaultPromotedPipeline := createPipelineForISBSvc(defaultPromotedPipelineName, defaultPromotedISBSvcName,
+		numaflowv1.PipelinePhaseRunning, map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: defaultPromotedISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		},
+	)
+	defaultUpgradingPipeline := createPipelineForISBSvc(defaultUpgradingPipelineName, defaultUpgradingISBSvcName,
+		numaflowv1.PipelinePhaseRunning, map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: defaultUpgradingISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		},
+	)
 
-	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
 	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
 
@@ -381,9 +401,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		existingPromotedISBSvcDef      numaflowv1.InterStepBufferService
 		existingPromotedStatefulSetDef appsv1.StatefulSet
 		//existingUpgradingStatefulSetDef *appsv1.StatefulSet
-		existingUpgradingISBSvcDef *numaflowv1.InterStepBufferService
-		existingPipelineRollout    *apiv1.PipelineRollout
-		//existingPromotedPipelineDef  *numaflowv1.Pipeline
+		existingUpgradingISBSvcDef   *numaflowv1.InterStepBufferService
+		existingPipelineRollout      *apiv1.PipelineRollout
+		existingPromotedPipelineDef  numaflowv1.Pipeline
 		existingUpgradingPipelineDef *numaflowv1.Pipeline
 		initialRolloutPhase          apiv1.Phase
 		initialRolloutNameCount      int
@@ -403,6 +423,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingUpgradingISBSvcDef:     nil,
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}, nil),
+			existingPromotedPipelineDef:  *defaultPromotedPipeline,
 			existingUpgradingPipelineDef: nil,
 			initialRolloutPhase:          apiv1.PhaseDeployed,
 			initialRolloutNameCount:      1,
@@ -410,15 +431,52 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:         apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestISBSvcRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestISBSvcRolloutName + "-1": common.LabelValueUpgradeInProgress,
+				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
+				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:                           "Progressive succeeds", // TODO: check if this does garbage collection
+			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedStatefulSetDef: *createDefaultISBStatefulSet("2.10.3", true),
+			existingUpgradingISBSvcDef: ctlrcommon.CreateTestISBService(
+				"2.10.11",
+				defaultUpgradingISBSvcName,
+				numaflowv1.ISBSvcPhaseRunning,
+				true,
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+				},
+				map[string]string{},
+			),
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
+				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
+				&apiv1.PipelineRolloutStatus{
+					Status: apiv1.Status{
+						ProgressiveStatus: apiv1.ProgressiveStatus{
+							UpgradingChildStatus: &apiv1.ChildStatus{
+								Name:             defaultUpgradingPipelineName,
+								AssessmentResult: apiv1.AssessmentResultSuccess,
+							},
+						},
+					},
+				},
+			),
+			existingPromotedPipelineDef:  *defaultPromotedPipeline,
+			existingUpgradingPipelineDef: defaultUpgradingPipeline,
+			initialRolloutPhase:          apiv1.PhasePending,
+			initialRolloutNameCount:      2,
+			initialInProgressStrategy:    &progressiveUpgradeStrategy,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			expectedISBServices: map[string]common.UpgradeState{
+				defaultPromotedISBSvcName:  common.LabelValueUpgradeRecyclable,
+				defaultUpgradingISBSvcName: common.LabelValueUpgradePromoted,
 			},
 		},
 		/*{
-			name: "Progressive succeeds",
-			// TODO: check if this does garbage collection
-		},
-		{
 			name: "Progressive fails",
 		},
 		{
@@ -433,6 +491,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
@@ -462,8 +521,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			// create PipelineRollout in K8S
 			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, tc.existingPipelineRollout)
 
-			// create "upgrading" pipeline if it exists, in K8S
-			// note: we don't bother to create the "promoted" Pipeline, since what happens will not be dependent on it
+			// create "promoted" as well as "upgrading" pipeline if it exists, in K8S
+			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, &tc.existingPromotedPipelineDef)
 			if tc.existingUpgradingPipelineDef != nil {
 				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, tc.existingUpgradingPipelineDef)
 			}
@@ -547,4 +606,15 @@ func createDefaultISBStatefulSet(jetstreamVersion string, fullyReconciled bool) 
 
 func deriveISBSvcStatefulSetName(isbsvcName string) string {
 	return fmt.Sprintf("isbsvc-%s-js", isbsvcName)
+}
+
+func createPipelineForISBSvc(
+	name string,
+	isbsvcName string,
+	phase numaflowv1.PipelinePhase,
+	//numaflowStatus numaflowv1.Status,
+	labels map[string]string,
+) *numaflowv1.Pipeline {
+	spec := numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcName}
+	return ctlrcommon.CreateTestPipelineOfSpec(spec, name, phase, numaflowv1.Status{}, false, labels, map[string]string{})
 }
