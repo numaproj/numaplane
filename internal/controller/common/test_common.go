@@ -174,7 +174,7 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 	}
 }
 
-func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, pipelineAnnotations map[string]string, pipelineLabels map[string]string) *apiv1.PipelineRollout {
+func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, pipelineAnnotations map[string]string, pipelineLabels map[string]string, status apiv1.Status) *apiv1.PipelineRollout {
 	pipelineRaw, _ := json.Marshal(pipelineSpec)
 	return &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{
@@ -196,6 +196,9 @@ func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnno
 					Raw: pipelineRaw,
 				},
 			},
+		},
+		Status: apiv1.PipelineRolloutStatus{
+			Status: status,
 		},
 	}
 }
@@ -248,7 +251,7 @@ func CreateDefaultTestMVOfPhase(phase numaflowv1.MonoVertexPhase) *numaflowv1.Mo
 	}
 }
 
-func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, mvAnnotations map[string]string, mvLabels map[string]string) *apiv1.MonoVertexRollout {
+func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, mvAnnotations map[string]string, mvLabels map[string]string, status apiv1.Status) *apiv1.MonoVertexRollout {
 	mvRaw, _ := json.Marshal(mvSpec)
 	return &apiv1.MonoVertexRollout{
 		ObjectMeta: metav1.ObjectMeta{
@@ -270,6 +273,9 @@ func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations ma
 					Raw: mvRaw,
 				},
 			},
+		},
+		Status: apiv1.MonoVertexRolloutStatus{
+			Status: status,
 		},
 	}
 }
