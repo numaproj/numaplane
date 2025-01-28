@@ -378,8 +378,10 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 			document("Creating a slow pipeline")
 			slowPipelineSpec := updatedPipelineSpec.DeepCopy()
-			highRPU := int64(10000)
+			highRPU := int64(10000000)
 			readBatchSize := uint64(1)
+			pauseGracePeriodSeconds := int64(3600) // numaflow will try to pause for 1 hour if we let it
+			slowPipelineSpec.Lifecycle.PauseGracePeriodSeconds = &pauseGracePeriodSeconds
 			slowPipelineSpec.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: &readBatchSize}
 			slowPipelineSpec.Vertices[0].Source.Generator.RPU = &highRPU
 			slowPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
