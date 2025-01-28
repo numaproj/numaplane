@@ -509,9 +509,78 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
 			},
 		},
+		{
+			name: "Updated isbsvc spec after previous progressive failure",
+			// this version is different from our current upgrading isbsvc, which is using 2.10.11 - this will create a new isbsvc
+			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.12"),
+			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
+			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
+				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
+				&apiv1.PipelineRolloutStatus{
+					Status: apiv1.Status{
+						ProgressiveStatus: apiv1.ProgressiveStatus{
+							UpgradingChildStatus: &apiv1.ChildStatus{
+								Name:             defaultUpgradingPipelineName,
+								AssessmentResult: apiv1.AssessmentResultFailure,
+							},
+						},
+					},
+				},
+			),
+			existingPromotedPipelineDef:  defaultPromotedPipeline,
+			existingUpgradingPipelineDef: defaultUpgradingPipeline,
+			initialRolloutPhase:          apiv1.PhasePending,
+			initialRolloutNameCount:      2,
+			initialInProgressStrategy:    &progressiveUpgradeStrategy,
+			expectedInProgressStrategy:   progressiveUpgradeStrategy,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedISBServices: map[string]common.UpgradeState{
+				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
+				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeInProgress,
+			},
+		},
 		/*{
 			name: "Progressive succeeds after it previously failed; also garbage collects previous isbsvc", // note: if previous pipeline is gone, then isbsvc will be deleted too
-
+			// this version is different from our current upgrading isbsvc, which is using 2.10.11 - this will create a new isbsvc
+			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.12"),
+			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
+			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
+			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
+				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
+				&apiv1.PipelineRolloutStatus{
+					Status: apiv1.Status{
+						ProgressiveStatus: apiv1.ProgressiveStatus{
+							UpgradingChildStatus: &apiv1.ChildStatus{
+								Name:             defaultUpgradingPipelineName,
+								AssessmentResult: apiv1.AssessmentResultFailure,
+							},
+						},
+					},
+				},
+			),
+			// our previously "upgrading" pipeline has been "promoted" and our previously "promoted" one was already deleted
+			// TODO: maybe we should set it this way in the previous success case above?
+			existingPromotedPipelineDef: createPipelineForISBSvc(defaultUpgradingPipelineName, defaultUpgradingISBSvcName,
+				numaflowv1.PipelinePhaseRunning, map[string]string{
+					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyISBServiceChildNameForPipeline: defaultUpgradingISBSvcName,
+					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+				},
+			),
+			existingUpgradingPipelineDef: nil,
+			initialRolloutPhase:          apiv1.PhasePending,
+			initialRolloutNameCount:      2,
+			initialInProgressStrategy:    &progressiveUpgradeStrategy,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			expectedISBServices: map[string]common.UpgradeState{
+				defaultUpgradingISBSvcName: common.LabelValueUpgradePromoted,
+			},
 		},*/
 	}
 
