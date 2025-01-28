@@ -174,8 +174,14 @@ func CreateDefaultTestPipelineOfPhase(phase numaflowv1.PipelinePhase) *numaflowv
 	}
 }
 
-func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, pipelineAnnotations map[string]string, pipelineLabels map[string]string, status apiv1.Status) *apiv1.PipelineRollout {
+func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, pipelineAnnotations map[string]string, pipelineLabels map[string]string, optionalStatus *apiv1.PipelineRolloutStatus) *apiv1.PipelineRollout {
 	pipelineRaw, _ := json.Marshal(pipelineSpec)
+
+	pipelineRolloutStatus := apiv1.PipelineRolloutStatus{}
+	if optionalStatus != nil {
+		pipelineRolloutStatus = *optionalStatus
+	}
+
 	return &apiv1.PipelineRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         DefaultTestNamespace,
@@ -197,9 +203,7 @@ func CreateTestPipelineRollout(pipelineSpec numaflowv1.PipelineSpec, rolloutAnno
 				},
 			},
 		},
-		Status: apiv1.PipelineRolloutStatus{
-			Status: status,
-		},
+		Status: pipelineRolloutStatus,
 	}
 }
 
@@ -251,8 +255,14 @@ func CreateDefaultTestMVOfPhase(phase numaflowv1.MonoVertexPhase) *numaflowv1.Mo
 	}
 }
 
-func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, mvAnnotations map[string]string, mvLabels map[string]string, status apiv1.Status) *apiv1.MonoVertexRollout {
+func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations map[string]string, rolloutLabels map[string]string, mvAnnotations map[string]string, mvLabels map[string]string, optionalStatus *apiv1.MonoVertexRolloutStatus) *apiv1.MonoVertexRollout {
 	mvRaw, _ := json.Marshal(mvSpec)
+
+	monoVertexRolloutStatus := apiv1.MonoVertexRolloutStatus{}
+	if optionalStatus != nil {
+		monoVertexRolloutStatus = *optionalStatus
+	}
+
 	return &apiv1.MonoVertexRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         DefaultTestNamespace,
@@ -274,9 +284,7 @@ func CreateTestMVRollout(mvSpec numaflowv1.MonoVertexSpec, rolloutAnnotations ma
 				},
 			},
 		},
-		Status: apiv1.MonoVertexRolloutStatus{
-			Status: status,
-		},
+		Status: monoVertexRolloutStatus,
 	}
 }
 

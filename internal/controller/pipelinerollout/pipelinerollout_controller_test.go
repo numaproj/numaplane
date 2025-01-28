@@ -726,7 +726,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			}
 
 			// Create our PipelineRollout
-			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{}, map[string]string{}, map[string]string{}, apiv1.Status{})
+			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, tc.pipelineRolloutAnnotations, map[string]string{}, map[string]string{}, map[string]string{}, nil)
 			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
@@ -1091,7 +1091,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			// Create our PipelineRollout
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}})
+				&apiv1.PipelineRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}}})
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {

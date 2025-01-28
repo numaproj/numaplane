@@ -354,10 +354,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
 				map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.newControllerInstanceID}, map[string]string{},
-				apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{
+				&apiv1.MonoVertexRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{
 					UpgradingChildStatus: tc.initialUpgradingChildStatus,
-				},
-				})
+				}}})
 			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
