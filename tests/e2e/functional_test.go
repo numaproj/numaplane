@@ -378,7 +378,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 			document("Creating a slow pipeline")
 			slowPipelineSpec := updatedPipelineSpec.DeepCopy()
-			highRPU := int64(10000)
+			highRPU := int64(10000000)
 			readBatchSize := uint64(1)
 			slowPipelineSpec.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: &readBatchSize}
 			slowPipelineSpec.Vertices[0].Source.Generator.RPU = &highRPU
