@@ -358,7 +358,6 @@ func CreateTestISBService(
 	jetstreamVersion string,
 	name string,
 	phase numaflowv1.ISBSvcPhase,
-	//status numaflowv1.Status,
 	fullyReconciled bool,
 	labels map[string]string,
 	annotations map[string]string,

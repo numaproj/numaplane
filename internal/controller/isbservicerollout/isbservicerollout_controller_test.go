@@ -76,7 +76,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 
 	config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
 
-	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
 		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
 	}
@@ -427,6 +426,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 	}{
 		{
+			// the Rollout's specified jetstream version - 2.10.11 - differs from the running one - 2.10.3
+			// that's a data loss field
 			name:                           "spec difference results in Progressive",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
@@ -447,11 +448,14 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			},
 		},
 		{
+			// the "upgrading" isbsvc succeeds (given that its pipeline succeeded)
+			// the original pipeline was deleted, so the isbsvc in turn can also be deleted
 			name:                           "Progressive succeeds",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
+			// Because the PipelineRollout was successful, therefore the ISBServiceRollout should be as well
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
 				&apiv1.PipelineRolloutStatus{
@@ -486,6 +490,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			},
 		},
 		{
+			// the "upgrading" isbsvc fails because the "upgrading" pipeline on it has failed
 			name:                           "Progressive fails",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
@@ -517,6 +522,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			},
 		},
 		{
+			// jetstream version modified after the last "upgrading" pipeline was marked "failed"
 			name: "Updated isbsvc spec after previous progressive failure",
 			// this version is different from our current upgrading isbsvc, which is using 2.10.11 - this will create a new isbsvc
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.12"),
@@ -554,7 +560,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 	for _, tc := range testCases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
+			// first delete all of the resources in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = k8sClientSet.AppsV1().StatefulSets(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
@@ -564,9 +570,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 			// create ISBServiceRollout in K8S
 			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec)
-
 			rollout.Status.Init(rollout.Generation)
-
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
 				rollout.Status.NameCount = new(int32)
@@ -680,7 +684,6 @@ func createPipelineForISBSvc(
 	name string,
 	isbsvcName string,
 	phase numaflowv1.PipelinePhase,
-	//numaflowStatus numaflowv1.Status,
 	labels map[string]string,
 ) *numaflowv1.Pipeline {
 	spec := numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcName}
