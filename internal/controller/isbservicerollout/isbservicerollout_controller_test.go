@@ -373,6 +373,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
+	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
+
 	testCases := []struct {
 		name                           string
 		newISBSvcSpec                  numaflowv1.InterStepBufferServiceSpec
@@ -412,7 +414,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestISBSvcRolloutName + "-1": common.LabelValueUpgradeInProgress,
 			},
 		},
-		{
+		/*{
 			name: "Progressive succeeds",
 			// TODO: check if this does garbage collection
 		},
@@ -422,7 +424,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		{
 			name: "Progressive succeeds after it previously failed",
 			// TODO: check if this does garbage collection
-		},
+		},*/
 	}
 
 	for _, tc := range testCases {
