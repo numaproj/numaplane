@@ -354,8 +354,47 @@ func CreateDefaultISBService(jetstreamVersion string, phase numaflowv1.ISBSvcPha
 	}
 }
 
-func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
+func CreateTestISBService(
+	jetstreamVersion string,
+	name string,
+	phase numaflowv1.ISBSvcPhase,
+	fullyReconciled bool,
+	labels map[string]string,
+	annotations map[string]string,
+) *numaflowv1.InterStepBufferService {
+	isbsvcStatus := numaflowv1.InterStepBufferServiceStatus{
+		Phase: phase,
+	}
+	if fullyReconciled {
+		isbsvcStatus.ObservedGeneration = 1
+	} else {
+		isbsvcStatus.ObservedGeneration = 0
+	}
+	return &numaflowv1.InterStepBufferService{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       common.NumaflowISBServiceKind,
+			APIVersion: common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   DefaultTestNamespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec:   CreateDefaultISBServiceSpec(jetstreamVersion),
+		Status: isbsvcStatus,
+	}
+
+}
+
+func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec, optionalStatus *apiv1.ISBServiceRolloutStatus) *apiv1.ISBServiceRollout {
 	isbsSpecRaw, _ := json.Marshal(isbsvcSpec)
+
+	isbSvcRolloutStatus := apiv1.ISBServiceRolloutStatus{}
+	if optionalStatus != nil {
+		isbSvcRolloutStatus = *optionalStatus
+	}
+
 	return &apiv1.ISBServiceRollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         DefaultTestNamespace,
@@ -370,6 +409,7 @@ func CreateISBServiceRollout(isbsvcSpec numaflowv1.InterStepBufferServiceSpec) *
 				},
 			},
 		},
+		Status: isbSvcRolloutStatus,
 	}
 }
 

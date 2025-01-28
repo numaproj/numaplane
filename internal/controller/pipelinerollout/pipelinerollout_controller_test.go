@@ -756,7 +756,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			}
 
 			// create ISBServiceRollout and isbsvc in Kubernetes
-			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"))
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
 			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
 			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
@@ -817,7 +817,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	testCases := []struct {
 		name                        string
 		newPipelineSpec             numaflowv1.PipelineSpec
-		existingOriginalPipelineDef numaflowv1.Pipeline
+		existingPromotedPipelineDef numaflowv1.Pipeline
 		existingUpgradePipelineDef  *numaflowv1.Pipeline
 		initialRolloutPhase         apiv1.Phase
 		initialRolloutNameCount     int
@@ -833,7 +833,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "spec difference results in Progressive",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -859,7 +859,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Progressive deployed successfully",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -908,7 +908,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Progressive deployment failed",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -957,7 +957,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Progressive deployment failed - going back to original spec",
 			newPipelineSpec: pipelineSpec, // this matches the original spec
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhaseRunning,
 				numaflowv1.Status{},
 				false,
@@ -1007,7 +1007,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Clean up after progressive upgrade",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhasePaused,
 				numaflowv1.Status{},
 				true,
@@ -1042,7 +1042,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Clean up after progressive upgrade: pipeline still draining",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingOriginalPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: *createPipeline(
 				numaflowv1.PipelinePhasePaused,
 				numaflowv1.Status{},
 				false,
@@ -1113,7 +1113,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			}
 
 			// create the already-existing Pipeline in Kubernetes
-			existingPipelineDef := &tc.existingOriginalPipelineDef
+			existingPipelineDef := &tc.existingPromotedPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
 
@@ -1124,7 +1124,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			}
 
 			// create ISBServiceRollout and isbsvc in Kubernetes
-			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"))
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
 			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
 			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
