@@ -307,12 +307,17 @@ func processUpgradingChild(
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
 	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
+		if childStatus != nil {
+			numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("the live upgrading child status is stale, resetting it")
+		} else {
+			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
+		}
+
 		childStatus = &apiv1.ChildStatus{
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}
 		childStatus.InitAssessUntil()
-		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child not yet set")
 	} else {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
 	}
@@ -334,9 +339,11 @@ func processUpgradingChild(
 			return false, false, 0, err
 		}
 
-		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debugf("performing upgrading child assessment, assessment returned: %v", assessment)
+		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus, "assessment", assessment).
+			Debugf("performing upgrading child assessment, assessment returned: %v", assessment)
 	} else {
-		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("skipping upgrading child assessment but assessing previous child status")
+		numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus, "assessment", assessment).
+			Debug("skipping upgrading child assessment but assessing previous child status")
 	}
 
 	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
