@@ -26,7 +26,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -203,7 +202,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrc
 		for _, recyclableChild := range recycleList {
 			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
-			_ = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
+			_ = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
 		}
 		return mostCurrentChild, nil
 	} else if len(children.Items) == 1 {
@@ -379,7 +378,7 @@ func processUpgradingChild(
 			}
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-			err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef)
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -393,12 +392,12 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		err := updateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
+		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
 
-		err = updateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef)
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -417,15 +416,6 @@ func processUpgradingChild(
 
 		return false, false, assessmentInterval, nil
 	}
-}
-
-// update the in-memory object with the new Label and patch the object in K8S
-func updateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured) error {
-	labels := childObject.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(upgradeState)
-	childObject.SetLabels(labels)
-	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
-	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
 
 func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {

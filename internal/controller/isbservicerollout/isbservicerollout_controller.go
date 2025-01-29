@@ -287,7 +287,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
 	// TODO: handle recreate parameter
-	isbServiceNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
 	if err != nil {
 		return 0, err
 	}
@@ -347,7 +347,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
-			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
 			if err != nil {
 				return fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyPPND, err)
 			}
@@ -396,7 +396,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
-		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
 		if err != nil {
 			return 0, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
@@ -420,12 +420,21 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	return 0, nil
 }
 
-func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
-	if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
-		return err
+func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured, needsRecreate bool) error {
+	if needsRecreate {
+		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
+		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, newISBServiceDef)
+		if err != nil {
+			return err
+		}
+		isbServiceRollout.Status.MarkPending()
+		r.enqueueAllPipelinesForChildISBSvc(ctx, newISBServiceDef)
+	} else {
+		if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
+			return err
+		}
+		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
-
-	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	return nil
 }
 
@@ -523,6 +532,21 @@ func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context
 	}
 	numaLogger.Debugf("found %d PipelineRollouts associated with ISBServiceRollout", len(pipelineRolloutsForISBSvc))
 	return pipelineRolloutsForISBSvc, nil
+}
+
+func (r *ISBServiceRolloutReconciler) enqueueAllPipelinesForChildISBSvc(ctx context.Context, isbsvc *unstructured.Unstructured) error {
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to enqueue pipelines - failed to list them: %s", err.Error())
+	}
+	for _, pipeline := range pipelines.Items {
+		pipelineRollout, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
+		if err != nil {
+			return fmt.Errorf("failed to enqueue pipelines - error getting PipelineRolloutName: %w", err)
+		}
+		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.GetNamespace(), Name: pipelineRollout})
+	}
+	return nil
 }
 
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
