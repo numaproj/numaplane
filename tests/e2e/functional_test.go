@@ -186,10 +186,10 @@ var (
 	monovertexgvr schema.GroupVersionResource
 )
 
-func TestE2E(t *testing.T) {
+func TestFunctionalE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "E2E Suite")
+	RunSpecs(t, "Functional E2E Suite")
 }
 
 func init() {
