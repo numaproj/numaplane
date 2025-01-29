@@ -403,9 +403,7 @@ func getUpgradeStrategy() config.USDEUserStrategy {
 	}
 }
 
-// test suite common functions
-var _ = BeforeSuite(func() {
-
+func beforeSuiteSetup() {
 	var err error
 	// make output directory to store temporary outputs; if it's there from before delete it
 	disableTestArtifacts = os.Getenv("DISABLE_TEST_ARTIFACTS")
@@ -418,10 +416,6 @@ var _ = BeforeSuite(func() {
 	openFiles = make(map[string]*os.File)
 
 	stopCh = make(chan struct{})
-
-	upgradeStrategy = getUpgradeStrategy()
-	Expect(upgradeStrategy.IsValid()).To(BeTrue())
-
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
@@ -494,8 +488,7 @@ var _ = BeforeSuite(func() {
 		}
 
 	}
-
-})
+}
 
 var _ = AfterSuite(func() {
 

@@ -189,6 +189,12 @@ var (
 func TestFunctionalE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
+	BeforeSuite(func() {
+		upgradeStrategy = getUpgradeStrategy()
+		Expect(upgradeStrategy.IsValid()).To(BeTrue())
+		beforeSuiteSetup()
+	})
+
 	RunSpecs(t, "Functional E2E Suite")
 }
 
