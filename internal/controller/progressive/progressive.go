@@ -137,7 +137,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 	return upgradingChild, nil
 }
 
-func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
+func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
 	childGVR := rolloutObject.GetChildGVR()
 
 	labelSelector := fmt.Sprintf(
@@ -162,13 +162,15 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
+// TODO: move all these functions out of progressive
+
 // find the most current child of a Rollout
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 // if we do see older ones, recycle them
 func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	children, err := findChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
+	children, err := FindChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
 	if err != nil {
 		return nil, err
 	}

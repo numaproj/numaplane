@@ -136,6 +136,16 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 	return isbsvc, nil
 }
 
+// get all isbsvc children of ISBServiceRollout with the given upgrading state label
+func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.UnstructuredList, error) {
+	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
+	if err != nil || isbsvcRollout == nil {
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	}
+
+	return progressive.FindChildrenOfUpgradeState(ctx, pipelineRollout, upgradeState, false, r.client)
+}
+
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // Assessment:
 // Success: phase must be "Running" and all conditions must be True

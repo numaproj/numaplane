@@ -413,7 +413,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	// clean up recyclable pipelines
 	// TODO: for isbsvc and monovertex, also move the call to reconcile() and make sure we don't preemptively return in the case of having created the child
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
 	if err != nil {
 		return 0, existingPipelineDef, err
 	}
@@ -922,12 +922,45 @@ func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.Pipeline
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
+
+// return true if there are still more pipelines that need to be deleted
 func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-	c client.Client,
 ) (bool, error) {
-	// first check to see if there are any isbservices that are marked "recyclable"
-	// our pipelines need to be marked "recyclable" if so
+	numaLogger := logger.FromContext(ctx)
 
+	// first check to see if there are any recyclableISBServices that are marked "recyclable"
+	// our pipelines need to be marked "recyclable" if so
+	recyclableISBServices, err := r.getISBServicesByUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable)
+	if err != nil {
+		return false, fmt.Errorf("error getting isbservices of type recyclable: %s", err.Error())
+	}
+	numaLogger.WithValues("recyclable isbservices", recyclableISBServices).Debug("locating recyclable isbservices")
+
+	allPipelines, err := numaflowtypes.GetPipelinesForRollout(ctx, r.client, pipelineRollout, false)
+	if err != nil {
+		return false, fmt.Errorf("error getting all pipelines (in order to mark recyclable): %s", err.Error())
+	}
+
+	// for each recyclable isbsvc:
+	for _, isbsvc := range recyclableISBServices.Items {
+		// see if any pipelines are using it: if so, mark them "recyclable"
+		for _, pipeline := range allPipelines.Items {
+			pipelineISBSvcName, err := numaflowtypes.GetPipelineISBSVCName(&pipeline)
+			if err != nil {
+				return false, err
+			}
+			if pipelineISBSvcName == isbsvc.GetName() {
+				numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
+				err = ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &pipeline)
+				if err != nil {
+					return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
+				}
+			}
+		}
+
+	}
+
+	return progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 }
