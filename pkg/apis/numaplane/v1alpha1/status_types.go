@@ -232,7 +232,7 @@ func (status *Status) ClearUpgradeInProgress() {
 }
 
 // assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
-var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 2, time.UTC)
+var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
 // InitAssessUntil initializes the AssessUntil field to a large value.
 func (cs *ChildStatus) InitAssessUntil() {
