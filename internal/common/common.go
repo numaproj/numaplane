@@ -102,6 +102,11 @@ const (
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
+	// LabelKeyNumaflowPipelineName is the label key used to identify the Pod(s) associated to a specific Pipeline.
+	LabelKeyNumaflowPipelineName = "numaflow.numaproj.io/pipeline-name"
+
+	// LabelKeyNumaflowVertexName is the label key used to identify the Pod(s) associated to a specific Vertex (search by name).
+	LabelKeyNumaflowVertexName = "numaflow.numaproj.io/vertex-name"
 )
 
 var (
