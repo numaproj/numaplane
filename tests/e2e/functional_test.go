@@ -19,6 +19,7 @@ package e2e
 import (
 	"encoding/json"
 	"strings"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -184,6 +185,12 @@ var (
 	isbservicegvr schema.GroupVersionResource
 	monovertexgvr schema.GroupVersionResource
 )
+
+func TestE2E(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	RunSpecs(t, "E2E Suite")
+}
 
 func init() {
 

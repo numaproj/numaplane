@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,12 +28,16 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientgo "k8s.io/client-go/kubernetes"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	kubeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -396,4 +401,164 @@ func getUpgradeStrategy() config.USDEUserStrategy {
 	} else {
 		return userStrategy
 	}
+}
+
+// test suite common functions
+var _ = BeforeSuite(func() {
+
+	var err error
+	// make output directory to store temporary outputs; if it's there from before delete it
+	disableTestArtifacts = os.Getenv("DISABLE_TEST_ARTIFACTS")
+	// pod logs env
+	enablePodLogs = os.Getenv("ENABLE_POD_LOGS")
+	if disableTestArtifacts != "true" {
+		setupOutputDir()
+	}
+
+	openFiles = make(map[string]*os.File)
+
+	stopCh = make(chan struct{})
+
+	upgradeStrategy = getUpgradeStrategy()
+	Expect(upgradeStrategy.IsValid()).To(BeTrue())
+
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	By("bootstrapping test environment")
+	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout) // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
+
+	scheme := runtime.NewScheme()
+	err = apiv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = numaflowv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	useExistingCluster := true
+
+	restConfig := kubeconfig.GetConfigOrDie()
+
+	testEnv = &envtest.Environment{
+		UseExistingCluster:       &useExistingCluster,
+		Config:                   restConfig,
+		AttachControlPlaneOutput: true,
+	}
+
+	cfg, err := testEnv.Start()
+	Expect(cfg).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	pipelineRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().PipelineRollouts(Namespace)
+	Expect(pipelineRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	monoVertexRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().MonoVertexRollouts(Namespace)
+	Expect(monoVertexRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	isbServiceRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().ISBServiceRollouts(Namespace)
+	Expect(isbServiceRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	numaflowControllerRolloutClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().NumaflowControllerRollouts(Namespace)
+	Expect(numaflowControllerRolloutClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	kubeClient, err = clientgo.NewForConfig(cfg)
+	Expect(kubeClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	dynamicClient = *dynamic.NewForConfigOrDie(cfg)
+	Expect(dynamicClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	if disableTestArtifacts != "true" {
+
+		wg.Add(1)
+		go watchPods()
+
+		wg.Add(1)
+		go watchNumaflowControllerRollout()
+
+		startPipelineRolloutWatches()
+
+		startISBServiceRolloutWatches()
+
+		startMonoVertexRolloutWatches()
+
+		if enablePodLogs == "true" {
+			wg.Add(1)
+			go watchPodLogs(kubeClient, Namespace, NumaplaneLabel)
+
+			wg.Add(1)
+			go watchPodLogs(kubeClient, Namespace, NumaflowLabel)
+		}
+
+	}
+
+})
+
+var _ = AfterSuite(func() {
+
+	cancel()
+	By("tearing down test environment")
+	close(stopCh)
+
+	err := closeAllFiles()
+	Expect(err).NotTo(HaveOccurred())
+
+	err = testEnv.Stop()
+	Expect(err).NotTo(HaveOccurred())
+
+})
+
+var _ = AfterEach(func() {
+
+	report := CurrentSpecReport()
+	if report.Failed() {
+		AbortSuite("Test spec has failed, aborting suite run")
+	}
+
+})
+
+func setupOutputDir() {
+
+	var (
+		dirs = []string{ResourceChangesPipelineOutputPath, ResourceChangesISBServiceOutputPath,
+			ResourceChangesMonoVertexOutputPath, ResourceChangesNumaflowControllerOutputPath}
+		logDirs = []string{PodLogsPipelineOutputPath, PodLogsISBServiceOutputPath,
+			PodLogsNumaflowControllerOutputPath, PodLogsMonoVertexOutputPath, PodLogsNumaplaneControllerOutputPath}
+	)
+
+	// clear out prior runs output files
+	directory := "output"
+	_, err := os.Stat(directory)
+	if err == nil {
+		err = os.RemoveAll(directory)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	// output/resources contains `kubectl get` output for each resource
+	if disableTestArtifacts != "true" {
+		for _, dir := range dirs {
+			if dir == ResourceChangesPipelineOutputPath {
+				err = os.MkdirAll(filepath.Join(dir, "vertices"), os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			if dir == ResourceChangesISBServiceOutputPath {
+				err = os.MkdirAll(filepath.Join(dir, "statefulsets"), os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			err = os.MkdirAll(filepath.Join(dir, "pods"), os.ModePerm)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// output/pods contains pod logs for each resource
+		if enablePodLogs == "true" {
+			for _, dir := range logDirs {
+				err = os.MkdirAll(dir, os.ModePerm)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		}
+	}
+
 }
