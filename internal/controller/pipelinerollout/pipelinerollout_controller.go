@@ -360,46 +360,68 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
-	newPipelineDef, err := r.makePromotedPipelineDefinition(ctx, pipelineRollout)
+	// locate all isbsvc children
+	// for every isbsvc that is recyclable, we mark any associated pipelines recyclable
+	// in addition, if we have a promoted or upgrading isbsvc, we can perform standard logic
+
+	newPipelineDef, foundISBSvc, err := r.makeNewPipelineDefinition(ctx, pipelineRollout) // TODO: should we rename this for other rollouts too?
 	if err != nil {
 		return 0, nil, err
 	}
 
-	// Get the object to see if it exists
-	existingPipelineDef, err := kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Name: newPipelineDef.GetName(), Namespace: newPipelineDef.GetNamespace()})
-	if err != nil {
-		// create object as it doesn't exist
-		if apierrors.IsNotFound(err) {
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
-			pipelineRollout.Status.MarkPending()
+	requeueDelay := time.Duration(0)
+	var existingPipelineDef *unstructured.Unstructured
 
-			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
-			if err != nil {
-				return 0, nil, err
+	if foundISBSvc {
+		// Get the "promoted" (main) object to see if it exists
+		existingPipelineDef, err = kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
+			k8stypes.NamespacedName{Name: newPipelineDef.GetName(), Namespace: newPipelineDef.GetNamespace()})
+		if err != nil {
+			// create object as it doesn't exist
+			if apierrors.IsNotFound(err) {
+				numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
+				pipelineRollout.Status.MarkPending()
+
+				err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
+				if err != nil {
+					return 0, nil, err
+				}
+				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+				//return 0, existingPipelineDef, nil
 			}
-			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-			return 0, existingPipelineDef, nil
+
+			return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
+		} else {
+
+			// "promoted" object already exists
+			// if Pipeline is not owned by Rollout, fail and return
+			if !checkOwnerRef(existingPipelineDef.GetOwnerReferences(), pipelineRollout.UID) {
+				errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.GetName())
+				numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
+				return 0, existingPipelineDef, errors.New(errStr)
+			}
+
+			newPipelineDefResult, err := r.merge(existingPipelineDef, newPipelineDef)
+			if err != nil {
+				return 0, existingPipelineDef, err
+			}
+
+			requeueDelay, err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDefResult, syncStartTime)
 		}
-
-		return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
 	}
 
-	// Object already exists
-	// if Pipeline is not owned by Rollout, fail and return
-	if !checkOwnerRef(existingPipelineDef.GetOwnerReferences(), pipelineRollout.UID) {
-		errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.GetName())
-		numaLogger.Debugf("PipelineRollout %s failed because %s", pipelineRollout.Name, errStr)
-		return 0, existingPipelineDef, errors.New(errStr)
-	}
-
-	newPipelineDefResult, err := r.merge(existingPipelineDef, newPipelineDef)
+	// clean up recyclable pipelines
+	// TODO: for isbsvc and monovertex, also move the call to reconcile() and make sure we don't preemptively return in the case of having created the child
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 	if err != nil {
-		return 0, nil, err
+		return 0, existingPipelineDef, err
 	}
 
-	requeueDelay, err := r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDefResult, syncStartTime)
+	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
+		requeueDelay = common.DefaultRequeueDelay
+	}
+
 	return requeueDelay, existingPipelineDef, err
 }
 
@@ -557,16 +579,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 		}
-	}
-
-	// clean up recyclable pipelines
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
-	if err != nil {
-		return 0, err
-	}
-
-	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
-		requeueDelay = common.DefaultRequeueDelay
 	}
 
 	if pipelineNeedsToUpdate {
@@ -778,16 +790,18 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
+// return whether we found an isbsvc we can use in order to create our pipeline definition
+// if we did, we can create the pipeline definition and return it
+func (r *PipelineRolloutReconciler) makeNewPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-) (*unstructured.Unstructured, error) {
+) (*unstructured.Unstructured, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// determine name of the Pipeline
 	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// which InterstepBufferServiceName should we use?
@@ -797,24 +811,29 @@ func (r *PipelineRolloutReconciler) makePromotedPipelineDefinition(
 	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
 	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if isbsvc == nil {
-		numaLogger.Debugf("no Upgrading isbsvc found for Pipeline, will find promoted one")
+		numaLogger.Debug("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
-		if err != nil || isbsvc == nil {
-			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
+		}
+		if isbsvc == nil {
+			numaLogger.Debug("no Upgrading or Promoted isbsvc found for Pipeline")
+			return nil, false, nil
 		}
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
-	return r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
+	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
+	return pipelineDef, true, err
 }
 
 func (r *PipelineRolloutReconciler) getISBSvcRollout(
@@ -902,4 +921,13 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
+}
+func (r *PipelineRolloutReconciler) garbageCollectChildren(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	c client.Client,
+) (bool, error) {
+	// first check to see if there are any isbservices that are marked "recyclable"
+	// our pipelines need to be marked "recyclable" if so
+
 }

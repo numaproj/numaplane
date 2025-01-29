@@ -430,6 +430,7 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 	return true
 }
 
+// TODO: move this out of progressive
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
 func GarbageCollectChildren(
 	ctx context.Context,
