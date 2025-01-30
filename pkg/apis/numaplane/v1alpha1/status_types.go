@@ -117,10 +117,23 @@ type UpgradingChildStatus struct {
 	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
+// ScaleValues stores the original, expected, and actual scale max values of a pipeline or monovertext vertex
+type ScaleValues struct {
+	// Original is the max scale value of the original child spec
+	Original int64 `json:"original"`
+	// Expected is the max scale value calculated by cutting in half the Original value
+	Expected int64 `json:"expected"`
+	// Actual indicates how many pods are actually running for the vertex
+	Actual int64 `json:"actual"`
+}
+
 // PromotedChildStatus describes the status of the promoted child
 type PromotedChildStatus struct {
 	// Name of the promoted child
 	Name string `json:"name"`
+	// ScaleValues is a map where the keys are the promoted child source vertices names and the values are the
+	// original and scaled down values of the source vertices
+	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
 	// ScaledDown indicates if ALL the promoted child source vertices have been scaled down
 	AllSourceVerticesScaledDown bool `json:"allSourceVerticesScaledDown,omitempty"`
 }
@@ -273,6 +286,26 @@ func (ucs *UpgradingChildStatus) CanAssess() bool {
 // AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
 func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
+}
+
+// MarkAllSourceVerticesScaledDown checks if all source vertices in the
+// PromotedChildStatus have been scaled down by comparing their scale values.
+// It updates the AllSourceVerticesScaledDown field to true if all vertices
+// are scaled down, otherwise sets it to false.
+func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
+	if pcs == nil {
+		return
+	}
+
+	allScaledDown := true
+	for _, sv := range pcs.ScaleValues {
+		if sv.Original <= sv.Expected || sv.Actual <= sv.Expected {
+			allScaledDown = false
+			break
+		}
+	}
+
+	pcs.AllSourceVerticesScaledDown = allScaledDown
 }
 
 // setCondition sets a condition

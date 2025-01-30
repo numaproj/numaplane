@@ -79,7 +79,7 @@ func ProcessResource(
 	// - should we only scale down the Kafka-type source vertices or also others?
 	// + there could be a temporary state in which there are 2 "promoted" or 2 "upgrading": in the case that the second update fails
 	if promotedDifference && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
-		err := scaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
+		scaleValuesMap, err := scaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
 		}
@@ -89,13 +89,17 @@ func ProcessResource(
 		}
 
 		// TTODO: should we verify if the pods for each vertex have been really scaled down before updating the rollout state?
-		// We'd need to get all related pods count and compare it to expected value.
+		// We'd need to get all related pods count and compare it to expected value by updating the scaleValuesMap.Actual values for each source vertex.
 		// Also, should we make sure all pods have been scaled down correctly before proceeding with the upgrade?
+
 		if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
 			rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
 		}
 		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.Name = existingPromotedChild.GetName()
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AllSourceVerticesScaledDown = true
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = scaleValuesMap
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDown()
+
+		return false, false, common.DefaultRequeueDelay, nil
 	}
 
 	// is there currently an "upgrading" child?
@@ -187,28 +191,39 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
-func scaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
-	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices")
+func scaleDownPromotedChildSourceVertices(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (map[string]apiv1.ScaleValues, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("scaleDownPromotedChildSourceVertices")
 
 	numaLogger.Debugf("started promoted child source vertices scaling down process")
 
 	promotedChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
 	if err != nil {
-		return fmt.Errorf("error while looking for most current promoted child: %w", err)
+		return nil, fmt.Errorf("error while looking for most current promoted child: %w", err)
 	}
 
 	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
 	if err != nil {
-		return fmt.Errorf("error while getting vertices of promoted child: %w", err)
+		return nil, fmt.Errorf("error while getting vertices of promoted child: %w", err)
 	}
 
 	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertices", vertices).Debugf("found vertices for the promoted child: %d", len(vertices))
+
+	scaleValuesMap := map[string]apiv1.ScaleValues{}
+	if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues != nil {
+		scaleValuesMap = rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues
+	}
 
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
 			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !found {
 				continue
@@ -216,10 +231,10 @@ func scaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctl
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !found {
-				return errors.New("a vertex must have a name")
+				return nil, errors.New("a vertex must have a name")
 			}
 
 			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
@@ -229,38 +244,60 @@ func scaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctl
 				),
 			})
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-			scaleValue := math.Floor(float64(len(pods.Items)) / float64(2))
+			actualPodsCount := int64(len(pods.Items))
 
-			numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %.0f", len(pods.Items), scaleValue)
+			// If for the vertex we already set an expected scale value, we only need to update the actual pods count
+			// to later verify that the pods were actually scaled down.
+			// We want to skip scaling down again.
+			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.Expected != 0 {
+				vertexScaleValues.Actual = actualPodsCount
+				scaleValuesMap[vertexName] = vertexScaleValues
+				continue
+			}
+
+			scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
+
+			originalMax, _, err := unstructured.NestedInt64(vertexAsMap, "scale", "max")
+			if err != nil {
+				return nil, err
+			}
+
+			numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
 
 			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
-				return err
+				return nil, err
 			}
 
 			// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 			currMin, found, err := unstructured.NestedInt64(vertexAsMap, "scale", "min")
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if found && float64(currMin) > scaleValue {
+			if found && currMin > scaleValue {
 				if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "min"); err != nil {
-					return err
+					return nil, err
 				}
+			}
+
+			scaleValuesMap[vertexName] = apiv1.ScaleValues{
+				Original: originalMax,
+				Expected: scaleValue,
+				Actual:   actualPodsCount,
 			}
 		}
 	}
 
 	err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	numaLogger.WithValues("vertices", vertices).Debug("applied updated vertices to promoted child definition")
+	numaLogger.WithValues("vertices", vertices, "scaleValuesMap", scaleValuesMap).Debug("applied updated vertices to promoted child definition")
 
-	return nil
+	return scaleValuesMap, nil
 }
 
 // find the most current child of a Rollout
