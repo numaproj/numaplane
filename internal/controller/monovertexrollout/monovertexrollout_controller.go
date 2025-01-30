@@ -185,6 +185,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
+	requeueDelay := time.Duration(0)
 
 	defer func() {
 		if monoVertexRollout.Status.IsHealthy() {
@@ -239,7 +240,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		requeueDelay, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
+		requeueDelay, err = r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 		}
@@ -251,6 +252,26 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	// process status
 	r.processMonoVertexStatus(ctx, existingMonoVertexDef, monoVertexRollout)
 
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout)
+
+	// clean up recyclable monovertices
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// if we still have monovertices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
+	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
+	}
+
+	if requeueDelay > 0 {
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -341,15 +362,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-	}
-	// clean up recyclable monovertices
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
-	if err != nil {
-		return 0, err
-	}
-
-	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
-		requeueDelay = common.DefaultRequeueDelay
 	}
 
 	return requeueDelay, nil

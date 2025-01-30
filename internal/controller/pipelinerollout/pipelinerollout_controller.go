@@ -435,7 +435,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
 
 	// clean up recyclable pipelines
-	// TODO: for isbsvc and monovertex, also move the call to reconcile() and make sure we don't preemptively return in the case of having created the child
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
 	if err != nil {
 		return 0, existingPipelineDef, err

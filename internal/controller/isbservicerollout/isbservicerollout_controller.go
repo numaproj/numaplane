@@ -265,7 +265,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
-	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+
+	// clean up recyclable interstepbufferservices
+	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
+	}
+
+	// if we still have interstepbufferservices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
+	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
@@ -418,16 +426,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		break
 	default:
 		return 0, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
-	}
-	// clean up recyclable interstepbufferservices
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
-	if err != nil {
-		return 0, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
-	}
-
-	// if any haven't been deleted, requeue
-	if !allDeleted {
-		return common.DefaultRequeueDelay, nil
 	}
 
 	return 0, nil
