@@ -120,6 +120,11 @@ type ChildStatus struct {
 type ProgressiveStatus struct {
 	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
 	UpgradingChildStatus *ChildStatus `json:"upgradingChildStatus,omitempty"`
+
+	// TTODO: we need to know what is happening at the scaling level of the promoted child
+	// Maybe use something other than ChildStatus struct (ex: PromotedChildStatus) and rename ChildStatus struct to UpgradingChildStatus
+	// If possible, share the ChildStatus between the upgrading and promoted status fields (only if it makes sense)
+	// PromotedChild *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
 }
 
 func (status *Status) SetPhase(phase Phase, msg string) {

@@ -18,6 +18,7 @@ package progressive
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -73,6 +74,12 @@ func ProcessResource(
 	if err != nil {
 		return false, false, 0, err
 	}
+
+	// TTODO:
+	// Apply the scaled down definition somewhere in this function and make sure to:
+	// - only call it once and if necessary
+	// - call it if the previous reconciliation failed
+	// - keep track of when/where/how to call based on PromotedChild Status (TODO)
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
@@ -132,7 +139,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 	return upgradingChild, nil
 }
 
-func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
+func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
 	childGVR := rolloutObject.GetChildGVR()
 
 	labelSelector := fmt.Sprintf(
@@ -157,13 +164,96 @@ func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
+func ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices")
+
+	numaLogger.Debugf("started promoted child source vertices scaling down process")
+
+	promotedChildren, err := findChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
+	if err != nil {
+		return fmt.Errorf("error while looking for promoted child: %w", err)
+	}
+
+	if len(promotedChildren.Items) > 1 {
+		return errors.New("there should only be one promoted child per rollout")
+	}
+
+	promotedChild := promotedChildren.Items[0]
+
+	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error while getting vertices of promoted child: %w", err)
+	}
+
+	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertices", vertices).Debugf("found vertices for the promoted child: %d", len(vertices))
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
+			if err != nil {
+				return err
+			}
+			if !found {
+				continue
+			}
+
+			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return err
+			}
+			if !found {
+				return errors.New("a vertex must have a name")
+			}
+
+			// TTODO: handle monovertex case, the labels are different and this function needs to know if it is handling a pipeline or monovertex. It should not be allowed to handle others.
+			// Examples of monovertex labels keys and values
+			// app.kubernetes.io/name: my-monovertex-0
+			// numaflow.numaproj.io/mono-vertex-name: my-monovertex-0
+			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("%s=%s, %s=%s", common.LabelKeyNumaflowPipelineName, promotedChild.GetName(), common.LabelKeyNumaflowVertexName, vertexName),
+			})
+			if err != nil {
+				return err
+			}
+
+			scaleValue := math.Floor(float64(len(pods.Items)) / float64(2))
+
+			numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %.0f", len(pods.Items), scaleValue)
+
+			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
+				return err
+			}
+
+			// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
+			currMin, found, err := unstructured.NestedInt64(vertexAsMap, "scale", "min")
+			if err != nil {
+				return err
+			}
+			if found && float64(currMin) > scaleValue {
+				if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "min"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
+	if err != nil {
+		return err
+	}
+
+	numaLogger.WithValues("vertices", vertices).Debug("applied updated vertices to promoted child definition")
+
+	return nil
+}
+
 // find the most current child of a Rollout
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 // if we do see older ones, recycle them
 func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	children, err := FindChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
+	children, err := findChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
 	if err != nil {
 		return nil, err
 	}
