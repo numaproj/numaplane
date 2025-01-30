@@ -646,7 +646,13 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpec, numaflowv1.PipelinePhaseRunning),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{}, map[string]string{}),
+				false,
+				map[string]string{
+					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+					common.LabelKeyParentRollout:                  "pipelinerollout-test",
+					common.LabelKeyUpgradeState:                   "promoted"},
+				map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
