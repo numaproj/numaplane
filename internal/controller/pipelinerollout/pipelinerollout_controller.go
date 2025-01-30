@@ -364,7 +364,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// for every isbsvc that is recyclable, we mark any associated pipelines recyclable
 	// in addition, if we have a promoted or upgrading isbsvc, we can perform standard logic
 
-	newPipelineDef, foundISBSvc, err := r.makeNewPipelineDefinition(ctx, pipelineRollout) // TODO: should we rename this for other rollouts too?
+	newPipelineDef, err := r.makeNewPipelineDefinition(ctx, pipelineRollout) // TODO: should we rename this for other rollouts too?
 	if err != nil {
 		return 0, nil, err
 	}
@@ -372,7 +372,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	requeueDelay := time.Duration(0)
 	var existingPipelineDef *unstructured.Unstructured
 
-	if foundISBSvc {
+	if newPipelineDef != nil {
 		// Get the "promoted" (main) object to see if it exists
 		existingPipelineDef, err = kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
 			k8stypes.NamespacedName{Name: newPipelineDef.GetName(), Namespace: newPipelineDef.GetNamespace()})
@@ -381,6 +381,26 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if apierrors.IsNotFound(err) {
 				numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
 				pipelineRollout.Status.MarkPending()
+
+				// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
+				// (i.e. if isbsvc or numaflow controller is requesting pause)
+				userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace())
+				if err != nil {
+					return 0, nil, err
+				}
+				if userPreferredStrategy == config.PPNDStrategyID {
+					needsPaused, _, err := r.shouldBePaused(ctx, pipelineRollout, nil, newPipelineDef, false)
+					if err != nil {
+						return 0, nil, err
+					}
+					if needsPaused != nil && *needsPaused == true {
+						err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
+						if err != nil {
+							return 0, nil, err
+						}
+					}
+
+				}
 
 				err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
 				if err != nil {
@@ -411,15 +431,22 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
+	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
+
 	// clean up recyclable pipelines
 	// TODO: for isbsvc and monovertex, also move the call to reconcile() and make sure we don't preemptively return in the case of having created the child
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
 	if err != nil {
 		return 0, existingPipelineDef, err
 	}
-
-	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
-		requeueDelay = common.DefaultRequeueDelay
+	// there are some cases that require requeueing // TODO: make sure we do this for all rollouts
+	if !allDeleted || inProgressStrategySet {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
 	}
 
 	return requeueDelay, existingPipelineDef, err
@@ -494,7 +521,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if userPreferredStrategy == config.PPNDStrategyID {
 			// if the preferred strategy is PPND, do we need to start the process for PPND (if we haven't already)?
 			needPPND := false
-			ppndRequired, err := r.needPPND(ctx, pipelineRollout, newPipelineDef, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
+			ppndRequired, err := r.needPPND(ctx, pipelineRollout, upgradeStrategyType == apiv1.UpgradeStrategyPPND)
 			if err != nil {
 				return 0, err
 			}
@@ -790,18 +817,17 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 }
 
-// return whether we found an isbsvc we can use in order to create our pipeline definition
 // if we did, we can create the pipeline definition and return it
 func (r *PipelineRolloutReconciler) makeNewPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-) (*unstructured.Unstructured, bool, error) {
+) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// determine name of the Pipeline
 	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// which InterstepBufferServiceName should we use?
@@ -811,29 +837,29 @@ func (r *PipelineRolloutReconciler) makeNewPipelineDefinition(
 	// other than progressive - we may need isbsvc's "in-progress-strategy" to inform pipeline's strategy
 	isbsvc, err := r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradeInProgress)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	if isbsvc == nil {
 		numaLogger.Debug("no Upgrading isbsvc found for Pipeline, will find promoted one")
 		isbsvc, err = r.getISBSvc(ctx, pipelineRollout, common.LabelValueUpgradePromoted)
 		if err != nil {
-			return nil, false, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
+			return nil, fmt.Errorf("failed to find isbsvc that's 'promoted': won't be able to reconcile PipelineRollout, err=%v", err)
 		}
 		if isbsvc == nil {
 			numaLogger.Debug("no Upgrading or Promoted isbsvc found for Pipeline")
-			return nil, false, nil
+			return nil, nil
 		}
 	}
 
 	metadata, err := getBasePipelineMetadata(pipelineRollout)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
 	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
-	return pipelineDef, true, err
+	return pipelineDef, err
 }
 
 func (r *PipelineRolloutReconciler) getISBSvcRollout(
@@ -922,6 +948,31 @@ func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.Pipeline
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
+
+/*
+// if no upgrade strategy is set yet, then set one
+// then return the final upgrade strategy
+func (r *PipelineRolloutReconciler) updateInProgressStrategy(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	currentUpgradeStrategy apiv1.UpgradeStrategy) (apiv1.UpgradeStrategy, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
+	numaLogger.Debugf("current inProgressStrategy=%s", inProgressStrategy)
+	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
+	if inProgressStrategySet {
+		return inProgressStrategy, nil
+	}
+
+	// if not, should we set one?
+	if currentUpgradeStrategy == apiv1.UpgradeStrategyPPND || currentUpgradeStrategy == apiv1.UpgradeStrategyProgressive {
+		r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, currentUpgradeStrategy)
+	}
+
+	return r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout), nil
+}*/
 
 // return true if there are still more pipelines that need to be deleted
 func (r *PipelineRolloutReconciler) garbageCollectChildren(

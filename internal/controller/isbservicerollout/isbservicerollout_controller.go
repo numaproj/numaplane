@@ -188,6 +188,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
+	requeueDelay := time.Duration(0)
+
 	defer func() {
 		if isbServiceRollout.Status.IsHealthy() {
 			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(1)
@@ -236,6 +238,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
+			// TODO: consider not creating a "promoted' isbsvc in the case that there's still a "recyclable" one
+
 			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
 				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 			}
@@ -250,12 +254,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// Object already exists
 		// perform logic related to updating
 		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
-		requeueDelay, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
+		requeueDelay, err = r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
-		}
-		if requeueDelay > 0 {
-			return ctrl.Result{RequeueAfter: requeueDelay}, nil
 		}
 	}
 
@@ -263,6 +264,18 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
 
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
+	if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
+	}
+
+	if requeueDelay > 0 {
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
