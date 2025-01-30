@@ -80,6 +80,7 @@ func ProcessResource(
 	// - only call it once and if necessary
 	// - call it if the previous reconciliation failed
 	// - keep track of when/where/how to call based on PromotedChild Status (TODO)
+	// - not call this logic for resources other than pipeline and monovertex
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
@@ -205,12 +206,11 @@ func ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctl
 				return errors.New("a vertex must have a name")
 			}
 
-			// TTODO: handle monovertex case, the labels are different and this function needs to know if it is handling a pipeline or monovertex. It should not be allowed to handle others.
-			// Examples of monovertex labels keys and values
-			// app.kubernetes.io/name: my-monovertex-0
-			// numaflow.numaproj.io/mono-vertex-name: my-monovertex-0
 			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
-				LabelSelector: fmt.Sprintf("%s=%s, %s=%s", common.LabelKeyNumaflowPipelineName, promotedChild.GetName(), common.LabelKeyNumaflowVertexName, vertexName),
+				LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
+					common.RolloutKindToNumaflowPodLabelKeysMap[rolloutObject.GetRolloutGVK().Kind].ParentName, promotedChild.GetName(),
+					common.RolloutKindToNumaflowPodLabelKeysMap[rolloutObject.GetRolloutGVK().Kind].VertexName, vertexName,
+				),
 			})
 			if err != nil {
 				return err

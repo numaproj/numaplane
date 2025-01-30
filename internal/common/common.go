@@ -120,4 +120,20 @@ var (
 
 	// DefaultRequeueDelay indicates the default requeue time (in seconds) used by Reconcilers
 	DefaultRequeueDelay = 20 * time.Second
+
+	// RolloutKindToNumaflowPodLabelKeysMap maps a rollout Kind to a ParentName label key and VertexName label key
+	// used to identify the Pod(s) associated to a specific Pipeline or MonoVertex and Vertex.
+	RolloutKindToNumaflowPodLabelKeysMap = map[string]struct {
+		ParentName string
+		VertexName string
+	}{
+		"PipelineRollout": {
+			ParentName: "numaflow.numaproj.io/pipeline-name",
+			VertexName: "numaflow.numaproj.io/vertex-name",
+		},
+		"MonoVertexRollout": {
+			ParentName: "app.kubernetes.io/name",
+			VertexName: "numaflow.numaproj.io/mono-vertex-name",
+		},
+	}
 )
