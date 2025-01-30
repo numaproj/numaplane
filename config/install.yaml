@@ -245,6 +245,20 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  promotedChildStatus:
+                    description: PromotedChild stores information regarding the current
+                      "promoted" child status
+                    properties:
+                      allSourceVerticesScaledDown:
+                        description: ScaledDown indicates if ALL the promoted child
+                          source vertices have been scaled down
+                        type: boolean
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
                   upgradingChildStatus:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
@@ -460,6 +474,20 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  promotedChildStatus:
+                    description: PromotedChild stores information regarding the current
+                      "promoted" child status
+                    properties:
+                      allSourceVerticesScaledDown:
+                        description: ScaledDown indicates if ALL the promoted child
+                          source vertices have been scaled down
+                        type: boolean
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
                   upgradingChildStatus:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
@@ -751,6 +779,20 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  promotedChildStatus:
+                    description: PromotedChild stores information regarding the current
+                      "promoted" child status
+                    properties:
+                      allSourceVerticesScaledDown:
+                        description: ScaledDown indicates if ALL the promoted child
+                          source vertices have been scaled down
+                        type: boolean
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
                   upgradingChildStatus:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
@@ -950,6 +992,20 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  promotedChildStatus:
+                    description: PromotedChild stores information regarding the current
+                      "promoted" child status
+                    properties:
+                      allSourceVerticesScaledDown:
+                        description: ScaledDown indicates if ALL the promoted child
+                          source vertices have been scaled down
+                        type: boolean
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
                   upgradingChildStatus:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
@@ -1186,6 +1242,20 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  promotedChildStatus:
+                    description: PromotedChild stores information regarding the current
+                      "promoted" child status
+                    properties:
+                      allSourceVerticesScaledDown:
+                        description: ScaledDown indicates if ALL the promoted child
+                          source vertices have been scaled down
+                        type: boolean
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
                   upgradingChildStatus:
                     description: UpgradingChildStatus represents either the current
                       or otherwise the most recent "upgrading" child
@@ -1781,6 +1851,12 @@ rules:
   verbs:
   - create
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

@@ -105,8 +105,8 @@ const (
 	AssessmentResultUnknown = "Unknown"
 )
 
-// ChildStatus describes the status of an upgrading child
-type ChildStatus struct {
+// UpgradingChildStatus describes the status of an upgrading child
+type UpgradingChildStatus struct {
 	// Name of the upgrading child
 	Name string `json:"name"`
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
@@ -117,14 +117,19 @@ type ChildStatus struct {
 	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
+// PromotedChildStatus describes the status of the promoted child
+type PromotedChildStatus struct {
+	// Name of the promoted child
+	Name string `json:"name"`
+	// ScaledDown indicates if ALL the promoted child source vertices have been scaled down
+	AllSourceVerticesScaledDown bool `json:"allSourceVerticesScaledDown,omitempty"`
+}
+
 type ProgressiveStatus struct {
 	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
-	UpgradingChildStatus *ChildStatus `json:"upgradingChildStatus,omitempty"`
-
-	// TTODO: we need to know what is happening at the scaling level of the promoted child
-	// Maybe use something other than ChildStatus struct (ex: PromotedChildStatus) and rename ChildStatus struct to UpgradingChildStatus
-	// If possible, share the ChildStatus between the upgrading and promoted status fields (only if it makes sense)
-	// PromotedChild *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
+	UpgradingChildStatus *UpgradingChildStatus `json:"upgradingChildStatus,omitempty"`
+	// PromotedChild stores information regarding the current "promoted" child status
+	PromotedChildStatus *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
 }
 
 func (status *Status) SetPhase(phase Phase, msg string) {
@@ -240,29 +245,46 @@ func (status *Status) ClearUpgradeInProgress() {
 var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
 // InitAssessUntil initializes the AssessUntil field to a large value.
-func (cs *ChildStatus) InitAssessUntil() {
-	if cs == nil {
-		cs = &ChildStatus{}
+func (ucs *UpgradingChildStatus) InitAssessUntil() {
+	if ucs == nil {
+		ucs = &UpgradingChildStatus{}
 	}
 
 	assessUntil := metav1.NewTime(assessUntilInitValue)
-	cs.AssessUntil = &assessUntil
+	ucs.AssessUntil = &assessUntil
 }
 
 // IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
-func (cs *ChildStatus) IsAssessUntilSet() bool {
-	return cs != nil && cs.AssessUntil != nil && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
+func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {
+	return ucs != nil && ucs.AssessUntil != nil && !ucs.AssessUntil.Time.Equal(assessUntilInitValue)
 }
 
-// CanAssess determines if the ChildStatus instance is eligible for assessment.
+// CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
 // It checks that the current time is after the NextAssessmentTime and
 // before the AssessUntil time, and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
-func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil &&
-		cs.NextAssessmentTime != nil && time.Now().After(cs.NextAssessmentTime.Time) &&
-		cs.AssessUntil != nil && time.Now().Before(cs.AssessUntil.Time) &&
-		cs.AssessmentResult != AssessmentResultFailure
+func (ucs *UpgradingChildStatus) CanAssess() bool {
+	return ucs != nil &&
+		ucs.NextAssessmentTime != nil && time.Now().After(ucs.NextAssessmentTime.Time) &&
+		ucs.AssessUntil != nil && time.Now().Before(ucs.AssessUntil.Time) &&
+		ucs.AssessmentResult != AssessmentResultFailure
+}
+
+// AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
+func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
+	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
+}
+
+// MarkAllSourceVerticesScaledDownTrue sets the AllSourceVerticesScaledDown field
+// of the named PromotedChildStatus to true. If the PromotedChildStatus is nil, it initializes
+// a new instance before setting the field.
+func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDownTrue(name string) {
+	if pcs == nil {
+		pcs = &PromotedChildStatus{}
+	}
+
+	pcs.Name = name
+	pcs.AllSourceVerticesScaledDown = true
 }
 
 // setCondition sets a condition

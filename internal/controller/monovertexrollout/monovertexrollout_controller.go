@@ -316,11 +316,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		err = progressive.ScaleDownPromotedChildSourceVertices(ctx, monoVertexRollout, existingMonoVertexDef, r.client)
-		if err != nil {
-			return 0, fmt.Errorf("error scaling down the existing promoted monovertex: %w", err)
-		}
-
 		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err

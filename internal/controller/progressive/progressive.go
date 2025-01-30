@@ -69,18 +69,35 @@ func ProcessResource(
 
 	numaLogger := logger.FromContext(ctx)
 
+	// TTODO:
+	// Apply the scaled down definition somewhere in this function and make sure to:
+	// + only call it once and if necessary
+	// + call it if the previous reconciliation failed
+	// + keep track of when/where/how to call based on PromotedChildStatus
+	// - not call this logic for resources other than pipeline and monovertex: could do it via a bool arg or based on the rollout Kind
+	// Other considerations:
+	// - should we only scale down the Kafka-type source vertices or also others?
+	// + there could be a temporary state in which there are 2 "promoted" or 2 "upgrading": in the case that the second update fails
+	if promotedDifference && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
+		err := scaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
+		if err != nil {
+			return false, false, 0, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
+		}
+
+		if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+			return false, false, 0, fmt.Errorf("error scaling down the existing promoted child: %w", err)
+		}
+
+		// TTODO: should we verify if the pods for each vertex have been really scaled down before marking true?
+		// We'd need to get all related pods count and compare it to expected value
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDownTrue(existingPromotedChild.GetName())
+	}
+
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
 	if err != nil {
 		return false, false, 0, err
 	}
-
-	// TTODO:
-	// Apply the scaled down definition somewhere in this function and make sure to:
-	// - only call it once and if necessary
-	// - call it if the previous reconciliation failed
-	// - keep track of when/where/how to call based on PromotedChild Status (TODO)
-	// - not call this logic for resources other than pipeline and monovertex
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
@@ -165,21 +182,15 @@ func findChildrenOfUpgradeState(ctx context.Context, rolloutObject ctlrcommon.Ro
 	return children, err
 }
 
-func ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+func scaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices")
 
 	numaLogger.Debugf("started promoted child source vertices scaling down process")
 
-	promotedChildren, err := findChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
+	promotedChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
 	if err != nil {
-		return fmt.Errorf("error while looking for promoted child: %w", err)
+		return fmt.Errorf("error while looking for most current promoted child: %w", err)
 	}
-
-	if len(promotedChildren.Items) > 1 {
-		return errors.New("there should only be one promoted child per rollout")
-	}
-
-	promotedChild := promotedChildren.Items[0]
 
 	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
 	if err != nil {
@@ -397,7 +408,7 @@ func processUpgradingChild(
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
 
-		childStatus = &apiv1.ChildStatus{
+		childStatus = &apiv1.UpgradingChildStatus{
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}

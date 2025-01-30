@@ -534,11 +534,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return 0, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
 		}
 
-		err = progressive.ScaleDownPromotedChildSourceVertices(ctx, pipelineRollout, existingPipelineDef, r.client)
-		if err != nil {
-			return 0, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
-		}
-
 		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err
