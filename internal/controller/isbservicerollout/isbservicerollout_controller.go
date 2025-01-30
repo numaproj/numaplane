@@ -238,14 +238,22 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			// TODO: consider not creating a "promoted' isbsvc in the case that there's still a "recyclable" one
-
-			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+			// first check if there's a "recyclable" isbsvc; if there is, it could be in the middle of a delete/recreate process, and we don't want to create a new one until it's been deleted
+			recyclableISBSvcs, err := progressive.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, false, r.client)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
 			}
+			if recyclableISBSvcs != nil && len(recyclableISBSvcs.Items) > 0 {
+				numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' interstepbufferservice yet; need to wait for recyclable isbsvcs to be deleted")
+				requeueDelay = common.DefaultRequeueDelay
+			} else {
+				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+				}
 
-			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
+				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
+			}
 		} else {
 			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
 		}
