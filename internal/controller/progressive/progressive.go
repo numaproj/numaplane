@@ -88,9 +88,14 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error scaling down the existing promoted child: %w", err)
 		}
 
-		// TTODO: should we verify if the pods for each vertex have been really scaled down before marking true?
-		// We'd need to get all related pods count and compare it to expected value
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDownTrue(existingPromotedChild.GetName())
+		// TTODO: should we verify if the pods for each vertex have been really scaled down before updating the rollout state?
+		// We'd need to get all related pods count and compare it to expected value.
+		// Also, should we make sure all pods have been scaled down correctly before proceeding with the upgrade?
+		if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+			rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
+		}
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.Name = existingPromotedChild.GetName()
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AllSourceVerticesScaledDown = true
 	}
 
 	// is there currently an "upgrading" child?

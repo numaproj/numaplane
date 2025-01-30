@@ -275,18 +275,6 @@ func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
 }
 
-// MarkAllSourceVerticesScaledDownTrue sets the AllSourceVerticesScaledDown field
-// of the named PromotedChildStatus to true. If the PromotedChildStatus is nil, it initializes
-// a new instance before setting the field.
-func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDownTrue(name string) {
-	if pcs == nil {
-		pcs = &PromotedChildStatus{}
-	}
-
-	pcs.Name = name
-	pcs.AllSourceVerticesScaledDown = true
-}
-
 // setCondition sets a condition
 func (s *Status) setCondition(condition metav1.Condition) {
 	var conditions []metav1.Condition
