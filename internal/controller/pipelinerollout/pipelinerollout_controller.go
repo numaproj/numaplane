@@ -360,11 +360,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
-	// locate all isbsvc children
-	// for every isbsvc that is recyclable, we mark any associated pipelines recyclable
-	// in addition, if we have a promoted or upgrading isbsvc, we can perform standard logic
-
-	newPipelineDef, err := r.makeNewPipelineDefinition(ctx, pipelineRollout) // TODO: should we rename this for other rollouts too?
+	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -817,17 +813,11 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx cont
 }
 
 // if we did, we can create the pipeline definition and return it
-func (r *PipelineRolloutReconciler) makeNewPipelineDefinition(
+func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 ) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	// determine name of the Pipeline
-	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
-	if err != nil {
-		return nil, err
-	}
 
 	// which InterstepBufferServiceName should we use?
 	// If there is an upgrading isbsvc, use that
@@ -856,6 +846,12 @@ func (r *PipelineRolloutReconciler) makeNewPipelineDefinition(
 	}
 	metadata.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
+
+	// determine name of the Pipeline
+	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	if err != nil {
+		return nil, err
+	}
 
 	pipelineDef, err := r.makePipelineDefinition(pipelineRollout, pipelineName, isbsvc.GetName(), metadata)
 	return pipelineDef, err

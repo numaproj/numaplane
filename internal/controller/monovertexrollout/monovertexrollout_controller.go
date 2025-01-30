@@ -212,7 +212,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
-	newMonoVertexDef, err := r.makePromotedMonoVertexDefinition(ctx, monoVertexRollout)
+	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -518,7 +518,7 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 }
 
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
-func (r *MonoVertexRolloutReconciler) makePromotedMonoVertexDefinition(
+func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {

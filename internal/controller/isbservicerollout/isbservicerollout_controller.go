@@ -226,42 +226,54 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ppnd.GetPauseModule().NewPauseRequest(isbsvcKey)
 	}
 
-	newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
+	// check if there's a promoted isbsvc yet
+	promotedISBSvcs, err := progressive.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, false, r.client)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
-	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
-	if err != nil {
-		// create an object as it doesn't exist
-		if apierrors.IsNotFound(err) {
+
+	if promotedISBSvcs == nil || len(promotedISBSvcs.Items) == 0 {
+
+		// first check if there's a "recyclable" isbsvc; if there is, it could be in the middle of a delete/recreate process, and we don't want to create a new one until it's been deleted
+		recyclableISBSvcs, err := progressive.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, false, r.client)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
+		}
+		if recyclableISBSvcs != nil && len(recyclableISBSvcs.Items) > 0 {
+			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+
+			// create an object as it doesn't exist
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			// first check if there's a "recyclable" isbsvc; if there is, it could be in the middle of a delete/recreate process, and we don't want to create a new one until it's been deleted
-			recyclableISBSvcs, err := progressive.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, false, r.client)
+			newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
 			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
+				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
-			if recyclableISBSvcs != nil && len(recyclableISBSvcs.Items) > 0 {
-				numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' interstepbufferservice yet; need to wait for recyclable isbsvcs to be deleted")
-				requeueDelay = common.DefaultRequeueDelay
-			} else {
-				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
-				}
+			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+			}
 
-				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
-			}
-		} else {
-			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
+			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 		}
 
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
+		newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+		}
+		existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
+			k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
+		}
+
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 		requeueDelay, err = r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
