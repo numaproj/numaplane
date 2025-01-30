@@ -360,57 +360,65 @@ func (r *PipelineRolloutReconciler) reconcile(
 		controllerutil.AddFinalizer(pipelineRollout, common.FinalizerName)
 	}
 
+	// check if there's a promoted pipeline yet
+	promotedPipelines, err := progressive.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, false, r.client)
+	if err != nil {
+		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
+	}
 	newPipelineDef, err := r.makeTargetPipelineDefinition(ctx, pipelineRollout)
 	if err != nil {
 		return 0, nil, err
 	}
-
+	// TODO: handle the newPipelineDef==nil case
 	requeueDelay := time.Duration(0)
+
 	var existingPipelineDef *unstructured.Unstructured
 
 	if newPipelineDef != nil {
-		// Get the "promoted" (main) object to see if it exists
-		existingPipelineDef, err = kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
-			k8stypes.NamespacedName{Name: newPipelineDef.GetName(), Namespace: newPipelineDef.GetNamespace()})
-		if err != nil {
-			// create object as it doesn't exist
-			if apierrors.IsNotFound(err) {
-				numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
-				pipelineRollout.Status.MarkPending()
 
-				// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
-				// (i.e. if isbsvc or numaflow controller is requesting pause)
-				userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace())
+		if promotedPipelines == nil || len(promotedPipelines.Items) == 0 {
+
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
+			pipelineRollout.Status.MarkPending()
+
+			// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
+			// (i.e. if isbsvc or numaflow controller is requesting pause)
+			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace())
+			if err != nil {
+				return 0, nil, err
+			}
+			if userPreferredStrategy == config.PPNDStrategyID {
+				needsPaused, _, err := r.shouldBePaused(ctx, pipelineRollout, nil, newPipelineDef, false)
 				if err != nil {
 					return 0, nil, err
 				}
-				if userPreferredStrategy == config.PPNDStrategyID {
-					needsPaused, _, err := r.shouldBePaused(ctx, pipelineRollout, nil, newPipelineDef, false)
+				if needsPaused != nil && *needsPaused == true {
+					err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
 					if err != nil {
 						return 0, nil, err
 					}
-					if needsPaused != nil && *needsPaused == true {
-						err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
-						if err != nil {
-							return 0, nil, err
-						}
-					}
-
 				}
 
-				err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
-				if err != nil {
-					return 0, nil, err
-				}
-				pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-				//return 0, existingPipelineDef, nil
 			}
 
-			return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
+			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
+			if err != nil {
+				return 0, nil, err
+			}
+			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+			//return 0, existingPipelineDef, nil
+
+			//return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
 		} else {
 
 			// "promoted" object already exists
+			existingPipelineDef, err = kubernetes.GetResource(ctx, r.client, newPipelineDef.GroupVersionKind(),
+				k8stypes.NamespacedName{Name: newPipelineDef.GetName(), Namespace: newPipelineDef.GetNamespace()})
+			if err != nil {
+				return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
+			}
+
 			// if Pipeline is not owned by Rollout, fail and return
 			if !checkOwnerRef(existingPipelineDef.GetOwnerReferences(), pipelineRollout.UID) {
 				errStr := fmt.Sprintf("Pipeline %s already exists in namespace, not owned by a PipelineRollout", existingPipelineDef.GetName())
@@ -433,7 +441,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// clean up recyclable pipelines
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
 	if err != nil {
-		return 0, existingPipelineDef, err
+		return 0, nil, err
 	}
 	// there are some cases that require requeueing // TODO: make sure we do this for all rollouts
 	if !allDeleted || inProgressStrategySet {
@@ -619,6 +627,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger := logger.FromContext(ctx)
 
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
+	// TODO: now we also have the delete/recreate case for this being nil: do we really need this if statement here at all?
 	if existingPipelineDef == nil {
 		// determine name of the promoted Pipeline
 		pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)

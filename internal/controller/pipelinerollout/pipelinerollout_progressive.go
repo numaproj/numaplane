@@ -103,7 +103,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	// TODO: Maybe we can annotate pipeline to indicate if it needs to be drained or not
 	// In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
 	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
-	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false) // TODO: "requiring drained" will be configurable
 	if err != nil {
 		return false, err
 	}

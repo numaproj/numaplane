@@ -248,22 +248,24 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
+			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
-			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
-			}
+			if newISBServiceDef != nil {
+				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+				}
 
-			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
+				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
+			}
 		}
 
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 		}
@@ -767,7 +769,7 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBS
 }
 
 // Create an InterstepBufferService definition of "promoted" state
-func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
+func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
 ) (*unstructured.Unstructured, error) {
