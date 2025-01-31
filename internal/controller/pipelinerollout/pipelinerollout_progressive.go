@@ -105,7 +105,7 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	rolloutObject ctlrcommon.RolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) (map[string]apiv1.ScaleValues, error) {
+) (map[string]apiv1.ScaleValues, bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices").WithName("PipelineRollout")
 
@@ -113,12 +113,12 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	promotedChild, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
 	if err != nil {
-		return nil, fmt.Errorf("error while looking for most current promoted child: %w", err)
+		return nil, false, fmt.Errorf("error while looking for most current promoted child: %w", err)
 	}
 
 	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
 	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
+		return nil, false, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
 
 	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertices", vertices).Debugf("found vertices for the promoted child: %d", len(vertices))
@@ -129,11 +129,12 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		scaleValuesMap = promotedChildStatus.ScaleValues
 	}
 
+	promotedChildNeedsUpdate := false
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
 			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if !found {
 				continue
@@ -141,10 +142,10 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if !found {
-				return nil, errors.New("a vertex must have a name")
+				return nil, false, errors.New("a vertex must have a name")
 			}
 
 			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
@@ -154,7 +155,7 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 				),
 			})
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			actualPodsCount := int64(len(pods.Items))
@@ -170,27 +171,29 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 				continue
 			}
 
+			promotedChildNeedsUpdate = true
+
 			scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
 
 			originalMax, _, err := unstructured.NestedInt64(vertexAsMap, "scale", "max")
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
 
 			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 			currMin, found, err := unstructured.NestedInt64(vertexAsMap, "scale", "min")
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if found && currMin > scaleValue {
 				if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "min"); err != nil {
-					return nil, err
+					return nil, false, err
 				}
 			}
 
@@ -202,12 +205,14 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		}
 	}
 
-	err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
-	if err != nil {
-		return nil, err
+	if promotedChildNeedsUpdate {
+		err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
+		if err != nil {
+			return nil, false, err
+		}
+
+		numaLogger.WithValues("vertices", vertices, "scaleValuesMap", scaleValuesMap).Debug("applied updated vertices to promoted child definition")
 	}
 
-	numaLogger.WithValues("vertices", vertices, "scaleValuesMap", scaleValuesMap).Debug("applied updated vertices to promoted child definition")
-
-	return scaleValuesMap, nil
+	return scaleValuesMap, promotedChildNeedsUpdate, nil
 }

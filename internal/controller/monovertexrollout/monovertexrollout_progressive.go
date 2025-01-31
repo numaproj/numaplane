@@ -86,7 +86,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	rolloutObject ctlrcommon.RolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) (map[string]apiv1.ScaleValues, error) {
+) (map[string]apiv1.ScaleValues, bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices").WithName("MonoVertexRollout")
 
@@ -94,7 +94,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	promotedChild, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
 	if err != nil {
-		return nil, fmt.Errorf("error while looking for most current promoted child: %w", err)
+		return nil, false, fmt.Errorf("error while looking for most current promoted child: %w", err)
 	}
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
@@ -111,7 +111,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		),
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	actualPodsCount := int64(len(pods.Items))
@@ -124,30 +124,30 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		scaleValuesMap[promotedChild.GetName()] = vertexScaleValues
 
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
-		return scaleValuesMap, nil
+		return scaleValuesMap, false, nil
 	}
 
 	scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
 
 	originalMax, _, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "max")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	numaLogger.WithValues("promotedChildName", promotedChild.GetName()).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
 
 	if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "max"); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 	currMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if found && currMin > scaleValue {
 		if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "min"); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
@@ -159,5 +159,5 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("applied scale changes to promoted child definition")
 
-	return scaleValuesMap, nil
+	return scaleValuesMap, true, nil
 }

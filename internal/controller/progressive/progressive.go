@@ -51,7 +51,7 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
 	// ScaleDownPromotedChildSourceVertices scales down by half the promoted child source vertices pods
-	ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, error)
+	ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error)
 }
 
 // return:
@@ -82,13 +82,15 @@ func ProcessResource(
 	// + there could be a temporary state in which there are 2 "promoted" or 2 "upgrading": in the case that the second update fails
 	// + once the upgrade process is done, cleanup the scaleValues map from the rollout status
 	if promotedDifference && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
-		scaleValuesMap, err := controller.ScaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
+		scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
 		}
 
-		if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
-			return false, false, 0, fmt.Errorf("error scaling down the existing promoted child: %w", err)
+		if promotedChildNeedsUpdate {
+			if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+				return false, false, 0, fmt.Errorf("error scaling down the existing promoted child: %w", err)
+			}
 		}
 
 		// TTODO: should we verify if the pods for each vertex have been really scaled down before updating the rollout state?
