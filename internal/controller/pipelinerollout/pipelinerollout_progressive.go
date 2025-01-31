@@ -10,15 +10,12 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 )
 
-// Implemented functions for the progressiveController interface:
-
+// CreateUpgradingChildDefinition creates a definition for an "upgrading" pipeline
+// This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -56,92 +53,12 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 	return pipeline, nil
 }
 
-func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
-	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	if pipelineRollout.Status.NameCount == nil {
-		return int32(0), false
-	} else {
-		return *pipelineRollout.Status.NameCount, true
-	}
-}
-
-func (r *PipelineRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
-	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	pipelineRollout.Status.NameCount = &nameCount
-	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
-}
-
-// increment the child count for the Rollout and return the count to use
-func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
-	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
-	if !found {
-		currentNameCount = int32(0)
-		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
-		if err != nil {
-			return int32(0), err
-		}
-	}
-
-	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
-	if err != nil {
-		return int32(0), err
-	}
-	return currentNameCount, nil
-}
-
-// Recycle deletes child; returns true if it was in fact deleted
-
-func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
-	pipeline *unstructured.Unstructured,
-	c client.Client,
-) (bool, error) {
-
-	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
-	if err != nil {
-		return false, err
-	}
-	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
-	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, true)
-	if err != nil {
-		return false, err
-	}
-	if pausedOrWontPause {
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		return true, err
-	}
-	// make sure we request Paused if we haven't yet
-	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
-	if err != nil {
-		return false, err
-	}
-	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
-		_ = r.drain(ctx, pipeline)
-		return false, nil
-	}
-	return false, nil
-
-}
-
-// get the isbsvc child of ISBServiceRollout with the given upgrading state label
-func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
-	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
-	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
-	}
-
-	isbsvc, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, upgradeState, false, r.client)
-	if err != nil {
-		return nil, err
-	}
-	return isbsvc, nil
-}
-
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // Assessment:
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
-// Unknowk: neither of the above if met
-// TODO: fix this assessment not to return an immediate result as soon as things are healthy or unhealthy
+// Unknown: neither of the above if met
+// This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 
 	numaLogger := logger.FromContext(ctx)
