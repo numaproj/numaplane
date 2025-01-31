@@ -288,8 +288,8 @@ func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
 }
 
-// MarkAllSourceVerticesScaledDown checks if all source vertices in the
-// PromotedChildStatus have been scaled down by comparing their scale values.
+// MarkAllSourceVerticesScaledDown checks if all source vertices in the PromotedChildStatus
+// have been scaled down by comparing their Actual and Scaled scale values.
 // It updates the AllSourceVerticesScaledDown field to true if all vertices
 // are scaled down, otherwise sets it to false.
 func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
@@ -299,7 +299,7 @@ func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
 
 	allScaledDown := true
 	for _, sv := range pcs.ScaleValues {
-		if (sv.Desired > 0 && sv.Desired <= sv.Scaled) || sv.Actual <= sv.Scaled {
+		if sv.Actual > sv.Scaled {
 			allScaledDown = false
 			break
 		}
