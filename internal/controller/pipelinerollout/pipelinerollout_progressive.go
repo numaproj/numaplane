@@ -165,6 +165,8 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.Scaled != 0 {
 				vertexScaleValues.Actual = actualPodsCount
 				scaleValuesMap[vertexName] = vertexScaleValues
+
+				numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debugf("updated scaleValues map for vertex '%s' with running pods count, skipping scaling down for this vertex since it has already been done", vertexName)
 				continue
 			}
 

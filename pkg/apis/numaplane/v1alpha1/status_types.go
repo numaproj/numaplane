@@ -299,7 +299,7 @@ func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
 
 	allScaledDown := true
 	for _, sv := range pcs.ScaleValues {
-		if sv.Desired <= sv.Scaled || sv.Actual <= sv.Scaled {
+		if (sv.Desired > 0 && sv.Desired <= sv.Scaled) || sv.Actual <= sv.Scaled {
 			allScaledDown = false
 			break
 		}

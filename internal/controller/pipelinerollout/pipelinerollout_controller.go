@@ -546,6 +546,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+			pipelineRollout.Status.ProgressiveStatus.PromotedChildStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}

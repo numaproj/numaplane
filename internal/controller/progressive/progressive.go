@@ -80,6 +80,7 @@ func ProcessResource(
 	// Other considerations:
 	// + should we only scale down the Kafka-type source vertices or also others? Derek: there is no way to determine when using UDSource
 	// + there could be a temporary state in which there are 2 "promoted" or 2 "upgrading": in the case that the second update fails
+	// + once the upgrade process is done, cleanup the scaleValues map from the rollout status
 	if promotedDifference && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
 		scaleValuesMap, err := controller.ScaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
 		if err != nil {
