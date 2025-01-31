@@ -836,7 +836,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
 
 	}{
-		/*{
+		{
 			name:            "spec difference results in Progressive",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: *createPipeline(
@@ -1044,7 +1044,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
-		},*/
+		},
 		{
 			name:            "Clean up after progressive upgrade: pipeline still pausing",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
