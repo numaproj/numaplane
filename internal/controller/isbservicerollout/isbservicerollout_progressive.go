@@ -9,15 +9,10 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 )
 
-// Implemented functions for the progressiveController interface:
-
 // CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
+// This implements a function of the progressiveController interface
 func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
@@ -36,63 +31,8 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 	return isbsvc, nil
 }
 
-func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
-	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
-	if isbsvcRollout.Status.NameCount == nil {
-		return int32(0), false
-	} else {
-		return *isbsvcRollout.Status.NameCount, true
-	}
-}
-
-func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
-	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
-	isbsvcRollout.Status.NameCount = &nameCount
-	return r.updateISBServiceRolloutStatus(ctx, isbsvcRollout)
-}
-
-// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
-func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
-	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
-	if !found {
-		currentNameCount = int32(0)
-		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
-		if err != nil {
-			return int32(0), err
-		}
-	}
-
-	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
-	if err != nil {
-		return int32(0), err
-	}
-	return currentNameCount, nil
-}
-
-// Recycle deletes child; returns true if it was in fact deleted
-func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) (bool, error) {
-	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
-
-	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
-	// Pipelines using it
-
-	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
-	if err != nil {
-		return false, fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
-	}
-	if pipelines != nil && len(pipelines.Items) > 0 {
-		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
-		return false, nil
-	}
-	// okay to delete now
-	numaLogger.Debug("deleting isbsvc")
-	err = kubernetes.DeleteResource(ctx, c, isbsvc)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
+// AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// This implements a function of the progressiveController interface
 func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 

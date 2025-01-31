@@ -361,7 +361,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// check if there's a promoted pipeline yet
-	promotedPipelines, err := progressive.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, false, r.client)
+	promotedPipelines, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, false, r.client)
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
@@ -630,7 +630,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	// TODO: now we also have the delete/recreate case for this being nil: do we really need this if statement here at all?
 	if existingPipelineDef == nil {
 		// determine name of the promoted Pipeline
-		pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+		pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 		if err != nil {
 			return fmt.Errorf("Unable to process pipeline status: err=%s", err)
 		}
@@ -857,7 +857,7 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
 	// determine name of the Pipeline
-	pipelineName, err := progressive.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -916,6 +916,7 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+// This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
@@ -946,6 +947,99 @@ func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.Condi
 		}
 	}
 	return metav1.ConditionTrue, ""
+}
+
+func (r *PipelineRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	if pipelineRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *pipelineRollout.Status.NameCount, true
+	}
+}
+
+func (r *PipelineRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	pipelineRollout.Status.NameCount = &nameCount
+	return r.updatePipelineRolloutStatus(ctx, pipelineRollout)
+}
+
+// IncrementChildCount increments the child count for the Rollout and returns the count to use
+// This implements a function of the RolloutController interface
+func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+// Recycle deletes child; returns true if it was in fact deleted
+// This implements a function of the RolloutController interface
+func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
+	if err != nil {
+		return false, err
+	}
+	// TODO: Maybe we can annotate pipeline to indicate if it needs to be drained or not
+	// In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
+	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false) // TODO: "requiring drained" will be configurable
+	if err != nil {
+		return false, err
+	}
+	if pausedOrWontPause {
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return true, err
+	}
+	// make sure we request Paused if we haven't yet
+	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+	if err != nil {
+		return false, err
+	}
+	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
+		_ = r.drain(ctx, pipeline)
+		return false, nil
+	}
+	return false, nil
+
+}
+
+// get the isbsvc child of ISBServiceRollout with the given upgrading state label
+func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
+	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
+	if err != nil || isbsvcRollout == nil {
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	}
+
+	isbsvc, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, upgradeState, false, r.client)
+	if err != nil {
+		return nil, err
+	}
+	return isbsvc, nil
+}
+
+// get all isbsvc children of ISBServiceRollout with the given upgrading state label
+func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.UnstructuredList, error) {
+	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
+	if err != nil || isbsvcRollout == nil {
+		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+	}
+
+	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, false, r.client)
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
@@ -1017,5 +1111,5 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 
 	}
 
-	return progressive.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 }

@@ -17,19 +17,13 @@ limitations under the License.
 package common
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -58,13 +52,4 @@ func GetRolloutParentName(childName string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("unexpected child name %q doesn't end with '-<number>'", childName)
-}
-
-// update the in-memory object with the new Label and patch the object in K8S
-func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured) error {
-	labels := childObject.GetLabels()
-	labels[common.LabelKeyUpgradeState] = string(upgradeState)
-	childObject.SetLabels(labels)
-	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
-	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
