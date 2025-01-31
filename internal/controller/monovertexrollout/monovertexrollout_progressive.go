@@ -2,11 +2,14 @@ package monovertexrollout
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -60,4 +63,113 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	}
 
 	return apiv1.AssessmentResultUnknown, nil
+}
+
+// ScaleDownPromotedChildSourceVertices scales down the source vertex of a promoted child
+// monovertex. It retrieves the most current promoted child and scales down the source vertex
+// by adjusting its max and min scale values. The function returns
+// a map of vertex names to their scale values, including desired, scaled, and actual pod counts.
+// The returned map will only have one vertex for the MonoVertex case.
+//
+// Parameters:
+//
+//	ctx - The context for the operation.
+//	rolloutObject - The rollout object containing the status and configuration.
+//	promotedChildDef - The unstructured definition of the promoted child.
+//	c - The Kubernetes client for interacting with the cluster.
+//
+// Returns:
+//
+//	A map of vertex names to their scale values and an error if any occurs during the process.
+func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (map[string]apiv1.ScaleValues, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices").WithName("MonoVertexRollout")
+
+	numaLogger.Debug("started promoted child source vertex scaling down process")
+
+	promotedChild, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
+	if err != nil {
+		return nil, fmt.Errorf("error while looking for most current promoted child: %w", err)
+	}
+
+	sourceVertex, _, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "source")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting source vertex of promoted monovertex: %w", err)
+	}
+
+	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "sourceVertex", sourceVertex).Debug("found source vertex for the promoted child")
+
+	scaleValuesMap := map[string]apiv1.ScaleValues{}
+	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
+	if promotedChildStatus != nil && promotedChildStatus.ScaleValues != nil {
+		scaleValuesMap = promotedChildStatus.ScaleValues
+	}
+
+	// the vertex name for a monovertex is the same as the monovertex name
+	vertexName := promotedChild.GetName()
+
+	pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
+			common.LabelKeyNumaflowPodMonoVertexName, promotedChild.GetName(),
+			common.LabelKeyNumaflowPodMonoVertexVertexName, vertexName,
+		),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	actualPodsCount := int64(len(pods.Items))
+
+	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
+	// to later verify that the pods were actually scaled down.
+	// We want to skip scaling down again.
+	if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.Scaled != 0 {
+		vertexScaleValues.Actual = actualPodsCount
+		scaleValuesMap[vertexName] = vertexScaleValues
+		return scaleValuesMap, nil
+	}
+
+	scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
+
+	originalMax, _, err := unstructured.NestedInt64(sourceVertex, "scale", "max")
+	if err != nil {
+		return nil, err
+	}
+
+	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
+
+	if err := unstructured.SetNestedField(sourceVertex, scaleValue, "scale", "max"); err != nil {
+		return nil, err
+	}
+
+	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
+	currMin, found, err := unstructured.NestedInt64(sourceVertex, "scale", "min")
+	if err != nil {
+		return nil, err
+	}
+	if found && currMin > scaleValue {
+		if err := unstructured.SetNestedField(sourceVertex, scaleValue, "scale", "min"); err != nil {
+			return nil, err
+		}
+	}
+
+	scaleValuesMap[vertexName] = apiv1.ScaleValues{
+		Desired: originalMax,
+		Scaled:  scaleValue,
+		Actual:  actualPodsCount,
+	}
+
+	err = unstructured.SetNestedMap(promotedChildDef.Object, sourceVertex, "spec", "source")
+	if err != nil {
+		return nil, err
+	}
+
+	numaLogger.WithValues("sourceVertex", sourceVertex, "scaleValuesMap", scaleValuesMap).Debug("applied updated source vertex to promoted child definition")
+
+	return scaleValuesMap, nil
 }

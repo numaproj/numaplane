@@ -111,3 +111,13 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	}
 	return apiv1.AssessmentResultSuccess, nil
 }
+
+func (r *ISBServiceRolloutReconciler) ScaleDownPromotedChildSourceVertices(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (map[string]apiv1.ScaleValues, error) {
+	// TTODO: should this return nil, error("not allowed/not implemented"), empty slice?
+	return nil, nil
+}
