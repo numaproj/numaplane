@@ -808,7 +808,7 @@ func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Contex
 }
 
 // IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
-// This implements a function of the progressiveController interface
+// This implements a function of the RolloutController interface
 func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
 	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
 	if !found {
@@ -827,7 +827,7 @@ func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, r
 }
 
 // Recycle deletes child; returns true if it was in fact deleted
-// This implements a function of the progressiveController interface
+// This implements a function of the RolloutController interface
 func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
 

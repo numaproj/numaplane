@@ -599,7 +599,7 @@ func (r *MonoVertexRolloutReconciler) updateCurrentChildCount(ctx context.Contex
 }
 
 // IncrementChildCount increments the child count for the Rollout and returns the count to use
-// This implements a function of the progressiveController interface
+// This implements a function of the RolloutController interface
 func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
 	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
 	if !found {
@@ -618,7 +618,7 @@ func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, r
 }
 
 // Recycle deletes child; returns true if it was in fact deleted
-// This implements a function of the progressiveController interface
+// This implements a function of the RolloutController interface
 func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 	monoVertexDef *unstructured.Unstructured,
 	c client.Client,
