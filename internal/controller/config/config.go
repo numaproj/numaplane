@@ -25,6 +25,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -110,6 +111,23 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
+// GetNumaflowControllerDefinitionsConfig looks up the controller definition from user namespace, if not found then use from global namespace.
+func (cm *NumaflowControllerDefinitionsManager) GetNumaflowControllerDefinitionsConfig(namespace, version string) (string, error) {
+	definition := cm.GetRolloutConfig()
+	key := fmt.Sprintf("%s/%s", namespace, version)
+
+	manifest, manifestExists := definition[key]
+	if !manifestExists {
+		key = fmt.Sprintf("%s/%s", common.NumaplaneSystemNamespace, version)
+		manifest, manifestExists = definition[key]
+		if !manifestExists {
+			return "", fmt.Errorf("no controller definition found for namespace/version %s/%s", namespace, version)
+		}
+	}
+
+	return manifest, nil
+}
+
 func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig, namespace string) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
@@ -136,7 +154,7 @@ func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefiniti
 	}
 }
 
-func (cm *NumaflowControllerDefinitionsManager) GetNumaflowControllerDefinitionsConfig() map[string]string {
+func (cm *NumaflowControllerDefinitionsManager) GetRolloutConfig() map[string]string {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
