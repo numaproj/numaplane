@@ -373,7 +373,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return 0, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, true, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}

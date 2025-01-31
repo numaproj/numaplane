@@ -65,23 +65,19 @@ func ProcessResource(
 	liveRolloutObject ctlrcommon.RolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
+	skipPromotedChildSourceVerticesScaleDown bool,
 	controller progressiveController,
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	// TTODO:
-	// Apply the scaled down definition somewhere in this function and make sure to:
-	// + only call it once and if necessary
-	// + call it if the previous reconciliation failed
-	// + keep track of when/where/how to call based on PromotedChildStatus
-	// - not call this logic for resources other than pipeline and monovertex: could do it via a bool arg or based on the rollout Kind
-	// Other considerations:
-	// + should we only scale down the Kafka-type source vertices or also others? Derek: there is no way to determine when using UDSource
-	// + there could be a temporary state in which there are 2 "promoted" or 2 "upgrading": in the case that the second update fails
-	// + once the upgrade process is done, cleanup the scaleValues map from the rollout status
-	if promotedDifference && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
+	if !skipPromotedChildSourceVerticesScaleDown && promotedDifference &&
+		!liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
+
+		// ScaleDownPromotedChildSourceVertices either updates the existingPromotedChild to scale down the source vertices pods or
+		// retrieves the currently running pods to update the scaleValuesMap used on the rollout status.
+		// This serves to make sure that the pods for each vertex have been really scaled down before proceeding with the progressive update.
 		scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
@@ -92,10 +88,6 @@ func ProcessResource(
 				return false, false, 0, fmt.Errorf("error scaling down the existing promoted child: %w", err)
 			}
 		}
-
-		// TTODO: should we verify if the pods for each vertex have been really scaled down before updating the rollout state?
-		// We'd need to get all related pods count and compare it to expected value by updating the scaleValuesMap.Actual values for each source vertex.
-		// Also, should we make sure all pods have been scaled down correctly before proceeding with the upgrade?
 
 		if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
 			rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
