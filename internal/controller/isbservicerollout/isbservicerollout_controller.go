@@ -461,7 +461,10 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 			return err
 		}
 		isbServiceRollout.Status.MarkPending()
-		r.enqueueAllPipelinesForChildISBSvc(ctx, newISBServiceDef)
+		err = r.enqueueAllPipelinesForChildISBSvc(ctx, newISBServiceDef)
+		if err != nil {
+			return fmt.Errorf("Failed to enqueue pipelines after marking isbservice as recyclable: %s", err.Error())
+		}
 	} else {
 		if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
 			return err

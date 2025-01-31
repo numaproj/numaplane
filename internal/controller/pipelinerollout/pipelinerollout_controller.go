@@ -392,7 +392,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 				if err != nil {
 					return 0, nil, err
 				}
-				if needsPaused != nil && *needsPaused == true {
+				if needsPaused != nil && *needsPaused {
 					err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
 					if err != nil {
 						return 0, nil, err
@@ -407,9 +407,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
-			//return 0, existingPipelineDef, nil
-
-			//return 0, existingPipelineDef, fmt.Errorf("error getting Pipeline: %v", err)
 		} else {
 
 			// "promoted" object already exists
@@ -997,7 +994,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	// TODO: Maybe we can annotate pipeline to indicate if it needs to be drained or not
 	// In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
 	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
-	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false) // TODO: "requiring drained" will be configurable
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false) // TODO: "requiring drained" will be configurable: https://github.com/numaproj/numaplane/issues/512
 	if err != nil {
 		return false, err
 	}
@@ -1046,31 +1043,6 @@ func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.Pipeline
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
-
-/*
-// if no upgrade strategy is set yet, then set one
-// then return the final upgrade strategy
-func (r *PipelineRolloutReconciler) updateInProgressStrategy(
-	ctx context.Context,
-	pipelineRollout *apiv1.PipelineRollout,
-	currentUpgradeStrategy apiv1.UpgradeStrategy) (apiv1.UpgradeStrategy, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	// is there currently an inProgressStrategy for the pipeline? (This will override any new decision)
-	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
-	numaLogger.Debugf("current inProgressStrategy=%s", inProgressStrategy)
-	inProgressStrategySet := (inProgressStrategy != apiv1.UpgradeStrategyNoOp)
-	if inProgressStrategySet {
-		return inProgressStrategy, nil
-	}
-
-	// if not, should we set one?
-	if currentUpgradeStrategy == apiv1.UpgradeStrategyPPND || currentUpgradeStrategy == apiv1.UpgradeStrategyProgressive {
-		r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, currentUpgradeStrategy)
-	}
-
-	return r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout), nil
-}*/
 
 // return true if there are still more pipelines that need to be deleted
 func (r *PipelineRolloutReconciler) garbageCollectChildren(
