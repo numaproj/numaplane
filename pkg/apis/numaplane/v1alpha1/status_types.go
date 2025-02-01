@@ -119,8 +119,10 @@ type UpgradingChildStatus struct {
 
 // ScaleValues stores the desired, scaled, and actual scale max values of a pipeline or monovertext vertex
 type ScaleValues struct {
-	// Desired is the max scale value of the original child spec
-	Desired int64 `json:"desired"`
+	// DesiredMin is the min scale value of the original child spec
+	DesiredMin int64 `json:"desiredMin"`
+	// DesiredMax is the max scale value of the original child spec
+	DesiredMax int64 `json:"desiredMax"`
 	// Scaled is the max scale value calculated by cutting in half the Desired value
 	Scaled int64 `json:"scaled"`
 	// Actual indicates how many pods are actually running for the vertex

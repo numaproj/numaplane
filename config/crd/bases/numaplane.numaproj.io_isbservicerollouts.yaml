@@ -215,9 +215,14 @@ spec:
                                 running for the vertex
                               format: int64
                               type: integer
-                            desired:
-                              description: Desired is the max scale value of the original
-                                child spec
+                            desiredMax:
+                              description: DesiredMax is the max scale value of the
+                                original child spec
+                              format: int64
+                              type: integer
+                            desiredMin:
+                              description: DesiredMin is the min scale value of the
+                                original child spec
                               format: int64
                               type: integer
                             scaled:
@@ -227,7 +232,8 @@ spec:
                               type: integer
                           required:
                           - actual
-                          - desired
+                          - desiredMax
+                          - desiredMin
                           - scaled
                           type: object
                         description: |-

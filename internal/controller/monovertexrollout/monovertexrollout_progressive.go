@@ -141,20 +141,21 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	}
 
 	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
-	currMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
+	originalMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
 	if err != nil {
 		return nil, false, err
 	}
-	if found && currMin > scaleValue {
+	if found && originalMin > scaleValue {
 		if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "min"); err != nil {
 			return nil, false, err
 		}
 	}
 
 	scaleValuesMap[promotedChild.GetName()] = apiv1.ScaleValues{
-		Desired: originalMax,
-		Scaled:  scaleValue,
-		Actual:  actualPodsCount,
+		DesiredMin: originalMin,
+		DesiredMax: originalMax,
+		Scaled:     scaleValue,
+		Actual:     actualPodsCount,
 	}
 
 	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("applied scale changes to promoted child definition")
