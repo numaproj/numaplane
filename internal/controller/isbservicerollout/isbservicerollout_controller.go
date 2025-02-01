@@ -329,7 +329,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	// TODO: handle recreate parameter
 	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
 	if err != nil {
 		return 0, err
@@ -456,7 +455,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured, needsRecreate bool) error {
 	if needsRecreate {
 		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
-		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, newISBServiceDef)
+		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, common.LabelValueDeleteRecreateChild, newISBServiceDef)
 		if err != nil {
 			return err
 		}

@@ -24,8 +24,11 @@ import (
 )
 
 // UpgradeState is the enum to track the possible state of
-// a resource upgrade, it can only be `promoted` or `in-progress`.
+// a resource upgrade: it can be `promoted`, `in-progress`, or `recyclable`.
 type UpgradeState string
+
+// UpgradeStateReason is the enum to track reasons for UpgradeState, to provide additional information when useful
+type UpgradeStateReason string
 
 const (
 	// SSAManager is the default numaplane manager name used by server-side apply syncs
@@ -85,6 +88,9 @@ const (
 	// a NumaRollout.
 	LabelKeyUpgradeState = "numaplane.numaproj.io/upgrade-state"
 
+	// LabelKeyUpgradeStateReason is an optional label to provide more information on top of the LabelKeyUpgradeState
+	LabelKeyUpgradeStateReason = "numaplane.numaproj.io/upgrade-state-reason"
+
 	// LabelValueUpgradePromoted is the label value indicating that the resource managed by a NumaRollout is promoted
 	// after an upgrade.
 	LabelValueUpgradePromoted UpgradeState = "promoted"
@@ -96,6 +102,20 @@ const (
 	// LabelValueUpgradeRecyclable is the label value indicating that the resource managed by a NumaRollout is recyclable
 	// after an upgrade.
 	LabelValueUpgradeRecyclable UpgradeState = "recyclable"
+
+	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child succeeding
+	LabelValueProgressiveSuccess UpgradeStateReason = "progressive-success"
+
+	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child failing
+	LabelValueProgressiveFailure UpgradeStateReason = "progressive-failure"
+
+	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to a child being deleted and recreated
+	LabelValueDeleteRecreateChild UpgradeStateReason = "delete-recreate"
+
+	// LabelValuePurgeOld is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" if there's a strange case in which there are multiple of a given
+	// child and there should only be one
+	// TODO: reevaluate if we really need that
+	LabelValuePurgeOld UpgradeStateReason = "purge"
 
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"

@@ -369,7 +369,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, err
 	}
-	// TODO: handle the newPipelineDef==nil case
+
 	requeueDelay := time.Duration(0)
 
 	var existingPipelineDef *unstructured.Unstructured
@@ -440,7 +440,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, err
 	}
-	// there are some cases that require requeueing // TODO: make sure we do this for all rollouts
+	// there are some cases that require requeueing
 	if !allDeleted || inProgressStrategySet {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
@@ -624,7 +624,6 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	numaLogger := logger.FromContext(ctx)
 
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
-	// TODO: now we also have the delete/recreate case for this being nil: do we really need this if statement here at all?
 	if existingPipelineDef == nil {
 		// determine name of the promoted Pipeline
 		pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
@@ -991,10 +990,19 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
-	// TODO: Maybe we can annotate pipeline to indicate if it needs to be drained or not
-	// In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
-	// if the Pipeline has been paused or if it can't be paused, then delete the pipeline
-	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false) // TODO: "requiring drained" will be configurable: https://github.com/numaproj/numaplane/issues/512
+
+	// TODO: get reason for pipeline being recycled
+	// if reason="delete/recreate", then don't pause at all
+	// if reason="progressive success", then either just pause or pause and drain depending on PipelineRollout specification
+	// if reason="progressive failure", then don't pause at all
+
+	// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
+
+	// TODO: "requiring drained" will be configurable: https://github.com/numaproj/numaplane/issues/512
+	// 1. In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
+	// 2. In the case of recycling the pipeline after progressive update, if the Pipeline was successful, it should be paused and drained
+	// 3. In the case of recycling a failed pipeline after progressive update, we don't want to wait for draining
+	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false)
 	if err != nil {
 		return false, err
 	}
@@ -1073,8 +1081,9 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 				return false, err
 			}
 			if pipelineISBSvcName == isbsvc.GetName() {
+				recyclableReason, _ := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
 				numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
-				err = ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &pipeline)
+				err = ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, common.UpgradeStateReason(recyclableReason), &pipeline)
 				if err != nil {
 					return false, fmt.Errorf("failed to mark pipeline %s 'recyclable': %s/%s", pipeline.GetNamespace(), pipeline.GetName(), err.Error())
 				}

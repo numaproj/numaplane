@@ -818,7 +818,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		ctlrcommon.TestCustomMetrics,
 		recorder)
 
-	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
 	testCases := []struct {
 		name                        string
