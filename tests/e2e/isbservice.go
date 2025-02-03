@@ -322,7 +322,7 @@ func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, 
 		return rollout, nil
 	})
 
-	if upgradeStrategy == config.PPNDStrategyID && dataLoss == true {
+	if upgradeStrategy == config.PPNDStrategyID && dataLoss {
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
@@ -343,7 +343,7 @@ func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, 
 
 	}
 
-	if upgradeStrategy == config.PPNDStrategyID && dataLoss == false {
+	if upgradeStrategy == config.PPNDStrategyID && !dataLoss {
 		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
 		verifyNotPausing := func() bool {
 			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
