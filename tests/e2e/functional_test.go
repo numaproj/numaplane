@@ -453,10 +453,6 @@ var _ = Describe("Functional e2e", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		}, true)
 
-		verifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		})
-
 	})
 
 	It("Should update the child ISBService updating a no-data-loss field", func() {

@@ -312,7 +312,13 @@ func deleteISBServiceRollout(name string) {
 	}).WithTimeout(testTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
 }
 
-func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, newSpec numaflowv1.InterStepBufferServiceSpec, f func(numaflowv1.InterStepBufferServiceSpec) bool, dataLoss bool) {
+// TODO: replace pipelineRolloutName with an array of names to check that each is paused
+// pipelineRolloutName is pipelinerollout and child pipeline that may be checked to see if it is pausing or not after update
+// newSpec is the updated spec of the ISBService defined in the rollout
+// verifySpecFunc is passed to the verifyISBServiceSpec func which verifies the ISBService spec defined in the updated rollout
+// matches what we expect
+// dataLoss determines if we will need to check if pipelines pause or not for the update
+func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, newSpec numaflowv1.InterStepBufferServiceSpec, verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool, dataLoss bool) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -365,7 +371,7 @@ func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, 
 		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
 	}
 
-	verifyISBServiceSpec(Namespace, isbServiceRolloutName, f)
+	verifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
 
 	verifyISBSvcRolloutReady(isbServiceRolloutName)
 	verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
