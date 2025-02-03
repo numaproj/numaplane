@@ -449,7 +449,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		}, true)
+		}, true, false)
 
 	})
 
@@ -460,7 +460,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		}, false)
+		}, false, false)
 
 	})
 
