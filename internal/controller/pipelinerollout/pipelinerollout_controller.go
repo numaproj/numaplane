@@ -985,40 +985,63 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
 	if err != nil {
 		return false, err
 	}
 
-	// TODO: get reason for pipeline being recycled
-	// if reason="delete/recreate", then don't pause at all
-	// if reason="progressive success", then either just pause or pause and drain depending on PipelineRollout specification
-	// if reason="progressive failure", then don't pause at all
-
-	// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
-
-	// TODO: "requiring drained" will be configurable: https://github.com/numaproj/numaplane/issues/512
-	// 1. In the case of "no-strategy" and a delete/recreate due to pipeline update or due to isbsvc update, we don't want to pause first
-	// 2. In the case of recycling the pipeline after progressive update, if the Pipeline was successful, it should be paused and drained
-	// 3. In the case of recycling a failed pipeline after progressive update, we don't want to wait for draining
-	pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, false)
-	if err != nil {
-		return false, err
+	// Need to determine how to delete the pipeline
+	// Use the "upgrade-strategy-reason" Label to determine how
+	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
+	// if upgrade-strategy-reason="progressive success", then either just pause, or pause and drain,
+	//    depending on PipelineRollout specification (TODO: https://github.com/numaproj/numaplane/issues/512)
+	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
+	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
+	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
+		numaLogger.Fatal(errors.New("Should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
+			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
 	}
-	if pausedOrWontPause {
+	pause := false
+	requireDrain := false
+	if upgradeStateReason != nil {
+		switch *upgradeStateReason {
+		case common.LabelValueDeleteRecreateChild:
+
+		case common.LabelValueProgressiveSuccess:
+			pause = true
+			requireDrain = true // TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
+
+		case common.LabelValueProgressiveFailure:
+
+		}
+	}
+
+	if pause {
+		// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
+		pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, requireDrain)
+		if err != nil {
+			return false, err
+		}
+		if pausedOrWontPause {
+			err = kubernetes.DeleteResource(ctx, c, pipeline)
+			return true, err
+		}
+		// make sure we request Paused if we haven't yet
+		desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+		if err != nil {
+			return false, err
+		}
+		if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
+			_ = r.drain(ctx, pipeline)
+			return false, nil
+		}
+	} else {
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		return true, err
 	}
-	// make sure we request Paused if we haven't yet
-	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
-	if err != nil {
-		return false, err
-	}
-	if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
-		_ = r.drain(ctx, pipeline)
-		return false, nil
-	}
+
 	return false, nil
 
 }

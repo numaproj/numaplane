@@ -156,6 +156,31 @@ func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
 
+func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {
+	numaLogger := logger.FromContext(ctx)
+
+	upgradeStateStr, found := childObject.GetLabels()[common.LabelKeyUpgradeState]
+	if !found {
+		numaLogger.Debug("upgradeState unset for %s:%s%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		return nil, nil
+	} else {
+		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
+		if !found {
+			numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", "nil").Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
+				childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+			upgradeState := common.UpgradeState(upgradeStateStr)
+			return &upgradeState, nil
+		} else {
+			numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", reasonStr).Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
+				childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+			upgradeState := common.UpgradeState(upgradeStateStr)
+			reason := common.UpgradeStateReason(reasonStr)
+			return &upgradeState, &reason
+		}
+	}
+
+}
+
 // Get the index of the child following the dash in the name
 // childName should be the rolloutName + '-<integer>'
 // For backward compatibility, support child resources whose names were equivalent to rollout names, returning -1 index
