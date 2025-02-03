@@ -113,7 +113,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	return apiv1.AssessmentResultSuccess, nil
 }
 
-// This is not needed for ISBServiceRollout
+// This does not need to be implemented for ISBServiceRollout
 func (r *ISBServiceRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
@@ -121,4 +121,14 @@ func (r *ISBServiceRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	c client.Client,
 ) (map[string]apiv1.ScaleValues, bool, error) {
 	return nil, false, errors.New("not implemented for ISBServiceRollout")
+}
+
+// This does not need to be implemented for ISBServiceRollout
+func (r *ISBServiceRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return nil
 }

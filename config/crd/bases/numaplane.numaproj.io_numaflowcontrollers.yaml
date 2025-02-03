@@ -163,8 +163,8 @@ spec:
                       "promoted" child status
                     properties:
                       allSourceVerticesScaledDown:
-                        description: ScaledDown indicates if ALL the promoted child
-                          source vertices have been scaled down
+                        description: AllSourceVerticesScaledDown indicates if ALL
+                          the promoted child source vertices have been scaled down
                         type: boolean
                       name:
                         description: Name of the promoted child
@@ -204,6 +204,11 @@ spec:
                           ScaleValues is a map where the keys are the promoted child source vertices names
                           and the values are the scale values of the source vertices
                         type: object
+                      scaleValuesRestoredToDesired:
+                        description: |-
+                          ScaleValuesRestoredToDesired indicates if ALL the promoted child source vertices have been set back to the original min and max scale values (desiredMin and desiredMax).
+                          This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
+                        type: boolean
                     required:
                     - name
                     type: object

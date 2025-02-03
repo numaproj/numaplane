@@ -136,8 +136,11 @@ type PromotedChildStatus struct {
 	// ScaleValues is a map where the keys are the promoted child source vertices names
 	// and the values are the scale values of the source vertices
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
-	// ScaledDown indicates if ALL the promoted child source vertices have been scaled down
+	// AllSourceVerticesScaledDown indicates if ALL the promoted child source vertices have been scaled down
 	AllSourceVerticesScaledDown bool `json:"allSourceVerticesScaledDown,omitempty"`
+	// ScaleValuesRestoredToDesired indicates if ALL the promoted child source vertices have been set back to the original min and max scale values (desiredMin and desiredMax).
+	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
+	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -292,6 +295,11 @@ func (ucs *UpgradingChildStatus) IsFailed() bool {
 // AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
 func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
+}
+
+// AreScaleValuesRestoredToDesired checks if all source vertices have been restored to the desired min and max values.
+func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) bool {
+	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToDesired
 }
 
 // MarkAllSourceVerticesScaledDown checks if all source vertices in the PromotedChildStatus

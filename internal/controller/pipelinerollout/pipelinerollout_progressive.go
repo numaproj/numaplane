@@ -217,3 +217,48 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	return scaleValuesMap, promotedChildNeedsUpdate, nil
 }
+
+/*
+ScalePromotedChildSourceVerticesToDesiredValues restores the scale values of a promoted child source vertices
+to its desired values as specified in the rollout object's progressive status.
+
+Parameters:
+  - ctx: The context for logging and tracing.
+  - rolloutObject: The rollout object containing the progressive status and promoted child status.
+  - promotedChildDef: The unstructured object representing the promoted child source vertices.
+  - c: The Kubernetes client for interacting with the cluster.
+
+Returns:
+  - error: An error if the scale values cannot be restored due to missing status information or if setting
+    the scale values fails.
+*/
+func (r *PipelineRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	numaLogger := logger.FromContext(ctx).WithName("ScalePromotedChildSourceVerticesToDesiredValues").WithName("PipelineRollout")
+
+	numaLogger.Debug("restoring scale values back to desired values for the promoted child source vertices")
+
+	// TTODO: implement this, remember pipeline can have multiple source vertices
+
+	// promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
+	// if promotedChildStatus == nil || promotedChildStatus.ScaleValues == nil {
+	// 	return errors.New("unable to restore scale values for the promoted child source vertices because the rollout does not have progressiveStatus and/or promotedChildStatus set")
+	// }
+
+	// if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
+	// 	return err
+	// }
+
+	// if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin, "spec", "scale", "min"); err != nil {
+	// 	return err
+	// }
+
+	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("applied scale changes to promoted child definition")
+
+	return nil
+}

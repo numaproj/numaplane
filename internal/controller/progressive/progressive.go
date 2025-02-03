@@ -52,6 +52,9 @@ type progressiveController interface {
 
 	// ScaleDownPromotedChildSourceVertices scales down by half the promoted child source vertices pods
 	ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error)
+
+	// ScalePromotedChildSourceVerticesToDesiredValues scales back up to the desired scale values the promoted child source vertices pods
+	ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // return:
@@ -78,7 +81,7 @@ func ProcessResource(
 		// ScaleDownPromotedChildSourceVertices either updates the existingPromotedChild to scale down the source vertices pods or
 		// retrieves the currently running pods to update the scaleValuesMap used on the rollout status.
 		// This serves to make sure that the pods for each vertex have been really scaled down before proceeding with the progressive update.
-		scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, rolloutObject, existingPromotedChild, c)
+		scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, liveRolloutObject, existingPromotedChild, c)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
 		}
@@ -99,8 +102,20 @@ func ProcessResource(
 		return false, false, common.DefaultRequeueDelay, nil
 	}
 
-	// TODO: in case of failure, scale the old/promoted rollout child back to its desireMin and desiredMax values (from status)
-	// if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.IsFailed() {}
+	// In case of failure and if not scaled back yet, scale the promoted rollout child back to its desired scale min and max values stored in the rollout progressive status
+	if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.IsFailed() &&
+		liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreScaleValuesRestoredToDesired(existingPromotedChild.GetName()) {
+
+		if err := controller.ScalePromotedChildSourceVerticesToDesiredValues(ctx, liveRolloutObject, existingPromotedChild, c); err != nil {
+			return false, false, 0, err
+		}
+
+		if err := kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+			return false, false, 0, fmt.Errorf("error scaling back to desired min and max values the existing promoted child: %w", err)
+		}
+
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = true
+	}
 
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
