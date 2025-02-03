@@ -823,6 +823,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		initialRolloutNameCount     int
 		initialInProgressStrategy   *apiv1.UpgradeStrategy
 		initialUpgradingChildStatus *apiv1.UpgradingChildStatus
+		initialPromotedChildStatus  *apiv1.PromotedChildStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -848,8 +849,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     1,
 			initialInProgressStrategy:   nil,
 			initialUpgradingChildStatus: nil,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:        apiv1.PhasePending,
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+			},
+			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:       apiv1.PhasePending,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
@@ -896,6 +901,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultSuccess,
+			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -1091,7 +1100,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			// Create our PipelineRollout
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}}})
+				&apiv1.PipelineRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus, PromotedChildStatus: tc.initialPromotedChildStatus}}})
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
