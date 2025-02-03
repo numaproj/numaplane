@@ -264,7 +264,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
-		updatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning)
+		updatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, true)
 
 	})
 
@@ -359,7 +359,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("setting desiredPhase=Paused")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
-		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused)
+		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, false)
 
 		document("verifying Pipeline stays in paused or otherwise pausing")
 		Consistently(func() bool {
@@ -381,13 +381,12 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	time.Sleep(2 * time.Second)
 
-	// how to use update pipelinerollout function in the same fashion here
 	It("Should resume the Pipeline if user requests it", func() {
 
 		document("setting desiredPhase=Running")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
-		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning)
+		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, false)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {

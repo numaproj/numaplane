@@ -428,7 +428,7 @@ func deletePipelineRollout(name string) {
 }
 
 // update PipelineRollout and verify correct process
-func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedPhase numaflowv1.PipelinePhase) {
+func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedPhase numaflowv1.PipelinePhase, dataLoss bool) {
 
 	document("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -440,7 +440,8 @@ func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		return rollout, nil
 	})
 
-	if upgradeStrategy == config.PPNDStrategyID {
+	// no data loss OR system pause
+	if upgradeStrategy == config.PPNDStrategyID && dataLoss {
 
 		document("Verify that in-progress-strategy gets set to PPND")
 		verifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
