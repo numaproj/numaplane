@@ -351,7 +351,7 @@ func deleteMonoVertexRollout(name string) {
 	}).WithTimeout(testTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
 }
 
-func updateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedPhase numaflowv1.MonoVertexPhase) {
+func updateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -364,13 +364,13 @@ func updateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 
 	document("verifying MonoVertexRollout spec deployed")
 	verifyMonoVertexRolloutDeployed(name)
-	if expectedPhase == numaflowv1.MonoVertexPhaseRunning {
+	if expectedFinalPhase == numaflowv1.MonoVertexPhaseRunning {
 		verifyMonoVertexRolloutHealthy(name)
 	}
 
 	verifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
-	if expectedPhase == numaflowv1.MonoVertexPhasePaused {
+	if expectedFinalPhase == numaflowv1.MonoVertexPhasePaused {
 		verifyMonoVertexPaused(Namespace, name)
 	} else {
 		verifyMonoVertexReady(Namespace, name)

@@ -185,6 +185,7 @@ func TestFunctionalE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	BeforeSuite(func() {
+		// this must be set for all tests to run
 		upgradeStrategy = getUpgradeStrategy()
 		Expect(upgradeStrategy.IsValid()).To(BeTrue())
 		beforeSuiteSetup()

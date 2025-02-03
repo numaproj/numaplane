@@ -428,7 +428,7 @@ func deletePipelineRollout(name string) {
 }
 
 // update PipelineRollout and verify correct process
-func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedPhase numaflowv1.PipelinePhase, dataLoss bool) {
+func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, dataLoss bool) {
 
 	document("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -462,13 +462,13 @@ func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	})
 
 	verifyPipelineRolloutDeployed(name)
-	if expectedPhase == numaflowv1.PipelinePhaseRunning {
+	if expectedFinalPhase == numaflowv1.PipelinePhaseRunning {
 		verifyPipelineRolloutHealthy(name)
 	}
 
 	verifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
-	if expectedPhase == numaflowv1.PipelinePhasePaused {
+	if expectedFinalPhase == numaflowv1.PipelinePhasePaused {
 		verifyPipelinePaused(Namespace, name)
 	} else {
 		verifyPipelineRunning(Namespace, name)

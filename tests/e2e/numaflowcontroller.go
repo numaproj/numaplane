@@ -193,6 +193,11 @@ func deleteNumaflowControllerRollout() {
 	}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 }
 
+// TODO: pipelinerolloutname should be an array of names to verify multiple pipelines should be paused
+// originalVersion is the original version of the current NumaflowController defined in the rollout
+// newVersion is the new version the updated NumaflowController should have if it is a valid version
+// pipelineRolloutName is the pipeline we check to be sure that it is pausing during the update
+// valid boolean indicates if newVersion is a valid version or not which will change the check we make
 func updateNumaflowControllerRollout(originalVersion, newVersion, pipelineRolloutName string, valid bool) {
 	// new NumaflowController spec
 	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
