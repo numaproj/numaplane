@@ -412,6 +412,9 @@ func beforeSuiteSetup() {
 	if disableTestArtifacts != "true" {
 		setupOutputDir()
 	}
+	// this must be set for all tests to run
+	upgradeStrategy = getUpgradeStrategy()
+	Expect(upgradeStrategy.IsValid()).To(BeTrue())
 
 	openFiles = make(map[string]*os.File)
 

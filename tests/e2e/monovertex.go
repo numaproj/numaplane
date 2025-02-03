@@ -2,9 +2,12 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -263,4 +266,114 @@ func startMonoVertexRolloutWatches() {
 
 	wg.Add(1)
 	go watchMonoVertex()
+}
+
+// shared functions
+
+// creates MonoVertexRollout of a given spec/name and makes sure it's running
+func createMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexSpec) {
+
+	monoVertexRolloutSpec := createMonoVertexRolloutSpec(name, namespace, spec)
+	_, err := monoVertexRolloutClient.Create(ctx, monoVertexRolloutSpec, metav1.CreateOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying that the MonoVertexRollout was created")
+	Eventually(func() error {
+		_, err := monoVertexRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		return err
+	}, testTimeout, testPollingInterval).Should(Succeed())
+
+	document("Verifying that the MonoVertex was created")
+	verifyMonoVertexSpec(Namespace, name, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		return spec.Source != nil
+	})
+
+	verifyMonoVertexRolloutReady(name)
+
+	verifyMonoVertexReady(namespace, name)
+
+}
+
+func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVertexSpec) *apiv1.MonoVertexRollout {
+
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	monoVertexRollout := &apiv1.MonoVertexRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "MonoVertexRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.MonoVertexRolloutSpec{
+			MonoVertex: apiv1.MonoVertex{
+				Spec: runtime.RawExtension{
+					Raw: rawSpec,
+				},
+			},
+		},
+	}
+
+	return monoVertexRollout
+}
+
+// delete MonoVertexRollout and verify deletion
+func deleteMonoVertexRollout(name string) {
+	document("Deleting MonoVertexRollout")
+	err := monoVertexRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying MonoVertexRollout deletion")
+	Eventually(func() bool {
+		_, err := monoVertexRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the MonoVertexRollout: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+
+	document("Verifying MonoVertex deletion")
+	Eventually(func() bool {
+		list, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+		if len(list.Items) == 0 {
+			return true
+		}
+		return false
+	}).WithTimeout(testTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
+}
+
+func updateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase) {
+
+	rawSpec, err := json.Marshal(newSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	// update the MonoVertexRollout
+	updateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+		return rollout, nil
+	})
+
+	document("verifying MonoVertexRollout spec deployed")
+	verifyMonoVertexRolloutDeployed(name)
+	if expectedFinalPhase == numaflowv1.MonoVertexPhaseRunning {
+		verifyMonoVertexRolloutHealthy(name)
+	}
+
+	verifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+
+	if expectedFinalPhase == numaflowv1.MonoVertexPhasePaused {
+		verifyMonoVertexPaused(Namespace, name)
+	} else {
+		verifyMonoVertexReady(Namespace, name)
+	}
+
 }
