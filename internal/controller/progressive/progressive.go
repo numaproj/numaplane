@@ -72,10 +72,6 @@ func ProcessResource(
 
 	numaLogger := logger.FromContext(ctx)
 
-	// TTODO:
-	// - in case of failure, scale the old/promoted rollout child back to its desireMin and desiredMax values (from status)
-	// - in case of success, we also want to scale back up once done (and clean up the status [should already work])
-
 	if !skipPromotedChildSourceVerticesScaleDown && promotedDifference &&
 		!liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
 
@@ -102,6 +98,9 @@ func ProcessResource(
 
 		return false, false, common.DefaultRequeueDelay, nil
 	}
+
+	// TODO: in case of failure, scale the old/promoted rollout child back to its desireMin and desiredMax values (from status)
+	// if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus.IsFailed() {}
 
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)

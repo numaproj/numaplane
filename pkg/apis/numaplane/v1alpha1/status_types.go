@@ -285,6 +285,10 @@ func (ucs *UpgradingChildStatus) CanAssess() bool {
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 
+func (ucs *UpgradingChildStatus) IsFailed() bool {
+	return ucs != nil && ucs.AssessmentResult == AssessmentResultFailure
+}
+
 // AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
 func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown

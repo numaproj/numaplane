@@ -162,3 +162,36 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	return scaleValuesMap, true, nil
 }
+
+// TODO: scale back up in case of failures
+// func (r *MonoVertexRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+// 	ctx context.Context,
+// 	rolloutObject ctlrcommon.RolloutObject,
+// 	promotedChildDef *unstructured.Unstructured,
+// 	c client.Client,
+// ) error {
+
+// 	// numaLogger := logger.FromContext(ctx).WithName("ScalePromotedChildSourceVerticesToDesiredValues").WithName("MonoVertexRollout")
+
+// 	// numaLogger.Debug("started promoted child source vertex scaling down process")
+
+// 	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
+// 	if promotedChildStatus == nil || promotedChildStatus.ScaleValues == nil {
+// 		// TODO: cannot scale up: either return error or just return
+// 		return nil
+// 	}
+
+// 	// TODO: after setting to scale back up, do we want to continue to check to make sure the pods are actually back up?
+
+// 	if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
+// 		return err
+// 	}
+
+// 	if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin, "spec", "scale", "min"); err != nil {
+// 		return err
+// 	}
+
+// 	// numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("applied scale changes to promoted child definition")
+
+// 	return nil
+// }
