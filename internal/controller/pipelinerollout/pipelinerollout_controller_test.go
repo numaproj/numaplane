@@ -1021,6 +1021,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
@@ -1056,6 +1057,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
