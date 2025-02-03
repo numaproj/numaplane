@@ -429,6 +429,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 
 			requeueDelay, err = r.processExistingPipeline(ctx, pipelineRollout, existingPipelineDef, newPipelineDefResult, syncStartTime)
+			if err != nil {
+				return 0, existingPipelineDef, err
+			}
 		}
 	}
 
@@ -1104,7 +1107,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 				return false, err
 			}
 			if pipelineISBSvcName == isbsvc.GetName() {
-				recyclableReason, _ := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
+				recyclableReason := isbsvc.GetLabels()[common.LabelKeyUpgradeStateReason]
 				numaLogger.WithValues("pipeline", pipeline.GetName(), "isbsvc", pipelineISBSvcName).Debug("marking pipeline 'recyclable' since isbsvc is 'recyclable'")
 				err = ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, common.UpgradeStateReason(recyclableReason), &pipeline)
 				if err != nil {
