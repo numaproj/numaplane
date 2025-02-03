@@ -2,13 +2,16 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -228,4 +231,146 @@ func startISBServiceRolloutWatches() {
 
 	wg.Add(1)
 	go watchStatefulSet()
+}
+
+// shared functions
+
+// create an ISBServiceRollout of a given version and name and make sure it's running
+func createISBServiceRollout(name string, isbServiceSpec numaflowv1.InterStepBufferServiceSpec) {
+
+	isbServiceRolloutSpec := createISBServiceRolloutSpec(name, Namespace, isbServiceSpec)
+	_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying that the ISBServiceRollout was created")
+	Eventually(func() error {
+		_, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		return err
+	}, testTimeout, testPollingInterval).Should(Succeed())
+
+	verifyISBSvcRolloutReady(name)
+
+	verifyISBSvcReady(Namespace, name, 3)
+
+}
+
+func createISBServiceRolloutSpec(name, namespace string, isbServiceSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
+
+	rawSpec, err := json.Marshal(isbServiceSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	isbServiceRollout := &apiv1.ISBServiceRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "ISBServiceRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.ISBServiceRolloutSpec{
+			InterStepBufferService: apiv1.InterStepBufferService{
+				Spec: runtime.RawExtension{
+					Raw: rawSpec,
+				},
+			},
+		},
+	}
+
+	return isbServiceRollout
+
+}
+
+// delete ISBServiceRollout and verify deletion
+func deleteISBServiceRollout(name string) {
+	document("Deleting ISBServiceRollout")
+	err := isbServiceRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying ISBServiceRollout deletion")
+	Eventually(func() bool {
+		_, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the ISBServiceRollout: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+
+	document("Verifying ISBService deletion")
+	Eventually(func() bool {
+		list, err := dynamicClient.Resource(getGVRForISBService()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+		if len(list.Items) == 0 {
+			return true
+		}
+		return false
+	}).WithTimeout(testTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
+}
+
+func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, newSpec numaflowv1.InterStepBufferServiceSpec, f func(numaflowv1.InterStepBufferServiceSpec) bool, dataLoss bool) {
+
+	rawSpec, err := json.Marshal(newSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	updateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+		rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+		return rollout, nil
+	})
+
+	if upgradeStrategy == config.PPNDStrategyID && dataLoss == true {
+
+		document("Verify that in-progress-strategy gets set to PPND")
+		verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+		verifyPipelinePaused(Namespace, pipelineRolloutName)
+
+		document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
+		Eventually(func() bool {
+			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if isbCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+				return false
+			}
+			return true
+		}, testTimeout).Should(BeTrue())
+
+	}
+
+	if upgradeStrategy == config.PPNDStrategyID && dataLoss == false {
+		document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
+		verifyNotPausing := func() bool {
+			_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
+			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+				return false
+			}
+			if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+				return false
+			}
+			return true
+		}
+
+		Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+	}
+
+	verifyISBServiceSpec(Namespace, isbServiceRolloutName, f)
+
+	verifyISBSvcRolloutReady(isbServiceRolloutName)
+	verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+
+	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	verifyPipelineRunning(Namespace, pipelineRolloutName)
+
 }

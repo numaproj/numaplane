@@ -2,11 +2,13 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +18,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -80,7 +83,7 @@ func verifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
-func verifyPipelineRunning(namespace string, pipelineRolloutName string, numVertices int) {
+func verifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	document("Verifying that the Pipeline is running")
 	verifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -96,7 +99,9 @@ func verifyPipelineRunning(namespace string, pipelineRolloutName string, numVert
 	// check "vertex" Pods
 	pipeline, err := getPipeline(namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
-	verifyPodsRunning(namespace, numVertices, getVertexLabelSelector(pipeline.GetName()))
+	spec, err := getPipelineSpec(pipeline)
+	Expect(err).ShouldNot(HaveOccurred())
+	verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 
 }
@@ -332,4 +337,140 @@ func startPipelineRolloutWatches() {
 
 	wg.Add(1)
 	go watchVertices()
+}
+
+// shared functions
+
+// create a PipelineRollout of a given spec/name and make sure it's running
+func createPipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec) {
+
+	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec)
+	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying that the PipelineRollout was created")
+	Eventually(func() error {
+		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		return err
+	}, testTimeout, testPollingInterval).Should(Succeed())
+
+	document("Verifying that the Pipeline was created")
+	verifyPipelineSpec(namespace, name, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return len(spec.Vertices) == len(retrievedPipelineSpec.Vertices) // TODO: make less kludgey
+		//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
+	})
+
+	verifyPipelineRolloutDeployed(name)
+	verifyPipelineRolloutHealthy(name)
+	verifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+
+	verifyPipelineRunning(namespace, name)
+
+}
+
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+
+	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	pipelineRollout := &apiv1.PipelineRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "PipelineRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+		Spec: apiv1.PipelineRolloutSpec{
+			Pipeline: apiv1.Pipeline{
+				Spec: runtime.RawExtension{
+					Raw: pipelineSpecRaw,
+				},
+			},
+		},
+	}
+
+	return pipelineRollout
+
+}
+
+// delete a PipelineRollout and verify deletion
+func deletePipelineRollout(name string) {
+
+	document("Deleting PipelineRollout")
+	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying PipelineRollout deletion")
+	Eventually(func() bool {
+		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the PipelineRollout: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+
+	document("Verifying Pipeline deletion")
+	Eventually(func() bool {
+		list, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+		if len(list.Items) == 0 {
+			return true
+		}
+		return false
+	}).WithTimeout(testTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
+}
+
+// update PipelineRollout and verify correct process
+func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedPhase numaflowv1.PipelinePhase) {
+
+	document("Updating Pipeline spec in PipelineRollout")
+	rawSpec, err := json.Marshal(newSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	// update the PipelineRollout
+	updatePipelineRolloutInK8S(Namespace, name, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		rollout.Spec.Pipeline.Spec.Raw = rawSpec
+		return rollout, nil
+	})
+
+	if upgradeStrategy == config.PPNDStrategyID {
+
+		document("Verify that in-progress-strategy gets set to PPND")
+		verifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
+
+		verifyPipelinePaused(Namespace, name)
+
+	}
+
+	// wait for update to reconcile
+	time.Sleep(5 * time.Second)
+
+	document("Verifying Pipeline got updated")
+	numPipelineVertices := len(newSpec.Vertices)
+
+	// get Pipeline to check that spec has been updated to correct spec
+	verifyPipelineSpec(Namespace, name, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
+	})
+
+	verifyPipelineRolloutDeployed(name)
+	if expectedPhase == numaflowv1.PipelinePhaseRunning {
+		verifyPipelineRolloutHealthy(name)
+	}
+
+	verifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+
+	if expectedPhase == numaflowv1.PipelinePhasePaused {
+		verifyPipelinePaused(Namespace, name)
+	} else {
+		verifyPipelineRunning(Namespace, name)
+	}
+
 }

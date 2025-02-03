@@ -2,10 +2,13 @@ package e2e
 
 import (
 	"context"
+	"strings"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -116,4 +119,134 @@ func watchNumaflowControllerRollout() {
 		return Output{}
 	})
 
+}
+
+// shared functions
+
+// create NumaflowControllerRollout of any given version and be sure it's running
+func createNumaflowControllerRollout(version string) {
+
+	numaflowControllerRolloutSpec := createNumaflowControllerRolloutSpec(numaflowControllerRolloutName, Namespace, version)
+	_, err := numaflowControllerRolloutClient.Create(ctx, numaflowControllerRolloutSpec, metav1.CreateOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying that the NumaflowControllerRollout was created")
+	Eventually(func() error {
+		_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		return err
+	}, testTimeout, testPollingInterval).Should(Succeed())
+
+	verifyNumaflowControllerRolloutReady()
+
+	verifyNumaflowControllerExists(Namespace)
+
+}
+
+func createNumaflowControllerRolloutSpec(name, namespace, version string) *apiv1.NumaflowControllerRollout {
+
+	controllerRollout := &apiv1.NumaflowControllerRollout{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "numaplane.numaproj.io/v1alpha1",
+			Kind:       "NumaflowControllerRollout",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: apiv1.NumaflowControllerRolloutSpec{
+			Controller: apiv1.Controller{Version: version},
+		},
+	}
+
+	return controllerRollout
+
+}
+
+// delete NumaflowControllerRollout and verify deletion
+func deleteNumaflowControllerRollout() {
+	document("Deleting NumaflowControllerRollout")
+	err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	document("Verifying NumaflowControllerRollout deletion")
+	Eventually(func() bool {
+		_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the NumaflowControllerRollout: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+
+	document("Verifying Numaflow Controller deletion")
+	Eventually(func() bool {
+		_, err := kubeClient.AppsV1().Deployments(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the deployment: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+}
+
+func updateNumaflowControllerRollout(originalVersion, newVersion, pipelineRolloutName string, valid bool) {
+	// new NumaflowController spec
+	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
+		Controller: apiv1.Controller{Version: newVersion},
+	}
+
+	updateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+		rollout.Spec = updatedNumaflowControllerROSpec
+		return rollout, nil
+	})
+
+	// NOTE: we are only checking the "valid" case because in the "non-valid" case the pipeline pausing conditions on
+	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
+	if upgradeStrategy == config.PPNDStrategyID && valid {
+
+		document("Verify that in-progress-strategy gets set to PPND")
+		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
+		verifyPipelinePaused(Namespace, pipelineRolloutName)
+
+		document("Verify that the pipelines are unpaused by checking the PPND conditions on NumaflowController Rollout and PipelineRollout")
+		Eventually(func() bool {
+			ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
+			ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
+			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+			if ncCondStatus != metav1.ConditionTrue || plCondStatus != metav1.ConditionTrue {
+				return false
+			}
+			return true
+		}, testTimeout).Should(BeTrue())
+	}
+
+	var versionToCheck string
+	if valid {
+		versionToCheck = newVersion
+	} else {
+		versionToCheck = originalVersion
+	}
+	verifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+		colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+		return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+versionToCheck
+	})
+
+	if valid {
+		verifyNumaflowControllerRolloutReady()
+	} else {
+		// verify NumaflowControllerRollout ChildResourcesHealthy condition == false but NumaflowControllerRollout itself is marked "Deployed"
+		verifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
+			healthCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+			return rollout.Status.Phase == apiv1.PhaseDeployed && healthCondition != nil && healthCondition.Status == metav1.ConditionFalse && healthCondition.Reason == "Failed"
+		})
+	}
+
+	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	// need to track vertices of pipeline spec
+	verifyPipelineRunning(Namespace, pipelineRolloutName)
 }
