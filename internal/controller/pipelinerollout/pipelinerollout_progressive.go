@@ -243,20 +243,52 @@ func (r *PipelineRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredVal
 
 	numaLogger.Debug("restoring scale values back to desired values for the promoted child source vertices")
 
-	// TTODO: implement this, remember pipeline can have multiple source vertices
+	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
+	if promotedChildStatus == nil || promotedChildStatus.ScaleValues == nil {
+		return errors.New("unable to restore scale values for the promoted child source vertices because the rollout does not have progressiveStatus and/or promotedChildStatus set")
+	}
 
-	// promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
-	// if promotedChildStatus == nil || promotedChildStatus.ScaleValues == nil {
-	// 	return errors.New("unable to restore scale values for the promoted child source vertices because the rollout does not have progressiveStatus and/or promotedChildStatus set")
-	// }
+	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
+	}
 
-	// if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
-	// 	return err
-	// }
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
+			if err != nil {
+				return err
+			}
+			if !found {
+				continue
+			}
 
-	// if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin, "spec", "scale", "min"); err != nil {
-	// 	return err
-	// }
+			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return err
+			}
+			if !found {
+				return errors.New("a vertex must have a name")
+			}
+
+			if _, exists := promotedChildStatus.ScaleValues[vertexName]; !exists {
+				return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
+			}
+
+			if err := unstructured.SetNestedField(vertexAsMap, promotedChildStatus.ScaleValues[vertexName].DesiredMax, "scale", "max"); err != nil {
+				return err
+			}
+
+			if err := unstructured.SetNestedField(vertexAsMap, promotedChildStatus.ScaleValues[vertexName].DesiredMin, "scale", "min"); err != nil {
+				return err
+			}
+		}
+	}
+
+	err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
+	if err != nil {
+		return err
+	}
 
 	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("applied scale changes to promoted child definition")
 

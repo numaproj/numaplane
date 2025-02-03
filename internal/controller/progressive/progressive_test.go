@@ -51,6 +51,10 @@ func (fpc fakeProgressiveController) ScaleDownPromotedChildSourceVertices(ctx co
 	return nil, false, nil
 }
 
+func (fpc fakeProgressiveController) ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+	return nil
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

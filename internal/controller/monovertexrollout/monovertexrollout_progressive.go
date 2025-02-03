@@ -194,6 +194,10 @@ func (r *MonoVertexRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredV
 		return errors.New("unable to restore scale values for the promoted child source vertex because the rollout does not have progressiveStatus and/or promotedChildStatus set")
 	}
 
+	if _, exists := promotedChildStatus.ScaleValues[promotedChildDef.GetName()]; !exists {
+		return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", promotedChildDef.GetName())
+	}
+
 	if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
 		return err
 	}
