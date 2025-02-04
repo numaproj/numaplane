@@ -10,6 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -118,8 +119,8 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 		return nil, err
 	}
 
-	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, found: %s",
-		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, kubernetes.ExtractResourceNames(children))
+	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, upgrade state reason=%v, found: %s",
+		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, util.OptionalString(upgradeStateReason), kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
@@ -181,14 +182,12 @@ func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstruct
 		return nil, nil
 	} else {
 		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
+		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
+			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 		if !found {
-			numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", "nil").Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
-				childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 			upgradeState := common.UpgradeState(upgradeStateStr)
 			return &upgradeState, nil
 		} else {
-			numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", reasonStr).Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
-				childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 			upgradeState := common.UpgradeState(upgradeStateStr)
 			reason := common.UpgradeStateReason(reasonStr)
 			return &upgradeState, &reason

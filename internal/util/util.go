@@ -185,3 +185,16 @@ func ExtractPath(data any, path []string) (any, bool, error) {
 		return nil, false, fmt.Errorf("invalid type encountered: %s", v.Kind().String())
 	}
 }
+
+// take any pointer passed in and print "nil" if it's nil, and otherwise the value
+// (convenience function for logging)
+func OptionalString(ptr any) string {
+	val := reflect.ValueOf(ptr)
+	if val.Kind() != reflect.Ptr {
+		return ""
+	}
+	if val.IsNil() {
+		return "nil"
+	}
+	return fmt.Sprintf("%v", val.Elem())
+}
