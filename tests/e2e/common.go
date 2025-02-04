@@ -380,7 +380,7 @@ func closeAllFiles() error {
 
 func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.Unstructured, error) {
 
-	label := fmt.Sprintf("%s=%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, rolloutName)
+	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, rolloutName)
 
 	unstructList, err := dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
 	if err != nil {
