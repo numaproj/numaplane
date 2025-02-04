@@ -369,6 +369,7 @@ func writeToFile(resource Output) error {
 
 func closeAllFiles() error {
 	for _, file := range openFiles {
+		file.Sync() // flush file to disk
 		err := file.Close()
 		if err != nil {
 			return err
