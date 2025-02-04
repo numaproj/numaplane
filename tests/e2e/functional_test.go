@@ -384,7 +384,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			}
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
-		}, 15*time.Second, testPollingInterval).Should(BeTrue())
+		}, 10*time.Second, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
@@ -419,7 +419,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			}
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
 				(retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused)
-		}, 15*time.Second, testPollingInterval).Should(BeTrue())
+		}, 10*time.Second, testPollingInterval).Should(BeTrue())
 
 		verifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 

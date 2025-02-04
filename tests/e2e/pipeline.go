@@ -65,7 +65,7 @@ func verifyPipelineStatusConsistently(namespace string, pipelineRolloutName stri
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, 30*time.Second, testPollingInterval).Should(BeTrue())
+	}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
 }
 

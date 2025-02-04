@@ -392,7 +392,7 @@ func updateISBServiceRollout(
 				return true
 			}
 
-			Consistently(verifyNotPausing, 30*time.Second).Should(BeTrue())
+			Consistently(verifyNotPausing, 15*time.Second).Should(BeTrue())
 		}
 	}
 
