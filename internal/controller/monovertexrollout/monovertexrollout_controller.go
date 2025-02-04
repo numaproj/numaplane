@@ -213,7 +213,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	}
 
 	// check if there's a promoted monovertex yet
-	promotedMonovertices, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, false, r.client)
+	promotedMonovertices, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted monovertex: %v", err)
 	}
@@ -529,7 +529,7 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}

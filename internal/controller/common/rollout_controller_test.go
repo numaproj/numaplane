@@ -92,7 +92,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			mostCurrentChild, err := FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, checkLive, client)
+			mostCurrentChild, err := FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, checkLive, client)
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.Nil(t, mostCurrentChild)

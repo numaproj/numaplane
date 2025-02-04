@@ -66,38 +66,54 @@ func getRecyclableObjects(
 	)
 }
 
-func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
+// Find the children of a given Rollout of specified UpgradeState (plus optional UpgradeStateReason)
+func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
 	childGVR := rolloutObject.GetChildGVR()
-
-	labelSelector := fmt.Sprintf(
-		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
-		common.LabelKeyUpgradeState, string(upgradeState))
 
 	var children *unstructured.UnstructuredList
 	var err error
 	if checkLive {
+		var labelSelector string
+		if upgradeStateReason == nil {
+			labelSelector = fmt.Sprintf(
+				"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState, string(upgradeState))
+		} else {
+			labelSelector = fmt.Sprintf(
+				"%s=%s,%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState, string(upgradeState), common.LabelKeyUpgradeStateReason, string(*upgradeStateReason))
+		}
 		children, err = kubernetes.ListLiveResource(
 			ctx, childGVR.Group, childGVR.Version, childGVR.Resource,
 			rolloutObject.GetRolloutObjectMeta().Namespace, labelSelector, "")
 	} else {
-		children, err = kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(), rolloutObject.GetRolloutObjectMeta().GetNamespace(),
-			client.MatchingLabels{
+		var labelMatch client.MatchingLabels
+		if upgradeStateReason == nil {
+			labelMatch = client.MatchingLabels{
 				common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
 				common.LabelKeyUpgradeState:  string(upgradeState),
-			},
-		)
+			}
+		} else {
+			labelMatch = client.MatchingLabels{
+				common.LabelKeyParentRollout:      rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState:       string(upgradeState),
+				common.LabelKeyUpgradeStateReason: string(*upgradeStateReason),
+			}
+
+		}
+		children, err = kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(), rolloutObject.GetRolloutObjectMeta().GetNamespace(), labelMatch)
 	}
 
 	return children, err
 }
 
-// find the most current child of a Rollout
+// find the most current child of a Rollout (of specified UpgradeState, plus optional UpgradeStateReason)
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 // if we do see older ones, recycle them
-func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
+func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	children, err := FindChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
+	children, err := FindChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, upgradeStateReason, checkLive, c)
 	if err != nil {
 		return nil, err
 	}
@@ -210,12 +226,12 @@ func getChildIndex(rolloutName string, childName string) (int, error) {
 	return childIndex, nil
 }
 
-// get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState"
+// get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
 // if none is found, create a new one
 // if one is found, create a new one if "useExistingChild=false", else use existing one
-func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller RolloutController, upgradeState common.UpgradeState, c client.Client, useExistingChild bool) (string, error) {
+func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller RolloutController, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, c client.Client, useExistingChild bool) (string, error) {
 
-	existingChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, true, c) // if for some reason there's more than 1
+	existingChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, upgradeStateReason, true, c) // if for some reason there's more than 1
 	if err != nil {
 		return "", err
 	}

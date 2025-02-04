@@ -361,7 +361,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	}
 
 	// check if there's a promoted pipeline yet
-	promotedPipelines, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, false, r.client)
+	promotedPipelines, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
 		return 0, nil, fmt.Errorf("error looking for promoted pipeline: %v", err)
 	}
@@ -629,7 +629,7 @@ func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, p
 	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
 	if existingPipelineDef == nil {
 		// determine name of the promoted Pipeline
-		pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+		pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 		if err != nil {
 			return fmt.Errorf("Unable to process pipeline status: err=%s", err)
 		}
@@ -856,7 +856,7 @@ func (r *PipelineRolloutReconciler) makeTargetPipelineDefinition(
 	metadata.Labels[common.LabelKeyISBServiceChildNameForPipeline] = isbsvc.GetName()
 
 	// determine name of the Pipeline
-	pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1056,7 +1056,7 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
-	isbsvc, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, upgradeState, false, r.client)
+	isbsvc, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbsvcRollout, upgradeState, nil, false, r.client)
 	if err != nil {
 		return nil, err
 	}
@@ -1070,7 +1070,7 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
-	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, false, r.client)
+	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, nil, false, r.client)
 }
 
 func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {

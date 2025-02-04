@@ -227,15 +227,17 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	}
 
 	// check if there's a promoted isbsvc yet
-	promotedISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, false, r.client)
+	promotedISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
 
 	if promotedISBSvcs == nil || len(promotedISBSvcs.Items) == 0 {
 
+		deleteRecreateLabel := common.LabelValueDeleteRecreateChild
+
 		// first check if there's a "recyclable" isbsvc; if there is, it could be in the middle of a delete/recreate process, and we don't want to create a new one until it's been deleted
-		recyclableISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, false, r.client)
+		recyclableISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, &deleteRecreateLabel, false, r.client)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
 		}
@@ -776,7 +778,7 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	isbServiceRollout *apiv1.ISBServiceRollout,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
-	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}
