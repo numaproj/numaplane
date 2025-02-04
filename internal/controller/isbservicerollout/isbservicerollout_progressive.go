@@ -10,6 +10,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
@@ -130,5 +131,5 @@ func (r *ISBServiceRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredV
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
-	return nil
+	return errors.New("not implemented for ISBServiceRollout")
 }

@@ -12,6 +12,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -93,7 +94,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	numaLogger.Debug("started promoted child source vertex scaling down process")
 
-	promotedChild, err := progressive.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
+	promotedChild, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
 	if err != nil {
 		return nil, false, fmt.Errorf("error while looking for most current promoted child: %w", err)
 	}
