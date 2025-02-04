@@ -375,6 +375,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	var existingPipelineDef *unstructured.Unstructured
 
 	if newPipelineDef == nil {
+		// we couldn't create the Pipeline definition: we need to check again later
 		requeueDelay = common.DefaultRequeueDelay
 	} else {
 
@@ -1087,8 +1088,8 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// first check to see if there are any recyclableISBServices that are marked "recyclable"
-	// our pipelines need to be marked "recyclable" if so
+	// first check to see if there are any isbservices that are marked "recyclable"
+	// our pipelines need to be marked "recyclable" if they are using one of those
 	recyclableISBServices, err := r.getISBServicesByUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradeRecyclable)
 	if err != nil {
 		return false, fmt.Errorf("error getting isbservices of type recyclable: %s", err.Error())
