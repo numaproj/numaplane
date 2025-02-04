@@ -245,7 +245,8 @@ func processUpgradingChild(
 			}
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, common.LabelValueProgressiveFailure, existingUpgradingChildDef)
+			reasonFailure := common.LabelValueProgressiveFailure
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -259,12 +260,13 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, common.LabelValueProgressiveSuccess, existingUpgradingChildDef)
+		reasonSuccess := common.LabelValueProgressiveSuccess
+		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
 
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, common.LabelValueProgressiveSuccess, existingPromotedChildDef)
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}

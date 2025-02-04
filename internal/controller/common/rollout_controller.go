@@ -149,7 +149,8 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 		for _, recyclableChild := range recycleList {
 			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
-			_ = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, common.LabelValuePurgeOld, recyclableChild)
+			purgeOld := common.LabelValuePurgeOld
+			_ = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
 		}
 		return mostCurrentChild, nil
 	} else if len(children.Items) == 1 {
@@ -160,16 +161,21 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
-func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
+func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 
-	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", upgradeStateReason).Debug("patching upgradeState and upgradeStateReason to %s:%s%s",
+	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debug("patching upgradeState and upgradeStateReason to %s:%s%s",
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+	var patchJson string
 	labels := childObject.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(upgradeState)
-	labels[common.LabelKeyUpgradeStateReason] = string(upgradeStateReason)
+	if upgradeStateReason != nil {
+		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
+		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `","` + common.LabelKeyUpgradeStateReason + `":"` + string(*upgradeStateReason) + `"}}}`
+	} else {
+		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
+	}
 	childObject.SetLabels(labels)
-	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `","` + common.LabelKeyUpgradeStateReason + `":"` + string(upgradeStateReason) + `"}}}`
 	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
 }
 

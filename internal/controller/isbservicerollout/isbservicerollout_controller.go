@@ -463,7 +463,8 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured, needsRecreate bool) error {
 	if needsRecreate {
 		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
-		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, common.LabelValueDeleteRecreateChild, newISBServiceDef)
+		reasonRecreate := common.LabelValueDeleteRecreateChild
+		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &reasonRecreate, newISBServiceDef)
 		if err != nil {
 			return err
 		}
