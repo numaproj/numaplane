@@ -343,7 +343,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 	}
 	// clean up recyclable monovertices
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
 	if err != nil {
 		return 0, err
 	}
@@ -510,7 +510,7 @@ func (r *MonoVertexRolloutReconciler) makePromotedMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := progressive.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -558,6 +558,7 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+// This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove "replicas" field from comparison to test for equality
@@ -580,4 +581,51 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 
+}
+
+func (r *MonoVertexRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	if monoVertexRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *monoVertexRollout.Status.NameCount, true
+	}
+}
+
+func (r *MonoVertexRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	monoVertexRollout.Status.NameCount = &nameCount
+	return r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
+}
+
+// IncrementChildCount increments the child count for the Rollout and returns the count to use
+// This implements a function of the RolloutController interface
+func (r *MonoVertexRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+// Recycle deletes child; returns true if it was in fact deleted
+// This implements a function of the RolloutController interface
+func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
+	monoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	err := kubernetes.DeleteResource(ctx, c, monoVertexDef)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

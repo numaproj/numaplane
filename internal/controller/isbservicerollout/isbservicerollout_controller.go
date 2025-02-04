@@ -407,7 +407,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		return 0, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
 	// clean up recyclable interstepbufferservices
-	allDeleted, err := progressive.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
 	if err != nil {
 		return 0, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
 	}
@@ -717,7 +717,7 @@ func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
 	isbServiceRollout *apiv1.ISBServiceRollout,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
-	isbsvcName, err := progressive.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
 	if err != nil {
 		return nil, err
 	}
@@ -777,6 +777,7 @@ func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *u
 }
 
 // ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
+// This implements a function of the progressiveController interface
 func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -789,4 +790,63 @@ func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+}
+
+func (r *ISBServiceRolloutReconciler) getCurrentChildCount(rolloutObject ctlrcommon.RolloutObject) (int32, bool) {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	if isbsvcRollout.Status.NameCount == nil {
+		return int32(0), false
+	} else {
+		return *isbsvcRollout.Status.NameCount, true
+	}
+}
+
+func (r *ISBServiceRolloutReconciler) updateCurrentChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, nameCount int32) error {
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	isbsvcRollout.Status.NameCount = &nameCount
+	return r.updateISBServiceRolloutStatus(ctx, isbsvcRollout)
+}
+
+// IncrementChildCount updates the count of children for the Resource in Kubernetes and returns the index that should be used for the next child
+// This implements a function of the RolloutController interface
+func (r *ISBServiceRolloutReconciler) IncrementChildCount(ctx context.Context, rolloutObject ctlrcommon.RolloutObject) (int32, error) {
+	currentNameCount, found := r.getCurrentChildCount(rolloutObject)
+	if !found {
+		currentNameCount = int32(0)
+		err := r.updateCurrentChildCount(ctx, rolloutObject, int32(0))
+		if err != nil {
+			return int32(0), err
+		}
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	if err != nil {
+		return int32(0), err
+	}
+	return currentNameCount, nil
+}
+
+// Recycle deletes child; returns true if it was in fact deleted
+// This implements a function of the RolloutController interface
+func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstructured.Unstructured, c client.Client) (bool, error) {
+	numaLogger := logger.FromContext(ctx).WithValues("isbsvc", fmt.Sprintf("%s/%s", isbsvc.GetNamespace(), isbsvc.GetName()))
+
+	// For InterstepBufferService, the main thing is that we don't want to delete it until we can be sure there are no
+	// Pipelines using it
+
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return false, fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
+	}
+	if pipelines != nil && len(pipelines.Items) > 0 {
+		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
+		return false, nil
+	}
+	// okay to delete now
+	numaLogger.Debug("deleting isbsvc")
+	err = kubernetes.DeleteResource(ctx, c, isbsvc)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
