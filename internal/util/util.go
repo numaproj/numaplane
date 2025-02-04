@@ -190,7 +190,7 @@ func ExtractPath(data any, path []string) (any, bool, error) {
 // (convenience function for logging)
 func OptionalString(ptr any) string {
 	val := reflect.ValueOf(ptr)
-	if val.Kind() != reflect.Ptr {
+	if val.Kind() != reflect.Ptr { // safely handle it if someone passes in a non-pointer
 		return ""
 	}
 	if val.IsNil() {
