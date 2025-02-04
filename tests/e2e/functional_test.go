@@ -155,6 +155,22 @@ var (
 		},
 	}
 
+	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
+	ISBServiceSpecRecreateField = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: updatedJetstreamVersion,
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &revisedVolSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+				},
+			},
+		},
+	}
+
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Replicas: ptr.To(int32(1)),
@@ -461,6 +477,14 @@ var _ = Describe("Functional e2e", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		}, false, false)
+
+	})
+
+	It("Should update the child ISBService updating a recreate field", func() {
+
+		updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
+		}, false, true)
 
 	})
 
