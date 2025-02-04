@@ -412,13 +412,14 @@ func updateISBServiceRollout(
 	newPipelineName, err := getPipelineName(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	document("verifying new isbservice name and new pipeline name are correct")
 	if recreateFieldChanged || upgradeStrategy == config.ProgressiveStrategyID {
 		// make sure the names of isbsvc and pipeline have changed
+		document(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineName))
 		Expect(originalISBServiceName != newISBServiceName).To(BeTrue())
 		Expect(originalPipelineName != newPipelineName).To(BeTrue())
 	} else {
 		// make sure the names of isbsvc and pipeline have not changed
+		document(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineName))
 		Expect(originalISBServiceName == newISBServiceName).To(BeTrue())
 		Expect(originalPipelineName == newPipelineName).To(BeTrue())
 	}
