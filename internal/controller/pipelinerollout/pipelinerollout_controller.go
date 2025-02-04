@@ -374,7 +374,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	var existingPipelineDef *unstructured.Unstructured
 
-	if newPipelineDef != nil {
+	if newPipelineDef == nil {
+		requeueDelay = common.DefaultRequeueDelay
+	} else {
 
 		if promotedPipelines == nil || len(promotedPipelines.Items) == 0 {
 

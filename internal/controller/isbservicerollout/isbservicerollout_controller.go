@@ -259,6 +259,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 				}
 
+				// if there are any PipelineRollouts using this ISBServiceRollout, enqueue them for reconciliation
+				err := r.enqueueAllPipelineROsForISBServiceRO(ctx, isbServiceRollout)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("error enqueuing PipelineRollouts following creation of InterstepBufferService %s/%s: %v", newISBServiceDef.GetNamespace(), newISBServiceDef.GetName(), err)
+				}
+
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 			}
@@ -462,7 +468,7 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 			return err
 		}
 		isbServiceRollout.Status.MarkPending()
-		err = r.enqueueAllPipelinesForChildISBSvc(ctx, newISBServiceDef)
+		err = r.enqueueAllPipelineROsForChildISBSvc(ctx, newISBServiceDef)
 		if err != nil {
 			return fmt.Errorf("Failed to enqueue pipelines after marking isbservice as recyclable: %s", err.Error())
 		}
@@ -571,7 +577,7 @@ func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context
 	return pipelineRolloutsForISBSvc, nil
 }
 
-func (r *ISBServiceRolloutReconciler) enqueueAllPipelinesForChildISBSvc(ctx context.Context, isbsvc *unstructured.Unstructured) error {
+func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForChildISBSvc(ctx context.Context, isbsvc *unstructured.Unstructured) error {
 	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
 	if err != nil {
 		return fmt.Errorf("failed to enqueue pipelines - failed to list them: %s", err.Error())
@@ -582,6 +588,16 @@ func (r *ISBServiceRolloutReconciler) enqueueAllPipelinesForChildISBSvc(ctx cont
 			return fmt.Errorf("failed to enqueue pipelines - error getting PipelineRolloutName: %w", err)
 		}
 		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.GetNamespace(), Name: pipelineRollout})
+	}
+	return nil
+}
+func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForISBServiceRO(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	pipelineRollouts, err := r.getPipelineRolloutList(ctx, isbServiceRollout.GetNamespace(), isbServiceRollout.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to enqueue PipelineRollouts for ISBServiceRollout %s/%s: %s", isbServiceRollout.GetNamespace(), isbServiceRollout.GetName(), err.Error())
+	}
+	for _, pipelineRollout := range pipelineRollouts {
+		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()})
 	}
 	return nil
 }
