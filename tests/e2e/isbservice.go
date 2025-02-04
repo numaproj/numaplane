@@ -21,6 +21,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -34,8 +35,8 @@ func getGVRForISBService() schema.GroupVersionResource {
 	}
 }
 
-func getISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(getGVRForISBService(), namespace, isbServiceRolloutName)
+func getpromotedISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
+	return getChildResource(getGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
 }
 
 // Get ISBServiceSpec from Unstructured type
@@ -47,7 +48,7 @@ func getISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBuffer
 }
 
 func getISBServiceName(namespace, isbServiceRolloutName string) (string, error) {
-	isbsvc, err := getISBService(namespace, isbServiceRolloutName)
+	isbsvc, err := getpromotedISBService(namespace, isbServiceRolloutName)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +60,7 @@ func verifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func
 	document("verifying ISBService Spec")
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
 	Eventually(func() bool {
-		unstruct, err := getISBService(namespace, isbServiceRolloutName)
+		unstruct, err := getpromotedISBService(namespace, isbServiceRolloutName)
 		if err != nil {
 			return false
 		}
@@ -105,7 +106,7 @@ func verifyISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize 
 
 	document("Verifying that the ISBService exists")
 	Eventually(func() error {
-		unstruct, err := getISBService(namespace, isbServiceRolloutName)
+		unstruct, err := getpromotedISBService(namespace, isbServiceRolloutName)
 		if err == nil {
 			isbsvcName = unstruct.GetName()
 		}
@@ -404,12 +405,15 @@ func updateISBServiceRollout(
 	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	verifyPipelineRunning(Namespace, pipelineRolloutName)
 
+	document("getting new isbservice name")
 	newISBServiceName, err := getISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
+	document("getting new pipeline name")
 	newPipelineName, err := getPipelineName(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
+	document("verifying new isbservice name and new pipeline name are correct")
 	if recreateFieldChanged {
 		// make sure the names of isbsvc and pipeline have changed
 		Expect(originalISBServiceName != newISBServiceName).To(BeTrue())

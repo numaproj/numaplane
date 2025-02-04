@@ -18,13 +18,14 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 func getPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(getGVRForPipeline(), namespace, pipelineRolloutName)
+	return getChildResource(getGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradePromoted)
 }
 
 func getPipelineName(namespace, pipelineRolloutName string) (string, error) {
