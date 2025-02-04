@@ -119,6 +119,9 @@ const (
 
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"
+
+	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
+	NumaplaneSystemNamespace = "numaplane-system"
 )
 
 var (
