@@ -117,14 +117,14 @@ type UpgradingChildStatus struct {
 	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
-// ScaleValues stores the desired, scaled, and actual scale max values of a pipeline or monovertext vertex
+// ScaleValues stores the desired min and max, scaleTo, and actual scale values of a pipeline or monovertext vertex
 type ScaleValues struct {
 	// DesiredMin is the min scale value of the original child spec
 	DesiredMin int64 `json:"desiredMin"`
 	// DesiredMax is the max scale value of the original child spec
 	DesiredMax int64 `json:"desiredMax"`
-	// Scaled is the max scale value calculated by cutting in half the Desired value
-	Scaled int64 `json:"scaled"`
+	// ScaleTo indicates how many pods to scale down to and it is calculated by getting the floor of the desiredMax value divided by 2
+	ScaleTo int64 `json:"scaleTo"`
 	// Actual indicates how many pods are actually running for the vertex
 	Actual int64 `json:"actual"`
 }
@@ -303,7 +303,7 @@ func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) boo
 }
 
 // MarkAllSourceVerticesScaledDown checks if all source vertices in the PromotedChildStatus
-// have been scaled down by comparing their Actual and Scaled scale values.
+// have been scaled down by comparing their Actual and ScaleTo scale values.
 // It updates the AllSourceVerticesScaledDown field to true if all vertices
 // are scaled down, otherwise sets it to false.
 func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
@@ -313,7 +313,7 @@ func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
 
 	allScaledDown := true
 	for _, sv := range pcs.ScaleValues {
-		if sv.Actual > sv.Scaled {
+		if sv.Actual > sv.ScaleTo {
 			allScaledDown = false
 			break
 		}

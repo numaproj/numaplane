@@ -163,7 +163,7 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 			// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.
-			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.Scaled != 0 {
+			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.ScaleTo != 0 {
 				vertexScaleValues.Actual = actualPodsCount
 				scaleValuesMap[vertexName] = vertexScaleValues
 
@@ -200,7 +200,7 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
 				DesiredMin: originalMin,
 				DesiredMax: originalMax,
-				Scaled:     scaleValue,
+				ScaleTo:    scaleValue,
 				Actual:     actualPodsCount,
 			}
 		}
