@@ -29,6 +29,7 @@ import (
 	clientgo "k8s.io/client-go/kubernetes"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -378,9 +379,9 @@ func closeAllFiles() error {
 	return nil
 }
 
-func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.Unstructured, error) {
+func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
 
-	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, rolloutName)
+	label := fmt.Sprintf("%s=%s,%s=%s", UpgradeStateLabelSelector, upgradeState, ParentRolloutLabel, rolloutName)
 
 	unstructList, err := dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
 	if err != nil {

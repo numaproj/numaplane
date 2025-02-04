@@ -18,6 +18,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -32,7 +33,7 @@ func getGVRForISBService() schema.GroupVersionResource {
 }
 
 func getISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(getGVRForISBService(), namespace, isbServiceRolloutName)
+	return getChildResource(getGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
 }
 
 // Get ISBServiceSpec from Unstructured type
