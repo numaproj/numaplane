@@ -51,8 +51,12 @@ func Test_watchConfigMaps(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Validate the controller definition config is set correctly
-	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
+	definition := config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetRolloutConfig()
 	assert.Len(t, definition, 2)
+
+	// validate namespace based controller definition config
+	_, exists := definition["default/1.2.0"]
+	assert.True(t, exists)
 
 	// Delete the ConfigMap object from the fake clientset
 	err = clientSet.CoreV1().ConfigMaps("default").Delete(ctx, configMap.Name, metav1.DeleteOptions{})
@@ -62,7 +66,7 @@ func Test_watchConfigMaps(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Validate the controller definition config has been removed
-	definition = config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetNumaflowControllerDefinitionsConfig()
+	definition = config.GetConfigManagerInstance().GetControllerDefinitionsMgr().GetRolloutConfig()
 	assert.Len(t, definition, 0)
 
 	// === USDE Config Test =====================================
