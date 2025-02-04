@@ -106,10 +106,10 @@ const (
 	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child succeeding
 	LabelValueProgressiveSuccess UpgradeStateReason = "progressive-success"
 
-	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child failing
+	// LabelValueProgressiveFailure is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child failing
 	LabelValueProgressiveFailure UpgradeStateReason = "progressive-failure"
 
-	// LabelValueProgressiveSuccess is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to a child being deleted and recreated
+	// LabelValueDeleteRecreateChild is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to a child being deleted and recreated
 	LabelValueDeleteRecreateChild UpgradeStateReason = "delete-recreate"
 
 	// LabelValuePurgeOld is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" if there's a strange case in which there are multiple of a given
