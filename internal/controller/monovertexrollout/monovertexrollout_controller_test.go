@@ -340,6 +340,11 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultFailure,
 			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+				ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {DesiredMin: 1, DesiredMax: 1}},
+			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
 

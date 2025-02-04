@@ -955,6 +955,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultFailure,
 			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
+			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
 
@@ -1003,6 +1008,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultFailure,
+			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
