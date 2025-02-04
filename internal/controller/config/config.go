@@ -28,6 +28,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -49,6 +50,7 @@ type ConfigManager struct {
 }
 
 type NumaflowControllerDefinitionsManager struct {
+	// rolloutConfig is a map of controller version to its full spec where key is namespace/version
 	rolloutConfig map[string]string
 	lock          *sync.RWMutex
 }
@@ -120,30 +122,50 @@ func (cm *ConfigManager) GetConfig() (GlobalConfig, error) {
 	return *config, nil
 }
 
-func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+// GetNumaflowControllerDefinitionsConfig looks up the controller definition from user namespace, if not found then use from global namespace.
+func (cm *NumaflowControllerDefinitionsManager) GetNumaflowControllerDefinitionsConfig(namespace, version string) (string, error) {
+	definition := cm.GetRolloutConfig()
+	key := fmt.Sprintf("%s/%s", namespace, version)
+
+	manifest, manifestExists := definition[key]
+	if !manifestExists {
+		key = fmt.Sprintf("%s/%s", common.NumaplaneSystemNamespace, version)
+		manifest, manifestExists = definition[key]
+		if !manifestExists {
+			return "", fmt.Errorf("no controller definition found for namespace/version %s/%s", namespace, version)
+		}
+	}
+
+	return manifest, nil
+}
+
+func (cm *NumaflowControllerDefinitionsManager) UpdateNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig, namespace string) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
-	// Add or update the controller definition config based on a version
+	// Add or update the controller definition config based on a version and namespace as key
 	for _, controller := range config.ControllerDefinitions {
-		cm.rolloutConfig[controller.Version] = controller.FullSpec
+		key := fmt.Sprintf("%s/%s", namespace, controller.Version)
+		cm.rolloutConfig[key] = controller.FullSpec
 
 		log.Debug().Msg(fmt.Sprintf("Added/Updated Controller definition Config, version: %s", config)) // due to cyclical dependency, we can't call logger
 	}
 }
 
-func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig) {
+func (cm *NumaflowControllerDefinitionsManager) RemoveNumaflowControllerDefinitionConfig(config NumaflowControllerDefinitionConfig, namespace string) {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
+	// Remove the controller definition config based on a version and namespace as key
 	for _, controller := range config.ControllerDefinitions {
-		delete(cm.rolloutConfig, controller.Version)
+		key := fmt.Sprintf("%s/%s", namespace, controller.Version)
+		delete(cm.rolloutConfig, key)
 
 		log.Debug().Msg(fmt.Sprintf("Removed Controller definition Config, version: %s", controller.Version)) // due to cyclical dependency, we can't call logger
 	}
 }
 
-func (cm *NumaflowControllerDefinitionsManager) GetNumaflowControllerDefinitionsConfig() map[string]string {
+func (cm *NumaflowControllerDefinitionsManager) GetRolloutConfig() map[string]string {
 	cm.lock.Lock()
 	defer cm.lock.Unlock()
 
