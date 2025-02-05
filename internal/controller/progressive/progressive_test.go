@@ -75,6 +75,8 @@ func Test_processUpgradingChild(t *testing.T) {
 	_, _, assessmentInterval, err := globalConfig.GetChildStatusAssessmentSchedule()
 	assert.NoError(t, err)
 
+	defaultExistingPromotedChildDef := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}}
+
 	testCases := []struct {
 		name                      string
 		liveRolloutObject         ctlrcommon.RolloutObject
@@ -128,7 +130,10 @@ func Test_processUpgradingChild(t *testing.T) {
 					AssessmentResult:   apiv1.AssessmentResultFailure,
 					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				},
-				&apiv1.PromotedChildStatus{},
+				&apiv1.PromotedChildStatus{
+					Name:                         defaultExistingPromotedChildDef.GetName(),
+					ScaleValuesRestoredToDesired: true,
+				},
 			),
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-failure"}}},
 			expectedDone:              false,
@@ -141,7 +146,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, nil, tc.existingUpgradingChildDef, false, client)
+				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, false, client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)

@@ -363,38 +363,37 @@ func scaleDownPromotedChild(
 		return false, nil
 	}
 
-	if !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
-
-		// ScaleDownPromotedChildSourceVertices either updates the existingPromotedChild to scale down the source vertices pods or
-		// retrieves the currently running pods to update the scaleValuesMap used on the rollout status.
-		// This serves to make sure that the pods for each vertex have been really scaled down before proceeding with the progressive update.
-		scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, liveRolloutObject, existingPromotedChild, c)
-		if err != nil {
-			return false, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
-		}
-
-		if promotedChildNeedsUpdate {
-			if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
-				return false, fmt.Errorf("error scaling down the existing promoted child: %w", err)
-			}
-		}
-
-		if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
-			rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
-		}
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.Name = existingPromotedChild.GetName()
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = scaleValuesMap
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDown()
-
-		// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = false
-
-		// Return that scaling down was performed
-		return true, nil
+	if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
+		// Return that scaling down was NOT performed
+		return false, nil
 	}
 
-	// Return that scaling down was NOT performed
-	return false, nil
+	// ScaleDownPromotedChildSourceVertices either updates the existingPromotedChild to scale down the source vertices pods or
+	// retrieves the currently running pods to update the scaleValuesMap used on the rollout status.
+	// This serves to make sure that the pods for each vertex have been really scaled down before proceeding with the progressive update.
+	scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, liveRolloutObject, existingPromotedChild, c)
+	if err != nil {
+		return false, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
+	}
+
+	if promotedChildNeedsUpdate {
+		if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+			return false, fmt.Errorf("error scaling down the existing promoted child: %w", err)
+		}
+	}
+
+	if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
+	}
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.Name = existingPromotedChild.GetName()
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = scaleValuesMap
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDown()
+
+	// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = false
+
+	// Return that scaling down was performed
+	return true, nil
 }
 
 /*
@@ -427,26 +426,24 @@ func scaleUpPromotedChild(
 		return false, nil
 	}
 
-	// In case of failure and if not scaled back yet, scale the promoted rollout child back to its desired scale min and max values stored in the rollout progressive status
-	if existingPromotedChild != nil && !liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreScaleValuesRestoredToDesired(existingPromotedChild.GetName()) {
-
-		if err := controller.ScalePromotedChildSourceVerticesToDesiredValues(ctx, liveRolloutObject, existingPromotedChild, c); err != nil {
-			return false, err
-		}
-
-		if err := kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
-			return false, fmt.Errorf("error scaling back to desired min and max values the existing promoted child: %w", err)
-		}
-
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = true
-
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AllSourceVerticesScaledDown = false
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = nil
-
-		// Return that scaling up was performed
-		return true, nil
+	if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreScaleValuesRestoredToDesired(existingPromotedChild.GetName()) {
+		// Return that scaling up was NOT performed
+		return false, nil
 	}
 
-	// Return that scaling up was NOT performed
-	return false, nil
+	if err := controller.ScalePromotedChildSourceVerticesToDesiredValues(ctx, liveRolloutObject, existingPromotedChild, c); err != nil {
+		return false, err
+	}
+
+	if err := kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+		return false, fmt.Errorf("error scaling back to desired min and max values the existing promoted child: %w", err)
+	}
+
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = true
+
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AllSourceVerticesScaledDown = false
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = nil
+
+	// Return that scaling up was performed
+	return true, nil
 }
