@@ -534,7 +534,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			return 0, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
 		}
 
-		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, livePipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, false, r, r.client)
 		if err != nil {
 			return 0, err
 		}
@@ -546,6 +546,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+			pipelineRollout.Status.ProgressiveStatus.PromotedChildStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}

@@ -46,6 +46,12 @@ type progressiveController interface {
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
+
+	// ScaleDownPromotedChildSourceVertices scales down by half the promoted child source vertices pods
+	ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error)
+
+	// ScalePromotedChildSourceVerticesToDesiredValues scales back up to the desired scale values the promoted child source vertices pods
+	ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // return:
@@ -59,6 +65,7 @@ func ProcessResource(
 	liveRolloutObject ctlrcommon.RolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
+	skipPromotedChildSourceVerticesScaling bool,
 	controller progressiveController,
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
@@ -79,6 +86,15 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
+			// Scale down the promoted child first
+			scaledDown, err := scaleDownPromotedChild(ctx, rolloutObject, liveRolloutObject, existingPromotedChild, skipPromotedChildSourceVerticesScaling, controller, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if scaledDown {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
+
 			// create object as it doesn't exist
 			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
@@ -102,7 +118,7 @@ func ProcessResource(
 		return false, false, 0, err
 	}
 
-	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, skipPromotedChildSourceVerticesScaling, c)
 	if err != nil {
 		return false, newChild, 0, err
 	}
@@ -155,6 +171,7 @@ func processUpgradingChild(
 	liveRolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	skipPromotedChildSourceVerticesScaling bool,
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -179,7 +196,7 @@ func processUpgradingChild(
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
 
-		childStatus = &apiv1.ChildStatus{
+		childStatus = &apiv1.UpgradingChildStatus{
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,
 		}
@@ -238,6 +255,14 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
+			scaledDown, err := scaleDownPromotedChild(ctx, rolloutObject, liveRolloutObject, existingPromotedChildDef, skipPromotedChildSourceVerticesScaling, controller, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if scaledDown {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
+
 			// create a definition for the "upgrading" child which has a new name (the definition created above had the previous child's name which was necessary for comparison)
 			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
@@ -252,6 +277,14 @@ func processUpgradingChild(
 
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
+		} else {
+			scaledUp, err := scaleUpPromotedChild(ctx, rolloutObject, liveRolloutObject, existingPromotedChildDef, skipPromotedChildSourceVerticesScaling, controller, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if scaledUp {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
 		}
 
 		return false, false, 0, nil
@@ -295,4 +328,122 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 		}
 	}
 	return true
+}
+
+/*
+scaleDownPromotedChild attempts to scale down the source vertices of a promoted child.
+// It checks if scaling is required based on the rollout
+status and performs the scaling operation if necessary. The function updates the rollout
+status with the new scale values and returns whether scaling was performed.
+
+Parameters:
+  - ctx: The context for managing request-scoped values, cancellation, and timeouts.
+  - rolloutObject: The rollout object containing the current rollout status.
+  - liveRolloutObject: The live rollout object representing the current state.
+  - existingPromotedChild: The unstructured object of the promoted child to be scaled down.
+  - skipPromotedChildSourceVerticesScaling: A flag to skip scaling if set to true.
+  - controller: The progressive controller handling the scaling logic.
+  - c: The Kubernetes client for interacting with the cluster.
+
+Returns:
+  - A boolean indicating if scaling was performed.
+  - An error if any issues occur during the scaling process.
+*/
+func scaleDownPromotedChild(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
+	existingPromotedChild *unstructured.Unstructured,
+	skipPromotedChildSourceVerticesScaling bool,
+	controller progressiveController,
+	c client.Client,
+) (bool, error) {
+
+	if skipPromotedChildSourceVerticesScaling {
+		return false, nil
+	}
+
+	if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreAllSourceVerticesScaledDown(existingPromotedChild.GetName()) {
+		// Return that scaling down was NOT performed
+		return false, nil
+	}
+
+	// ScaleDownPromotedChildSourceVertices either updates the existingPromotedChild to scale down the source vertices pods or
+	// retrieves the currently running pods to update the scaleValuesMap used on the rollout status.
+	// This serves to make sure that the pods for each vertex have been really scaled down before proceeding with the progressive update.
+	scaleValuesMap, promotedChildNeedsUpdate, err := controller.ScaleDownPromotedChildSourceVertices(ctx, liveRolloutObject, existingPromotedChild, c)
+	if err != nil {
+		return false, fmt.Errorf("error updating scaling properties to the existing promoted child definition: %w", err)
+	}
+
+	if promotedChildNeedsUpdate {
+		if err = kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+			return false, fmt.Errorf("error scaling down the existing promoted child: %w", err)
+		}
+	}
+
+	if rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+		rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{}
+	}
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.Name = existingPromotedChild.GetName()
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = scaleValuesMap
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.MarkAllSourceVerticesScaledDown()
+
+	// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = false
+
+	// Return that scaling down was performed
+	return true, nil
+}
+
+/*
+scaleUpPromotedChild scales up the promoted child of a rollout object to its desired scale values if not already done.
+
+Parameters:
+  - ctx: The context for managing request-scoped values, cancellation, and timeouts.
+  - rolloutObject: The rollout object containing the desired state and status.
+  - liveRolloutObject: The current live state of the rollout object.
+  - existingPromotedChild: The promoted child resource to be scaled.
+  - skipPromotedChildSourceVerticesScaling: Flag to skip scaling if set to true.
+  - controller: The progressive controller responsible for scaling operations.
+  - c: The Kubernetes client for interacting with the cluster.
+
+Returns:
+  - A boolean indicating whether scaling was performed.
+  - An error if scaling fails.
+*/
+func scaleUpPromotedChild(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
+	existingPromotedChild *unstructured.Unstructured,
+	skipPromotedChildSourceVerticesScaling bool,
+	controller progressiveController,
+	c client.Client,
+) (bool, error) {
+
+	if skipPromotedChildSourceVerticesScaling {
+		return false, nil
+	}
+
+	if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AreScaleValuesRestoredToDesired(existingPromotedChild.GetName()) {
+		// Return that scaling up was NOT performed
+		return false, nil
+	}
+
+	if err := controller.ScalePromotedChildSourceVerticesToDesiredValues(ctx, liveRolloutObject, existingPromotedChild, c); err != nil {
+		return false, err
+	}
+
+	if err := kubernetes.UpdateResource(ctx, c, existingPromotedChild); err != nil {
+		return false, fmt.Errorf("error scaling back to desired min and max values the existing promoted child: %w", err)
+	}
+
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValuesRestoredToDesired = true
+
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.AllSourceVerticesScaledDown = false
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.ScaleValues = nil
+
+	// Return that scaling up was performed
+	return true, nil
 }

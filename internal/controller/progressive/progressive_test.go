@@ -47,6 +47,14 @@ func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, e
 	}
 }
 
+func (fpc fakeProgressiveController) ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error) {
+	return nil, false, nil
+}
+
+func (fpc fakeProgressiveController) ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+	return nil
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -66,6 +74,8 @@ func Test_processUpgradingChild(t *testing.T) {
 
 	_, _, assessmentInterval, err := globalConfig.GetChildStatusAssessmentSchedule()
 	assert.NoError(t, err)
+
+	defaultExistingPromotedChildDef := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}}
 
 	testCases := []struct {
 		name                      string
@@ -87,7 +97,7 @@ func Test_processUpgradingChild(t *testing.T) {
 		},
 		{
 			name:                      "preset upgrading child status on the live rollout - different name",
-			liveRolloutObject:         setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{Name: "test"}),
+			liveRolloutObject:         setRolloutObjectChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.UpgradingChildStatus{Name: "test"}, &apiv1.PromotedChildStatus{}),
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-1"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -96,11 +106,15 @@ func Test_processUpgradingChild(t *testing.T) {
 		},
 		{
 			name: "preset upgrading child status on the live rollout - same name, can assess, success",
-			liveRolloutObject: setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{
-				Name:               "test-success",
-				AssessmentResult:   apiv1.AssessmentResultUnknown,
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-			}),
+			liveRolloutObject: setRolloutObjectChildStatus(
+				defaultMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingChildStatus{
+					Name:               "test-success",
+					AssessmentResult:   apiv1.AssessmentResultUnknown,
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				},
+				&apiv1.PromotedChildStatus{},
+			),
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-success"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -109,11 +123,18 @@ func Test_processUpgradingChild(t *testing.T) {
 		},
 		{
 			name: "preset upgrading child status on the live rollout - same name, failure",
-			liveRolloutObject: setRolloutObjectUpgradingChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.ChildStatus{
-				Name:               "test-failure",
-				AssessmentResult:   apiv1.AssessmentResultFailure,
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-			}),
+			liveRolloutObject: setRolloutObjectChildStatus(
+				defaultMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingChildStatus{
+					Name:               "test-failure",
+					AssessmentResult:   apiv1.AssessmentResultFailure,
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				},
+				&apiv1.PromotedChildStatus{
+					Name:                         defaultExistingPromotedChildDef.GetName(),
+					ScaleValuesRestoredToDesired: true,
+				},
+			),
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-failure"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
@@ -125,7 +146,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, nil, tc.existingUpgradingChildDef, client)
+				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, false, client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)
@@ -142,8 +163,9 @@ func Test_processUpgradingChild(t *testing.T) {
 	}
 }
 
-func setRolloutObjectUpgradingChildStatus(rolloutObject ctlrcommon.RolloutObject, childStatus *apiv1.ChildStatus) ctlrcommon.RolloutObject {
-	rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+func setRolloutObjectChildStatus(rolloutObject ctlrcommon.RolloutObject, upgradingChildStatus *apiv1.UpgradingChildStatus, promotedChildStatus *apiv1.PromotedChildStatus) ctlrcommon.RolloutObject {
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = upgradingChildStatus
+	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = promotedChildStatus
 	return rolloutObject
 }
 
@@ -155,6 +177,7 @@ var defaultMonoVertexRollout = &apiv1.MonoVertexRollout{
 		Status: apiv1.Status{
 			ProgressiveStatus: apiv1.ProgressiveStatus{
 				UpgradingChildStatus: nil,
+				PromotedChildStatus:  nil,
 			},
 		},
 	},

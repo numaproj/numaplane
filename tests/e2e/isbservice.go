@@ -377,6 +377,6 @@ func updateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName string, 
 	verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	verifyPipelineRunning(Namespace, pipelineRolloutName)
+	verifyPipelineRunning(Namespace, pipelineRolloutName, true)
 
 }

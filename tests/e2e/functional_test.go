@@ -51,14 +51,14 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
+	numVertices         = int32(getVerticesScaleValue())
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: PipelineSourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -79,7 +79,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: PipelineSourceVertexName,
 				To:   "out",
 			},
 		},
@@ -89,7 +89,7 @@ var (
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: PipelineSourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -119,7 +119,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: PipelineSourceVertexName,
 				To:   "cat",
 			},
 			{
@@ -254,16 +254,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		verifyPipelineRunning(Namespace, pipelineRolloutName)
-
+		verifyPipelineRunning(Namespace, pipelineRolloutName, true)
 	})
 
 	time.Sleep(2 * time.Second)
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
-
-		updatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, true)
-
+		updatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, true, true)
 	})
 
 	currentPipelineSpec = updatedPipelineSpec
@@ -299,7 +296,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 			})
 
-			verifyPipelineRunning(Namespace, slowPipelineRolloutName)
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
 			verifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			document("Updating Pipeline Topology to cause a PPND change")
@@ -307,7 +304,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
 			slowPipelineSpec.Edges = []numaflowv1.Edge{
 				{
-					From: "in",
+					From: PipelineSourceVertexName,
 					To:   "out",
 				},
 			}
@@ -340,7 +337,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 			})
 
 			document("Verifying that Pipeline has stopped trying to pause")
-			verifyPipelineRunning(Namespace, slowPipelineRolloutName)
+			verifyPipelineRunning(Namespace, slowPipelineRolloutName, true)
 
 			document("Deleting Slow PipelineRollout")
 
@@ -357,7 +354,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("setting desiredPhase=Paused")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
-		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, false)
+		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, false, false)
 
 		document("verifying Pipeline stays in paused or otherwise pausing")
 		Consistently(func() bool {
@@ -384,7 +381,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		document("setting desiredPhase=Running")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
-		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, false)
+		updatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, false, false)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {

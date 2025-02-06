@@ -92,6 +92,8 @@ const (
 	UpgradeStateLabelSelector = "numaplane.numaproj.io/upgrade-state=promoted"
 
 	LogSpacer = "================================"
+
+	PipelineSourceVertexName = "in"
 )
 
 type Output struct {
@@ -100,6 +102,15 @@ type Output struct {
 	Metadata   metav1.ObjectMeta `json:"metadata"`
 	Spec       interface{}       `json:"spec"`
 	Status     interface{}       `json:"status,omitempty"`
+}
+
+func getVerticesScaleValue() int {
+	switch getUpgradeStrategy() {
+	case config.ProgressiveStrategyID:
+		return 3
+	default:
+		return 1
+	}
 }
 
 // document for Ginkgo framework and print to console
