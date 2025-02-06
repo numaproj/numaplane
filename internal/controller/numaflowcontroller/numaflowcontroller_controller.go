@@ -722,17 +722,26 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowPipelineKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
-		return false
+		if !apierrors.IsNotFound(err) {
+			return false
+		}
+		pipelineList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
 	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowMonoVertexKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
-		return false
+		if !apierrors.IsNotFound(err) {
+			return false
+		}
+		monoVertexList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
 	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowISBServiceKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
-		return false
+		if !apierrors.IsNotFound(err) {
+			return false
+		}
+		isbServiceList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
 	if len(pipelineList.Items)+len(monoVertexList.Items)+len(isbServiceList.Items) == 0 {
 		return true
