@@ -108,8 +108,8 @@ func handleNumaflowControllerDefinitionsConfigMapEvent(ctx context.Context, conf
 			continue
 		}
 
-		// controller config definition is immutable, so no need to update the existing config
-		if event.Type == watch.Added {
+		// Update the controller definition config based on the event type
+		if event.Type == watch.Added || event.Type == watch.Modified {
 			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().UpdateNumaflowControllerDefinitionConfig(controllerConfig, configMap.Namespace)
 		} else if event.Type == watch.Deleted {
 			config.GetConfigManagerInstance().GetControllerDefinitionsMgr().RemoveNumaflowControllerDefinitionConfig(controllerConfig, configMap.Namespace)
