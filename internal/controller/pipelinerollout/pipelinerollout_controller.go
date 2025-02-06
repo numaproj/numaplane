@@ -334,11 +334,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 ) (time.Duration, *unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
-		if pipelineRollout.Status.IsHealthy() {
-			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase)).Set(1)
-		} else {
-			r.customMetrics.PipelinesRolloutHealth.WithLabelValues(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase)).Set(0)
-		}
+		r.customMetrics.SetPipelineRolloutHealth(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase))
 	}()
 
 	// is PipelineRollout being deleted? need to remove the finalizer, so it can
@@ -351,7 +347,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.PipelinesRolloutHealth.DeleteLabelValues(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase))
+		r.customMetrics.DeletePipelineRolloutHealth(pipelineRollout.Namespace, pipelineRollout.Name)
 		return 0, nil, nil
 	}
 

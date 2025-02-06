@@ -187,11 +187,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	numaLogger := logger.FromContext(ctx)
 
 	defer func() {
-		if monoVertexRollout.Status.IsHealthy() {
-			r.customMetrics.MonoVerticesRolloutHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase)).Set(1)
-		} else {
-			r.customMetrics.MonoVerticesRolloutHealth.WithLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase)).Set(0)
-		}
+		r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
 	}()
 
 	// remove finalizers if monoVertexRollout is being deleted
@@ -203,7 +199,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		// generate metrics for MonoVertex deletion
 		r.customMetrics.DecMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.MonoVerticesRolloutHealth.DeleteLabelValues(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
+		r.customMetrics.DeleteMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name)
 		return ctrl.Result{}, nil
 	}
 

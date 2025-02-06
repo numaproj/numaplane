@@ -189,11 +189,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	numaLogger := logger.FromContext(ctx)
 
 	defer func() {
-		if isbServiceRollout.Status.IsHealthy() {
-			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(1)
-		} else {
-			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(0)
-		}
+		r.customMetrics.SetISBServicesRolloutHealth(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase))
 	}()
 
 	isbsvcKey := ppnd.GetPauseModule().GetISBServiceKey(isbServiceRollout.Namespace, isbServiceRollout.Name)
@@ -209,7 +205,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		// generate metrics for ISB Service deletion.
 		r.customMetrics.DecISBServiceRollouts(isbServiceRollout.Name, isbServiceRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.ISBServicesRolloutHealth.DeleteLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase))
+		r.customMetrics.DeleteISBServicesRolloutHealth(isbServiceRollout.Namespace, isbServiceRollout.Name)
 		return ctrl.Result{}, nil
 	}
 

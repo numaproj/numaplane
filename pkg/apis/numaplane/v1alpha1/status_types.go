@@ -30,6 +30,10 @@ type ConditionType string
 // +kubebuilder:validation:Enum="";Pending;Deployed;Failed
 type Phase string
 
+func (p Phase) String() string {
+	return string(p)
+}
+
 const (
 	// PhasePending indicates that a reconciliation operation on the rollout spec has started.
 	// In this phase, the reconciliation process could take some time and/or happen with multiple reconciliation calls.
