@@ -150,7 +150,10 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
 			purgeOld := common.LabelValuePurgeOld
-			_ = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+			err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+			if err != nil {
+				numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
+			}
 		}
 		return mostCurrentChild, nil
 	} else if len(children.Items) == 1 {
@@ -164,7 +167,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 
-	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debug("patching upgradeState and upgradeStateReason to %s:%s%s",
+	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debug("patching upgradeState and upgradeStateReason to %s:%s/%s",
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 	var patchJson string
 	labels := childObject.GetLabels()
@@ -184,11 +187,11 @@ func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstruct
 
 	upgradeStateStr, found := childObject.GetLabels()[common.LabelKeyUpgradeState]
 	if !found {
-		numaLogger.Debug("upgradeState unset for %s:%s%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		numaLogger.Debug("upgradeState unset for %s:%s/%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 		return nil, nil
 	} else {
 		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
-		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debug("reading upgradeState and upgradeStateReason for %s:%s%s",
+		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debug("reading upgradeState and upgradeStateReason for %s:%s/%s",
 			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 		if !found {
 			upgradeState := common.UpgradeState(upgradeStateStr)
