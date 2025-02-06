@@ -161,6 +161,8 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 			actualPodsCount := int64(len(pods.Items))
 
+			numaLogger.WithValues("vertexName", vertexName, "actualPodsCount", actualPodsCount).Debugf("found pods for the source vertex")
+
 			// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.

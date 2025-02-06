@@ -92,6 +92,9 @@ const (
 	UpgradeStateLabelSelector = "numaplane.numaproj.io/upgrade-state=promoted"
 
 	LogSpacer = "================================"
+
+	VerticesScaleValue       = 3
+	PipelineSourceVertexName = "in"
 )
 
 type Output struct {

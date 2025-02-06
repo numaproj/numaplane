@@ -212,7 +212,7 @@ spec:
                       scaleValues:
                         additionalProperties:
                           description: ScaleValues stores the desired min and max,
-                            scaleTo, and actual scale values of a pipeline or monovertext
+                            scaleTo, and actual scale values of a pipeline or monovertex
                             vertex
                           properties:
                             actual:
@@ -232,8 +232,7 @@ spec:
                               type: integer
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
-                                down to and it is calculated by getting the floor
-                                of the desiredMax value divided by 2
+                                down to
                               format: int64
                               type: integer
                           required:
