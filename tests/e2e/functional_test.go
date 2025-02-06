@@ -51,7 +51,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(VerticesScaleValue)
+	numVertices         = int32(getVerticesScaleValue())
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
 	initialPipelineSpec = numaflowv1.PipelineSpec{

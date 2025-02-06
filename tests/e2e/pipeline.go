@@ -105,7 +105,7 @@ func verifyPipelineRunning(namespace string, pipelineRolloutName string, useVert
 
 	numPods := len(spec.Vertices)
 	if useVerticesScaleValue {
-		numPods *= VerticesScaleValue
+		numPods *= getVerticesScaleValue()
 	}
 	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
 
@@ -466,7 +466,7 @@ func updatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
 	// when scaling to 0 is also allowed.
 	if overrideSourceVertexReplicas {
-		scaleTo := int64(math.Floor(float64(VerticesScaleValue) / float64(2)))
+		scaleTo := int64(math.Floor(float64(getVerticesScaleValue()) / float64(2)))
 
 		pipeline, err := getPipeline(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
