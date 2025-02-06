@@ -253,5 +253,5 @@ func updateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 
 	verifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	// need to track vertices of pipeline spec
-	verifyPipelineRunning(Namespace, pipelineRolloutName)
+	verifyPipelineRunning(Namespace, pipelineRolloutName, false)
 }

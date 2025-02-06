@@ -2,6 +2,7 @@ package isbservicerollout
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -9,6 +10,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
@@ -110,4 +112,24 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		}
 	}
 	return apiv1.AssessmentResultSuccess, nil
+}
+
+// This does not need to be implemented for ISBServiceRollout
+func (r *ISBServiceRolloutReconciler) ScaleDownPromotedChildSourceVertices(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (map[string]apiv1.ScaleValues, bool, error) {
+	return nil, false, errors.New("not implemented for ISBServiceRollout")
+}
+
+// This does not need to be implemented for ISBServiceRollout
+func (r *ISBServiceRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return errors.New("not implemented for ISBServiceRollout")
 }

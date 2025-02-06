@@ -116,6 +116,17 @@ const (
 	// child and there should only be one
 	// TODO: reevaluate if we really need that
 	LabelValuePurgeOld UpgradeStateReason = "purge"
+	// LabelKeyNumaflowPodPipelineName is the label key used to identify the pod associated to a specific pipeline
+	LabelKeyNumaflowPodPipelineName = "numaflow.numaproj.io/pipeline-name"
+
+	// LabelKeyNumaflowPodMonoVertexName is the label key used to identify the pod associated to a specific monovertex
+	LabelKeyNumaflowPodMonoVertexName = "app.kubernetes.io/name"
+
+	// LabelKeyNumaflowPodPipelineVertexName is the label key used to identify the pod associated to a specific pipeline vertex
+	LabelKeyNumaflowPodPipelineVertexName = "numaflow.numaproj.io/vertex-name"
+
+	// LabelKeyNumaflowPodMonoVertexVertexName is the label key used to identify the pod associated to a specific monovertex vertex
+	LabelKeyNumaflowPodMonoVertexVertexName = "numaflow.numaproj.io/mono-vertex-name"
 
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"

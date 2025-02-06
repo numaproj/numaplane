@@ -105,8 +105,8 @@ const (
 	AssessmentResultUnknown = "Unknown"
 )
 
-// ChildStatus describes the status of an upgrading child
-type ChildStatus struct {
+// UpgradingChildStatus describes the status of an upgrading child
+type UpgradingChildStatus struct {
 	// Name of the upgrading child
 	Name string `json:"name"`
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
@@ -117,9 +117,37 @@ type ChildStatus struct {
 	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
+// ScaleValues stores the desired min and max, scaleTo, and actual scale values of a pipeline or monovertex vertex
+type ScaleValues struct {
+	// DesiredMin is the min scale value of the original child spec
+	DesiredMin int64 `json:"desiredMin"`
+	// DesiredMax is the max scale value of the original child spec
+	DesiredMax int64 `json:"desiredMax"`
+	// ScaleTo indicates how many pods to scale down to
+	ScaleTo int64 `json:"scaleTo"`
+	// Actual indicates how many pods are actually running for the vertex
+	Actual int64 `json:"actual"`
+}
+
+// PromotedChildStatus describes the status of the promoted child
+type PromotedChildStatus struct {
+	// Name of the promoted child
+	Name string `json:"name"`
+	// ScaleValues is a map where the keys are the promoted child source vertices names
+	// and the values are the scale values of the source vertices
+	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
+	// AllSourceVerticesScaledDown indicates if ALL the promoted child source vertices have been scaled down
+	AllSourceVerticesScaledDown bool `json:"allSourceVerticesScaledDown,omitempty"`
+	// ScaleValuesRestoredToDesired indicates if ALL the promoted child source vertices have been set back to the original min and max scale values (desiredMin and desiredMax).
+	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
+	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
+}
+
 type ProgressiveStatus struct {
 	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
-	UpgradingChildStatus *ChildStatus `json:"upgradingChildStatus,omitempty"`
+	UpgradingChildStatus *UpgradingChildStatus `json:"upgradingChildStatus,omitempty"`
+	// PromotedChild stores information regarding the current "promoted" child status
+	PromotedChildStatus *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
 }
 
 func (status *Status) SetPhase(phase Phase, msg string) {
@@ -235,29 +263,63 @@ func (status *Status) ClearUpgradeInProgress() {
 var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
 // InitAssessUntil initializes the AssessUntil field to a large value.
-func (cs *ChildStatus) InitAssessUntil() {
-	if cs == nil {
-		cs = &ChildStatus{}
+func (ucs *UpgradingChildStatus) InitAssessUntil() {
+	if ucs == nil {
+		ucs = &UpgradingChildStatus{}
 	}
 
 	assessUntil := metav1.NewTime(assessUntilInitValue)
-	cs.AssessUntil = &assessUntil
+	ucs.AssessUntil = &assessUntil
 }
 
 // IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
-func (cs *ChildStatus) IsAssessUntilSet() bool {
-	return cs != nil && cs.AssessUntil != nil && !cs.AssessUntil.Time.Equal(assessUntilInitValue)
+func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {
+	return ucs != nil && ucs.AssessUntil != nil && !ucs.AssessUntil.Time.Equal(assessUntilInitValue)
 }
 
-// CanAssess determines if the ChildStatus instance is eligible for assessment.
+// CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
 // It checks that the current time is after the NextAssessmentTime and
 // before the AssessUntil time, and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
-func (cs *ChildStatus) CanAssess() bool {
-	return cs != nil &&
-		cs.NextAssessmentTime != nil && time.Now().After(cs.NextAssessmentTime.Time) &&
-		cs.AssessUntil != nil && time.Now().Before(cs.AssessUntil.Time) &&
-		cs.AssessmentResult != AssessmentResultFailure
+func (ucs *UpgradingChildStatus) CanAssess() bool {
+	return ucs != nil &&
+		ucs.NextAssessmentTime != nil && time.Now().After(ucs.NextAssessmentTime.Time) &&
+		ucs.AssessUntil != nil && time.Now().Before(ucs.AssessUntil.Time) &&
+		ucs.AssessmentResult != AssessmentResultFailure
+}
+
+func (ucs *UpgradingChildStatus) IsFailed() bool {
+	return ucs != nil && ucs.AssessmentResult == AssessmentResultFailure
+}
+
+// AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
+func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
+	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
+}
+
+// AreScaleValuesRestoredToDesired checks if all source vertices have been restored to the desired min and max values.
+func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) bool {
+	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToDesired
+}
+
+// MarkAllSourceVerticesScaledDown checks if all source vertices in the PromotedChildStatus
+// have been scaled down by comparing their Actual and ScaleTo scale values.
+// It updates the AllSourceVerticesScaledDown field to true if all vertices
+// are scaled down, otherwise sets it to false.
+func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
+	if pcs == nil || len(pcs.ScaleValues) == 0 {
+		return
+	}
+
+	allScaledDown := true
+	for _, sv := range pcs.ScaleValues {
+		if sv.Actual > sv.ScaleTo {
+			allScaledDown = false
+			break
+		}
+	}
+
+	pcs.AllSourceVerticesScaledDown = allScaledDown
 }
 
 // setCondition sets a condition
