@@ -230,9 +230,9 @@ func (r *NumaflowControllerReconciler) reconcile(
 		numaLogger.Info("Deleting NumaflowController")
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
 		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
-			// Check if dependent resources are deleted, if not then requeue after 5 seconds
+			// Check if dependent resources are deleted, if not then requeue
 			if !r.areDependentResourcesDeleted(ctx, controller) {
-				numaLogger.Warn("Dependent resources are not deleted yet, requeue after 5 seconds")
+				numaLogger.Warn("Dependent resources are not deleted yet, requeue...")
 				return ctrl.Result{Requeue: true}, nil
 			}
 			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
@@ -719,17 +719,17 @@ func (r *NumaflowControllerReconciler) ErrorHandler(numaflowController *apiv1.Nu
 
 // areDependentResourcesDeleted checks if dependent resources are deleted.
 func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.Context, controller *apiv1.NumaflowController) bool {
-	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "pipelines",
+	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowPipelineKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		return false
 	}
-	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "monovertices",
+	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowMonoVertexKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		return false
 	}
-	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, "interstepbufferservices",
+	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowISBServiceKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		return false

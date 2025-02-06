@@ -342,6 +342,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if !pipelineRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting PipelineRollout")
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
+			// Set the foreground deletion policy
+			foreground := metav1.DeletePropagationForeground
+			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+				return 0, nil, err
+			}
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
