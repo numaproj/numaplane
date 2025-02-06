@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -333,7 +334,8 @@ func updateISBServiceRollout(
 	newSpec numaflowv1.InterStepBufferServiceSpec,
 	verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool,
 	dataLossFieldChanged bool,
-	recreateFieldChanged bool) {
+	recreateFieldChanged bool,
+	overrideSourceVertexReplicas bool) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -394,6 +396,21 @@ func updateISBServiceRollout(
 
 			Consistently(verifyNotPausing, 15*time.Second).Should(BeTrue())
 		}
+	}
+
+	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
+	// when scaling to 0 is also allowed.
+	if overrideSourceVertexReplicas && upgradeStrategy == config.ProgressiveStrategyID {
+		scaleTo := int64(math.Floor(float64(getVerticesScaleValue()) / float64(2)))
+
+		vertexName := fmt.Sprintf("%s-%s", originalPipelineName, PipelineSourceVertexName)
+
+		vertex, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
 	}
 
 	verifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
