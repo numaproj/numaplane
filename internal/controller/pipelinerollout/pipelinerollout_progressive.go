@@ -112,17 +112,12 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	numaLogger.Debug("started promoted child source vertices scaling down process")
 
-	promotedChild, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
-	if err != nil {
-		return nil, false, fmt.Errorf("error while looking for most current promoted child: %w", err)
-	}
-
 	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
 	if err != nil {
 		return nil, false, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertices", vertices).Debugf("found vertices for the promoted child: %d", len(vertices))
+	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertices", vertices).Debugf("found vertices for the promoted child: %d", len(vertices))
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
@@ -149,9 +144,9 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 				return nil, false, errors.New("a vertex must have a name")
 			}
 
-			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
+			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChildDef.GetNamespace()).List(ctx, metav1.ListOptions{
 				LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
-					common.LabelKeyNumaflowPodPipelineName, promotedChild.GetName(),
+					common.LabelKeyNumaflowPodPipelineName, promotedChildDef.GetName(),
 					common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
 				),
 			})
@@ -183,7 +178,7 @@ func (r *PipelineRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 				return nil, false, err
 			}
 
-			numaLogger.WithValues("promotedChildName", promotedChild.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
+			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
 
 			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
 				return nil, false, err

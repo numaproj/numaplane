@@ -94,22 +94,17 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 
 	numaLogger.Debug("started promoted child source vertex scaling down process")
 
-	promotedChild, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradePromoted, true, c)
-	if err != nil {
-		return nil, false, fmt.Errorf("error while looking for most current promoted child: %w", err)
-	}
-
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
 	if promotedChildStatus != nil && promotedChildStatus.ScaleValues != nil {
 		scaleValuesMap = promotedChildStatus.ScaleValues
 	}
 
-	pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChild.GetNamespace()).List(ctx, metav1.ListOptions{
+	pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChildDef.GetNamespace()).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
-			common.LabelKeyNumaflowPodMonoVertexName, promotedChild.GetName(),
+			common.LabelKeyNumaflowPodMonoVertexName, promotedChildDef.GetName(),
 			// the vertex name for a monovertex is the same as the monovertex name
-			common.LabelKeyNumaflowPodMonoVertexVertexName, promotedChild.GetName(),
+			common.LabelKeyNumaflowPodMonoVertexVertexName, promotedChildDef.GetName(),
 		),
 	})
 	if err != nil {
@@ -121,9 +116,9 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 	// to later verify that the pods were actually scaled down.
 	// We want to skip scaling down again.
-	if vertexScaleValues, exist := scaleValuesMap[promotedChild.GetName()]; exist && vertexScaleValues.ScaleTo != 0 {
+	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist && vertexScaleValues.ScaleTo != 0 {
 		vertexScaleValues.Actual = actualPodsCount
-		scaleValuesMap[promotedChild.GetName()] = vertexScaleValues
+		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
 		return scaleValuesMap, false, nil
@@ -136,7 +131,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		return nil, false, err
 	}
 
-	numaLogger.WithValues("promotedChildName", promotedChild.GetName()).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
+	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
 
 	if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "max"); err != nil {
 		return nil, false, err
@@ -153,7 +148,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		}
 	}
 
-	scaleValuesMap[promotedChild.GetName()] = apiv1.ScaleValues{
+	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
 		DesiredMin: originalMin,
 		DesiredMax: originalMax,
 		ScaleTo:    scaleValue,
