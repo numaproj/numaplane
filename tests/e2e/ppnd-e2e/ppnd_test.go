@@ -175,7 +175,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
-			}, true)
+			}, true, false)
 
 			completeSlowPipelineRolloutTest()
 
@@ -254,7 +254,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// TODO: clean up each function to be more clear
 		UpdatePipelineRollout(failedPipelineRolloutName, failedPipelineSpec, numaflowv1.PipelinePhaseFailed, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true)
+		}, true, false)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
@@ -280,7 +280,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update would normally cause data loss
 		UpdateISBServiceRollout(isbServiceRolloutName, failedPipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true)
+		}, true, false, false)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
@@ -332,7 +332,7 @@ func createSlowPipelineRollout() {
 		return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 	})
 
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
 	VerifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
@@ -359,7 +359,7 @@ func completeSlowPipelineRolloutTest() {
 	})
 
 	Document("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
 
 	Document("Deleting Slow PipelineRollout")
 	DeletePipelineRollout(slowPipelineRolloutName)

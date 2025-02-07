@@ -134,10 +134,6 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
 		return nil, false, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object["spec"], err)
 	}
-	var existingPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(existingPipelineDef.Object["spec"], &existingPipelineSpec); err != nil {
-		return nil, false, fmt.Errorf("failed to convert existing Pipeline spec %v into PipelineSpec type, err=%v", existingPipelineDef.Object["spec"], err)
-	}
 
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil {
@@ -153,7 +149,10 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 	// check to see if the PipelineRollout spec itself says to Pause
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
 
-	wontPause := numaflowtypes.CheckIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
+	var wontPause bool
+	if existingPipelineDef != nil {
+		wontPause = numaflowtypes.CheckIfPipelineWontPause(ctx, existingPipelineDef, pipelineRollout)
+	}
 
 	ppndPause := (pipelineNeedsToUpdate || externalPauseRequest) && !wontPause
 	shouldBePaused := ppndPause || specBasedPause
@@ -175,13 +174,8 @@ func (r *PipelineRolloutReconciler) shouldBePaused(ctx context.Context, pipeline
 //
 //	there's any difference in spec between PipelineRollout and Pipeline
 //	any pause request coming from isbsvc or Numaflow Controller
-func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured, pipelineUpdateRequiringPPND bool) (*bool, error) {
+func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, pipelineUpdateRequiringPPND bool) (*bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	var newPipelineSpec numaflowtypes.PipelineSpec
-	if err := util.StructToStruct(newPipelineDef.Object["spec"], &newPipelineSpec); err != nil {
-		return nil, fmt.Errorf("failed to convert new Pipeline spec %v into PipelineSpec type, err=%v", newPipelineDef.Object, err)
-	}
 
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil {

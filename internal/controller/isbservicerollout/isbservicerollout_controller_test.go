@@ -418,7 +418,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		initialRolloutPhase            apiv1.Phase
 		initialRolloutNameCount        int
 		initialInProgressStrategy      *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus    *apiv1.ChildStatus
+		initialUpgradingChildStatus    *apiv1.UpgradingChildStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -463,7 +463,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				&apiv1.PipelineRolloutStatus{
 					Status: apiv1.Status{
 						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.ChildStatus{
+							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultSuccess,
 							},
@@ -484,7 +484,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
@@ -509,7 +509,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				&apiv1.PipelineRolloutStatus{
 					Status: apiv1.Status{
 						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.ChildStatus{
+							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultFailure,
 							},
@@ -522,7 +522,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
@@ -548,7 +548,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				&apiv1.PipelineRolloutStatus{
 					Status: apiv1.Status{
 						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.ChildStatus{
+							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultFailure,
 							},
@@ -561,7 +561,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},

@@ -646,7 +646,13 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpec, numaflowv1.PipelinePhaseRunning),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{}, map[string]string{}),
+				false,
+				map[string]string{
+					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+					common.LabelKeyParentRollout:                  "pipelinerollout-test",
+					common.LabelKeyUpgradeState:                   "promoted"},
+				map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
@@ -822,7 +828,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		initialRolloutPhase         apiv1.Phase
 		initialRolloutNameCount     int
 		initialInProgressStrategy   *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus *apiv1.ChildStatus
+		initialUpgradingChildStatus *apiv1.UpgradingChildStatus
+		initialPromotedChildStatus  *apiv1.PromotedChildStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -848,8 +855,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     1,
 			initialInProgressStrategy:   nil,
 			initialUpgradingChildStatus: nil,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:        apiv1.PhasePending,
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+			},
+			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:       apiv1.PhasePending,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
@@ -891,11 +902,15 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:       apiv1.PhasePending,
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestPipelineRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultSuccess,
+			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -940,11 +955,16 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:       apiv1.PhasePending,
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestPipelineRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultFailure,
+			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -989,11 +1009,16 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:       apiv1.PhasePending,
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.ChildStatus{
+			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
 				Name:               ctlrcommon.DefaultTestPipelineRolloutName + "-1",
 				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 				AssessmentResult:   apiv1.AssessmentResultFailure,
+			},
+			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
+				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+				AllSourceVerticesScaledDown: true,
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -1015,6 +1040,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
@@ -1040,16 +1066,17 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Clean up after progressive upgrade: pipeline still draining",
+			name:            "Clean up after progressive upgrade: pipeline still pausing",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhasePaused,
+				numaflowv1.PipelinePhasePausing,
 				numaflowv1.Status{},
 				false,
 				map[string]string{
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
@@ -1091,7 +1118,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			// Create our PipelineRollout
 			rollout := ctlrcommon.CreateTestPipelineRollout(tc.newPipelineSpec, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}}})
+				&apiv1.PipelineRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus, PromotedChildStatus: tc.initialPromotedChildStatus}}})
 
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {

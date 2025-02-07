@@ -208,3 +208,21 @@ func Test_CompareStructNumTypeAgnostic(t *testing.T) {
 		})
 	}
 }
+
+func TestOptionalString(t *testing.T) {
+
+	// nil case:
+	var intPtr *int
+	result := OptionalString(intPtr)
+	assert.Equal(t, "nil", result)
+
+	// standard case: pointer to value
+	intVal := 10
+	intPtr = &intVal
+	result = OptionalString(intPtr)
+	assert.Equal(t, "10", result)
+
+	// not a pointer:
+	result = OptionalString(10)
+	assert.Equal(t, "", result)
+}

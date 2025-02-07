@@ -188,6 +188,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
 
+	requeueDelay := time.Duration(0)
+
 	defer func() {
 		if isbServiceRollout.Status.IsHealthy() {
 			r.customMetrics.ISBServicesRolloutHealth.WithLabelValues(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase)).Set(1)
@@ -224,38 +226,67 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		ppnd.GetPauseModule().NewPauseRequest(isbsvcKey)
 	}
 
-	newISBServiceDef, err := r.makePromotedISBServiceDef(ctx, isbServiceRollout)
+	// check if there's a promoted isbsvc yet
+	promotedISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
-	existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
-	if err != nil {
-		// create an object as it doesn't exist
-		if apierrors.IsNotFound(err) {
+
+	if promotedISBSvcs == nil || len(promotedISBSvcs.Items) == 0 {
+
+		deleteRecreateLabel := common.LabelValueDeleteRecreateChild
+
+		// first check if there's a "recyclable" isbsvc; if there is, it could be in the middle of a delete/recreate process, and we don't want to create a new one until it's been deleted
+		recyclableISBSvcs, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradeRecyclable, &deleteRecreateLabel, false, r.client)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
+		}
+		if recyclableISBSvcs != nil && len(recyclableISBSvcs.Items) > 0 {
+			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+
+			// create an object as it doesn't exist
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
 			isbServiceRollout.Status.MarkPending()
 
-			if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
+			if newISBServiceDef != nil {
+				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
+				}
 
-			isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
-		} else {
-			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
+				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
+
+				// if there are any PipelineRollouts using this ISBServiceRollout, enqueue them for reconciliation
+				err := r.enqueueAllPipelineROsForISBServiceRO(ctx, isbServiceRollout)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("error enqueuing PipelineRollouts following creation of InterstepBufferService %s/%s: %v", newISBServiceDef.GetNamespace(), newISBServiceDef.GetName(), err)
+				}
+			}
 		}
 
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef := r.merge(existingISBServiceDef, newISBServiceDef)
-		requeueDelay, err := r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+		}
+		existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
+			k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
+		}
+
+		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
+		requeueDelay, err = r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
-		}
-		if requeueDelay > 0 {
-			return ctrl.Result{RequeueAfter: requeueDelay}, nil
 		}
 	}
 
@@ -263,6 +294,26 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
 
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
+
+	// clean up recyclable interstepbufferservices
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
+	}
+
+	// if we still have interstepbufferservices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
+	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
+	}
+
+	if requeueDelay > 0 {
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -286,8 +337,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	// TODO: handle recreate parameter
-	isbServiceNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
 	if err != nil {
 		return 0, err
 	}
@@ -347,7 +397,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
-			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
 			if err != nil {
 				return fmt.Errorf("error updating ISBService, %s: %v", apiv1.UpgradeStrategyPPND, err)
 			}
@@ -373,7 +423,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return 0, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, true, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}
@@ -396,7 +446,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
-		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef)
+		err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
 		if err != nil {
 			return 0, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
@@ -406,26 +456,30 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	default:
 		return 0, fmt.Errorf("%v strategy not recognized", inProgressStrategy)
 	}
-	// clean up recyclable interstepbufferservices
-	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, isbServiceRollout, r, r.client)
-	if err != nil {
-		return 0, fmt.Errorf("error deleting recyclable interstepbufferservices: %s", err.Error())
-	}
-
-	// if any haven't been deleted, requeue
-	if !allDeleted {
-		return common.DefaultRequeueDelay, nil
-	}
 
 	return 0, nil
 }
 
-func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
-	if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
-		return err
+func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured, needsRecreate bool) error {
+	if needsRecreate {
+		// in this case, we need to mark our resource as Recyclable (it will be recreated on a future reconciliation after it's been deleted)
+		reasonRecreate := common.LabelValueDeleteRecreateChild
+		err := ctlrcommon.UpdateUpgradeState(ctx, r.client, common.LabelValueUpgradeRecyclable, &reasonRecreate, newISBServiceDef)
+		if err != nil {
+			return err
+		}
+		isbServiceRollout.Status.MarkPending()
+		// enqueue Pipeline Rollouts because they will need to be marked "recyclable" as well
+		err = r.enqueueAllPipelineROsForChildISBSvc(ctx, newISBServiceDef)
+		if err != nil {
+			return fmt.Errorf("Failed to enqueue pipelines after marking isbservice as recyclable: %s", err.Error())
+		}
+	} else {
+		if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
+			return err
+		}
+		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	}
-
-	isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 	return nil
 }
 
@@ -523,6 +577,34 @@ func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context
 	}
 	numaLogger.Debugf("found %d PipelineRollouts associated with ISBServiceRollout", len(pipelineRolloutsForISBSvc))
 	return pipelineRolloutsForISBSvc, nil
+}
+
+// enqueue all of the PipelineRollouts which have a child using this InterstepBufferService
+func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForChildISBSvc(ctx context.Context, isbsvc *unstructured.Unstructured) error {
+	pipelines, err := r.getPipelineListForChildISBSvc(ctx, isbsvc.GetNamespace(), isbsvc.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to enqueue pipelines - failed to list them: %s", err.Error())
+	}
+	for _, pipeline := range pipelines.Items {
+		pipelineRollout, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
+		if err != nil {
+			return fmt.Errorf("failed to enqueue pipelines - error getting PipelineRolloutName: %w", err)
+		}
+		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipeline.GetNamespace(), Name: pipelineRollout})
+	}
+	return nil
+}
+
+// enqueue all of the PipelineRollouts which are specified to use this ISBServiceRollout
+func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForISBServiceRO(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
+	pipelineRollouts, err := r.getPipelineRolloutList(ctx, isbServiceRollout.GetNamespace(), isbServiceRollout.GetName())
+	if err != nil {
+		return fmt.Errorf("failed to enqueue PipelineRollouts for ISBServiceRollout %s/%s: %s", isbServiceRollout.GetNamespace(), isbServiceRollout.GetName(), err.Error())
+	}
+	for _, pipelineRollout := range pipelineRollouts {
+		pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()})
+	}
+	return nil
 }
 
 func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
@@ -712,12 +794,12 @@ func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBS
 }
 
 // Create an InterstepBufferService definition of "promoted" state
-func (r *ISBServiceRolloutReconciler) makePromotedISBServiceDef(
+func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	ctx context.Context,
 	isbServiceRollout *apiv1.ISBServiceRollout,
 ) (*unstructured.Unstructured, error) {
 	// if a "promoted" InterstepBufferService exists, gets its name; otherwise create a new name
-	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	isbsvcName, err := ctlrcommon.GetChildName(ctx, isbServiceRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}

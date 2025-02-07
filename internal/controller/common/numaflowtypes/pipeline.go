@@ -24,10 +24,12 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -71,6 +73,18 @@ func GetRolloutForPipeline(ctx context.Context, c client.Client, pipeline *unstr
 		return nil, err
 	}
 	return pipelineRollout, nil
+}
+
+func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollout *apiv1.PipelineRollout, live bool) (*unstructured.UnstructuredList, error) {
+	if live {
+		return kubernetes.ListLiveResource(ctx, common.PipelineGVR.Group, common.PipelineGVR.Version, "pipelines", pipelineRollout.GetNamespace(), fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.GetName()), "")
+	} else {
+		gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
+
+		return kubernetes.ListResources(ctx, c, gvk, pipelineRollout.GetNamespace(),
+			client.MatchingLabels{common.LabelKeyParentRollout: pipelineRollout.GetName()})
+	}
+
 }
 
 func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {

@@ -49,14 +49,14 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
+	numVertices         = int32(GetVerticesScaleValue())
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: PipelineSourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -77,7 +77,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: PipelineSourceVertexName,
 				To:   "out",
 			},
 		},
@@ -87,7 +87,7 @@ var (
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: PipelineSourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -117,7 +117,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: PipelineSourceVertexName,
 				To:   "cat",
 			},
 			{
@@ -144,6 +144,22 @@ var (
 			Version: updatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+				},
+			},
+		},
+	}
+
+	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
+	ISBServiceSpecRecreateField = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: updatedJetstreamVersion,
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &revisedVolSize,
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
 				Resources: v1.ResourceRequirements{
@@ -240,8 +256,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		VerifyPipelineRunning(Namespace, pipelineRolloutName)
-
+		VerifyPipelineRunning(Namespace, pipelineRolloutName, true)
 	})
 
 	time.Sleep(2 * time.Second)
@@ -251,7 +266,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true)
+		}, true, false)
 
 	})
 
@@ -266,7 +281,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false)
+		}, false, false)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
@@ -278,9 +293,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Document("setting desiredPhase=Running")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
-		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false)
+		}, false, false)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
@@ -332,7 +347,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		}, true)
+		}, true, false, false)
 
 	})
 
@@ -343,7 +358,15 @@ var _ = Describe("Functional e2e", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		}, false)
+		}, false, false, false)
+
+	})
+
+	It("Should update the child ISBService updating a recreate field", func() {
+
+		UpdateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
+		}, false, true, true)
 
 	})
 

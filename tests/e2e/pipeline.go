@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,6 +26,14 @@ import (
 
 func getPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
 	return getChildResource(getGVRForPipeline(), namespace, pipelineRolloutName)
+}
+
+func getPipelineName(namespace, pipelineRolloutName string) (string, error) {
+	pipeline, err := getPipeline(namespace, pipelineRolloutName)
+	if err != nil {
+		return "", err
+	}
+	return pipeline.GetName(), nil
 }
 
 func VerifyPipelineSpec(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) bool) {
@@ -57,7 +66,7 @@ func VerifyPipelineStatusConsistently(namespace string, pipelineRolloutName stri
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, 30*time.Second, testPollingInterval).Should(BeTrue())
+	}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
 }
 
@@ -83,7 +92,7 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
+func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVerticesScaleValue bool) {
 	Document("Verifying that the Pipeline is running")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -101,9 +110,14 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	Expect(err).ShouldNot(HaveOccurred())
 	spec, err := getPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
-	verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
-	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 
+	numPods := len(spec.Vertices)
+	if useVerticesScaleValue {
+		numPods *= GetVerticesScaleValue()
+	}
+	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
+
+	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 }
 
 func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
@@ -382,8 +396,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec)
 	VerifyPipelineRolloutHealthy(name)
 	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
-	VerifyPipelineRunning(namespace, name)
-
+	VerifyPipelineRunning(namespace, name, true)
 }
 
 func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
@@ -448,7 +461,7 @@ func DeletePipelineRollout(name string) {
 }
 
 // update PipelineRollout and verify correct process
-func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool) {
+func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool, overrideSourceVertexReplicas bool) {
 
 	Document("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -480,6 +493,23 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	// wait for update to reconcile
 	time.Sleep(5 * time.Second)
 
+	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
+	// when scaling to 0 is also allowed.
+	if overrideSourceVertexReplicas {
+		scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
+
+		pipeline, err := getPipeline(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
+		vertexName := fmt.Sprintf("%s-%s", pipeline.GetName(), PipelineSourceVertexName)
+
+		vertex, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+	}
+
 	Document("Verifying Pipeline got updated")
 	// get Pipeline to check that spec has been updated to correct spec
 	VerifyPipelineSpec(Namespace, name, verifySpecFunc)
@@ -496,17 +526,6 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 	} else {
 		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
-	}
-
-	switch expectedFinalPhase {
-	case numaflowv1.PipelinePhasePausing:
-		VerifyPipelinePausing(Namespace, name)
-	case numaflowv1.PipelinePhasePaused:
-		VerifyPipelinePaused(Namespace, name)
-	case numaflowv1.PipelinePhaseRunning:
-		VerifyPipelineRunning(Namespace, name)
-	case numaflowv1.PipelinePhaseFailed:
-		VerifyPipelineFailed(Namespace, name)
 	}
 
 }

@@ -224,3 +224,66 @@ func BenchmarkCloneWithSerialization(b *testing.B) {
 		}
 	}
 }
+
+func TestNumaflowControllerDefinitionsManager_GetNumaflowControllerDefinitionsConfig(t *testing.T) {
+	type fields struct {
+		rolloutConfig map[string]string
+		lock          *sync.RWMutex
+	}
+	type args struct {
+		namespace string
+		version   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    string
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "Read Config form default namespace",
+			fields: fields{
+				rolloutConfig: map[string]string{
+					"default/1.0.0":          "numaflow-test-config-data1",
+					"numaplane-system/1.0.0": "numaflow-test-config-data2",
+				},
+				lock: new(sync.RWMutex),
+			},
+			args: args{
+				namespace: "default",
+				version:   "1.0.0",
+			},
+			want:    "numaflow-test-config-data1",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "Read Config form numaplane-system namespace",
+			fields: fields{
+				rolloutConfig: map[string]string{
+					"numaplane-system/1.0.0": "numaflow-test-config-data2",
+				},
+				lock: new(sync.RWMutex),
+			},
+			args: args{
+				namespace: "default",
+				version:   "1.0.0",
+			},
+			want:    "numaflow-test-config-data2",
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := &NumaflowControllerDefinitionsManager{
+				rolloutConfig: tt.fields.rolloutConfig,
+				lock:          tt.fields.lock,
+			}
+			got, err := cm.GetNumaflowControllerDefinitionsConfig(tt.args.namespace, tt.args.version)
+			if !tt.wantErr(t, err, fmt.Sprintf("GetNumaflowControllerDefinitionsConfig(%v, %v)", tt.args.namespace, tt.args.version)) {
+				return
+			}
+			assert.Equalf(t, tt.want, got, "GetNumaflowControllerDefinitionsConfig(%v, %v)", tt.args.namespace, tt.args.version)
+		})
+	}
+}

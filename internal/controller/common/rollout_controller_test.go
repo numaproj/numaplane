@@ -31,37 +31,59 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 	}
 	checkLive := false
 
+	reasonProgressiveSuccess := common.LabelValueProgressiveSuccess
+	reasonProgressiveFailure := common.LabelValueProgressiveFailure
+
 	tests := []struct {
-		name          string
-		pipelines     []*numaflowv1.Pipeline
-		expectedName  string
-		expectedError error
+		name               string
+		pipelines          []*numaflowv1.Pipeline
+		upgradeState       common.UpgradeState
+		upgradeStateReason *common.UpgradeStateReason
+		expectedName       string
+		expectedError      error
 	}{
 		{
 			name: "Multiple children with valid indices",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil),
 			},
-
+			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "my-pipeline-3",
 			expectedError: nil,
 		},
 		{
+			name: "Multiple children with valid indices - upgrade strategy reason specified",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveFailure),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveFailure),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess),
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+			},
+			upgradeState:       common.LabelValueUpgradePromoted,
+			upgradeStateReason: &reasonProgressiveFailure,
+			expectedName:       "my-pipeline-2",
+			expectedError:      nil,
+		},
+		{
 			name:          "No children",
 			pipelines:     []*numaflowv1.Pipeline{},
+			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "",
 			expectedError: nil,
 		},
 		{
 			name: "Backward compatibility with older code",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
-				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				// backward compatibility test tests for case of "my-pipeline" with no suffix
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
 			},
+			upgradeState: common.LabelValueUpgradePromoted,
 
 			expectedName:  "my-pipeline-3",
 			expectedError: nil,
@@ -69,8 +91,10 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "Backward compatibility with older code, and just one pipeline exists",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted),
+				// backward compatibility test tests for case of "my-pipeline" with no suffix
+				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
 			},
+			upgradeState: common.LabelValueUpgradePromoted,
 
 			expectedName:  "my-pipeline",
 			expectedError: nil,
@@ -92,7 +116,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			mostCurrentChild, err := FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, checkLive, client)
+			mostCurrentChild, err := FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, tt.upgradeState, tt.upgradeStateReason, checkLive, client)
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.Nil(t, mostCurrentChild)
@@ -105,17 +129,19 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 					assert.NotNil(t, mostCurrentChild)
 					assert.Equal(t, tt.expectedName, mostCurrentChild.GetName())
 
-					// verify all other children have been marked "recyclable"
+					// verify all other children of the same upgrade state and upgrade state reason have been marked "recyclable"
 					for _, p := range tt.pipelines {
-						retrievedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(DefaultTestNamespace).Get(ctx, p.Name, metav1.GetOptions{})
-						assert.NoError(t, err)
+						if p.Labels[common.LabelKeyUpgradeState] == string(tt.upgradeState) && (tt.upgradeStateReason == nil || p.Labels[common.LabelKeyUpgradeStateReason] == string(*tt.upgradeStateReason)) {
+							retrievedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(DefaultTestNamespace).Get(ctx, p.Name, metav1.GetOptions{})
+							assert.NoError(t, err)
 
-						retrievedUpgradeState, found := retrievedPipeline.GetLabels()[common.LabelKeyUpgradeState]
-						assert.True(t, found)
-						if p.Name == tt.expectedName {
-							assert.Equal(t, string(common.LabelValueUpgradePromoted), retrievedUpgradeState)
-						} else {
-							assert.Equal(t, string(common.LabelValueUpgradeRecyclable), retrievedUpgradeState)
+							retrievedUpgradeState, found := retrievedPipeline.GetLabels()[common.LabelKeyUpgradeState]
+							assert.True(t, found)
+							if p.Name == tt.expectedName {
+								assert.Equal(t, string(common.LabelValueUpgradePromoted), retrievedUpgradeState)
+							} else {
+								assert.Equal(t, string(common.LabelValueUpgradeRecyclable), retrievedUpgradeState)
+							}
 						}
 					}
 				}
@@ -153,12 +179,14 @@ var (
 	}
 )
 
-func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState) *numaflowv1.Pipeline {
-	return CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false,
-		map[string]string{
-			common.LabelKeyParentRollout:               pipelineRolloutName,
-			common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
-			common.LabelKeyUpgradeState:                string(upgradeState),
-		},
-		map[string]string{})
+func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason) *numaflowv1.Pipeline {
+	labels := map[string]string{
+		common.LabelKeyParentRollout:               pipelineRolloutName,
+		common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
+		common.LabelKeyUpgradeState:                string(upgradeState),
+	}
+	if upgradeStateReason != nil {
+		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
+	}
+	return CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, labels, map[string]string{})
 }
