@@ -224,19 +224,14 @@ func scaleDownMonoVertex(
 
 	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", len(pods.Items), scaleValue)
 
-	if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "max"); err != nil {
-		return false, err
-	}
-
 	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 	originalMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
 	if err != nil {
 		return false, err
 	}
+	newMin := originalMin
 	if found && originalMin > scaleValue {
-		if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "min"); err != nil {
-			return false, err
-		}
+		newMin = scaleValue
 	}
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
@@ -246,11 +241,12 @@ func scaleDownMonoVertex(
 		Actual:     actualPodsCount,
 	}
 
-	if err = kubernetes.UpdateResource(ctx, c, promotedChildDef); err != nil {
-		return false, fmt.Errorf("error scaling down the existing promoted monovertex: %w", err)
+	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, scaleValue)
+	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
+		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("updated the promoted monovertex with the new scale configuration")
+	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
 
 	rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
 	rolloutPromotedChildStatus.MarkAllSourceVerticesScaledDown()
@@ -309,7 +305,7 @@ func scaleMonoVertexToDesiredValues(
 		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("updated the promoted monovertex with the desired scale configuration")
+	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted monovertex with the desired scale configuration")
 
 	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = true
 	rolloutPromotedChildStatus.AllSourceVerticesScaledDown = false

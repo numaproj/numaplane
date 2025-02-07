@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -294,12 +295,7 @@ func scaleDownPipelineSourceVertices(
 	}
 
 	if promotedChildNeedsUpdate {
-		err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
-		if err != nil {
-			return false, err
-		}
-
-		if err = kubernetes.UpdateResource(ctx, c, promotedChildDef); err != nil {
+		if err := patchPipelineVertices(ctx, promotedChildDef, vertices, c); err != nil {
 			return false, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
 		}
 	}
@@ -386,20 +382,34 @@ func scalePipelineSourceVerticesToDesiredValues(
 		}
 	}
 
-	err = unstructured.SetNestedSlice(promotedChildDef.Object, vertices, "spec", "vertices")
-	if err != nil {
-		return false, err
-	}
-
-	if err := kubernetes.UpdateResource(ctx, c, promotedChildDef); err != nil {
+	if err := patchPipelineVertices(ctx, promotedChildDef, vertices, c); err != nil {
 		return false, fmt.Errorf("error scaling the existing promoted pipeline source vertices to desired values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("updated the promoted pipeline source vertices with the desired scale configuration")
+	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted pipeline source vertices with the desired scale configuration")
 
 	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = true
 	rolloutPromotedChildStatus.AllSourceVerticesScaledDown = false
 	rolloutPromotedChildStatus.ScaleValues = nil
 
 	return true, nil
+}
+
+func patchPipelineVertices(ctx context.Context, promotedChildDef *unstructured.Unstructured, vertices []any, c client.Client) error {
+	patch := &unstructured.Unstructured{Object: make(map[string]any)}
+	err := unstructured.SetNestedSlice(patch.Object, vertices, "spec", "vertices")
+	if err != nil {
+		return err
+	}
+
+	patchAsBytes, err := patch.MarshalJSON()
+	if err != nil {
+		return err
+	}
+
+	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
+		return err
+	}
+
+	return nil
 }
