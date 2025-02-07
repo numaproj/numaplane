@@ -47,12 +47,12 @@ func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, e
 	}
 }
 
-func (fpc fakeProgressiveController) ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error) {
-	return nil, false, nil
+func (fpc fakeProgressiveController) PreUpgradePromotedChildProcessing(ctx context.Context, rolloutObject, liveRolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
 }
 
-func (fpc fakeProgressiveController) ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
+func (fpc fakeProgressiveController) PostUpgradePromotedChildProcessing(ctx context.Context, rolloutObject, liveRolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
 }
 
 func Test_processUpgradingChild(t *testing.T) {

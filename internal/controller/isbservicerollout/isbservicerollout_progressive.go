@@ -2,7 +2,6 @@ package isbservicerollout
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -114,22 +113,22 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	return apiv1.AssessmentResultSuccess, nil
 }
 
-// This does not need to be implemented for ISBServiceRollout
-func (r *ISBServiceRolloutReconciler) ScaleDownPromotedChildSourceVertices(
+func (r *ISBServiceRolloutReconciler) PreUpgradePromotedChildProcessing(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) (map[string]apiv1.ScaleValues, bool, error) {
-	return nil, false, errors.New("not implemented for ISBServiceRollout")
+) (bool, error) {
+	return false, nil
 }
 
-// This does not need to be implemented for ISBServiceRollout
-func (r *ISBServiceRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+func (r *ISBServiceRolloutReconciler) PostUpgradePromotedChildProcessing(
 	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
+	liveRolloutObject ctlrcommon.RolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) error {
-	return errors.New("not implemented for ISBServiceRollout")
+) (bool, error) {
+	return false, nil
 }
