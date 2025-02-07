@@ -646,7 +646,13 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef: *ctlrcommon.CreateTestPipelineOfSpec(
 				ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpec, numaflowv1.PipelinePhaseRunning),
 				ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhasePaused, numaflowv1.Status{},
-				false, map[string]string{}, map[string]string{}),
+				false,
+				map[string]string{
+					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+					common.LabelKeyParentRollout:                  "pipelinerollout-test",
+					common.LabelKeyUpgradeState:                   "promoted"},
+				map[string]string{}),
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialInProgressStrategy:      apiv1.UpgradeStrategyNoOp,
 			numaflowControllerPauseRequest: &falseValue,
@@ -1034,6 +1040,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
@@ -1059,16 +1066,17 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Clean up after progressive upgrade: pipeline still draining",
+			name:            "Clean up after progressive upgrade: pipeline still pausing",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhasePaused,
+				numaflowv1.PipelinePhasePausing,
 				numaflowv1.Status{},
 				false,
 				map[string]string{
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				}),
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(

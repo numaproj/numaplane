@@ -380,7 +380,11 @@ func writeToFile(resource Output) error {
 
 func closeAllFiles() error {
 	for _, file := range openFiles {
-		err := file.Close()
+		err := file.Sync()
+		if err != nil { // flush file to disk
+			return err
+		}
+		err = file.Close()
 		if err != nil {
 			return err
 		}

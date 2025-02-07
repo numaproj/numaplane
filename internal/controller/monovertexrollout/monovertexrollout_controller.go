@@ -185,6 +185,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
+	requeueDelay := time.Duration(0)
 
 	defer func() {
 		if monoVertexRollout.Status.IsHealthy() {
@@ -211,15 +212,20 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
-	newMonoVertexDef, err := r.makePromotedMonoVertexDefinition(ctx, monoVertexRollout)
+	// check if there's a promoted monovertex yet
+	promotedMonovertices, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, false, r.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error looking for promoted monovertex: %v", err)
+	}
+
+	newMonoVertexDef, err := r.makeTargetMonoVertexDefinition(ctx, monoVertexRollout)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
-		k8stypes.NamespacedName{Namespace: newMonoVertexDef.GetNamespace(), Name: newMonoVertexDef.GetName()})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
+	if newMonoVertexDef != nil {
+		if promotedMonovertices == nil || len(promotedMonovertices.Items) == 0 {
+
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
@@ -229,28 +235,50 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
+
 		} else {
-			return ctrl.Result{}, fmt.Errorf("error getting MonoVertex: %v", err)
-		}
-	} else {
-		// merge and update
-		// we directly apply changes as there is no need for draining MonoVertex
-		newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		requeueDelay, err := r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
-		}
-		if requeueDelay > 0 {
-			return ctrl.Result{RequeueAfter: requeueDelay}, nil
+			existingMonoVertexDef, err := kubernetes.GetResource(ctx, r.client, newMonoVertexDef.GroupVersionKind(),
+				k8stypes.NamespacedName{Namespace: newMonoVertexDef.GetNamespace(), Name: newMonoVertexDef.GetName()})
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error getting MonoVertex: %v", err)
+			}
+			// merge and update
+			newMonoVertexDef, err = r.merge(existingMonoVertexDef, newMonoVertexDef)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			requeueDelay, err = r.processExistingMonoVertex(ctx, monoVertexRollout, existingMonoVertexDef, newMonoVertexDef, syncStartTime)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
+			}
+			if requeueDelay > 0 {
+				return ctrl.Result{RequeueAfter: requeueDelay}, nil
+			}
+			// process status
+			r.processMonoVertexStatus(ctx, existingMonoVertexDef, monoVertexRollout)
 		}
 	}
 
-	// process status
-	r.processMonoVertexStatus(ctx, existingMonoVertexDef, monoVertexRollout)
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout)
 
+	// clean up recyclable monovertices
+	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// if we still have monovertices that need deleting, or if we're in the middle of an upgrade strategy, then requeue
+	if !allDeleted || inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+		if requeueDelay == 0 {
+			requeueDelay = common.DefaultRequeueDelay
+		} else {
+			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
+		}
+	}
+
+	if requeueDelay > 0 {
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -342,15 +370,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
-	}
-	// clean up recyclable monovertices
-	allDeleted, err := ctlrcommon.GarbageCollectChildren(ctx, monoVertexRollout, r, r.client)
-	if err != nil {
-		return 0, err
-	}
-
-	if requeueDelay == 0 && !allDeleted { // if any haven't been deleted, requeue
-		requeueDelay = common.DefaultRequeueDelay
 	}
 
 	return requeueDelay, nil
@@ -507,11 +526,11 @@ func getMonoVertexChildResourceHealth(conditions []metav1.Condition) (metav1.Con
 }
 
 // create the definition for the MonoVertex child of the Rollout which is labeled "promoted"
-func (r *MonoVertexRolloutReconciler) makePromotedMonoVertexDefinition(
+func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 ) (*unstructured.Unstructured, error) {
-	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, r.client, true)
+	monoVertexName, err := ctlrcommon.GetChildName(ctx, monoVertexRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
 	if err != nil {
 		return nil, err
 	}

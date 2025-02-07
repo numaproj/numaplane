@@ -73,7 +73,7 @@ func ProcessResource(
 	numaLogger := logger.FromContext(ctx)
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, false, c)
+	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, false, c)
 	if err != nil {
 		return false, false, 0, err
 	}
@@ -81,7 +81,7 @@ func ProcessResource(
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it, first making sure one doesn't already exist by checking the live K8S API
-		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, true, c)
+		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
@@ -132,7 +132,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, c, useExistingChildName)
+	childName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, useExistingChildName)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,8 @@ func processUpgradingChild(
 			}
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingUpgradingChildDef)
+			reasonFailure := common.LabelValueProgressiveFailure
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -292,12 +293,13 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultSuccess:
 		// Label the new child as promoted and then remove the label from the old one
 		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, existingUpgradingChildDef)
+		reasonSuccess := common.LabelValueProgressiveSuccess
+		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
 
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, existingPromotedChildDef)
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}

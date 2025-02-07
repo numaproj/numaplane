@@ -10,6 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -66,44 +67,60 @@ func getRecyclableObjects(
 	)
 }
 
-func findChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
+// Find the children of a given Rollout of specified UpgradeState (plus optional UpgradeStateReason)
+func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
 	childGVR := rolloutObject.GetChildGVR()
-
-	labelSelector := fmt.Sprintf(
-		"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
-		common.LabelKeyUpgradeState, string(upgradeState))
 
 	var children *unstructured.UnstructuredList
 	var err error
 	if checkLive {
+		var labelSelector string
+		if upgradeStateReason == nil {
+			labelSelector = fmt.Sprintf(
+				"%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState, string(upgradeState))
+		} else {
+			labelSelector = fmt.Sprintf(
+				"%s=%s,%s=%s,%s=%s", common.LabelKeyParentRollout, rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState, string(upgradeState), common.LabelKeyUpgradeStateReason, string(*upgradeStateReason))
+		}
 		children, err = kubernetes.ListLiveResource(
 			ctx, childGVR.Group, childGVR.Version, childGVR.Resource,
 			rolloutObject.GetRolloutObjectMeta().Namespace, labelSelector, "")
 	} else {
-		children, err = kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(), rolloutObject.GetRolloutObjectMeta().GetNamespace(),
-			client.MatchingLabels{
+		var labelMatch client.MatchingLabels
+		if upgradeStateReason == nil {
+			labelMatch = client.MatchingLabels{
 				common.LabelKeyParentRollout: rolloutObject.GetRolloutObjectMeta().Name,
 				common.LabelKeyUpgradeState:  string(upgradeState),
-			},
-		)
+			}
+		} else {
+			labelMatch = client.MatchingLabels{
+				common.LabelKeyParentRollout:      rolloutObject.GetRolloutObjectMeta().Name,
+				common.LabelKeyUpgradeState:       string(upgradeState),
+				common.LabelKeyUpgradeStateReason: string(*upgradeStateReason),
+			}
+
+		}
+		children, err = kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(), rolloutObject.GetRolloutObjectMeta().GetNamespace(), labelMatch)
 	}
 
 	return children, err
 }
 
-// find the most current child of a Rollout
+// find the most current child of a Rollout (of specified UpgradeState, plus optional UpgradeStateReason)
 // typically we should only find one, but perhaps a previous reconciliation failure could cause us to find multiple
 // if we do see older ones, recycle them
-func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
+func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	children, err := findChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, checkLive, c)
+	children, err := FindChildrenOfUpgradeState(ctx, rolloutObject, upgradeState, upgradeStateReason, checkLive, c)
 	if err != nil {
 		return nil, err
 	}
 
-	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, found: %s",
-		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, kubernetes.ExtractResourceNames(children))
+	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, upgrade state reason=%v, found: %s",
+		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, util.OptionalString(upgradeStateReason), kubernetes.ExtractResourceNames(children))
 
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
@@ -128,10 +145,15 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 			}
 		}
 		// recycle the previous children
+		// TODO: do we want this? consider the cases that would actually use it
 		for _, recyclableChild := range recycleList {
 			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
-			_ = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, recyclableChild)
+			purgeOld := common.LabelValuePurgeOld
+			err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+			if err != nil {
+				numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
+			}
 		}
 		return mostCurrentChild, nil
 	} else if len(children.Items) == 1 {
@@ -142,12 +164,45 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
-func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, childObject *unstructured.Unstructured) error {
+func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
+	numaLogger := logger.FromContext(ctx)
+
+	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debug("patching upgradeState and upgradeStateReason to %s:%s/%s",
+		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+	var patchJson string
 	labels := childObject.GetLabels()
 	labels[common.LabelKeyUpgradeState] = string(upgradeState)
+	if upgradeStateReason != nil {
+		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
+		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `","` + common.LabelKeyUpgradeStateReason + `":"` + string(*upgradeStateReason) + `"}}}`
+	} else {
+		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
+	}
 	childObject.SetLabels(labels)
-	patchJson := `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
 	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
+}
+
+func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {
+	numaLogger := logger.FromContext(ctx)
+
+	upgradeStateStr, found := childObject.GetLabels()[common.LabelKeyUpgradeState]
+	if !found {
+		numaLogger.Debug("upgradeState unset for %s:%s/%s", childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		return nil, nil
+	} else {
+		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
+		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debug("reading upgradeState and upgradeStateReason for %s:%s/%s",
+			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
+		if !found {
+			upgradeState := common.UpgradeState(upgradeStateStr)
+			return &upgradeState, nil
+		} else {
+			upgradeState := common.UpgradeState(upgradeStateStr)
+			reason := common.UpgradeStateReason(reasonStr)
+			return &upgradeState, &reason
+		}
+	}
+
 }
 
 // Get the index of the child following the dash in the name
@@ -179,12 +234,12 @@ func getChildIndex(rolloutName string, childName string) (int, error) {
 	return childIndex, nil
 }
 
-// get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState"
+// get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
 // if none is found, create a new one
 // if one is found, create a new one if "useExistingChild=false", else use existing one
-func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller RolloutController, upgradeState common.UpgradeState, c client.Client, useExistingChild bool) (string, error) {
+func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller RolloutController, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, c client.Client, useExistingChild bool) (string, error) {
 
-	existingChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, true, c) // if for some reason there's more than 1
+	existingChild, err := FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, upgradeState, upgradeStateReason, true, c) // if for some reason there's more than 1
 	if err != nil {
 		return "", err
 	}

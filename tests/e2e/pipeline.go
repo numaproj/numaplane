@@ -28,6 +28,14 @@ func getPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructu
 	return getChildResource(getGVRForPipeline(), namespace, pipelineRolloutName)
 }
 
+func getPipelineName(namespace, pipelineRolloutName string) (string, error) {
+	pipeline, err := getPipeline(namespace, pipelineRolloutName)
+	if err != nil {
+		return "", err
+	}
+	return pipeline.GetName(), nil
+}
+
 func verifyPipelineSpec(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) bool) {
 
 	document("verifying Pipeline Spec")
@@ -58,7 +66,7 @@ func verifyPipelineStatusConsistently(namespace string, pipelineRolloutName stri
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, 30*time.Second, testPollingInterval).Should(BeTrue())
+	}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
 }
 
