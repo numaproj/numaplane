@@ -223,11 +223,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 	numaLogger := logger.FromContext(ctx)
 
 	defer func() {
-		if controller.Status.IsHealthy() {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controller.Namespace, controller.Name, string(controller.Status.Phase)).Set(1)
-		} else {
-			r.customMetrics.NumaflowControllersHealth.WithLabelValues(controller.Namespace, controller.Name, string(controller.Status.Phase)).Set(0)
-		}
+		r.customMetrics.SetNumaflowControllersHealth(controller.Namespace, controller.Name, string(controller.Status.Phase))
 	}()
 
 	if !controller.DeletionTimestamp.IsZero() {
@@ -244,7 +240,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 
 		// generate the metrics for the numaflow controller deletion
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowController, "delete").Observe(time.Since(syncStartTime).Seconds())
-		r.customMetrics.NumaflowControllersHealth.DeleteLabelValues(controller.Namespace, controller.Name, string(controller.Status.Phase))
+		r.customMetrics.DeleteNumaflowControllersHealth(controller.Namespace, controller.Name)
 		return ctrl.Result{}, nil
 	}
 
