@@ -199,7 +199,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
-			// Set the foreground deletion policy
+			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
 			foreground := metav1.DeletePropagationForeground
 			if err := r.client.Delete(ctx, nfcRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err

@@ -231,9 +231,8 @@ func (r *NumaflowControllerReconciler) reconcile(
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
 		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
 			// Check if dependent resources are deleted, if not then requeue
-			if !r.areDependentResourcesDeleted(ctx, controller) {
-				numaLogger.Warn("Dependent resources are not deleted yet, requeue...")
-				return ctrl.Result{Requeue: true}, nil
+			if ok, err := r.areDependentResourcesDeleted(ctx, controller); !ok || err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete dependent resources: %v", err)
 			}
 			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
 		}
@@ -718,12 +717,12 @@ func (r *NumaflowControllerReconciler) ErrorHandler(numaflowController *apiv1.Nu
 }
 
 // areDependentResourcesDeleted checks if dependent resources are deleted.
-func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.Context, controller *apiv1.NumaflowController) bool {
+func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.Context, controller *apiv1.NumaflowController) (bool, error) {
 	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowPipelineKind,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return false
+			return false, err
 		}
 		pipelineList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
@@ -731,7 +730,7 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return false
+			return false, err
 		}
 		monoVertexList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
@@ -739,13 +738,13 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return false
+			return false, err
 		}
 		isbServiceList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
 	if len(pipelineList.Items)+len(monoVertexList.Items)+len(isbServiceList.Items) == 0 {
-		return true
+		return true, nil
 	}
 
-	return false
+	return false, fmt.Errorf("dependent resources are not deleted")
 }
