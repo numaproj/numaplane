@@ -153,7 +153,7 @@ func (r *MonoVertexRolloutReconciler) PostUpgradePromotedChildProcessing(
 
 /*
 scaleDownMonoVertex scales down the pods of a monovertex to half of the current count if not already scaled down.
-It checks if all source vertices are already scaled down and skips the operation if true.
+It checks if the monovertex was already scaled down and skips the operation if true.
 The function updates the scale values in the rollout status and adjusts the scale configuration
 of the promoted child definition. It ensures that the scale.min does not exceed the new scale.max.
 Returns a boolean indicating if scaling was performed and an error if any operation fails.

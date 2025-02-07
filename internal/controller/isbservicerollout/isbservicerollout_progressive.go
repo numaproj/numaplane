@@ -115,8 +115,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 
 func (r *ISBServiceRolloutReconciler) PreUpgradePromotedChildProcessing(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
@@ -125,8 +124,7 @@ func (r *ISBServiceRolloutReconciler) PreUpgradePromotedChildProcessing(
 
 func (r *ISBServiceRolloutReconciler) PostUpgradePromotedChildProcessing(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
