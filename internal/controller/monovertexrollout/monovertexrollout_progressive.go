@@ -12,6 +12,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -298,15 +299,13 @@ func scaleMonoVertexToDesiredValues(
 		return false, fmt.Errorf("the scale values for the monovertex '%s' are not present in the rollout promotedChildStatus", promotedChildDef.GetName())
 	}
 
-	if err := unstructured.SetNestedField(promotedChildDef.Object, rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
-		return false, err
-	}
+	patchJson := fmt.Sprintf(
+		`{"spec": {"scale": {"min": %d, "max": %d}}}`,
+		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin,
+		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax,
+	)
 
-	if err := unstructured.SetNestedField(promotedChildDef.Object, rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin, "spec", "scale", "min"); err != nil {
-		return false, err
-	}
-
-	if err := kubernetes.UpdateResource(ctx, c, promotedChildDef); err != nil {
+	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
 		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
 	}
 
