@@ -528,6 +528,15 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 	}
 
+	switch expectedFinalPhase {
+	case numaflowv1.PipelinePhasePausing:
+		VerifyPipelinePausing(Namespace, name)
+	case numaflowv1.PipelinePhasePaused:
+		VerifyPipelinePaused(Namespace, name)
+	case numaflowv1.PipelinePhaseFailed:
+		VerifyPipelineFailed(Namespace, name)
+	}
+
 }
 
 func VerifyPipelineStaysPaused(pipelineRolloutName string) {
@@ -540,7 +549,7 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 		}
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
 			(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
-	}, 15*time.Second, testPollingInterval).Should(BeTrue())
+	}, 10*time.Second, testPollingInterval).Should(BeTrue())
 
 	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
