@@ -61,7 +61,8 @@ var (
 
 	disableTestArtifacts string
 	enablePodLogs        string
-	upgradeStrategy      config.USDEUserStrategy
+
+	UpgradeStrategy config.USDEUserStrategy
 
 	openFiles map[string]*os.File
 )
@@ -69,18 +70,18 @@ var (
 const (
 	Namespace = "numaplane-system"
 
-	ControllerOutputPath = "output/controllers"
+	ControllerOutputPath = "../output/controllers"
 
-	ResourceChangesPipelineOutputPath           = "output/resources/pipelinerollouts"
-	ResourceChangesISBServiceOutputPath         = "output/resources/isbservicerollouts"
-	ResourceChangesMonoVertexOutputPath         = "output/resources/monovertexrollouts"
-	ResourceChangesNumaflowControllerOutputPath = "output/resources/numaflowcontrollerrollouts"
+	ResourceChangesPipelineOutputPath           = "../output/resources/pipelinerollouts"
+	ResourceChangesISBServiceOutputPath         = "../output/resources/isbservicerollouts"
+	ResourceChangesMonoVertexOutputPath         = "../output/resources/monovertexrollouts"
+	ResourceChangesNumaflowControllerOutputPath = "../output/resources/numaflowcontrollerrollouts"
 
-	PodLogsPipelineOutputPath            = "output/logs/pipelinerollouts"
-	PodLogsISBServiceOutputPath          = "output/logs/isbservicerollouts"
-	PodLogsMonoVertexOutputPath          = "output/logs/monovertexrollouts"
-	PodLogsNumaflowControllerOutputPath  = "output/logs/numaflowcontrollerrollouts"
-	PodLogsNumaplaneControllerOutputPath = "output/logs/numaplanecontroller"
+	PodLogsPipelineOutputPath            = "../output/logs/pipelinerollouts"
+	PodLogsISBServiceOutputPath          = "../output/logs/isbservicerollouts"
+	PodLogsMonoVertexOutputPath          = "../output/logs/monovertexrollouts"
+	PodLogsNumaflowControllerOutputPath  = "../output/logs/numaflowcontrollerrollouts"
+	PodLogsNumaplaneControllerOutputPath = "../output/logs/numaplanecontroller"
 
 	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
 	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
@@ -103,7 +104,7 @@ type Output struct {
 }
 
 // document for Ginkgo framework and print to console
-func document(testName string) {
+func Document(testName string) {
 	snapshotCluster(testName)
 	By(testName)
 }
@@ -119,7 +120,7 @@ func snapshotCluster(testName string) {
 }
 
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
-	document(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector))
+	Document(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector))
 
 	Eventually(func() bool {
 		podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
@@ -403,7 +404,7 @@ func getUpgradeStrategy() config.USDEUserStrategy {
 	}
 }
 
-func beforeSuiteSetup() {
+func BeforeSuiteSetup() {
 	var err error
 	// make output directory to store temporary outputs; if it's there from before delete it
 	disableTestArtifacts = os.Getenv("DISABLE_TEST_ARTIFACTS")
@@ -413,8 +414,8 @@ func beforeSuiteSetup() {
 		setupOutputDir()
 	}
 	// this must be set for all tests to run
-	upgradeStrategy = getUpgradeStrategy()
-	Expect(upgradeStrategy.IsValid()).To(BeTrue())
+	UpgradeStrategy = getUpgradeStrategy()
+	Expect(UpgradeStrategy.IsValid()).To(BeTrue())
 
 	openFiles = make(map[string]*os.File)
 
@@ -526,7 +527,7 @@ func setupOutputDir() {
 	)
 
 	// clear out prior runs output files
-	directory := "output"
+	directory := "../output"
 	_, err := os.Stat(directory)
 	if err == nil {
 		err = os.RemoveAll(directory)

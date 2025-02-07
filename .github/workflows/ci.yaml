@@ -106,8 +106,8 @@ jobs:
       - name: Verify docker image
         run: make image
   
-  e2e-tests:
-    name: E2E Tests
+  functional-e2e-tests:
+    name: Functional E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -159,7 +159,7 @@ jobs:
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-e2e
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-functional-e2e
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
@@ -175,6 +175,80 @@ jobs:
         if: always()
         with:
           name: pod-logs-${{matrix.strategy}}
+          path: |
+            tests/e2e/output/logs/
+          retention-days: 7
+
+
+  ppnd-e2e-test:
+    name: Pause and Drain E2E Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     strategy: ["pause-and-drain", "progressive", "no-strategy"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Restore go build cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-v1-${{ hashFiles('**/go.mod') }}
+      
+      - name: Setup Golang
+        uses: actions/setup-go@v4.0.0
+        with:
+          go-version: '1.23'
+
+      - name: Add bins to PATH
+        run: |
+          echo /home/runner/go/bin >> $GITHUB_PATH
+          echo /usr/local/bin >> $GITHUB_PATH
+
+      - name: Install k3d
+        run: |
+          curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
+          echo 'k3d installed'
+          k3d --version
+
+      - name: Create a cluster
+        run: |
+          export PATH=$PATH:/usr/local/bin
+          k3d cluster create e2e  --runtime-ulimit "nofile=65535:65535"
+          k3d kubeconfig get e2e > ~/.kube/config
+          echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts
+          echo 'Waiting for the cluster to be ready...'
+          until kubectl cluster-info; do sleep 1; done
+
+      - name: Install Numaplane
+        env:
+          GOPATH: /home/runner/go
+        run:
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=pause-and-drain make start
+
+      - name: Run e2e tests
+        env:
+          GOPATH: /home/runner/go
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=pause-and-drain ENABLE_POD_LOGS=true make test-ppnd-e2e
+
+      - name: Archive resource changes
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ppnd-resource-changes
+          path: |
+            tests/e2e/output/resources/
+          retention-days: 7
+
+      - name: Archive pod logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ppnd-pod-logs
           path: |
             tests/e2e/output/logs/
           retention-days: 7
