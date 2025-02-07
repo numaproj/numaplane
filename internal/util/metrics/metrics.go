@@ -6,6 +6,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 type CustomMetrics struct {
@@ -99,6 +101,7 @@ const (
 )
 
 var (
+	phases         = []string{apiv1.PhasePending.String(), apiv1.PhaseDeployed.String(), apiv1.PhaseFailed.String()}
 	defaultLabels  = prometheus.Labels{LabelIntuit: "true"}
 	pipelineLock   sync.Mutex
 	isbServiceLock sync.Mutex
@@ -429,5 +432,95 @@ func (m *CustomMetrics) DecMonoVertexRollouts(name, namespace string) {
 	delete(m.MonoVerticesCounterMap[namespace], name)
 	for ns, monoVertices := range m.MonoVerticesCounterMap {
 		m.MonoVertexRolloutsRunning.WithLabelValues(ns).Set(float64(len(monoVertices)))
+	}
+}
+
+// SetPipelineRolloutHealth sets the health of the pipeline rollout
+func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase string) {
+	for _, phase := range phases {
+		if phase == currentPhase {
+			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
+		} else {
+			m.PipelinesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		}
+	}
+}
+
+// DeletePipelineRolloutHealth deletes the pipeline rollout health metric
+func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
+	for _, phase := range phases {
+		m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+	}
+}
+
+// SetISBServicesRolloutHealth sets the health of the ISB service rollout
+func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhase string) {
+	for _, phase := range phases {
+		if phase == currentPhase {
+			m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
+		} else {
+			m.ISBServicesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		}
+	}
+}
+
+// DeleteISBServicesRolloutHealth deletes the ISB service rollout health metric
+func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
+	for _, phase := range phases {
+		m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+	}
+}
+
+// SetMonoVerticesRolloutHealth sets the health of the monovertex rollout
+func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPhase string) {
+	for _, phase := range phases {
+		if phase == currentPhase {
+			m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase).Set(1)
+		} else {
+			m.MonoVerticesRolloutHealth.WithLabelValues(namespace, name, phase).Set(0)
+		}
+	}
+}
+
+// DeleteMonoVerticesRolloutHealth deletes the monovertex rollout health metric
+func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
+	for _, phase := range phases {
+		m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+	}
+}
+
+// SetNumaflowControllerRolloutsHealth sets the health of the numaflow controller rollout
+func (m *CustomMetrics) SetNumaflowControllerRolloutsHealth(namespace, name, currentPhase string) {
+	for _, phase := range phases {
+		if phase == currentPhase {
+			m.NumaflowControllerRolloutsHealth.WithLabelValues(namespace, name, phase).Set(1)
+		} else {
+			m.NumaflowControllerRolloutsHealth.WithLabelValues(namespace, name, phase).Set(0)
+		}
+	}
+}
+
+// DeleteNumaflowControllerRolloutsHealth deletes the numaflow controller rollout health metric
+func (m *CustomMetrics) DeleteNumaflowControllerRolloutsHealth(namespace, name string) {
+	for _, phase := range phases {
+		m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
+	}
+}
+
+// SetNumaflowControllersHealth sets the health of the numaflow controller
+func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPhase string) {
+	for _, phase := range phases {
+		if phase == currentPhase {
+			m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase).Set(1)
+		} else {
+			m.NumaflowControllersHealth.WithLabelValues(namespace, name, phase).Set(0)
+		}
+	}
+}
+
+// DeleteNumaflowControllersHealth deletes the numaflow controller health metric
+func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) {
+	for _, phase := range phases {
+		m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
 	}
 }
