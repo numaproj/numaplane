@@ -95,7 +95,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	numaLogger.Debug("started pre-upgrade processing of promoted monovertex")
 
 	if rolloutPromotedChildStatus == nil {
-		rolloutPromotedChildStatus = &apiv1.PromotedChildStatus{Name: promotedChildDef.GetName()}
+		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
 	// scaleDownMonoVertex either updates the promoted monovertex to scale down the pods or
@@ -142,14 +142,14 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	scaledToDesired, err := scaleMonoVertexToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	performedScaling, err := scaleMonoVertexToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
 	if err != nil {
 		return true, err
 	}
 
 	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
 
-	return scaledToDesired, nil
+	return performedScaling, nil
 }
 
 /*

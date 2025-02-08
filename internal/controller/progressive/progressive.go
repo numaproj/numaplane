@@ -85,7 +85,11 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
+			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()}
+			}
+
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -252,7 +256,7 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -276,7 +280,7 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}

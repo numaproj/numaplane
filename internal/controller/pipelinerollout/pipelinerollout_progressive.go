@@ -114,7 +114,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	numaLogger.Debug("started pre-upgrade processing of promoted pipeline")
 
 	if rolloutPromotedChildStatus == nil {
-		rolloutPromotedChildStatus = &apiv1.PromotedChildStatus{Name: promotedChildDef.GetName()}
+		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
 	// scaleDownPipelineSourceVertices either updates the promoted pipeline to scale down the source vertices
@@ -161,14 +161,14 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	scaledToDesired, err := scalePipelineSourceVerticesToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	performedScaling, err := scalePipelineSourceVerticesToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
 	if err != nil {
 		return true, err
 	}
 
 	numaLogger.Debug("completed post-upgrade processing of promoted pipeline")
 
-	return scaledToDesired, nil
+	return performedScaling, nil
 }
 
 /*
