@@ -146,7 +146,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, false, client)
+				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)

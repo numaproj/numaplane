@@ -65,7 +65,6 @@ func ProcessResource(
 	liveRolloutObject ctlrcommon.RolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
-	skipPromotedChildSourceVerticesScaling bool,
 	controller progressiveController,
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
@@ -86,6 +85,14 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if requeue {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
+
 			// create object as it doesn't exist
 			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
@@ -94,19 +101,7 @@ func ProcessResource(
 
 			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			if err != nil {
-				return false, true, 0, err
-			}
-
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
-			if err != nil {
-				return false, false, 0, err
-			}
-			if requeue {
-				return false, true, common.DefaultRequeueDelay, nil
-			}
-
-			return false, true, 0, nil
+			return false, true, 0, err
 		}
 	}
 	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
@@ -121,7 +116,7 @@ func ProcessResource(
 		return false, false, 0, err
 	}
 
-	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, skipPromotedChildSourceVerticesScaling, c)
+	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, newChild, 0, err
 	}
@@ -174,7 +169,6 @@ func processUpgradingChild(
 	liveRolloutObject ctlrcommon.RolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
-	skipPromotedChildSourceVerticesScaling bool,
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -258,6 +252,14 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if requeue {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
+
 			// create a definition for the "upgrading" child which has a new name (the definition created above had the previous child's name which was necessary for comparison)
 			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
@@ -272,19 +274,7 @@ func processUpgradingChild(
 			}
 
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			if err != nil {
-				return false, true, 0, err
-			}
-
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
-			if err != nil {
-				return false, false, 0, err
-			}
-			if requeue {
-				return false, false, common.DefaultRequeueDelay, nil
-			}
-
-			return false, true, 0, nil
+			return false, true, 0, err
 		} else {
 			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
