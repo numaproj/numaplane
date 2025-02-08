@@ -69,7 +69,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 }
 
 /*
-PreUpgradePromotedChildProcessing handles the pre-upgrade processing of a promoted monovertex.
+ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted monovertex.
 It performs the following pre-upgrade operations:
 - it ensures that the promoted monovertex is scaled down before proceeding with a progressive upgrade.
 
@@ -83,14 +83,14 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *MonoVertexRolloutReconciler) PreUpgradePromotedChildProcessing(
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("PreUpgradePromotedChildProcessing").WithName("MonoVertexRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("MonoVertexRollout")
 
 	numaLogger.Debug("started pre-upgrade processing of promoted monovertex")
 
@@ -113,7 +113,7 @@ func (r *MonoVertexRolloutReconciler) PreUpgradePromotedChildProcessing(
 }
 
 /*
-PostUpgradePromotedChildProcessing handles the post-upgrade processing of a promoted monovertex.
+ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted monovertex.
 It performs the following post-upgrade operations:
 - it restores the promoted monovertex scale values to the desired values retrieved from the rollout status.
 
@@ -127,14 +127,14 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *MonoVertexRolloutReconciler) PostUpgradePromotedChildProcessing(
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("PostUpgradePromotedChildProcessing").WithName("MonoVertexRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("MonoVertexRollout")
 
 	numaLogger.Debug("started post-upgrade processing of promoted monovertex")
 

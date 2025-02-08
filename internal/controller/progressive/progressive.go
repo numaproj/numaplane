@@ -47,11 +47,11 @@ type progressiveController interface {
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
-	// PreUpgradePromotedChildProcessing performs operations on the promoted child prior to the upgrade
-	PreUpgradePromotedChildProcessing(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
+	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// PostUpgradePromotedChildProcessing performs operations on the promoted child after the upgrade
-	PostUpgradePromotedChildProcessing(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the upgrade
+	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // return:
@@ -98,7 +98,7 @@ func ProcessResource(
 				return false, true, 0, err
 			}
 
-			requeue, err := controller.PreUpgradePromotedChildProcessing(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -276,7 +276,7 @@ func processUpgradingChild(
 				return false, true, 0, err
 			}
 
-			requeue, err := controller.PreUpgradePromotedChildProcessing(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -286,7 +286,7 @@ func processUpgradingChild(
 
 			return false, true, 0, nil
 		} else {
-			requeue, err := controller.PostUpgradePromotedChildProcessing(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}

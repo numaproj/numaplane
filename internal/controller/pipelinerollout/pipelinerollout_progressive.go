@@ -88,7 +88,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ex
 }
 
 /*
-PreUpgradePromotedChildProcessing handles the pre-upgrade processing of a promoted pipeline.
+ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted pipeline.
 It performs the following pre-upgrade operations:
 - it ensures that the promoted pipeline source vertices are scaled down before proceeding with a progressive upgrade.
 
@@ -102,14 +102,14 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *PipelineRolloutReconciler) PreUpgradePromotedChildProcessing(
+func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("PreUpgradePromotedChildProcessing").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("PipelineRollout")
 
 	numaLogger.Debug("started pre-upgrade processing of promoted pipeline")
 
@@ -132,7 +132,7 @@ func (r *PipelineRolloutReconciler) PreUpgradePromotedChildProcessing(
 }
 
 /*
-PostUpgradePromotedChildProcessing handles the post-upgrade processing of a promoted pipeline.
+ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted pipeline.
 It performs the following post-upgrade operations:
 - it restores the promoted pipeline source vertices scale values to the desired values retrieved from the rollout status.
 
@@ -146,14 +146,14 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *PipelineRolloutReconciler) PostUpgradePromotedChildProcessing(
+func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("PostUpgradePromotedChildProcessing").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("PipelineRollout")
 
 	numaLogger.Debug("started post-upgrade processing of promoted pipeline")
 

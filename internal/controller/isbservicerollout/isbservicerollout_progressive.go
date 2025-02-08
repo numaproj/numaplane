@@ -113,7 +113,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	return apiv1.AssessmentResultSuccess, nil
 }
 
-func (r *ISBServiceRolloutReconciler) PreUpgradePromotedChildProcessing(
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
@@ -122,7 +122,7 @@ func (r *ISBServiceRolloutReconciler) PreUpgradePromotedChildProcessing(
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) PostUpgradePromotedChildProcessing(
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
