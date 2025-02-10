@@ -121,14 +121,14 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	// pods or retrieves the currently running pods to update the rolloutPromotedChildStatus scaleValues.
 	// This serves to make sure that the source vertices pods have been really scaled down before proceeding
 	// with the progressive upgrade.
-	scaledDown, err := scaleDownPipelineSourceVertices(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	performedScaling, err := scaleDownPipelineSourceVertices(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
 	if err != nil {
 		return true, err
 	}
 
 	numaLogger.Debug("completed pre-upgrade processing of promoted pipeline")
 
-	return scaledDown, nil
+	return performedScaling, nil
 }
 
 /*
