@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -362,7 +361,7 @@ func UpdateISBServiceRollout(
 
 			Document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
-			// if we expect the pipeline to be failed
+			// if we expect the pipeline to be healthy after update
 			if !pipelineIsFailed {
 				VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 				VerifyPipelinePaused(Namespace, pipelineRolloutName)
@@ -424,8 +423,8 @@ func UpdateISBServiceRollout(
 	verifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	// VerifyPipelineRunning(Namespace, pipelineRolloutName)
-	if strings.Contains(pipelineRolloutName, "failed") {
+	// check that pipeline will be failed if we expect it to be
+	if pipelineIsFailed {
 		VerifyPipelineFailed(Namespace, pipelineRolloutName)
 	} else {
 		VerifyPipelineRunning(Namespace, pipelineRolloutName, true)
