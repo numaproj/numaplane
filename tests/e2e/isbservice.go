@@ -362,8 +362,7 @@ func UpdateISBServiceRollout(
 
 			Document("Verify that in-progress-strategy gets set to PPND")
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
-			// if we expect the pipeline to be failed?
-			// short term workaround
+			// if we expect the pipeline to be failed
 			if !pipelineIsFailed {
 				VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 				VerifyPipelinePaused(Namespace, pipelineRolloutName)

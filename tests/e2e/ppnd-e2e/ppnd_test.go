@@ -257,7 +257,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// need to update
 		// this update technically doesnt cause data loss since pipeline for now is failed
 		// TODO: clean up each function to be more clear
-		UpdatePipelineRollout(failedPipelineRolloutName, failedPipelineSpec, numaflowv1.PipelinePhaseFailed, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		UpdatePipelineRollout(failedPipelineRolloutName, failedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
 		}, true, false)
 
