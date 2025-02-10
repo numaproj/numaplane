@@ -10,7 +10,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -189,18 +188,17 @@ func scaleDownMonoVertex(
 		scaleValuesMap = rolloutPromotedChildStatus.ScaleValues
 	}
 
-	pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChildDef.GetNamespace()).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
-			common.LabelKeyNumaflowPodMonoVertexName, promotedChildDef.GetName(),
-			// the vertex name for a monovertex is the same as the monovertex name
-			common.LabelKeyNumaflowPodMonoVertexVertexName, promotedChildDef.GetName(),
-		),
-	})
+	podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedChildDef.GetNamespace(), fmt.Sprintf(
+		"%s=%s, %s=%s",
+		common.LabelKeyNumaflowPodMonoVertexName, promotedChildDef.GetName(),
+		// the vertex name for a monovertex is the same as the monovertex name
+		common.LabelKeyNumaflowPodMonoVertexVertexName, promotedChildDef.GetName(),
+	))
 	if err != nil {
 		return false, err
 	}
 
-	actualPodsCount := int64(len(pods.Items))
+	actualPodsCount := int64(len(podsList.Items))
 
 	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 	// to later verify that the pods were actually scaled down.
@@ -222,7 +220,7 @@ func scaleDownMonoVertex(
 		return false, err
 	}
 
-	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", len(pods.Items), scaleValue)
+	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, scaleValue)
 
 	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 	originalMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")

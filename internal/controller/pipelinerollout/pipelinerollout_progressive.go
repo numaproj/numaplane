@@ -11,7 +11,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -234,17 +233,16 @@ func scaleDownPipelineSourceVertices(
 				return false, errors.New("a vertex must have a name")
 			}
 
-			pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChildDef.GetNamespace()).List(ctx, metav1.ListOptions{
-				LabelSelector: fmt.Sprintf("%s=%s, %s=%s",
-					common.LabelKeyNumaflowPodPipelineName, promotedChildDef.GetName(),
-					common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
-				),
-			})
+			podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedChildDef.GetNamespace(), fmt.Sprintf(
+				"%s=%s, %s=%s",
+				common.LabelKeyNumaflowPodPipelineName, promotedChildDef.GetName(),
+				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
+			))
 			if err != nil {
 				return false, err
 			}
 
-			actualPodsCount := int64(len(pods.Items))
+			actualPodsCount := int64(len(podsList.Items))
 
 			numaLogger.WithValues("vertexName", vertexName, "actualPodsCount", actualPodsCount).Debugf("found pods for the source vertex")
 
@@ -268,7 +266,7 @@ func scaleDownPipelineSourceVertices(
 				return false, err
 			}
 
-			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
+			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, scaleValue)
 
 			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
 				return false, err
