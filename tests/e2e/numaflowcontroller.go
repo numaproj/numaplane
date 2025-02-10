@@ -198,7 +198,8 @@ func DeleteNumaflowControllerRollout() {
 // newVersion is the new version the updated NumaflowController should have if it is a valid version
 // pipelineRolloutName is the pipeline we check to be sure that it is pausing during the update
 // valid boolean indicates if newVersion is a valid version or not (which will change the check we make)
-func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRolloutName string, valid bool) {
+// pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
+func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRolloutName string, valid bool, pipelineIsFailed bool) {
 	// new NumaflowController spec
 	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
 		Controller: apiv1.Controller{Version: newVersion},
@@ -213,7 +214,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
 	if UpgradeStrategy == config.PPNDStrategyID && valid {
 
-		if !strings.Contains(pipelineRolloutName, "failed") {
+		if pipelineIsFailed {
 			Document("Verify that in-progress-strategy gets set to PPND")
 			VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			VerifyPipelinePaused(Namespace, pipelineRolloutName)

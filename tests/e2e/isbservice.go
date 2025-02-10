@@ -329,6 +329,7 @@ func DeleteISBServiceRollout(name string) {
 // matches what we expect
 // dataLossFieldChanged determines if the change of spec incurs a potential data loss or not, as defined in the USDE config: https://github.com/numaproj/numaplane/blob/main/config/manager/usde-config.yaml
 // recreateFieldChanged determines if the change of spec should result in a recreation of InterstepBufferService and its underlying pipelines - also defined in the USDE config
+// pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
 func UpdateISBServiceRollout(
 	isbServiceRolloutName,
 	pipelineRolloutName string,
@@ -336,7 +337,8 @@ func UpdateISBServiceRollout(
 	verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool,
 	dataLossFieldChanged bool,
 	recreateFieldChanged bool,
-	overrideSourceVertexReplicas bool) {
+	overrideSourceVertexReplicas bool,
+	pipelineIsFailed bool) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -362,7 +364,7 @@ func UpdateISBServiceRollout(
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			// if we expect the pipeline to be failed?
 			// short term workaround
-			if !strings.Contains(pipelineRolloutName, "failed") {
+			if pipelineIsFailed {
 				VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 				VerifyPipelinePaused(Namespace, pipelineRolloutName)
 			}

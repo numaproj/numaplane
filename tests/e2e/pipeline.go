@@ -139,7 +139,7 @@ func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
 }
 
 func VerifyPipelineFailed(namespace, pipelineRolloutName string) {
-	Document("Verify that Pipeline Rollout condition is Failed")
+	Document("Verify that Pipeline is Failed")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhaseFailed
@@ -374,7 +374,7 @@ func startPipelineRolloutWatches() {
 // shared functions
 
 // create a PipelineRollout of a given spec/name and make sure it's running
-func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec) {
+func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool) {
 
 	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec)
 	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
@@ -393,10 +393,12 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec)
 	})
 
 	VerifyPipelineRolloutDeployed(name)
-	VerifyPipelineRolloutHealthy(name)
 	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
-	VerifyPipelineRunning(namespace, name, true)
+	if failed {
+		VerifyPipelineRolloutHealthy(name)
+		VerifyPipelineRunning(namespace, name, true)
+	}
 }
 
 func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
@@ -461,6 +463,11 @@ func DeletePipelineRollout(name string) {
 }
 
 // update PipelineRollout and verify correct process
+// name - name of PipelineRollout to update
+// newSpec - new child Pipeline spec that will be updated in the rollout
+// expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in
+// verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
+// dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
 func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool, overrideSourceVertexReplicas bool) {
 
 	Document("Updating Pipeline spec in PipelineRollout")
@@ -473,10 +480,8 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		return rollout, nil
 	})
 
-	// no data loss OR system pause
 	if UpgradeStrategy == config.PPNDStrategyID && dataLoss {
 
-		Document("Verify that in-progress-strategy gets set to PPND")
 		switch expectedFinalPhase {
 		case numaflowv1.PipelinePhasePausing:
 			VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
@@ -510,11 +515,11 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		Expect(err).ShouldNot(HaveOccurred())
 	}
 
-	Document("Verifying Pipeline got updated")
-	// get Pipeline to check that spec has been updated to correct spec
-	VerifyPipelineSpec(Namespace, name, verifySpecFunc)
-	// rollout phase will be pending if we are expecting a long pausing state
+	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
 	if expectedFinalPhase != numaflowv1.PipelinePhasePausing {
+		Document("Verifying Pipeline got updated")
+		// get Pipeline to check that spec has been updated to correct spec
+		VerifyPipelineSpec(Namespace, name, verifySpecFunc)
 		VerifyPipelineRolloutDeployed(name)
 	}
 	// child pipeline will only be healthy if it is running
@@ -556,27 +561,4 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 	pipeline, err := getPipeline(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
-}
-
-func CreateFailedPipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec) {
-
-	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec)
-	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
-	Expect(err).ShouldNot(HaveOccurred())
-
-	Document("Verifying that the PipelineRollout was created")
-	Eventually(func() error {
-		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
-		return err
-	}, testTimeout, testPollingInterval).Should(Succeed())
-
-	Document("Verifying that the Pipeline was created")
-	VerifyPipelineSpec(namespace, name, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-		return len(spec.Vertices) == len(retrievedPipelineSpec.Vertices) // TODO: make less kludgey
-		//return reflect.DeepEqual(pipelineSpec, retrievedPipelineSpec) // this may have had some false negatives due to "lifecycle" field maybe, or null values in one
-	})
-
-	VerifyPipelineRolloutDeployed(name)
-	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
-
 }

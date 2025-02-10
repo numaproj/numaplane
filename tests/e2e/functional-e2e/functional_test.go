@@ -212,7 +212,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
 	})
 
 	currentPipelineSpec = initialPipelineSpec
@@ -322,19 +322,19 @@ var _ = Describe("Functional e2e", Serial, func() {
 	time.Sleep(2 * time.Second)
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
-		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, pipelineRolloutName, true)
+		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, pipelineRolloutName, true, false)
 	})
 
 	time.Sleep(2 * time.Second)
 
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, pipelineRolloutName, false)
+		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, pipelineRolloutName, false, false)
 	})
 
 	time.Sleep(2 * time.Second)
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
-		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, pipelineRolloutName, true)
+		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, pipelineRolloutName, true, false)
 	})
 
 	time.Sleep(2 * time.Second)
@@ -347,7 +347,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		}, true, false, false)
+		}, true, false, false, false)
 
 	})
 
@@ -358,7 +358,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		}, false, false, false)
+		}, false, false, false, false)
 
 	})
 
@@ -366,7 +366,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
-		}, false, true, true)
+		}, false, true, true, false)
 
 	})
 

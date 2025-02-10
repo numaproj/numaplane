@@ -177,7 +177,9 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 				return true
 			}, true, false)
 
-			completeSlowPipelineRolloutTest()
+			verifyPipelineIsSlowToPause()
+			allowDataLoss()
+			DeletePipelineRollout(slowPipelineRolloutName)
 
 		}
 	})
@@ -199,7 +201,9 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 				return rollout, nil
 			})
 
-			completeSlowPipelineRolloutTest()
+			verifyPipelineIsSlowToPause()
+			allowDataLoss()
+			DeletePipelineRollout(slowPipelineRolloutName)
 
 			// confirm update
 			VerifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
@@ -223,7 +227,9 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 				return rollout, nil
 			})
 
-			completeSlowPipelineRolloutTest()
+			verifyPipelineIsSlowToPause()
+			allowDataLoss()
+			DeletePipelineRollout(slowPipelineRolloutName)
 
 			// confirm update
 			VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
@@ -240,14 +246,13 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreateFailedPipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 
 		// update spec to have topology change
 		failedPipelineSpec = updatedPipelineSpec
-		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
 		// need to update
 		// this update technically doesnt cause data loss since pipeline for now is failed
@@ -266,7 +271,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreateFailedPipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -280,7 +285,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update would normally cause data loss
 		UpdateISBServiceRollout(isbServiceRolloutName, failedPipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true, false, false)
+		}, true, false, false, true)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
@@ -292,13 +297,13 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreateFailedPipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 
 		Document("Updating Numaflow controller to cause a PPND change")
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, failedPipelineRolloutName, true)
+		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, failedPipelineRolloutName, true, true)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
@@ -325,7 +330,7 @@ func createSlowPipelineRollout() {
 		Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
 	}}
 
-	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec)
+	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false)
 
 	Document("Verifying that the slow pipeline was created")
 	VerifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -336,7 +341,8 @@ func createSlowPipelineRollout() {
 	VerifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
-func completeSlowPipelineRolloutTest() {
+
+func verifyPipelineIsSlowToPause() {
 
 	Document("Verifying that Pipeline tries to pause")
 	VerifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -347,7 +353,9 @@ func completeSlowPipelineRolloutTest() {
 		return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
 	})
 
-	Document("Updating PipelineRollout to allow data loss")
+}
+
+func allowDataLoss() {
 
 	// update the PipelineRollout to allow data loss temporarily
 	UpdatePipelineRolloutInK8S(Namespace, slowPipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
@@ -360,8 +368,5 @@ func completeSlowPipelineRolloutTest() {
 
 	Document("Verifying that Pipeline has stopped trying to pause")
 	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
-
-	Document("Deleting Slow PipelineRollout")
-	DeletePipelineRollout(slowPipelineRolloutName)
 
 }
