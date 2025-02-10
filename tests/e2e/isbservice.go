@@ -364,7 +364,7 @@ func UpdateISBServiceRollout(
 			verifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			// if we expect the pipeline to be failed?
 			// short term workaround
-			if pipelineIsFailed {
+			if !pipelineIsFailed {
 				VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 				VerifyPipelinePaused(Namespace, pipelineRolloutName)
 			}

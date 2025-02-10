@@ -395,7 +395,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	VerifyPipelineRolloutDeployed(name)
 	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
-	if failed {
+	if !failed {
 		VerifyPipelineRolloutHealthy(name)
 		VerifyPipelineRunning(namespace, name, true)
 	}

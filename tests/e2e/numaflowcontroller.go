@@ -214,7 +214,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
 	if UpgradeStrategy == config.PPNDStrategyID && valid {
 
-		if pipelineIsFailed {
+		if !pipelineIsFailed {
 			Document("Verify that in-progress-strategy gets set to PPND")
 			VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
 			VerifyPipelinePaused(Namespace, pipelineRolloutName)
