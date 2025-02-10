@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -259,34 +258,22 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
+			newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"}, []string{"scale", "max"})
 
-			originalMax, _, err := unstructured.NestedInt64(vertexAsMap, "scale", "max")
-			if err != nil {
+			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, newMax)
+
+			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
 				return false, err
 			}
 
-			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, scaleValue)
-
-			if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "max"); err != nil {
+			if err := unstructured.SetNestedField(vertexAsMap, newMax, "scale", "max"); err != nil {
 				return false, err
-			}
-
-			// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
-			originalMin, found, err := unstructured.NestedInt64(vertexAsMap, "scale", "min")
-			if err != nil {
-				return false, err
-			}
-			if found && originalMin > scaleValue {
-				if err := unstructured.SetNestedField(vertexAsMap, scaleValue, "scale", "min"); err != nil {
-					return false, err
-				}
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
 				DesiredMin: originalMin,
 				DesiredMax: originalMax,
-				ScaleTo:    scaleValue,
+				ScaleTo:    newMax,
 				Actual:     actualPodsCount,
 			}
 		}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -213,33 +212,18 @@ func scaleDownMonoVertex(
 		return false, nil
 	}
 
-	scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
+	newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(actualPodsCount), []string{"spec", "scale", "min"}, []string{"spec", "scale", "max"})
 
-	originalMax, _, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "max")
-	if err != nil {
-		return false, err
-	}
-
-	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, scaleValue)
-
-	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
-	originalMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
-	if err != nil {
-		return false, err
-	}
-	newMin := originalMin
-	if found && originalMin > scaleValue {
-		newMin = scaleValue
-	}
+	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
 		DesiredMin: originalMin,
 		DesiredMax: originalMax,
-		ScaleTo:    scaleValue,
+		ScaleTo:    newMax,
 		Actual:     actualPodsCount,
 	}
 
-	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, scaleValue)
+	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, newMax)
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
 		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
 	}

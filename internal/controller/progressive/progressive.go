@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -331,4 +332,34 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 		}
 	}
 	return true
+}
+
+func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, int64, int64, error) {
+	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
+
+	min, foundMin, err := unstructured.NestedInt64(object, pathToMin...)
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+
+	max, _, err := unstructured.NestedInt64(object, pathToMax...)
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+
+	// TODO: what if !foundMin and/or !foundMax? what if part of the path to min and max is nil (ex: spec.scale.min where scale is nil)?
+
+	// TODO: this may not be necessary
+	// If max is less than newMax, we can keep the original max
+	// if foundMax && max < newMax {
+	// 	newMax = max
+	// }
+
+	// If min exceeds the newMax, reduce also min to newMax
+	newMin := min
+	if foundMin && min > newMax {
+		newMin = newMax
+	}
+
+	return newMin, newMax, min, max, nil
 }
