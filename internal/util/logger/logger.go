@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -45,6 +46,15 @@ const (
 	DebugLevel   = infoLevelShift + 1
 	VerboseLevel = infoLevelShift + 2
 )
+
+// LogLevelMap maps the log level string to the logr verbosity level.
+var LogLevelMap = map[string]int{
+	"ERROR":   FatalLevel,
+	"WARN":    WarnLevel,
+	"INFO":    InfoLevel,
+	"DEBUG":   DebugLevel,
+	"VERBOSE": VerboseLevel,
+}
 
 // The following map define the logr verbosity or NumaLogger semantic levels (constants above) mapping
 // to the zerolog levels (https://github.com/rs/zerolog/blob/master/log.go#L129).
@@ -97,7 +107,7 @@ func New() *NumaLogger {
 		log.Debug().Msg("error using global config to get log level: " + err.Error())
 		return newNumaLogger(&w, nil)
 	}
-	lvl := globalConfig.LogLevel
+	lvl := LogLevelMap[strings.ToUpper(globalConfig.LogLevel)]
 
 	return newNumaLogger(&w, &lvl)
 }
@@ -145,17 +155,17 @@ func FromContext(ctx context.Context) *NumaLogger {
 	return New()
 }
 
-func (in *NumaLogger) DeepCopy() *NumaLogger {
-	if in == nil {
+func (nl *NumaLogger) DeepCopy() *NumaLogger {
+	if nl == nil {
 		return nil
 	}
 	out := new(NumaLogger)
-	out.LogLevel = in.LogLevel
+	out.LogLevel = nl.LogLevel
 	if out.LogLevel == 0 {
 		out.LogLevel = defaultLevel
 	}
 	out.LogrLogger = new(logr.Logger)
-	*(out.LogrLogger) = *(in.LogrLogger)
+	*(out.LogrLogger) = *(nl.LogrLogger)
 	return out
 }
 
@@ -213,7 +223,7 @@ func (nl *NumaLogger) Warn(msg string, keysAndValues ...any) {
 	nl.LogrLogger.GetSink().Info(WarnLevel-infoLevelShift, msg, keysAndValues...)
 }
 
-// Warn logs a warning-level formatted message with args.
+// Warnf logs a warning-level formatted message with args.
 func (nl *NumaLogger) Warnf(msg string, args ...any) {
 	nl.WithCallDepth(1).Warn(fmt.Sprintf(msg, args...))
 }
