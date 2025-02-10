@@ -47,12 +47,12 @@ func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, e
 	}
 }
 
-func (fpc fakeProgressiveController) ScaleDownPromotedChildSourceVertices(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (map[string]apiv1.ScaleValues, bool, error) {
-	return nil, false, nil
+func (fpc fakeProgressiveController) ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
 }
 
-func (fpc fakeProgressiveController) ScalePromotedChildSourceVerticesToDesiredValues(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
+func (fpc fakeProgressiveController) ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
 }
 
 func Test_processUpgradingChild(t *testing.T) {
@@ -146,7 +146,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, false, client)
+				ctx, defaultMonoVertexRollout, tc.liveRolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)

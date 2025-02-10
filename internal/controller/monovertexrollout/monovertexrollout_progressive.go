@@ -12,6 +12,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -67,37 +68,125 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	return apiv1.AssessmentResultUnknown, nil
 }
 
-// ScaleDownPromotedChildSourceVertices scales down the source vertex of a promoted child
-// monovertex. It retrieves the most current promoted child and scales down the source vertex
-// by adjusting its max and min scale values. The function returns
-// a map of vertex names to their scale values, including desired, scaled, and actual pod counts.
-// The returned map will only have one vertex for the MonoVertex case.
-//
-// Parameters:
-//
-//	ctx - The context for the operation.
-//	rolloutObject - The rollout object containing the status and configuration.
-//	promotedChildDef - The unstructured definition of the promoted child.
-//	c - The Kubernetes client for interacting with the cluster.
-//
-// Returns:
-//
-//	A map of vertex names to their scale values and an error if any occurs during the process.
-func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
+/*
+ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted monovertex.
+It performs the following pre-upgrade operations:
+- it ensures that the promoted monovertex is scaled down before proceeding with a progressive upgrade.
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutPromotedChildStatus: the status of the promoted child, which may be updated during processing.
+  - promotedChildDef: the definition of the promoted child as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) (map[string]apiv1.ScaleValues, bool, error) {
+) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ScaleDownPromotedChildSourceVertices").WithName("MonoVertexRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("MonoVertexRollout")
 
-	numaLogger.Debug("started promoted child source vertex scaling down process")
+	numaLogger.Debug("started pre-upgrade processing of promoted monovertex")
+
+	if rolloutPromotedChildStatus == nil {
+		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+	}
+
+	// scaleDownMonoVertex either updates the promoted monovertex to scale down the pods or
+	// retrieves the currently running pods to update the rolloutPromotedChildStatus scaleValues.
+	// This serves to make sure that the pods have been really scaled down before proceeding
+	// with the progressive upgrade.
+	performedScaling, err := scaleDownMonoVertex(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	if err != nil {
+		return true, err
+	}
+
+	numaLogger.Debug("completed pre-upgrade processing of promoted monovertex")
+
+	return performedScaling, nil
+}
+
+/*
+ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted monovertex.
+It performs the following post-upgrade operations:
+- it restores the promoted monovertex scale values to the desired values retrieved from the rollout status.
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutPromotedChildStatus: the status of the promoted child, which may be updated during processing.
+  - promotedChildDef: the definition of the promoted child as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
+	ctx context.Context,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("MonoVertexRollout")
+
+	numaLogger.Debug("started post-upgrade processing of promoted monovertex")
+
+	if rolloutPromotedChildStatus == nil {
+		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
+	}
+
+	performedScaling, err := scaleMonoVertexToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	if err != nil {
+		return true, err
+	}
+
+	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
+
+	return performedScaling, nil
+}
+
+/*
+scaleDownMonoVertex scales down the pods of a monovertex to half of the current count if not already scaled down.
+It checks if the monovertex was already scaled down and skips the operation if true.
+The function updates the scale values in the rollout status and adjusts the scale configuration
+of the promoted child definition. It ensures that the scale.min does not exceed the new scale.max.
+Returns a boolean indicating if scaling was performed and an error if any operation fails.
+
+Parameters:
+- ctx: the context for managing request-scoped values.
+- rolloutPromotedChildStatus: the status of the promoted child in the rollout.
+- promotedChildDef: the unstructured object representing the promoted child definition.
+- c: the Kubernetes client for resource operations.
+
+Returns:
+- bool: true if scaling down was performed, false otherwise.
+- error: an error if any operation fails during the scaling process.
+*/
+func scaleDownMonoVertex(
+	ctx context.Context,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// If the monovertex has been scaled down already, do not perform scaling down operations
+	if rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()) {
+		// Return that scaling down was NOT performed
+		return false, nil
+	}
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
-	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
-	if promotedChildStatus != nil && promotedChildStatus.ScaleValues != nil {
-		scaleValuesMap = promotedChildStatus.ScaleValues
+	if rolloutPromotedChildStatus.ScaleValues != nil {
+		scaleValuesMap = rolloutPromotedChildStatus.ScaleValues
 	}
 
 	pods, err := kubernetes.KubernetesClient.CoreV1().Pods(promotedChildDef.GetNamespace()).List(ctx, metav1.ListOptions{
@@ -108,7 +197,7 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		),
 	})
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
 
 	actualPodsCount := int64(len(pods.Items))
@@ -120,32 +209,29 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		vertexScaleValues.Actual = actualPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
+		rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
+
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
-		return scaleValuesMap, false, nil
+		return false, nil
 	}
 
 	scaleValue := int64(math.Floor(float64(actualPodsCount) / float64(2)))
 
 	originalMax, _, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "max")
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
 
-	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the source vertex, scaling down to %d", len(pods.Items), scaleValue)
-
-	if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "max"); err != nil {
-		return nil, false, err
-	}
+	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", len(pods.Items), scaleValue)
 
 	// If scale.min exceeds the new scale.max (scaleValue), reduce also scale.min to scaleValue
 	originalMin, found, err := unstructured.NestedInt64(promotedChildDef.Object, "spec", "scale", "min")
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
+	newMin := originalMin
 	if found && originalMin > scaleValue {
-		if err := unstructured.SetNestedField(promotedChildDef.Object, scaleValue, "spec", "scale", "min"); err != nil {
-			return nil, false, err
-		}
+		newMin = scaleValue
 	}
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
@@ -155,54 +241,75 @@ func (r *MonoVertexRolloutReconciler) ScaleDownPromotedChildSourceVertices(
 		Actual:     actualPodsCount,
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("applied scale changes to promoted child definition")
+	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, scaleValue)
+	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
+		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
+	}
 
-	return scaleValuesMap, true, nil
+	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
+
+	rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
+	rolloutPromotedChildStatus.MarkAllSourceVerticesScaledDown()
+
+	// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
+	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = false
+
+	return true, nil
 }
 
 /*
-ScalePromotedChildSourceVerticesToDesiredValues restores the scale values of a promoted child source vertex
-to its desired values as specified in the rollout object's progressive status.
+scaleMonoVertexToDesiredValues scales a monovertex to its desired values based on the rollout status.
+This function checks if the monovertex has already been scaled to the desired values. If not, it restores the scale values
+from the rollout's promoted child status and updates the Kubernetes resource accordingly.
 
 Parameters:
-  - ctx: The context for logging and tracing.
-  - rolloutObject: The rollout object containing the progressive status and promoted child status.
-  - promotedChildDef: The unstructured object representing the promoted child source vertex.
-  - c: The Kubernetes client for interacting with the cluster.
+- ctx: the context for managing request-scoped values.
+- rolloutPromotedChildStatus: the status of the promoted child in the rollout, containing scale values.
+- promotedChildDef: the unstructured definition of the promoted child resource.
+- c: the Kubernetes client for resource operations.
 
 Returns:
-  - error: An error if the scale values cannot be restored due to missing status information or if setting
-    the scale values fails.
+- A boolean indicating whether scaling to desired values was performed.
+- An error if any issues occur during the scaling process.
 */
-func (r *MonoVertexRolloutReconciler) ScalePromotedChildSourceVerticesToDesiredValues(
+func scaleMonoVertexToDesiredValues(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
+	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
-) error {
+) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ScalePromotedChildSourceVerticesToDesiredValues").WithName("MonoVertexRollout")
+	numaLogger := logger.FromContext(ctx)
 
-	numaLogger.Debug("restoring scale values back to desired values for the promoted child source vertex")
-
-	promotedChildStatus := rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus
-	if promotedChildStatus == nil || promotedChildStatus.ScaleValues == nil {
-		return errors.New("unable to restore scale values for the promoted child source vertex because the rollout does not have progressiveStatus and/or promotedChildStatus set")
+	// If the monovertex has been scaled back to desired values already, do not restore scaling values again
+	if rolloutPromotedChildStatus.AreScaleValuesRestoredToDesired(promotedChildDef.GetName()) {
+		// Return that scaling to desired values was NOT performed
+		return false, nil
 	}
 
-	if _, exists := promotedChildStatus.ScaleValues[promotedChildDef.GetName()]; !exists {
-		return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", promotedChildDef.GetName())
+	if rolloutPromotedChildStatus.ScaleValues == nil {
+		return false, errors.New("unable to restore scale values for the promoted monovertex because the rollout does not have promotedChildStatus scaleValues set")
 	}
 
-	if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax, "spec", "scale", "max"); err != nil {
-		return err
+	if _, exists := rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()]; !exists {
+		return false, fmt.Errorf("the scale values for the monovertex '%s' are not present in the rollout promotedChildStatus", promotedChildDef.GetName())
 	}
 
-	if err := unstructured.SetNestedField(promotedChildDef.Object, promotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin, "spec", "scale", "min"); err != nil {
-		return err
+	patchJson := fmt.Sprintf(
+		`{"spec": {"scale": {"min": %d, "max": %d}}}`,
+		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin,
+		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax,
+	)
+
+	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
+		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("applied scale changes to promoted child definition")
+	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted monovertex with the desired scale configuration")
 
-	return nil
+	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = true
+	rolloutPromotedChildStatus.AllSourceVerticesScaledDown = false
+	rolloutPromotedChildStatus.ScaleValues = nil
+
+	return true, nil
 }
