@@ -252,10 +252,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		// update spec to have topology change
-		failedPipelineSpec = updatedPipelineSpec
-
-		// TODO: clean up each function to be more clear
-		UpdatePipelineRollout(failedPipelineRolloutName, failedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		UpdatePipelineRollout(failedPipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
 		}, true, false)
 
@@ -289,7 +286,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	})
 
-	It("Should update a NumaflowControler even if the Pipeline is failed", func() {
+	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
 		// add bad edge to automatically fail Pipeline
 		failedPipelineSpec := initialPipelineSpec
