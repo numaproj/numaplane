@@ -256,9 +256,13 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			return len(retrievedPipelineSpec.Vertices) == 3
 		}, true, false)
 
+		time.Sleep(5 * time.Second)
+
 		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
+
+	time.Sleep(5 * time.Second)
 
 	It("Should update an ISBService even if the Pipeline is failed", func() {
 
@@ -287,6 +291,8 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
+
+	time.Sleep(5 * time.Second)
 
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
