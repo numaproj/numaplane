@@ -45,7 +45,7 @@ var (
 	testEnv             *envtest.Environment
 	ctx                 context.Context
 	cancel              context.CancelFunc
-	suiteTimeout        = 30 * time.Minute // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
+	suiteTimeout        = 35 * time.Minute // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
 	testTimeout         = 4 * time.Minute  // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
 	testPollingInterval = 10 * time.Millisecond
 
