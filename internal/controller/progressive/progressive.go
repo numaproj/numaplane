@@ -334,32 +334,59 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 	return true
 }
 
-func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, int64, int64, error) {
+/*
+CalculateScaleMinMaxValues computes new minimum and maximum scale values for a given object based on the current
+number of pods. It retrieves the existing min and max values from the object using specified paths.
+If the min or max values are not found, it returns nil for those values to allow restoration of the
+desired values later.
+
+Numaflow notes:
+- if max is unset, Numaflow uses DefaultMaxReplicas (50)
+- if min is unset or negative, Numaflow uses 0
+
+Parameters:
+  - object: A map representing the object from which to retrieve min and max values.
+  - podsCount: The current number of pods.
+  - pathToMin: A slice of strings representing the path to the min value in the object.
+  - pathToMax: A slice of strings representing the path to the max value in the object.
+
+Returns:
+  - newMin: The adjusted minimum scale value.
+  - newMax: The adjusted maximum scale value.
+  - outMin: A pointer to the original min value or nil if not found.
+  - outMax: A pointer to the original max value or nil if not found.
+  - error: An error if there is an issue retrieving the min or max values.
+*/
+func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, *int64, *int64, error) {
 	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
 
 	min, foundMin, err := unstructured.NestedInt64(object, pathToMin...)
 	if err != nil {
-		return -1, -1, -1, -1, err
+		return -1, -1, nil, nil, err
 	}
 
-	max, _, err := unstructured.NestedInt64(object, pathToMax...)
+	max, foundMax, err := unstructured.NestedInt64(object, pathToMax...)
 	if err != nil {
-		return -1, -1, -1, -1, err
+		return -1, -1, nil, nil, err
 	}
-
-	// TODO: what if !foundMin and/or !foundMax? what if part of the path to min and max is nil (ex: spec.scale.min where scale is nil)?
-
-	// TODO: this may not be necessary
-	// If max is less than newMax, we can keep the original max
-	// if foundMax && max < newMax {
-	// 	newMax = max
-	// }
 
 	// If min exceeds the newMax, reduce also min to newMax
 	newMin := min
-	if foundMin && min > newMax {
+	if min > newMax {
 		newMin = newMax
 	}
 
-	return newMin, newMax, min, max, nil
+	// If min was not found, return nil to later restore the appropriate desired value
+	outMin := &min
+	if !foundMin {
+		outMin = nil
+	}
+
+	// If max was not found, return nil to later restore the appropriate desired value
+	outMax := &max
+	if !foundMax {
+		outMax = nil
+	}
+
+	return newMin, newMax, outMin, outMax, nil
 }

@@ -258,7 +258,15 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
+			_, foundDesiredScaleField, err := unstructured.NestedMap(vertexAsMap, "scale")
+			if err != nil {
+				return false, err
+			}
+
 			newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"}, []string{"scale", "max"})
+			if err != nil {
+				return false, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
+			}
 
 			numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertexName", vertexName).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, newMax)
 
@@ -271,10 +279,11 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				DesiredMin: originalMin,
-				DesiredMax: originalMax,
-				ScaleTo:    newMax,
-				Actual:     actualPodsCount,
+				IsDesiredScaleSet: foundDesiredScaleField,
+				DesiredMin:        originalMin,
+				DesiredMax:        originalMax,
+				ScaleTo:           newMax,
+				Actual:            actualPodsCount,
 			}
 		}
 	}
@@ -353,8 +362,17 @@ func scalePipelineSourceVerticesToDesiredValues(
 				return false, errors.New("a vertex must have a name")
 			}
 
-			if _, exists := rolloutPromotedChildStatus.ScaleValues[vertexName]; !exists {
+			vertexScaleValues, exists := rolloutPromotedChildStatus.ScaleValues[vertexName]
+			if !exists {
 				return false, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
+			}
+
+			if !vertexScaleValues.IsDesiredScaleSet {
+				if err := unstructured.SetNestedField(vertexAsMap, nil, "scale"); err != nil {
+					return false, err
+				}
+
+				continue
 			}
 
 			if err := unstructured.SetNestedField(vertexAsMap, rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMax, "scale", "max"); err != nil {

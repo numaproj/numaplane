@@ -212,15 +212,24 @@ func scaleDownMonoVertex(
 		return false, nil
 	}
 
+	_, foundDesiredScaleField, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "scale")
+	if err != nil {
+		return false, err
+	}
+
 	newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(actualPodsCount), []string{"spec", "scale", "min"}, []string{"spec", "scale", "max"})
+	if err != nil {
+		return false, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
+	}
 
 	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName()).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
-		DesiredMin: originalMin,
-		DesiredMax: originalMax,
-		ScaleTo:    newMax,
-		Actual:     actualPodsCount,
+		IsDesiredScaleSet: foundDesiredScaleField,
+		DesiredMin:        originalMin,
+		DesiredMax:        originalMax,
+		ScaleTo:           newMax,
+		Actual:            actualPodsCount,
 	}
 
 	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, newMax)
@@ -273,15 +282,19 @@ func scaleMonoVertexToDesiredValues(
 		return false, errors.New("unable to restore scale values for the promoted monovertex because the rollout does not have promotedChildStatus scaleValues set")
 	}
 
-	if _, exists := rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()]; !exists {
+	vertexScaleValues, exists := rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()]
+	if !exists {
 		return false, fmt.Errorf("the scale values for the monovertex '%s' are not present in the rollout promotedChildStatus", promotedChildDef.GetName())
 	}
 
-	patchJson := fmt.Sprintf(
-		`{"spec": {"scale": {"min": %d, "max": %d}}}`,
-		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin,
-		rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax,
-	)
+	patchJson := `{"spec": {"scale": null}}`
+	if vertexScaleValues.IsDesiredScaleSet {
+		patchJson = fmt.Sprintf(
+			`{"spec": {"scale": {"min": %d, "max": %d}}}`,
+			rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin,
+			rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax,
+		)
+	}
 
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
 		return false, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)

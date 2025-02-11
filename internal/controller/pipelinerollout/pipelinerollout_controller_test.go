@@ -964,7 +964,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
 				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 				AllSourceVerticesScaledDown: true,
-				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: &ctlrcommon.DesiredMinMax, DesiredMax: &ctlrcommon.DesiredMinMax}},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -1018,7 +1018,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
 				Name:                        ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 				AllSourceVerticesScaledDown: true,
-				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: 1, DesiredMax: 1}},
+				ScaleValues:                 map[string]apiv1.ScaleValues{"in": {DesiredMin: &ctlrcommon.DesiredMinMax, DesiredMax: &ctlrcommon.DesiredMinMax}},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
