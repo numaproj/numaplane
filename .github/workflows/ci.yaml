@@ -109,7 +109,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35 # If we start getting error in CI as "The operation was canceled", we need to increase this value.
     strategy:
       fail-fast: false
       matrix:
