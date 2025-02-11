@@ -255,7 +255,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 	}
 
 	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	// need to track vertices of pipeline spec
+	// don't check that pipeline is running if we expect failed
 	if pipelineIsFailed {
 		VerifyPipelineFailed(Namespace, pipelineRolloutName)
 	} else {
