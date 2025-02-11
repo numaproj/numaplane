@@ -116,18 +116,7 @@ func GetVerticesScaleValue() int {
 
 // document for Ginkgo framework and print to console
 func Document(testName string) {
-	snapshotCluster(testName)
 	By(testName)
-}
-
-func snapshotCluster(testName string) {
-	fmt.Printf("*** %+v: NAMESPACE POD STATE BEFORE TEST: %s\n", time.Now(), testName)
-	podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{})
-	if podList != nil {
-		for _, pod := range podList.Items {
-			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
-		}
-	}
 }
 
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
