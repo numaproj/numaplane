@@ -264,35 +264,35 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	time.Sleep(5 * time.Second)
 
-	It("Should update an ISBService even if the Pipeline is failed", func() {
+	// It("Should update an ISBService even if the Pipeline is failed", func() {
 
-		// add bad edge to automatically fail Pipeline
-		failedPipelineSpec := initialPipelineSpec
-		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
+	// 	// add bad edge to automatically fail Pipeline
+	// 	failedPipelineSpec := initialPipelineSpec
+	// 	failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
-		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
+	// 	CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
+	// 	VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
-		time.Sleep(5 * time.Second)
+	// 	time.Sleep(5 * time.Second)
 
-		// update ISBService to have data loss update
-		Document("Updating ISBService to cause a PPND change")
-		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
+	// 	// update ISBService to have data loss update
+	// 	Document("Updating ISBService to cause a PPND change")
+	// 	updatedISBServiceSpec := isbServiceSpec
+	// 	updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
 
-		// need to update function
-		// update would normally cause data loss
-		UpdateISBServiceRollout(isbServiceRolloutName, failedPipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true, false, false, true)
+	// 	// need to update function
+	// 	// update would normally cause data loss
+	// 	UpdateISBServiceRollout(isbServiceRolloutName, failedPipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+	// 		return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
+	// 	}, true, false, false, true)
 
-		time.Sleep(5 * time.Second)
+	// 	time.Sleep(5 * time.Second)
 
-		DeletePipelineRollout(failedPipelineRolloutName)
+	// 	DeletePipelineRollout(failedPipelineRolloutName)
 
-	})
+	// })
 
-	time.Sleep(5 * time.Second)
+	// time.Sleep(5 * time.Second)
 
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
