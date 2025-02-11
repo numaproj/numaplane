@@ -114,6 +114,10 @@ jobs:
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain", "progressive", "no-strategy"]
+        case: ["functional"]
+        include:
+        - strategy: "pause-and-drain"
+          case: "ppnd"
 
     steps:
       - name: Checkout code
@@ -159,13 +163,13 @@ jobs:
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-e2e
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: resource-changes-${{matrix.strategy}}
+          name: resource-changes-${{matrix.strategy}}-${{matrix.case}}
           path: |
             tests/e2e/output/resources/
           retention-days: 7
@@ -174,8 +178,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pod-logs-${{matrix.strategy}}
+          name: pod-logs-${{matrix.strategy}}-${{matrix.case}}
           path: |
             tests/e2e/output/logs/
           retention-days: 7
-        
