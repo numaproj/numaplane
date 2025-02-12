@@ -198,9 +198,9 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
-                  promotedChildStatus:
-                    description: PromotedChild stores information regarding the current
-                      "promoted" child status
+                  promotedPipelineStatus:
+                    description: PromotedPipelineStatus stores information regarding
+                      the current "promoted" pipeline
                     properties:
                       allSourceVerticesScaledDown:
                         description: AllSourceVerticesScaledDown indicates if ALL
@@ -253,9 +253,9 @@ spec:
                     required:
                     - name
                     type: object
-                  upgradingChildStatus:
-                    description: UpgradingChildStatus represents either the current
-                      or otherwise the most recent "upgrading" child
+                  upgradingPipelineStatus:
+                    description: UpgradingPipelineStatus represents either the current
+                      or otherwise the most recent "upgrading" pipeline
                     properties:
                       assessUntil:
                         description: AssessUntil indicates the time after which no
@@ -265,6 +265,8 @@ spec:
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
+                        type: string
+                      interStepBufferServiceName:
                         type: string
                       name:
                         description: Name of the upgrading child
