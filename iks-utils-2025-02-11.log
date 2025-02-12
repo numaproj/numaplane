@@ -1,0 +1,13 @@
+[36mINFO[0m[2025-02-11T16:26:05-08:00] found 2 vpcs [vpc-082ee22e7e5b1fcac vpc-0282cbe95eea37728] 
+[36mINFO[0m[2025-02-11T16:26:05-08:00] running for vpc "vpc-082ee22e7e5b1fcac"      
+[36mINFO[0m[2025-02-11T16:26:05-08:00] updating name from "" to "iks-route53-healthcheck-tcp-443" for "sg-04d1436e10686b675" 
+[36mINFO[0m[2025-02-11T16:26:05-08:00] updating name from "" to "iks-intuit-tank-ingress-tcp-443" for "sg-04361524f22e7f7f6" 
+[36mINFO[0m[2025-02-11T16:26:05-08:00] updating name from "" to "iks-intuit-ibp-ingress-tcp-443" for "sg-075bd72790551e8b8" 
+[36mINFO[0m[2025-02-11T16:26:05-08:00] updating name from "" to "iks-intuit-cidr-ingress-tcp-443" for "sg-0d2beb460abd57245" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] no albs was updated for vpc "vpc-082ee22e7e5b1fcac" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] running for vpc "vpc-0282cbe95eea37728"      
+[36mINFO[0m[2025-02-11T16:26:06-08:00] updating name from "" to "iks-intuit-ibp-ingress-tcp-443" for "sg-0de405821fba52f9e" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] updating name from "" to "iks-intuit-cidr-ingress-tcp-443" for "sg-03ba105a9d4b84416" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] updating name from "" to "iks-route53-healthcheck-tcp-443" for "sg-0e0d443b572276fd5" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] updating name from "" to "iks-intuit-tank-ingress-tcp-443" for "sg-03fa8e17c2ad45655" 
+[36mINFO[0m[2025-02-11T16:26:06-08:00] no albs was updated for vpc "vpc-0282cbe95eea37728" 

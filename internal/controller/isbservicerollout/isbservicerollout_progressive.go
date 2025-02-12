@@ -15,7 +15,7 @@ import (
 
 // CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
 // This implements a function of the progressiveController interface
-func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	metadata, err := getBaseISBSVCMetadata(isbsvcRollout)
 	if err != nil {
