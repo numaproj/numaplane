@@ -54,6 +54,8 @@ func NewPodDisruptionBudget(name, namespace string, maxUnavailable int32, ownerR
 }
 
 func ListPodsMetadataOnly(ctx context.Context, c k8sClient.Client, namespace, labels string) (*metav1.PartialObjectMetadataList, error) {
+	// TTODO: maybe get only running pods
+
 	podsLabelsSelector, err := k8sLabels.Parse(labels)
 	if err != nil {
 		return nil, err

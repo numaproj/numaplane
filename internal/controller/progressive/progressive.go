@@ -88,6 +88,8 @@ func ProcessResource(
 		if currentUpgradingChildDef == nil {
 			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
 				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
@@ -109,7 +111,9 @@ func ProcessResource(
 			return false, true, 0, err
 		}
 	}
-	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+
+	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+	if currentUpgradingChildDef == nil {
 		return true, false, 0, err
 	}
 
@@ -257,6 +261,12 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
+			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+			}
+
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
@@ -281,6 +291,12 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
+			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+			}
+
 			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
