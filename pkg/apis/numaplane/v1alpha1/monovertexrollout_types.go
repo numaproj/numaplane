@@ -63,6 +63,7 @@ type UpgradingMonoVertexStatus struct {
 	UpgradingChildStatus `json:",inline"`
 }
 
+// PromotedMonoVertexStatus describes the status of the promoted child
 type PromotedMonoVertexStatus struct {
 	PromotedPipelineTypeStatus `json:",inline"`
 }

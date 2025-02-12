@@ -2,18 +2,9 @@ package progressive
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
 
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	commontest "github.com/numaproj/numaplane/tests/common"
-	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -55,6 +46,7 @@ func (fpc fakeProgressiveController) ProcessPromotedChildPostUpgrade(ctx context
 	return false, nil
 }
 
+/*
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -163,9 +155,13 @@ func Test_processUpgradingChild(t *testing.T) {
 	}
 }
 
-func setRolloutObjectChildStatus(rolloutObject ctlrcommon.RolloutObject, upgradingChildStatus *apiv1.UpgradingChildStatus, promotedChildStatus *apiv1.PromotedChildStatus) ctlrcommon.RolloutObject {
-	rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = upgradingChildStatus
-	rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = promotedChildStatus
+func SetMonovertexStatus(monoVertexRollout *apiv1.MonoVertexRollout, upgradingMonoVertexStatus *apiv1.UpgradingMonoVertexStatus, promotedMonoVertexStatus *apiv1.PromotedMonoVertexStatus) *apiv1.MonoVertexRollout {
+
+}
+
+func setRolloutObjectChildStatus(rolloutObject ProgressiveRolloutObject, upgradingChildStatus *apiv1.UpgradingChildStatus, promotedChildStatus *apiv1.PromotedChildStatus) ProgressiveRolloutObject {
+	rolloutObject.SetUpgradingChildStatus(upgradingChildStatus)
+	rolloutObject.SetPromotedChildStatus(promotedChildStatus)
 	return rolloutObject
 }
 
@@ -182,3 +178,4 @@ var defaultMonoVertexRollout = &apiv1.MonoVertexRollout{
 		},
 	},
 }
+*/

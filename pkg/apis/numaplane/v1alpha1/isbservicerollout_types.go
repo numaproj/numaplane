@@ -63,6 +63,7 @@ type UpgradingISBServiceStatus struct {
 	UpgradingChildStatus `json:",inline"`
 }
 
+// PromotedISBServiceStatus describes the status of a promoted child
 type PromotedISBServiceStatus struct {
 	PromotedChildStatus `json:",inline"`
 }

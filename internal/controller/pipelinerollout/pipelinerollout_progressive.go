@@ -120,7 +120,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	}
 
 	// scaleDownPipelineSourceVertices either updates the promoted pipeline to scale down the source vertices
-	// pods or retrieves the currently running pods to update the rolloutPromotedChildStatus scaleValues.
+	// pods or retrieves the currently running pods to update the PromotedPipelineStatus scaleValues.
 	// This serves to make sure that the source vertices pods have been really scaled down before proceeding
 	// with the progressive upgrade.
 	performedScaling, err := scaleDownPipelineSourceVertices(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
@@ -140,7 +140,7 @@ It performs the following post-upgrade operations:
 
 Parameters:
   - ctx: the context for managing request-scoped values.
-  - promotedChildStatus: the status of the promoted child, which may be updated during processing.
+  - pipelineRollout: the PipelineRollout instance
   - promotedPipelineDef: the definition of the promoted child as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 

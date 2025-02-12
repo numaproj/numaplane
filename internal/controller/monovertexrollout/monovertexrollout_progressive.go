@@ -102,7 +102,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	}
 
 	// scaleDownMonoVertex either updates the promoted monovertex to scale down the pods or
-	// retrieves the currently running pods to update the promotedMVStatus scaleValues.
+	// retrieves the currently running pods to update the PromotedMonoVertexStatus scaleValues.
 	// This serves to make sure that the pods have been really scaled down before proceeding
 	// with the progressive upgrade.
 	performedScaling, err := scaleDownMonoVertex(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedChildDef, c)

@@ -54,6 +54,7 @@ type progressiveController interface {
 	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
+// ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
 type ProgressiveRolloutObject interface {
 	ctlrcommon.RolloutObject
 

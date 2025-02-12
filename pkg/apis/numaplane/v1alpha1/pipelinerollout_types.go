@@ -66,6 +66,7 @@ type UpgradingPipelineStatus struct {
 	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
 }
 
+// PromotedPipelineStatus describes the status of the promoted child
 type PromotedPipelineStatus struct {
 	PromotedPipelineTypeStatus `json:",inline"`
 }

@@ -84,9 +84,6 @@ type Status struct {
 
 	// UpgradeInProgress indicates the upgrade strategy currently being used and affecting the resource state or empty if no upgrade is in progress
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
-
-	// ProgressiveStatus stores fields related to the Progressive strategy
-	//ProgressiveStatus ProgressiveStatus `json:"progressiveStatus,omitempty"`
 }
 
 // PauseStatus is a common structure used to communicate how long Pipelines are paused.
@@ -153,14 +150,6 @@ type PromotedPipelineTypeStatus struct {
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
 	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
 }
-
-/*
-type ProgressiveStatus struct {
-	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
-	UpgradingChildStatus *UpgradingChildStatus `json:"upgradingChildStatus,omitempty"`
-	// PromotedChild stores information regarding the current "promoted" child status
-	PromotedChildStatus *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
-}*/
 
 func (status *Status) SetPhase(phase Phase, msg string) {
 	if phase == PhaseFailed {
