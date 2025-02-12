@@ -217,11 +217,6 @@ func scaleDownMonoVertex(
 		return true, err
 	}
 
-	_, foundDesiredScaleField, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "scale")
-	if err != nil {
-		return false, err
-	}
-
 	newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(actualPodsCount), []string{"spec", "scale", "min"}, []string{"spec", "scale", "max"})
 	if err != nil {
 		return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
