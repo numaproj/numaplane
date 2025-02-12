@@ -48,6 +48,26 @@ type PipelineRolloutStatus struct {
 	// NameCount is used as a suffix for the name of the managed pipeline, to uniquely
 	// identify a pipeline.
 	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// ProgressiveStatus stores fields related to the Progressive strategy
+	ProgressiveStatus PipelineProgressiveStatus `json:"progressiveStatus,omitempty"`
+}
+
+type PipelineProgressiveStatus struct {
+	// UpgradingPipelineStatus represents either the current or otherwise the most recent "upgrading" pipeline
+	UpgradingPipelineStatus *UpgradingPipelineStatus `json:"upgradingPipelineStatus,omitempty"`
+	// PromotedPipelineStatus stores information regarding the current "promoted" pipeline
+	PromotedPipelineStatus *PromotedPipelineStatus `json:"promotedPipelineStatus,omitempty"`
+}
+
+// UpgradingPipelineStatus describes the status of an upgrading child
+type UpgradingPipelineStatus struct {
+	UpgradingChildStatus       `json:",inline"`
+	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
+}
+
+type PromotedPipelineStatus struct {
+	PromotedPipelineTypeStatus `json:",inline"`
 }
 
 // +genclient
@@ -104,6 +124,40 @@ func (pipelineRollout *PipelineRollout) GetRolloutObjectMeta() *metav1.ObjectMet
 
 func (pipelineRollout *PipelineRollout) GetRolloutStatus() *Status {
 	return &pipelineRollout.Status.Status
+}
+
+// GetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
+	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+		return nil
+	}
+	return &pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus
+}
+
+// GetPromotedChildStatus is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) GetPromotedChildStatus() *PromotedChildStatus {
+	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
+		return nil
+	}
+	return &pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedChildStatus
+}
+
+// SetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) error {
+	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+		pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{}
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus = *status.DeepCopy()
+	return nil
+}
+
+// SetPromotedChildStatus is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) SetPromotedChildStatus(status *PromotedChildStatus) error {
+	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
+		pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = &PromotedPipelineStatus{}
+	}
+	pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
+	return nil
 }
 
 func init() {

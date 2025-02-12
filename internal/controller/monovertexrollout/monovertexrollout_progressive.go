@@ -85,7 +85,7 @@ Returns:
 */
 func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
@@ -129,7 +129,7 @@ Returns:
 */
 func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {

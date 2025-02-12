@@ -86,7 +86,7 @@ type Status struct {
 	UpgradeInProgress UpgradeStrategy `json:"upgradeInProgress,omitempty"`
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
-	ProgressiveStatus ProgressiveStatus `json:"progressiveStatus,omitempty"`
+	//ProgressiveStatus ProgressiveStatus `json:"progressiveStatus,omitempty"`
 }
 
 // PauseStatus is a common structure used to communicate how long Pipelines are paused.
@@ -137,6 +137,13 @@ type ScaleValues struct {
 type PromotedChildStatus struct {
 	// Name of the promoted child
 	Name string `json:"name"`
+}
+
+// PromotedPipelineTypeStatus describes the status of a promoted child, and applies to all pipeline types
+// (Pipeline and MonoVertex)
+type PromotedPipelineTypeStatus struct {
+	PromotedChildStatus `json:",inline"`
+
 	// ScaleValues is a map where the keys are the promoted child source vertices names
 	// and the values are the scale values of the source vertices
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
@@ -147,12 +154,13 @@ type PromotedChildStatus struct {
 	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
 }
 
+/*
 type ProgressiveStatus struct {
 	// UpgradingChildStatus represents either the current or otherwise the most recent "upgrading" child
 	UpgradingChildStatus *UpgradingChildStatus `json:"upgradingChildStatus,omitempty"`
 	// PromotedChild stores information regarding the current "promoted" child status
 	PromotedChildStatus *PromotedChildStatus `json:"promotedChildStatus,omitempty"`
-}
+}*/
 
 func (status *Status) SetPhase(phase Phase, msg string) {
 	if phase == PhaseFailed {
@@ -297,12 +305,12 @@ func (ucs *UpgradingChildStatus) IsFailed() bool {
 }
 
 // AreAllSourceVerticesScaledDown checks if all source vertices have been scaled down for the named child.
-func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool {
+func (pcs *PromotedPipelineTypeStatus) AreAllSourceVerticesScaledDown(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
 }
 
 // AreScaleValuesRestoredToDesired checks if all source vertices have been restored to the desired min and max values.
-func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) bool {
+func (pcs *PromotedPipelineTypeStatus) AreScaleValuesRestoredToDesired(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToDesired
 }
 
@@ -310,7 +318,7 @@ func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) boo
 // have been scaled down by comparing their Actual and ScaleTo scale values.
 // It updates the AllSourceVerticesScaledDown field to true if all vertices
 // are scaled down, otherwise sets it to false.
-func (pcs *PromotedChildStatus) MarkAllSourceVerticesScaledDown() {
+func (pcs *PromotedPipelineTypeStatus) MarkAllSourceVerticesScaledDown() {
 	if pcs == nil || len(pcs.ScaleValues) == 0 {
 		return
 	}

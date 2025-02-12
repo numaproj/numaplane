@@ -6,6 +6,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -99,8 +100,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	for pipelineRollout, pipeline := range rolloutToPipeline {
 
 		// Look for this Pipeline in the PipelineRollout's ProgressiveStatus
-		if pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.Name == pipeline.GetName() {
-			switch pipelineRollout.Status.ProgressiveStatus.UpgradingChildStatus.AssessmentResult {
+		if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Name == pipeline.GetName() {
+			switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 			case apiv1.AssessmentResultFailure:
 				return apiv1.AssessmentResultFailure, nil
 			case apiv1.AssessmentResultUnknown:
@@ -115,7 +116,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
@@ -124,7 +125,7 @@ func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
+	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
