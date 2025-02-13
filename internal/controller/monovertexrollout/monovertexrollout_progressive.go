@@ -250,7 +250,7 @@ func scaleDownMonoVertex(
 
 	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, newMin, newMax)
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
-		return true, fmt.Errorf("error scaling the existing promoted monovertex to desired values: %w", err)
+		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
 	}
 
 	numaLogger.WithValues("promotedChildDef", promotedChildDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
@@ -265,8 +265,8 @@ func scaleDownMonoVertex(
 }
 
 /*
-scaleMonoVertexToOriginalValues scales a monovertex to its desired values based on the rollout status.
-This function checks if the monovertex has already been scaled to the desired values. If not, it restores the scale values
+scaleMonoVertexToOriginalValues scales a monovertex to its original values based on the rollout status.
+This function checks if the monovertex has already been scaled to the original values. If not, it restores the scale values
 from the rollout's promoted child status and updates the Kubernetes resource accordingly.
 
 Parameters:

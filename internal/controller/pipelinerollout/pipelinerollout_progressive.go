@@ -332,7 +332,7 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all source vertices have been scaled back to desired values.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all source vertices have been scaled back to the original values.
 - An error if any issues occur during the scaling process.
 */
 func scalePipelineSourceVerticesToOriginalValues(
