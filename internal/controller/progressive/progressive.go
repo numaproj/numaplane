@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,6 +88,8 @@ func ProcessResource(
 		if currentUpgradingChildDef == nil {
 			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
 				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
@@ -108,7 +111,9 @@ func ProcessResource(
 			return false, true, 0, err
 		}
 	}
-	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+
+	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+	if currentUpgradingChildDef == nil {
 		return true, false, 0, err
 	}
 
@@ -256,6 +261,12 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
+			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+			}
+
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
@@ -280,6 +291,12 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
+			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			} else {
+				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+			}
+
 			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
@@ -331,4 +348,61 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 		}
 	}
 	return true
+}
+
+/*
+CalculateScaleMinMaxValues computes new minimum and maximum scale values for a given object based on the current
+number of pods. It retrieves the existing min and max values from the object using specified paths.
+If the min or max values are not found, it returns nil for those values to allow restoration of the
+desired values later.
+
+Numaflow notes:
+- if max is unset, Numaflow uses DefaultMaxReplicas (50)
+- if min is unset or negative, Numaflow uses 0
+
+Parameters:
+  - object: A map representing the object from which to retrieve min and max values.
+  - podsCount: The current number of pods.
+  - pathToMin: A slice of strings representing the path to the min value in the object.
+  - pathToMax: A slice of strings representing the path to the max value in the object.
+
+Returns:
+  - newMin: The adjusted minimum scale value.
+  - newMax: The adjusted maximum scale value.
+  - outMin: A pointer to the original min value or nil if not found.
+  - outMax: A pointer to the original max value or nil if not found.
+  - error: An error if there is an issue retrieving the min or max values.
+*/
+func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, *int64, *int64, error) {
+	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
+
+	min, foundMin, err := unstructured.NestedInt64(object, pathToMin...)
+	if err != nil {
+		return -1, -1, nil, nil, err
+	}
+
+	max, foundMax, err := unstructured.NestedInt64(object, pathToMax...)
+	if err != nil {
+		return -1, -1, nil, nil, err
+	}
+
+	// If min exceeds the newMax, reduce also min to newMax
+	newMin := min
+	if min > newMax {
+		newMin = newMax
+	}
+
+	// If min was not found, return nil to later restore the appropriate desired value
+	outMin := &min
+	if !foundMin {
+		outMin = nil
+	}
+
+	// If max was not found, return nil to later restore the appropriate desired value
+	outMax := &max
+	if !foundMax {
+		outMax = nil
+	}
+
+	return newMin, newMax, outMin, outMax, nil
 }

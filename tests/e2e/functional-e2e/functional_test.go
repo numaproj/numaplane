@@ -347,7 +347,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdateISBServiceRollout(isbServiceRolloutName, pipelineRolloutName, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		}, true, false, false, false)
+		}, true, false, true, false)
 
 	})
 

@@ -51,3 +51,22 @@ func NewPodDisruptionBudget(name, namespace string, maxUnavailable int32, ownerR
 		},
 	}
 }
+
+func ListPodsMetadataOnly(ctx context.Context, c k8sClient.Client, namespace, labels string) (*metav1.PartialObjectMetadataList, error) {
+	podsMeta := &metav1.PartialObjectMetadataList{}
+
+	err := KubernetesClient.CoreV1().RESTClient().
+		Get().
+		Namespace(namespace).
+		Resource("pods").
+		Param("labelSelector", labels).
+		SetHeader("Accept", "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1").
+		Do(ctx).
+		Into(podsMeta)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return podsMeta, nil
+}
