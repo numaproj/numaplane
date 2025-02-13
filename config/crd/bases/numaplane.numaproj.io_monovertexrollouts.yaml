@@ -207,6 +207,10 @@ spec:
                                 original child spec
                               format: int64
                               type: integer
+                            isDesiredScaleSet:
+                              description: IsDesiredScaleSet indicates if the original
+                                child spec scale field is set (true) or nil (false)
+                              type: boolean
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
                                 down to
@@ -216,6 +220,7 @@ spec:
                           - actual
                           - desiredMax
                           - desiredMin
+                          - isDesiredScaleSet
                           - scaleTo
                           type: object
                         description: |-
