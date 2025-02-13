@@ -675,7 +675,7 @@ data:
                       - controller
                     env:
                       - name: NUMAFLOW_DEBUG
-                        value: true
+                        value: "true"
                       - name: NUMAFLOW_IMAGE
                         value: quay.io/numaproj/numaflow:v1.4.2
                       - name: NAMESPACE
