@@ -174,7 +174,7 @@ func scaleDownMonoVertex(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithName("scaleDownMonoVertex")
 
 	// If the monovertex has been scaled down already, do not perform scaling down operations
 	if rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()) {
@@ -276,7 +276,7 @@ func scaleMonoVertexToDesiredValues(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithName("scaleMonoVertexToDesiredValues")
 
 	// If the monovertex has been scaled back to desired values already, do not restore scaling values again
 	if rolloutPromotedChildStatus.AreScaleValuesRestoredToDesired(promotedChildDef.GetName()) {
@@ -294,11 +294,18 @@ func scaleMonoVertexToDesiredValues(
 
 	patchJson := `{"spec": {"scale": null}}`
 	if vertexScaleValues.IsDesiredScaleSet {
-		patchJson = fmt.Sprintf(
-			`{"spec": {"scale": {"min": %d, "max": %d}}}`,
-			rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin,
-			rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax,
-		)
+		var minVal any = "null"
+		var maxVal any = "null"
+
+		if rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin != nil {
+			minVal = *rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMin
+		}
+
+		if rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax != nil {
+			maxVal = *rolloutPromotedChildStatus.ScaleValues[promotedChildDef.GetName()].DesiredMax
+		}
+
+		patchJson = fmt.Sprintf(`{"spec": {"scale": {"min": %v, "max": %v}}}`, minVal, maxVal)
 	}
 
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {

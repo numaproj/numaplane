@@ -192,7 +192,7 @@ func scaleDownPipelineSourceVertices(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineSourceVertices")
 
 	// If the pipeline source vertices have been scaled down already, do not perform scaling down operations
 	if rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()) {
@@ -333,7 +333,7 @@ func scalePipelineSourceVerticesToDesiredValues(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToDesiredValues")
 
 	// If all the pipeline source vertices have been scaled back to desired values already, do not restore scaling values again
 	if rolloutPromotedChildStatus.AreScaleValuesRestoredToDesired(promotedChildDef.GetName()) {
@@ -380,12 +380,22 @@ func scalePipelineSourceVerticesToDesiredValues(
 				continue
 			}
 
-			if err := unstructured.SetNestedField(vertexAsMap, rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMax, "scale", "max"); err != nil {
-				return true, err
+			desiredMax := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMax
+			if desiredMax == nil {
+				unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+			} else {
+				if err := unstructured.SetNestedField(vertexAsMap, *desiredMax, "scale", "max"); err != nil {
+					return true, err
+				}
 			}
 
-			if err := unstructured.SetNestedField(vertexAsMap, rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMin, "scale", "min"); err != nil {
-				return true, err
+			desiredMin := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMin
+			if desiredMin == nil {
+				unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+			} else {
+				if err := unstructured.SetNestedField(vertexAsMap, *desiredMin, "scale", "min"); err != nil {
+					return true, err
+				}
 			}
 		}
 	}
