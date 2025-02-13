@@ -351,10 +351,8 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 }
 
 /*
-CalculateScaleMinMaxValues computes new minimum and maximum scale values for a given object based on the current
-number of pods. It retrieves the existing min and max values from the object using specified paths.
-If the min or max values are not found, it returns nil for those values to allow restoration of the
-desired values later.
+CalculateScaleMinMaxValues computes new minimum and maximum scale values
+for a given object based on the current number of pods.
 
 Numaflow notes:
 - if max is unset, Numaflow uses DefaultMaxReplicas (50)
@@ -364,26 +362,18 @@ Parameters:
   - object: A map representing the object from which to retrieve min and max values.
   - podsCount: The current number of pods.
   - pathToMin: A slice of strings representing the path to the min value in the object.
-  - pathToMax: A slice of strings representing the path to the max value in the object.
 
 Returns:
   - newMin: The adjusted minimum scale value.
   - newMax: The adjusted maximum scale value.
-  - outMin: A pointer to the original min value or nil if not found.
-  - outMax: A pointer to the original max value or nil if not found.
   - error: An error if there is an issue retrieving the min or max values.
 */
-func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, *int64, *int64, error) {
+func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin []string) (int64, int64, error) {
 	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
 
-	min, foundMin, err := unstructured.NestedInt64(object, pathToMin...)
+	min, _, err := unstructured.NestedInt64(object, pathToMin...)
 	if err != nil {
-		return -1, -1, nil, nil, err
-	}
-
-	max, foundMax, err := unstructured.NestedInt64(object, pathToMax...)
-	if err != nil {
-		return -1, -1, nil, nil, err
+		return -1, -1, err
 	}
 
 	// If min exceeds the newMax, reduce also min to newMax
@@ -392,17 +382,5 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin,
 		newMin = newMax
 	}
 
-	// If min was not found, return nil to later restore the appropriate desired value
-	outMin := &min
-	if !foundMin {
-		outMin = nil
-	}
-
-	// If max was not found, return nil to later restore the appropriate desired value
-	outMax := &max
-	if !foundMax {
-		outMax = nil
-	}
-
-	return newMin, newMax, outMin, outMax, nil
+	return newMin, newMax, nil
 }

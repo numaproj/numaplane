@@ -131,8 +131,8 @@ func Test_processUpgradingChild(t *testing.T) {
 					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 				},
 				&apiv1.PromotedChildStatus{
-					Name:                         defaultExistingPromotedChildDef.GetName(),
-					ScaleValuesRestoredToDesired: true,
+					Name:                          defaultExistingPromotedChildDef.GetName(),
+					ScaleValuesRestoredToOriginal: true,
 				},
 			),
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-failure"}}},

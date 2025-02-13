@@ -121,14 +121,10 @@ type UpgradingChildStatus struct {
 	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
 }
 
-// ScaleValues stores the desired min and max, scaleTo, and actual scale values of a pipeline or monovertex vertex
+// ScaleValues stores the original scale definition, scaleTo value, and actual scale value of a pipeline or monovertex vertex
 type ScaleValues struct {
-	// IsDesiredScaleSet indicates if the original child spec scale field is set (true) or nil (false)
-	IsDesiredScaleSet bool `json:"isDesiredScaleSet"`
-	// DesiredMin is the min scale value of the original child spec
-	DesiredMin *int64 `json:"desiredMin,omitempty"`
-	// DesiredMax is the max scale value of the original child spec
-	DesiredMax *int64 `json:"desiredMax,omitempty"`
+	// OriginalScaleDefinition stores the original scale definition as JSON string
+	OriginalScaleDefinition *string `json:"originalScaleDefinition,omitempty"`
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
 	// Actual indicates how many pods are actually running for the vertex
@@ -144,9 +140,9 @@ type PromotedChildStatus struct {
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
 	// AllSourceVerticesScaledDown indicates if ALL the promoted child source vertices have been scaled down
 	AllSourceVerticesScaledDown bool `json:"allSourceVerticesScaledDown,omitempty"`
-	// ScaleValuesRestoredToDesired indicates if ALL the promoted child source vertices have been set back to the original min and max scale values (desiredMin and desiredMax).
+	// ScaleValuesRestoredToOriginal indicates if ALL the promoted child source vertices have been set back to the original min and max scale values.
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
-	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
+	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`
 }
 
 type ProgressiveStatus struct {
@@ -303,9 +299,9 @@ func (pcs *PromotedChildStatus) AreAllSourceVerticesScaledDown(name string) bool
 	return pcs != nil && pcs.Name == name && pcs.AllSourceVerticesScaledDown
 }
 
-// AreScaleValuesRestoredToDesired checks if all source vertices have been restored to the desired min and max values.
-func (pcs *PromotedChildStatus) AreScaleValuesRestoredToDesired(name string) bool {
-	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToDesired
+// AreScaleValuesRestoredToOriginal checks if all source vertices have been restored to the original scale values.
+func (pcs *PromotedChildStatus) AreScaleValuesRestoredToOriginal(name string) bool {
+	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToOriginal
 }
 
 // MarkAllSourceVerticesScaledDown checks if all source vertices in the PromotedChildStatus

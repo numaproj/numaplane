@@ -171,29 +171,19 @@ spec:
                         type: string
                       scaleValues:
                         additionalProperties:
-                          description: ScaleValues stores the desired min and max,
-                            scaleTo, and actual scale values of a pipeline or monovertex
-                            vertex
+                          description: ScaleValues stores the original scale definition,
+                            scaleTo value, and actual scale value of a pipeline or
+                            monovertex vertex
                           properties:
                             actual:
                               description: Actual indicates how many pods are actually
                                 running for the vertex
                               format: int64
                               type: integer
-                            desiredMax:
-                              description: DesiredMax is the max scale value of the
-                                original child spec
-                              format: int64
-                              type: integer
-                            desiredMin:
-                              description: DesiredMin is the min scale value of the
-                                original child spec
-                              format: int64
-                              type: integer
-                            isDesiredScaleSet:
-                              description: IsDesiredScaleSet indicates if the original
-                                child spec scale field is set (true) or nil (false)
-                              type: boolean
+                            originalScaleDefinition:
+                              description: OriginalScaleDefinition stores the original
+                                scale definition as JSON string
+                              type: string
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
                                 down to
@@ -201,16 +191,15 @@ spec:
                               type: integer
                           required:
                           - actual
-                          - isDesiredScaleSet
                           - scaleTo
                           type: object
                         description: |-
                           ScaleValues is a map where the keys are the promoted child source vertices names
                           and the values are the scale values of the source vertices
                         type: object
-                      scaleValuesRestoredToDesired:
+                      scaleValuesRestoredToOriginal:
                         description: |-
-                          ScaleValuesRestoredToDesired indicates if ALL the promoted child source vertices have been set back to the original min and max scale values (desiredMin and desiredMax).
+                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child source vertices have been set back to the original min and max scale values.
                           This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
                         type: boolean
                     required:

@@ -2,6 +2,7 @@ package pipelinerollout
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -132,7 +133,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 /*
 ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted pipeline.
 It performs the following post-upgrade operations:
-- it restores the promoted pipeline source vertices scale values to the desired values retrieved from the rollout status.
+- it restores the promoted pipeline source vertices scale values to the original values retrieved from the rollout status.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -159,7 +160,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	requeue, err := scalePipelineSourceVerticesToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	requeue, err := scalePipelineSourceVerticesToOriginalValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -256,12 +257,23 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			_, foundDesiredScaleField, err := unstructured.NestedMap(vertexAsMap, "scale")
+			originalScaleDef, found, err := unstructured.NestedMap(vertexAsMap, "scale")
 			if err != nil {
 				return true, err
 			}
 
-			newMin, newMax, originalMin, originalMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"}, []string{"scale", "max"})
+			var originalScaleDefAsString *string
+			if found {
+				jsonBytes, err := json.Marshal(originalScaleDef)
+				if err != nil {
+					return true, err
+				}
+
+				jsonString := string(jsonBytes)
+				originalScaleDefAsString = &jsonString
+			}
+
+			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"})
 			if err != nil {
 				return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
 			}
@@ -272,8 +284,7 @@ func scaleDownPipelineSourceVertices(
 				"actualPodsCount", actualPodsCount,
 				"newMin", newMin,
 				"newMax", newMax,
-				"originalMin", originalMin,
-				"originalMax", originalMax,
+				"originalScaleDefAsString", originalScaleDefAsString,
 			).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, newMax)
 
 			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
@@ -285,11 +296,9 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				IsDesiredScaleSet: foundDesiredScaleField,
-				DesiredMin:        originalMin,
-				DesiredMax:        originalMax,
-				ScaleTo:           newMax,
-				Actual:            actualPodsCount,
+				OriginalScaleDefinition: originalScaleDefAsString,
+				ScaleTo:                 newMax,
+				Actual:                  actualPodsCount,
 			}
 		}
 	}
@@ -305,15 +314,15 @@ func scaleDownPipelineSourceVertices(
 	rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
 	rolloutPromotedChildStatus.MarkAllSourceVerticesScaledDown()
 
-	// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
-	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = false
+	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
+	rolloutPromotedChildStatus.ScaleValuesRestoredToOriginal = false
 
 	return !rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()), nil
 }
 
 /*
-scalePipelineSourceVerticesToDesiredValues scales the source vertices of a pipeline to their desired values based on the rollout status.
-This function checks if the pipeline source vertices have already been scaled to the desired values. If not, it restores the scale values
+scalePipelineSourceVerticesToOriginalValues scales the source vertices of a pipeline to their original values based on the rollout status.
+This function checks if the pipeline source vertices have already been scaled to the original values. If not, it restores the scale values
 from the rollout's promoted child status and updates the Kubernetes resource accordingly.
 
 Parameters:
@@ -326,17 +335,17 @@ Returns:
 - bool: true if should requeue, false otherwise. Should requeue in case of error or if not all source vertices have been scaled back to desired values.
 - An error if any issues occur during the scaling process.
 */
-func scalePipelineSourceVerticesToDesiredValues(
+func scalePipelineSourceVerticesToOriginalValues(
 	ctx context.Context,
 	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
 	promotedChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToDesiredValues")
+	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToOriginalValues")
 
-	// If all the pipeline source vertices have been scaled back to desired values already, do not restore scaling values again
-	if rolloutPromotedChildStatus.AreScaleValuesRestoredToDesired(promotedChildDef.GetName()) {
+	// If all the pipeline source vertices have been scaled back to original values already, do not restore scaling values again
+	if rolloutPromotedChildStatus.AreScaleValuesRestoredToOriginal(promotedChildDef.GetName()) {
 		return false, nil
 	}
 
@@ -372,41 +381,19 @@ func scalePipelineSourceVerticesToDesiredValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if !vertexScaleValues.IsDesiredScaleSet {
-				if err := unstructured.SetNestedField(vertexAsMap, nil, "scale"); err != nil {
-					return true, err
-				}
-
-				continue
-			}
-
-			desiredMax := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMax
-			if desiredMax == nil {
-				unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
-			} else {
-				if err := unstructured.SetNestedField(vertexAsMap, *desiredMax, "scale", "max"); err != nil {
-					return true, err
-				}
-			}
-
-			desiredMin := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMin
-			if desiredMin == nil {
-				unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
-			} else {
-				if err := unstructured.SetNestedField(vertexAsMap, *desiredMin, "scale", "min"); err != nil {
-					return true, err
-				}
+			if err := unstructured.SetNestedField(vertexAsMap, vertexScaleValues.OriginalScaleDefinition, "scale"); err != nil {
+				return true, err
 			}
 		}
 	}
 
 	if err := patchPipelineVertices(ctx, promotedChildDef, vertices, c); err != nil {
-		return true, fmt.Errorf("error scaling the existing promoted pipeline source vertices to desired values: %w", err)
+		return true, fmt.Errorf("error scaling the existing promoted pipeline source vertices to original values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted pipeline source vertices with the desired scale configuration")
+	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted pipeline source vertices with the original scale configuration")
 
-	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = true
+	rolloutPromotedChildStatus.ScaleValuesRestoredToOriginal = true
 	rolloutPromotedChildStatus.AllSourceVerticesScaledDown = false
 	rolloutPromotedChildStatus.ScaleValues = nil
 
