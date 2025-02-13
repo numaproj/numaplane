@@ -203,10 +203,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if controllerutil.ContainsFinalizer(isbServiceRollout, common.FinalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(isbsvcKey)
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
+			// foreground := metav1.DeletePropagationForeground
+			// if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			// 	return ctrl.Result{}, err
+			// }
 			controllerutil.RemoveFinalizer(isbServiceRollout, common.FinalizerName)
 		}
 		// generate metrics for ISB Service deletion.

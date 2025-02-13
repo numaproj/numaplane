@@ -34,7 +34,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -232,10 +231,10 @@ func (r *NumaflowControllerReconciler) reconcile(
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
 		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
+			// foreground := metav1.DeletePropagationForeground
+			// if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			// 	return ctrl.Result{}, err
+			// }
 			// Check if dependent resources are deleted, if not then requeue
 			if ok, err := r.areDependentResourcesDeleted(ctx, controller); !ok || err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete dependent resources: %v", err)
