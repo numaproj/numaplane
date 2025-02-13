@@ -211,6 +211,7 @@ func scaleDownMonoVertex(
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
 		rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
+		rolloutPromotedChildStatus.MarkAllSourceVerticesScaledDown()
 
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
 		return true, nil
