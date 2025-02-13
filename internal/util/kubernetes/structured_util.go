@@ -7,7 +7,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sLabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,18 +53,20 @@ func NewPodDisruptionBudget(name, namespace string, maxUnavailable int32, ownerR
 }
 
 func ListPodsMetadataOnly(ctx context.Context, c k8sClient.Client, namespace, labels string) (*metav1.PartialObjectMetadataList, error) {
-	podsLabelsSelector, err := k8sLabels.Parse(labels)
+	podsMeta := &metav1.PartialObjectMetadataList{}
+
+	err := KubernetesClient.CoreV1().RESTClient().
+		Get().
+		Namespace(namespace).
+		Resource("pods").
+		Param("labelSelector", labels).
+		SetHeader("Accept", "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1").
+		Do(ctx).
+		Into(podsMeta)
+
 	if err != nil {
 		return nil, err
 	}
 
-	podsList := &metav1.PartialObjectMetadataList{}
-	podsList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
-
-	err = c.List(ctx, podsList, k8sClient.InNamespace(namespace), &k8sClient.ListOptions{LabelSelector: podsLabelsSelector})
-	if err != nil {
-		return nil, err
-	}
-
-	return podsList, nil
+	return podsMeta, nil
 }
