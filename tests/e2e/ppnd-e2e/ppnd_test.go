@@ -286,7 +286,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
 		}, true, false, false, true)
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(5 * time.Minute)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
