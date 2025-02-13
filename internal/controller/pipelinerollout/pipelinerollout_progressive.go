@@ -243,11 +243,6 @@ func scaleDownPipelineSourceVertices(
 
 			numaLogger.WithValues("vertexName", vertexName, "actualPodsCount", actualPodsCount).Debugf("found pods for the source vertex")
 
-			// If there are no pods, return and do not requeue
-			if actualPodsCount == 0 {
-				return false, nil
-			}
-
 			// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.
