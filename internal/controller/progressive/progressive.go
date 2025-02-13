@@ -62,9 +62,9 @@ type ProgressiveRolloutObject interface {
 
 	GetPromotedChildStatus() *apiv1.PromotedChildStatus
 
-	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus) error
+	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
-	SetPromotedChildStatus(*apiv1.PromotedChildStatus) error
+	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
 }
 
 // return:

@@ -140,21 +140,19 @@ func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedCh
 }
 
 // SetUpgradingChildStatus is a function of the progressiveRolloutObject
-func (isbServiceRollout *ISBServiceRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) error {
+func (isbServiceRollout *ISBServiceRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
 	if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
 		isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{}
 	}
 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus = *status.DeepCopy()
-	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject
-func (isbServiceRollout *ISBServiceRollout) SetPromotedChildStatus(status *PromotedChildStatus) error {
+func (isbServiceRollout *ISBServiceRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
 	if isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus == nil {
 		isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus = &PromotedISBServiceStatus{}
 	}
 	isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus.PromotedChildStatus = *status.DeepCopy()
-	return nil
 }
 
 func init() {

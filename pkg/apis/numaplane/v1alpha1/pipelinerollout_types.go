@@ -144,21 +144,19 @@ func (pipelineRollout *PipelineRollout) GetPromotedChildStatus() *PromotedChildS
 }
 
 // SetUpgradingChildStatus is a function of the progressiveRolloutObject
-func (pipelineRollout *PipelineRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) error {
+func (pipelineRollout *PipelineRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
 	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
 		pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{}
 	}
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus = *status.DeepCopy()
-	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject
-func (pipelineRollout *PipelineRollout) SetPromotedChildStatus(status *PromotedChildStatus) error {
+func (pipelineRollout *PipelineRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
 	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = &PromotedPipelineStatus{}
 	}
 	pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
-	return nil
 }
 
 func init() {

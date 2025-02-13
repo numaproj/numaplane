@@ -141,21 +141,19 @@ func (monoVertexRollout *MonoVertexRollout) GetPromotedChildStatus() *PromotedCh
 }
 
 // SetUpgradingChildStatus is a function of the progressiveRolloutObject
-func (monoVertexRollout *MonoVertexRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) error {
+func (monoVertexRollout *MonoVertexRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
 	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
 		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{}
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus = *status.DeepCopy()
-	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject
-func (monoVertexRollout *MonoVertexRollout) SetPromotedChildStatus(status *PromotedChildStatus) error {
+func (monoVertexRollout *MonoVertexRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
 		monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = &PromotedMonoVertexStatus{}
 	}
 	monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
-	return nil
 }
 
 func init() {
