@@ -288,7 +288,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 		time.Sleep(5 * time.Second)
 
-		// DeletePipelineRollout(failedPipelineRolloutName)
+		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
 
@@ -297,11 +297,11 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
 		// add bad edge to automatically fail Pipeline
-		// failedPipelineSpec := initialPipelineSpec
-		// failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
+		failedPipelineSpec := initialPipelineSpec
+		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		// CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
-		// VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
+		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 

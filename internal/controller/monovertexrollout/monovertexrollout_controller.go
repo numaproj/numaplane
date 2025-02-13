@@ -196,10 +196,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		numaLogger.Info("Deleting MonoVertexRollout")
 		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			// foreground := metav1.DeletePropagationForeground
-			// if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-			// 	return ctrl.Result{}, err
-			// }
+			foreground := metav1.DeletePropagationForeground
+			if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+				return ctrl.Result{}, err
+			}
 			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
 		}
 		// generate metrics for MonoVertex deletion
