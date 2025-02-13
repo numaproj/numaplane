@@ -17,16 +17,31 @@ limitations under the License.
 package monovertexrollout
 
 import (
+	"context"
 	"log"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	"github.com/numaproj/numaplane/pkg/client/clientset/versioned/scheme"
+	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
 var (
@@ -159,7 +174,6 @@ func createMonoVertex(phase numaflowv1.MonoVertexPhase, status numaflowv1.Status
 	return ctlrcommon.CreateTestMonoVertexOfSpec(monoVertexSpec, ctlrcommon.DefaultTestMonoVertexName, phase, status, labels, annotations)
 }
 
-/*
 // process an existing monoVertex in this test, the user preferred strategy is Progressive
 func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
@@ -545,4 +559,3 @@ func TestChildNeedsUpdating(t *testing.T) {
 		})
 	}
 }
-*/

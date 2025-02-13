@@ -16,7 +16,37 @@ limitations under the License.
 
 package isbservicerollout
 
-/*
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
+	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	commontest "github.com/numaproj/numaplane/tests/common"
+)
+
 // test reconcile() for the case of PPND
 
 func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
@@ -295,7 +325,6 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 		})
 	}
 }
-
 
 func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
@@ -681,4 +710,3 @@ func createPipelineForISBSvc(
 	spec := numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcName}
 	return ctlrcommon.CreateTestPipelineOfSpec(spec, name, phase, numaflowv1.Status{}, false, labels, map[string]string{})
 }
-*/

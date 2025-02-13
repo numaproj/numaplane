@@ -785,7 +785,6 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	}
 }
 
-/*
 // process an existing pipeline in this test, the user preferred strategy is Progressive
 func Test_processExistingPipeline_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
@@ -1180,4 +1179,3 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		})
 	}
 }
-*/
