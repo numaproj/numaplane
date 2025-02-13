@@ -46,6 +46,26 @@ type ISBServiceRolloutStatus struct {
 	// NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
 	// identify an isbsvc.
 	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// ProgressiveStatus stores fields related to the Progressive strategy
+	ProgressiveStatus ISBServiceProgressiveStatus `json:"progressiveStatus,omitempty"`
+}
+
+type ISBServiceProgressiveStatus struct {
+	// UpgradingISBServiceStatus represents either the current or otherwise the most recent "upgrading" isbservice
+	UpgradingISBServiceStatus *UpgradingISBServiceStatus `json:"upgradingISBServiceStatus,omitempty"`
+	// PromotedISBServiceStatus stores information regarding the current "promoted" isbservice
+	PromotedISBServiceStatus *PromotedISBServiceStatus `json:"promotedISBServiceStatus,omitempty"`
+}
+
+// UpgradingISBServiceStatus describes the status of an upgrading child
+type UpgradingISBServiceStatus struct {
+	UpgradingChildStatus `json:",inline"`
+}
+
+// PromotedISBServiceStatus describes the status of a promoted child
+type PromotedISBServiceStatus struct {
+	PromotedChildStatus `json:",inline"`
 }
 
 // +genclient
@@ -101,6 +121,38 @@ func (isbServiceRollout *ISBServiceRollout) GetRolloutObjectMeta() *metav1.Objec
 
 func (isbServiceRollout *ISBServiceRollout) GetRolloutStatus() *Status {
 	return &isbServiceRollout.Status.Status
+}
+
+// GetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (isbServiceRollout *ISBServiceRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
+	if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
+		return nil
+	}
+	return &isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus
+}
+
+// GetPromotedChildStatus is a function of the progressiveRolloutObject
+func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedChildStatus {
+	if isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus == nil {
+		return nil
+	}
+	return &isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus.PromotedChildStatus
+}
+
+// SetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (isbServiceRollout *ISBServiceRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
+	if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
+		isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{}
+	}
+	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// SetPromotedChildStatus is a function of the progressiveRolloutObject
+func (isbServiceRollout *ISBServiceRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
+	if isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus == nil {
+		isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus = &PromotedISBServiceStatus{}
+	}
+	isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus.PromotedChildStatus = *status.DeepCopy()
 }
 
 func init() {

@@ -40,7 +40,7 @@ type progressiveController interface {
 	ctlrcommon.RolloutController
 
 	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
-	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
+	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
@@ -49,10 +49,23 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
-	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the upgrade
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+}
+
+// ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
+type ProgressiveRolloutObject interface {
+	ctlrcommon.RolloutObject
+
+	GetUpgradingChildStatus() *apiv1.UpgradingChildStatus
+
+	GetPromotedChildStatus() *apiv1.PromotedChildStatus
+
+	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
+
+	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
 }
 
 // return:
@@ -62,8 +75,8 @@ type progressiveController interface {
 // - error if any
 func ProcessResource(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
+	liveRolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
 	controller progressiveController,
@@ -86,13 +99,13 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()}
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()})
 			} else {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -135,7 +148,7 @@ func ProcessResource(
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
 // if there's already an existing "upgrading" child, create a definition using its name; otherwise, use a new name
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -174,8 +187,8 @@ Returns:
 */
 func processUpgradingChild(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
+	liveRolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
@@ -192,7 +205,7 @@ func processUpgradingChild(
 		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
 	}
 
-	childStatus := liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus
+	childStatus := liveRolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
 	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
@@ -247,7 +260,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
@@ -261,13 +274,13 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
 			} else {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -291,13 +304,13 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()}
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
 			} else {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus.DeepCopy()
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
-			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -324,7 +337,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// if we are still in the assessment window, return we are not done
@@ -332,7 +345,7 @@ func processUpgradingChild(
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		return false, false, assessmentInterval, nil
 	}

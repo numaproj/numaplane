@@ -13,13 +13,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" pipeline
 // This implements a function of the progressiveController interface
-func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error) {
+func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
@@ -92,8 +90,8 @@ It performs the following pre-upgrade operations:
 
 Parameters:
   - ctx: the context for managing request-scoped values.
-  - rolloutPromotedChildStatus: the status of the promoted child, which may be updated during processing.
-  - promotedChildDef: the definition of the promoted child as an unstructured object.
+  - pipelineRollout: the pipelineRollout
+  - promotedPipelineDef: the definition of the promoted child as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -102,24 +100,28 @@ Returns:
 */
 func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
-	promotedChildDef *unstructured.Unstructured,
+	pipelineRollout progressive.ProgressiveRolloutObject,
+	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("PipelineRollout")
 
 	numaLogger.Debug("started pre-upgrade processing of promoted pipeline")
+	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
+	if !ok {
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline pre-upgrade", pipelineRollout)
+	}
 
-	if rolloutPromotedChildStatus == nil {
+	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
 	// scaleDownPipelineSourceVertices either updates the promoted pipeline to scale down the source vertices
-	// pods or retrieves the currently running pods to update the rolloutPromotedChildStatus scaleValues.
+	// pods or retrieves the currently running pods to update the PromotedPipelineStatus scaleValues.
 	// This serves to make sure that the source vertices pods have been really scaled down before proceeding
 	// with the progressive upgrade.
-	requeue, err := scaleDownPipelineSourceVertices(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	requeue, err := scaleDownPipelineSourceVertices(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -136,8 +138,8 @@ It performs the following post-upgrade operations:
 
 Parameters:
   - ctx: the context for managing request-scoped values.
-  - rolloutPromotedChildStatus: the status of the promoted child, which may be updated during processing.
-  - promotedChildDef: the definition of the promoted child as an unstructured object.
+  - pipelineRollout: the PipelineRollout instance
+  - promotedPipelineDef: the definition of the promoted child as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -146,8 +148,8 @@ Returns:
 */
 func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
-	promotedChildDef *unstructured.Unstructured,
+	pipelineRollout progressive.ProgressiveRolloutObject,
+	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
@@ -155,11 +157,16 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	numaLogger.Debug("started post-upgrade processing of promoted pipeline")
 
-	if rolloutPromotedChildStatus == nil {
+	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
+	if !ok {
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline post-upgrade", pipelineRollout)
+	}
+
+	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	requeue, err := scalePipelineSourceVerticesToDesiredValues(ctx, rolloutPromotedChildStatus, promotedChildDef, c)
+	requeue, err := scalePipelineSourceVerticesToDesiredValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -177,8 +184,8 @@ of the promoted child definition. It ensures that the scale.min does not exceed 
 
 Parameters:
 - ctx: the context for managing request-scoped values.
-- rolloutPromotedChildStatus: the status of the promoted child in the rollout.
-- promotedChildDef: the unstructured object representing the promoted child definition.
+- promotedPipelineStatus: the status of the promoted child in the rollout.
+- promotedPipelineDef: the unstructured object representing the promoted child definition.
 - c: the Kubernetes client for resource operations.
 
 Returns:
@@ -187,28 +194,28 @@ Returns:
 */
 func scaleDownPipelineSourceVertices(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
-	promotedChildDef *unstructured.Unstructured,
+	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
+	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineSourceVertices")
 
 	// If the pipeline source vertices have been scaled down already, do not perform scaling down operations
-	if rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()) {
+	if promotedPipelineStatus.AreAllSourceVerticesScaledDown(promotedPipelineDef.GetName()) {
 		return false, nil
 	}
 
-	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
+	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
 	if err != nil {
 		return true, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildName", promotedChildDef.GetName(), "vertices", vertices).Debugf("found vertices for the promoted pipeline: %d", len(vertices))
+	numaLogger.WithValues("promotedChildName", promotedPipelineDef.GetName(), "vertices", vertices).Debugf("found vertices for the promoted pipeline: %d", len(vertices))
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
-	if rolloutPromotedChildStatus.ScaleValues != nil {
-		scaleValuesMap = rolloutPromotedChildStatus.ScaleValues
+	if promotedPipelineStatus.ScaleValues != nil {
+		scaleValuesMap = promotedPipelineStatus.ScaleValues
 	}
 
 	promotedChildNeedsUpdate := false
@@ -230,9 +237,9 @@ func scaleDownPipelineSourceVertices(
 				return true, errors.New("a vertex must have a name")
 			}
 
-			podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedChildDef.GetNamespace(), fmt.Sprintf(
+			podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedPipelineDef.GetNamespace(), fmt.Sprintf(
 				"%s=%s, %s=%s",
-				common.LabelKeyNumaflowPodPipelineName, promotedChildDef.GetName(),
+				common.LabelKeyNumaflowPodPipelineName, promotedPipelineDef.GetName(),
 				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
 			))
 			if err != nil {
@@ -267,7 +274,7 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			numaLogger.WithValues(
-				"promotedChildName", promotedChildDef.GetName(),
+				"promotedChildName", promotedPipelineDef.GetName(),
 				"vertexName", vertexName,
 				"actualPodsCount", actualPodsCount,
 				"newMin", newMin,
@@ -295,20 +302,20 @@ func scaleDownPipelineSourceVertices(
 	}
 
 	if promotedChildNeedsUpdate {
-		if err := patchPipelineVertices(ctx, promotedChildDef, vertices, c); err != nil {
+		if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
 			return true, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
 		}
 
 		numaLogger.WithValues("vertices", vertices, "scaleValuesMap", scaleValuesMap).Debug("updated the promoted pipeline with the new scale configuration")
 	}
 
-	rolloutPromotedChildStatus.ScaleValues = scaleValuesMap
-	rolloutPromotedChildStatus.MarkAllSourceVerticesScaledDown()
+	promotedPipelineStatus.ScaleValues = scaleValuesMap
+	promotedPipelineStatus.MarkAllSourceVerticesScaledDown()
 
 	// Set ScaleValuesRestoredToDesired to false in case previously set to true and now scaling back down to recover from a previous failure
-	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = false
+	promotedPipelineStatus.ScaleValuesRestoredToDesired = false
 
-	return !rolloutPromotedChildStatus.AreAllSourceVerticesScaledDown(promotedChildDef.GetName()), nil
+	return !promotedPipelineStatus.AreAllSourceVerticesScaledDown(promotedPipelineDef.GetName()), nil
 }
 
 /*
@@ -318,8 +325,8 @@ from the rollout's promoted child status and updates the Kubernetes resource acc
 
 Parameters:
 - ctx: the context for managing request-scoped values.
-- rolloutPromotedChildStatus: the status of the promoted child in the rollout, containing scale values.
-- promotedChildDef: the unstructured definition of the promoted child resource.
+- promotedPipelineStatus: the status of the promoted child in the rollout, containing scale values.
+- promotedPipelineDef: the unstructured definition of the promoted child resource.
 - c: the Kubernetes client for resource operations.
 
 Returns:
@@ -328,23 +335,23 @@ Returns:
 */
 func scalePipelineSourceVerticesToDesiredValues(
 	ctx context.Context,
-	rolloutPromotedChildStatus *apiv1.PromotedChildStatus,
-	promotedChildDef *unstructured.Unstructured,
+	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
+	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToDesiredValues")
 
 	// If all the pipeline source vertices have been scaled back to desired values already, do not restore scaling values again
-	if rolloutPromotedChildStatus.AreScaleValuesRestoredToDesired(promotedChildDef.GetName()) {
+	if promotedPipelineStatus.AreScaleValuesRestoredToDesired(promotedPipelineDef.GetName()) {
 		return false, nil
 	}
 
-	if rolloutPromotedChildStatus.ScaleValues == nil {
+	if promotedPipelineStatus.ScaleValues == nil {
 		return true, errors.New("unable to restore scale values for the promoted pipeline source vertices because the rollout does not have promotedChildStatus set")
 	}
 
-	vertices, _, err := unstructured.NestedSlice(promotedChildDef.Object, "spec", "vertices")
+	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
 	if err != nil {
 		return true, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
@@ -367,7 +374,7 @@ func scalePipelineSourceVerticesToDesiredValues(
 				return true, errors.New("a vertex must have a name")
 			}
 
-			vertexScaleValues, exists := rolloutPromotedChildStatus.ScaleValues[vertexName]
+			vertexScaleValues, exists := promotedPipelineStatus.ScaleValues[vertexName]
 			if !exists {
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
@@ -380,7 +387,7 @@ func scalePipelineSourceVerticesToDesiredValues(
 				continue
 			}
 
-			desiredMax := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMax
+			desiredMax := promotedPipelineStatus.ScaleValues[vertexName].DesiredMax
 			if desiredMax == nil {
 				unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
 			} else {
@@ -389,7 +396,7 @@ func scalePipelineSourceVerticesToDesiredValues(
 				}
 			}
 
-			desiredMin := rolloutPromotedChildStatus.ScaleValues[vertexName].DesiredMin
+			desiredMin := promotedPipelineStatus.ScaleValues[vertexName].DesiredMin
 			if desiredMin == nil {
 				unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
 			} else {
@@ -400,20 +407,20 @@ func scalePipelineSourceVerticesToDesiredValues(
 		}
 	}
 
-	if err := patchPipelineVertices(ctx, promotedChildDef, vertices, c); err != nil {
+	if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted pipeline source vertices to desired values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedChildDef", promotedChildDef).Debug("patched the promoted pipeline source vertices with the desired scale configuration")
+	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline source vertices with the desired scale configuration")
 
-	rolloutPromotedChildStatus.ScaleValuesRestoredToDesired = true
-	rolloutPromotedChildStatus.AllSourceVerticesScaledDown = false
-	rolloutPromotedChildStatus.ScaleValues = nil
+	promotedPipelineStatus.ScaleValuesRestoredToDesired = true
+	promotedPipelineStatus.AllSourceVerticesScaledDown = false
+	promotedPipelineStatus.ScaleValues = nil
 
 	return false, nil
 }
 
-func patchPipelineVertices(ctx context.Context, promotedChildDef *unstructured.Unstructured, vertices []any, c client.Client) error {
+func patchPipelineVertices(ctx context.Context, promotedPipelineDef *unstructured.Unstructured, vertices []any, c client.Client) error {
 	patch := &unstructured.Unstructured{Object: make(map[string]any)}
 	err := unstructured.SetNestedSlice(patch.Object, vertices, "spec", "vertices")
 	if err != nil {
@@ -425,7 +432,7 @@ func patchPipelineVertices(ctx context.Context, promotedChildDef *unstructured.U
 		return err
 	}
 
-	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
+	if err := kubernetes.PatchResource(ctx, c, promotedPipelineDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
 		return err
 	}
 

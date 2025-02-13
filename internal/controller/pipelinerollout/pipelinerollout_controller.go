@@ -602,7 +602,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
-			pipelineRollout.Status.ProgressiveStatus.PromotedChildStatus = nil
+			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
@@ -1008,7 +1008,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
-		numaLogger.Fatal(errors.New("Should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
+		numaLogger.Error(errors.New("Should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
 			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
 	}
 	pause := false

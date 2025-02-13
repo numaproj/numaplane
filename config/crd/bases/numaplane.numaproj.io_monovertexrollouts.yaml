@@ -175,9 +175,9 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
-                  promotedChildStatus:
-                    description: PromotedChild stores information regarding the current
-                      "promoted" child status
+                  promotedMonoVertexStatus:
+                    description: PromotedMonoVertexStatus stores information regarding
+                      the current "promoted" MonoVertex
                     properties:
                       allSourceVerticesScaledDown:
                         description: AllSourceVerticesScaledDown indicates if ALL
@@ -218,6 +218,8 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - desiredMax
+                          - desiredMin
                           - isDesiredScaleSet
                           - scaleTo
                           type: object
@@ -233,9 +235,9 @@ spec:
                     required:
                     - name
                     type: object
-                  upgradingChildStatus:
-                    description: UpgradingChildStatus represents either the current
-                      or otherwise the most recent "upgrading" child
+                  upgradingMonoVertexStatus:
+                    description: UpgradingMonoVertexStatus represents either the current
+                      or otherwise the most recent "upgrading" MonoVertex
                     properties:
                       assessUntil:
                         description: AssessUntil indicates the time after which no

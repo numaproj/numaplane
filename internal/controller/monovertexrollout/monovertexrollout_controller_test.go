@@ -212,8 +212,8 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		initialRolloutPhase           apiv1.Phase
 		initialRolloutNameCount       int
 		initialInProgressStrategy     *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus   *apiv1.UpgradingChildStatus
-		initialPromotedChildStatus    *apiv1.PromotedChildStatus
+		initialUpgradingChildStatus   *apiv1.UpgradingMonoVertexStatus
+		initialPromotedChildStatus    *apiv1.PromotedMonoVertexStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -239,9 +239,13 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialRolloutNameCount:      1,
 			initialInProgressStrategy:    nil,
 			initialUpgradingChildStatus:  nil,
-			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
-				Name:                        ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-				AllSourceVerticesScaledDown: true,
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+					},
+					AllSourceVerticesScaledDown: true,
+				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -287,15 +291,21 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialRolloutPhase:       apiv1.PhasePending,
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
-				Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:   apiv1.AssessmentResultSuccess,
+			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:   apiv1.AssessmentResultSuccess,
+				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
-				Name:                        ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-				AllSourceVerticesScaledDown: true,
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+					},
+					AllSourceVerticesScaledDown: true,
+				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -334,16 +344,22 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialRolloutPhase:       apiv1.PhasePending,
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
-				Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:   apiv1.AssessmentResultFailure,
+			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:   apiv1.AssessmentResultFailure,
+				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedChildStatus{
-				Name:                        ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-				AllSourceVerticesScaledDown: true,
-				ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {DesiredMin: &ctlrcommon.DesiredMinMax, DesiredMax: &ctlrcommon.DesiredMinMax}},
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+					},
+					AllSourceVerticesScaledDown: true,
+					ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {DesiredMin: &ctlrcommon.DesiredMinMax, DesiredMax: &ctlrcommon.DesiredMinMax}},
+				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -368,10 +384,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
 				map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.newControllerInstanceID}, map[string]string{},
-				&apiv1.MonoVertexRolloutStatus{Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{
-					UpgradingChildStatus: tc.initialUpgradingChildStatus,
-					PromotedChildStatus:  tc.initialPromotedChildStatus,
-				}}})
+				&apiv1.MonoVertexRolloutStatus{ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+					UpgradingMonoVertexStatus: tc.initialUpgradingChildStatus,
+					PromotedMonoVertexStatus:  tc.initialPromotedChildStatus,
+				}})
 			_ = client.Delete(ctx, rollout)
 
 			rollout.Status.Phase = tc.initialRolloutPhase
