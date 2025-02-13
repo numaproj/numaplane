@@ -265,6 +265,7 @@ func (nl *NumaLogger) Verbosef(msg string, args ...any) {
 func (nl *NumaLogger) SetLevel(level int) {
 	// default if not defined
 	if level == 0 {
+		log.Printf("LogLevel is not set or unsupported, using default level: INFO")
 		level = defaultLevel
 	}
 
