@@ -202,7 +202,7 @@ func scaleDownMonoVertex(
 	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 	// to later verify that the pods were actually scaled down.
 	// We want to skip scaling down again.
-	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist && vertexScaleValues.ScaleTo != 0 {
+	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist && vertexScaleValues.ScaleTo != nil {
 		vertexScaleValues.Actual = actualPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
@@ -244,7 +244,7 @@ func scaleDownMonoVertex(
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
 		OriginalScaleDefinition: originalScaleDefAsString,
-		ScaleTo:                 newMax,
+		ScaleTo:                 &newMax,
 		Actual:                  actualPodsCount,
 	}
 
