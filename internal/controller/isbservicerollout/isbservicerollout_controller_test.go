@@ -418,7 +418,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 		initialRolloutPhase            apiv1.Phase
 		initialRolloutNameCount        int
 		initialInProgressStrategy      *apiv1.UpgradeStrategy
-		initialUpgradingChildStatus    *apiv1.UpgradingChildStatus
+		initialUpgradingChildStatus    *apiv1.UpgradingISBServiceStatus
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -461,9 +461,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
 				&apiv1.PipelineRolloutStatus{
-					Status: apiv1.Status{
-						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultSuccess,
 							},
@@ -484,11 +484,13 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
-				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:   apiv1.AssessmentResultSuccess,
+			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:   apiv1.AssessmentResultSuccess,
+				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
@@ -507,9 +509,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
 				&apiv1.PipelineRolloutStatus{
-					Status: apiv1.Status{
-						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultFailure,
 							},
@@ -522,11 +524,13 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
-				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:   apiv1.AssessmentResultFailure,
+			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:   apiv1.AssessmentResultFailure,
+				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -546,9 +550,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
 				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
 				&apiv1.PipelineRolloutStatus{
-					Status: apiv1.Status{
-						ProgressiveStatus: apiv1.ProgressiveStatus{
-							UpgradingChildStatus: &apiv1.UpgradingChildStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+							UpgradingChildStatus: apiv1.UpgradingChildStatus{
 								Name:             defaultUpgradingPipelineName,
 								AssessmentResult: apiv1.AssessmentResultFailure,
 							},
@@ -561,11 +565,13 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingChildStatus{
-				Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-				NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-				AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-				AssessmentResult:   apiv1.AssessmentResultFailure,
+			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
+				UpgradingChildStatus: apiv1.UpgradingChildStatus{
+					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:   apiv1.AssessmentResultFailure,
+				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,
 			expectedRolloutPhase:       apiv1.PhasePending,
@@ -590,7 +596,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 			// create ISBServiceRollout in K8S
 			rollout := ctlrcommon.CreateISBServiceRollout(tc.newISBSvcSpec, &apiv1.ISBServiceRolloutStatus{
-				Status: apiv1.Status{ProgressiveStatus: apiv1.ProgressiveStatus{UpgradingChildStatus: tc.initialUpgradingChildStatus}}})
+				ProgressiveStatus: apiv1.ISBServiceProgressiveStatus{UpgradingISBServiceStatus: tc.initialUpgradingChildStatus}})
 			rollout.Status.Init(rollout.Generation)
 			rollout.Status.Phase = tc.initialRolloutPhase
 			if rollout.Status.NameCount == nil {
