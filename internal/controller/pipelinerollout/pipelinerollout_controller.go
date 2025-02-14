@@ -209,7 +209,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 		return ctrl.Result{}, err
 	}
-	numaLogger.Info("got here: about to check needsUpdate()")
+	numaLogger.Infof("got here: about to check needsUpdate(), pipelineRolloutOrig.Finalizers=%+v, pipelineRollout.Finalizers=%+v", pipelineRolloutOrig.Finalizers, pipelineRollout.Finalizers)
 
 	// Update the Spec if needed
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
