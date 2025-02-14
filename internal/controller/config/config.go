@@ -89,7 +89,7 @@ func (*ConfigManager) GetControllerDefinitionsMgr() *NumaflowControllerDefinitio
 // supposed to be populated from the configmap attached to the
 // controller manager.
 type GlobalConfig struct {
-	LogLevel          int    `json:"logLevel" mapstructure:"logLevel"`
+	LogLevel          string `json:"logLevel" mapstructure:"logLevel"`
 	IncludedResources string `json:"includedResources" mapstructure:"includedResources"`
 	// List of Numaflow Controller image names to look for
 	NumaflowControllerImageNames []string `json:"numaflowControllerImageNames" mapstructure:"numaflowControllerImageNames"`

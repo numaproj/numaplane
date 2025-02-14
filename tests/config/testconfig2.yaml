@@ -1,3 +1,3 @@
-logLevel: 4
+logLevel: DEBUG # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
 defaultUpgradeStrategy: "progressive"
 childStatusAssessmentSchedule: "30,90,5"
