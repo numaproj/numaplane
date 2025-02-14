@@ -143,7 +143,7 @@ func Test_processUpgradingChild(t *testing.T) {
 						PromotedChildStatus: apiv1.PromotedChildStatus{
 							Name: defaultExistingPromotedChildDef.GetName(),
 						},
-						ScaleValuesRestoredToDesired: true,
+						ScaleValuesRestoredToOriginal: true,
 					},
 				},
 			),
