@@ -19,6 +19,7 @@ package progressive
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,7 @@ type progressiveController interface {
 	ctlrcommon.RolloutController
 
 	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
-	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, name string) (*unstructured.Unstructured, error)
+	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
@@ -48,10 +49,23 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
-	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the upgrade
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutPromotedChildStatus *apiv1.PromotedChildStatus, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+}
+
+// ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
+type ProgressiveRolloutObject interface {
+	ctlrcommon.RolloutObject
+
+	GetUpgradingChildStatus() *apiv1.UpgradingChildStatus
+
+	GetPromotedChildStatus() *apiv1.PromotedChildStatus
+
+	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
+
+	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
 }
 
 // return:
@@ -61,8 +75,8 @@ type progressiveController interface {
 // - error if any
 func ProcessResource(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
+	liveRolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
 	controller progressiveController,
@@ -85,11 +99,13 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			if liveRolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus == nil {
-				rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus = &apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()}
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()})
+			} else {
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChild, c)
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -108,7 +124,9 @@ func ProcessResource(
 			return false, true, 0, err
 		}
 	}
-	if currentUpgradingChildDef == nil { // nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+
+	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+	if currentUpgradingChildDef == nil {
 		return true, false, 0, err
 	}
 
@@ -130,7 +148,7 @@ func ProcessResource(
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
 // if there's already an existing "upgrading" child, create a definition using its name; otherwise, use a new name
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -169,8 +187,8 @@ Returns:
 */
 func processUpgradingChild(
 	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	liveRolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
+	liveRolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
@@ -187,7 +205,7 @@ func processUpgradingChild(
 		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
 	}
 
-	childStatus := liveRolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus
+	childStatus := liveRolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
 	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
@@ -242,7 +260,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
 		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
@@ -256,7 +274,13 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
+			} else {
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
+			}
+
+			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -280,7 +304,13 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject.GetRolloutStatus().ProgressiveStatus.PromotedChildStatus, existingPromotedChildDef, c)
+			if liveRolloutObject.GetPromotedChildStatus() == nil {
+				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
+			} else {
+				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
+			}
+
+			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -307,7 +337,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 		// if we are still in the assessment window, return we are not done
@@ -315,7 +345,7 @@ func processUpgradingChild(
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-		rolloutObject.GetRolloutStatus().ProgressiveStatus.UpgradingChildStatus = childStatus
+		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		return false, false, assessmentInterval, nil
 	}
@@ -331,4 +361,61 @@ func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool 
 		}
 	}
 	return true
+}
+
+/*
+CalculateScaleMinMaxValues computes new minimum and maximum scale values for a given object based on the current
+number of pods. It retrieves the existing min and max values from the object using specified paths.
+If the min or max values are not found, it returns nil for those values to allow restoration of the
+desired values later.
+
+Numaflow notes:
+- if max is unset, Numaflow uses DefaultMaxReplicas (50)
+- if min is unset or negative, Numaflow uses 0
+
+Parameters:
+  - object: A map representing the object from which to retrieve min and max values.
+  - podsCount: The current number of pods.
+  - pathToMin: A slice of strings representing the path to the min value in the object.
+  - pathToMax: A slice of strings representing the path to the max value in the object.
+
+Returns:
+  - newMin: The adjusted minimum scale value.
+  - newMax: The adjusted maximum scale value.
+  - outMin: A pointer to the original min value or nil if not found.
+  - outMax: A pointer to the original max value or nil if not found.
+  - error: An error if there is an issue retrieving the min or max values.
+*/
+func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin, pathToMax []string) (int64, int64, *int64, *int64, error) {
+	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
+
+	min, foundMin, err := unstructured.NestedInt64(object, pathToMin...)
+	if err != nil {
+		return -1, -1, nil, nil, err
+	}
+
+	max, foundMax, err := unstructured.NestedInt64(object, pathToMax...)
+	if err != nil {
+		return -1, -1, nil, nil, err
+	}
+
+	// If min exceeds the newMax, reduce also min to newMax
+	newMin := min
+	if min > newMax {
+		newMin = newMax
+	}
+
+	// If min was not found, return nil to later restore the appropriate desired value
+	outMin := &min
+	if !foundMin {
+		outMin = nil
+	}
+
+	// If max was not found, return nil to later restore the appropriate desired value
+	outMax := &max
+	if !foundMax {
+		outMax = nil
+	}
+
+	return newMin, newMax, outMin, outMax, nil
 }

@@ -175,9 +175,9 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
-                  promotedChildStatus:
-                    description: PromotedChild stores information regarding the current
-                      "promoted" child status
+                  promotedMonoVertexStatus:
+                    description: PromotedMonoVertexStatus stores information regarding
+                      the current "promoted" MonoVertex
                     properties:
                       allSourceVerticesScaledDown:
                         description: AllSourceVerticesScaledDown indicates if ALL
@@ -207,6 +207,10 @@ spec:
                                 original child spec
                               format: int64
                               type: integer
+                            isDesiredScaleSet:
+                              description: IsDesiredScaleSet indicates if the original
+                                child spec scale field is set (true) or nil (false)
+                              type: boolean
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
                                 down to
@@ -216,6 +220,7 @@ spec:
                           - actual
                           - desiredMax
                           - desiredMin
+                          - isDesiredScaleSet
                           - scaleTo
                           type: object
                         description: |-
@@ -230,9 +235,9 @@ spec:
                     required:
                     - name
                     type: object
-                  upgradingChildStatus:
-                    description: UpgradingChildStatus represents either the current
-                      or otherwise the most recent "upgrading" child
+                  upgradingMonoVertexStatus:
+                    description: UpgradingMonoVertexStatus represents either the current
+                      or otherwise the most recent "upgrading" MonoVertex
                     properties:
                       assessUntil:
                         description: AssessUntil indicates the time after which no

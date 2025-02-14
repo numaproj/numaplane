@@ -46,6 +46,26 @@ type MonoVertexRolloutStatus struct {
 	// NameCount is used as a suffix for the name of the managed monovertex, to uniquely
 	// identify a monovertex.
 	NameCount *int32 `json:"nameCount,omitempty"`
+
+	// ProgressiveStatus stores fields related to the Progressive strategy
+	ProgressiveStatus MonoVertexProgressiveStatus `json:"progressiveStatus,omitempty"`
+}
+
+type MonoVertexProgressiveStatus struct {
+	// UpgradingMonoVertexStatus represents either the current or otherwise the most recent "upgrading" MonoVertex
+	UpgradingMonoVertexStatus *UpgradingMonoVertexStatus `json:"upgradingMonoVertexStatus,omitempty"`
+	// PromotedMonoVertexStatus stores information regarding the current "promoted" MonoVertex
+	PromotedMonoVertexStatus *PromotedMonoVertexStatus `json:"promotedMonoVertexStatus,omitempty"`
+}
+
+// UpgradingMonoVertexStatus describes the status of an upgrading child
+type UpgradingMonoVertexStatus struct {
+	UpgradingChildStatus `json:",inline"`
+}
+
+// PromotedMonoVertexStatus describes the status of the promoted child
+type PromotedMonoVertexStatus struct {
+	PromotedPipelineTypeStatus `json:",inline"`
 }
 
 // +genclient
@@ -102,6 +122,38 @@ func (monoVertexRollout *MonoVertexRollout) GetRolloutObjectMeta() *metav1.Objec
 
 func (monoVertexRollout *MonoVertexRollout) GetRolloutStatus() *Status {
 	return &monoVertexRollout.Status.Status
+}
+
+// GetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
+	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+		return nil
+	}
+	return &monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus
+}
+
+// GetPromotedChildStatus is a function of the progressiveRolloutObject
+func (monoVertexRollout *MonoVertexRollout) GetPromotedChildStatus() *PromotedChildStatus {
+	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
+		return nil
+	}
+	return &monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedChildStatus
+}
+
+// SetUpgradingChildStatus is a function of the progressiveRolloutObject
+func (monoVertexRollout *MonoVertexRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
+	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{}
+	}
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// SetPromotedChildStatus is a function of the progressiveRolloutObject
+func (monoVertexRollout *MonoVertexRollout) SetPromotedChildStatus(status *PromotedChildStatus) {
+	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
+		monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = &PromotedMonoVertexStatus{}
+	}
+	monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
 }
 
 func init() {
