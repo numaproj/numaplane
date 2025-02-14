@@ -49,7 +49,6 @@ const (
 
 // LogLevelMap maps the log level string to the logr verbosity level.
 var LogLevelMap = map[string]int{
-	"ERROR":   FatalLevel,
 	"WARN":    WarnLevel,
 	"INFO":    InfoLevel,
 	"DEBUG":   DebugLevel,
