@@ -347,6 +347,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return 0, nil, err
 			}
+			// Get the PipelineRollout live resource
+			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
+			}
+			*pipelineRollout = *livePipelineRollout
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
