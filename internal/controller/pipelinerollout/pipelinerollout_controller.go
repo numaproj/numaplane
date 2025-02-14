@@ -211,10 +211,13 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update the Spec if needed
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		pipelineRolloutStatus := pipelineRollout.Status
+		numaLogger.Infof("got here 3, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
+			numaLogger.Info("got here 4: Updating PipelineRollout finalizers resulted in error")
 			r.ErrorHandler(pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
+				numaLogger.Info("got here 5: Updating PipelineRollout Status resulted in error")
 				r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
@@ -344,9 +347,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
 			foreground := metav1.DeletePropagationForeground
+			numaLogger.Infof("got here 1, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return 0, nil, err
 			}
+			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
