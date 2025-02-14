@@ -351,6 +351,17 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return 0, nil, err
 			}
+
+			namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
+			if err := r.client.Get(ctx, namespacedName, pipelineRollout); err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Infof("attempted to delete PipelineRollout with foreground deletion but now it seems like it's already gone")
+					return 0, nil, nil
+				} else {
+					return 0, nil, err
+				}
+			}
+
 			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
