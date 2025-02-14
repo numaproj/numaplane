@@ -352,7 +352,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return 0, nil, err
 			}
 
-			namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
+			/*namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
 			if err := r.client.Get(ctx, namespacedName, pipelineRollout); err != nil {
 				if apierrors.IsNotFound(err) {
 					numaLogger.Infof("attempted to delete PipelineRollout with foreground deletion but now it seems like it's already gone")
@@ -360,6 +360,12 @@ func (r *PipelineRolloutReconciler) reconcile(
 				} else {
 					return 0, nil, err
 				}
+			}*/
+			// Get the PipelineRollout live resource
+			var err error
+			pipelineRollout, err = kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 			}
 
 			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
