@@ -76,7 +76,6 @@ type ProgressiveRolloutObject interface {
 func ProcessResource(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
-	liveRolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
 	controller progressiveController,
@@ -99,10 +98,8 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
+			if rolloutObject.GetPromotedChildStatus() == nil {
 				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
@@ -138,7 +135,7 @@ func ProcessResource(
 		return false, false, 0, err
 	}
 
-	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, newChild, 0, err
 	}
@@ -173,7 +170,6 @@ assessment result.
 Parameters:
 - ctx: The context for managing request-scoped values, cancellation, and timeouts.
 - rolloutObject: The current rollout object (this could be from cache).
-- liveRolloutObject: The live rollout object reflecting the current state of the rollout.
 - controller: The progressive controller responsible for managing the upgrade process.
 - existingPromotedChildDef: The definition of the currently promoted child resource.
 - existingUpgradingChildDef: The definition of the child resource currently being upgraded.
@@ -188,7 +184,6 @@ Returns:
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
-	liveRolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
@@ -205,7 +200,7 @@ func processUpgradingChild(
 		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
 	}
 
-	childStatus := liveRolloutObject.GetUpgradingChildStatus()
+	childStatus := rolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
 	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
@@ -274,10 +269,8 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
+			if rolloutObject.GetPromotedChildStatus() == nil {
 				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
@@ -304,10 +297,8 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
+			if rolloutObject.GetPromotedChildStatus() == nil {
 				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
 			}
 
 			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
