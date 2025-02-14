@@ -195,6 +195,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	numaLogger.Info("got here: about to processPipelineStatus()")
+
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
 	if err != nil {
@@ -207,6 +209,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 		return ctrl.Result{}, err
 	}
+	numaLogger.Info("got here: about to check needsUpdate()")
 
 	// Update the Spec if needed
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
@@ -370,6 +373,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
+			numaLogger.Infof("got here 2a, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 		}
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
