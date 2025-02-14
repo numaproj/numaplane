@@ -388,8 +388,18 @@ func scalePipelineSourceVerticesToOriginalValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if err := unstructured.SetNestedField(vertexAsMap, vertexScaleValues.OriginalScaleDefinition, "scale"); err != nil {
-				return true, err
+			if vertexScaleValues.OriginalScaleDefinition == nil {
+				unstructured.RemoveNestedField(vertexAsMap, "scale")
+			} else {
+				scaleAsMap := map[string]any{}
+				err := json.Unmarshal([]byte(*vertexScaleValues.OriginalScaleDefinition), &scaleAsMap)
+				if err != nil {
+					return true, fmt.Errorf("failed to unmarshal OriginalScaleDefinition: %w", err)
+				}
+
+				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap, "scale"); err != nil {
+					return true, err
+				}
 			}
 		}
 	}
