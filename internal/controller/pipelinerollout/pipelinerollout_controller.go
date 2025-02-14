@@ -365,11 +365,11 @@ func (r *PipelineRolloutReconciler) reconcile(
 				}
 			}*/
 			// Get the PipelineRollout live resource
-			var err error
-			pipelineRollout, err = kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
 			if err != nil {
 				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 			}
+			*pipelineRollout = *livePipelineRollout
 
 			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
