@@ -46,7 +46,8 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-var DefaultScaleJSONString string = `{scale: {min: 1, max: 1}}`
+var DefaultScaleJSONString string = `{"min":2,"max":2}`
+var DefaultScaleTo int64 = 1
 
 var (
 	DefaultTestNamespace = "default"
