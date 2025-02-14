@@ -195,6 +195,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	numaLogger.Info("got here: about to processPipelineStatus()")
+
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
 	if err != nil {
@@ -207,14 +209,18 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 		return ctrl.Result{}, err
 	}
+	numaLogger.Infof("got here: about to check needsUpdate(), pipelineRolloutOrig.Finalizers=%+v, pipelineRollout.Finalizers=%+v", pipelineRolloutOrig.Finalizers, pipelineRollout.Finalizers)
 
 	// Update the Spec if needed
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		pipelineRolloutStatus := pipelineRollout.Status
+		numaLogger.Infof("got here 3, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
+			numaLogger.Info("got here 4: Updating PipelineRollout finalizers resulted in error")
 			r.ErrorHandler(pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
+				numaLogger.Info("got here 5: Updating PipelineRollout Status resulted in error")
 				r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
@@ -344,10 +350,30 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
 			foreground := metav1.DeletePropagationForeground
+			numaLogger.Infof("got here 1, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return 0, nil, err
 			}
+
+			/*namespacedName := k8stypes.NamespacedName{Namespace: pipelineRollout.GetNamespace(), Name: pipelineRollout.GetName()}
+			if err := r.client.Get(ctx, namespacedName, pipelineRollout); err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Infof("attempted to delete PipelineRollout with foreground deletion but now it seems like it's already gone")
+					return 0, nil, nil
+				} else {
+					return 0, nil, err
+				}
+			}*/
+			// Get the PipelineRollout live resource
+			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
+			}
+			*pipelineRollout = *livePipelineRollout
+
+			numaLogger.Infof("got here 2, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
+			numaLogger.Infof("got here 2a, pipelineRollout version=%q, finalizers=%+v", pipelineRollout.ResourceVersion, pipelineRollout.Finalizers)
 		}
 		// generate the metrics for the Pipeline deletion.
 		r.customMetrics.DecPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)

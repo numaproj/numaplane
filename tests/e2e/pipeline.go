@@ -435,18 +435,6 @@ func DeletePipelineRollout(name string) {
 	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	Document("Verifying PipelineRollout deletion")
-	Eventually(func() bool {
-		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				Fail("An unexpected error occurred when fetching the PipelineRollout: " + err.Error())
-			}
-			return false
-		}
-		return true
-	}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
-
 	Document("Verifying Pipeline deletion")
 	Eventually(func() bool {
 		// ensures deletion of single pipeline
@@ -460,6 +448,32 @@ func DeletePipelineRollout(name string) {
 		}
 		return false
 	}).WithTimeout(testTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
+
+	Document("Verifying PipelineRollout deletion")
+	Eventually(func() bool {
+		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				Fail("An unexpected error occurred when fetching the PipelineRollout: " + err.Error())
+			}
+			return false
+		}
+		return true
+	}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+
+	// Document("Verifying Pipeline deletion")
+	// Eventually(func() bool {
+	// 	// ensures deletion of single pipeline
+	// 	pipelineRolloutLabel := fmt.Sprintf("numaplane.numaproj.io/parent-rollout-name=%v", name)
+	// 	list, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: pipelineRolloutLabel})
+	// 	if err != nil {
+	// 		return false
+	// 	}
+	// 	if len(list.Items) == 0 {
+	// 		return true
+	// 	}
+	// 	return false
+	// }).WithTimeout(testTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 }
 
 // update PipelineRollout and verify correct process
