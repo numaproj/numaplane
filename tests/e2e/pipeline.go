@@ -516,7 +516,7 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	}
 
 	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
-	if expectedFinalPhase != numaflowv1.PipelinePhasePausing {
+	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
 		Document("Verifying Pipeline got updated")
 		// get Pipeline to check that spec has been updated to correct spec
 		VerifyPipelineSpec(Namespace, name, verifySpecFunc)
