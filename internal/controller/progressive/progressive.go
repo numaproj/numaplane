@@ -51,8 +51,8 @@ type progressiveController interface {
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the upgrade
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails
+	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -65,7 +65,13 @@ type ProgressiveRolloutObject interface {
 
 	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
+	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+	ResetUpgradingChildStatus(upgradingChild *unstructured.Unstructured) error
+
 	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
+
+	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
 }
 
 // return:
@@ -98,8 +104,9 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			if rolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()})
+			promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+			if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
+				rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
@@ -269,9 +276,11 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			if rolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			}
+			// this shouldn't happen but just in case the PromotedChildStatus isn't there or is identifying the wrong Pipeline, reset it
+			//promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+			//if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChildDef.GetName() {
+			//	rolloutObject.ResetPromotedChildStatus(existingPromotedChildDef)
+			//}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
@@ -297,11 +306,13 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			if rolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			}
+			// this shouldn't happen but just in case the PromotedChildStatus isn't there or is identifying the wrong Pipeline, reset it
+			//promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+			//if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChildDef.GetName() {
+			//	rolloutObject.ResetPromotedChildStatus(existingPromotedChildDef)
+			//}
 
-			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}

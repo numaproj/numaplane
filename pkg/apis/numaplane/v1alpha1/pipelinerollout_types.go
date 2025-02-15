@@ -17,8 +17,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -143,12 +146,45 @@ func (pipelineRollout *PipelineRollout) GetPromotedChildStatus() *PromotedChildS
 	return &pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedChildStatus
 }
 
+// ResetUpgradingChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipeline *unstructured.Unstructured) error {
+
+	isbsvcName, found, err := unstructured.NestedString(upgradingPipeline.Object, "spec", "interStepBufferServiceName")
+	if err != nil {
+		return fmt.Errorf("unable to reset upgrading child status for pipeline %s/%s: %s", upgradingPipeline.GetNamespace(), upgradingPipeline.GetName(), err)
+	}
+	if !found {
+		isbsvcName = "default" // if not set, the default value is "default"
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{
+		InterStepBufferServiceName: isbsvcName,
+		UpgradingChildStatus: UpgradingChildStatus{
+			Name: upgradingPipeline.GetName(),
+		},
+	}
+	return nil
+}
+
 // SetUpgradingChildStatus is a function of the progressiveRolloutObject
 func (pipelineRollout *PipelineRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
 	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
 		pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{}
 	}
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// ResetPromotedChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+func (pipelineRollout *PipelineRollout) ResetPromotedChildStatus(promotedPipeline *unstructured.Unstructured) error {
+	pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = &PromotedPipelineStatus{
+		PromotedPipelineTypeStatus: PromotedPipelineTypeStatus{
+			PromotedChildStatus: PromotedChildStatus{
+				Name: promotedPipeline.GetName(),
+			},
+		},
+	}
+	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject

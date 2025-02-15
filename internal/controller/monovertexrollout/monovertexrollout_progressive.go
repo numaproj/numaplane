@@ -114,7 +114,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 }
 
 /*
-ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted monovertex.
+ProcessPromotedChildPostFailure handles the post-upgrade processing of a promoted monovertex.
 It performs the following post-upgrade operations:
 - it restores the promoted monovertex scale values to the desired values retrieved from the rollout status.
 
@@ -128,7 +128,7 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,

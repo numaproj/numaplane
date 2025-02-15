@@ -123,7 +123,7 @@ func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
