@@ -106,7 +106,10 @@ func ProcessResource(
 		if currentUpgradingChildDef == nil {
 			promotedChildStatus := rolloutObject.GetPromotedChildStatus()
 			if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
-				rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
+				err = rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
+				if err != nil {
+					return false, false, 0, err
+				}
 			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
@@ -217,6 +220,7 @@ func processUpgradingChild(
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
 
+		// TODO: replace this with ResetUpgradingChild()
 		childStatus = &apiv1.UpgradingChildStatus{
 			Name:             existingUpgradingChildDef.GetName(),
 			AssessmentResult: apiv1.AssessmentResultUnknown,

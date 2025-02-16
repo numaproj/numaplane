@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -59,55 +58,20 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		return apiv1.AssessmentResultSuccess, nil
 	}
 
-	// Get all Pipelines using this "upgrading" isbsvc
-	pipelines, err := r.getPipelineListForChildISBSvc(ctx, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, fmt.Errorf("Error retrieving pipelines for isbsvc %s/%s; can't make assessment for progressive: %s",
-			existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName(), err.Error())
-	}
-	if pipelines == nil {
-		numaLogger.Debugf("Can't assess isbsvc; didn't find any pipelines yet using this isbsvc")
-		return apiv1.AssessmentResultUnknown, nil
-	}
-
-	// map each PipelineRollout to its Pipeline - if we don't have a Pipeline for any of them, it is probably still being created, so we return "Unknown"
-	rolloutToPipeline := make(map[*apiv1.PipelineRollout]*unstructured.Unstructured)
+	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline which is in fact using this isbsvc
+	// otherwise, it may not have yet started the upgrade process for this isbsvc
 	for _, pipelineRollout := range pipelineRollouts {
-		foundPipeline := false
-		for _, pipeline := range pipelines.Items {
-			pipelineParent, err := ctlrcommon.GetRolloutParentName(pipeline.GetName())
-			if err != nil {
-				return apiv1.AssessmentResultUnknown, err
-			}
-			if pipelineParent == pipelineRollout.Name {
-				rolloutToPipeline[&pipelineRollout] = &pipeline
-				foundPipeline = true
-				break
-			}
-		}
-		if !foundPipeline {
-			numaLogger.Debugf("Can't assess isbsvc; didn't find a Pipeline associated with PipelineRollout %s/%s using this isbsvc",
-				pipelineRollout.GetNamespace(), pipelineRollout.GetName())
+		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
 			return apiv1.AssessmentResultUnknown, nil
 		}
-	}
-	numaLogger.Debugf("found these PipelineRollout/Pipeline pairs for this isbsvc: %+v", rolloutToPipeline)
-
-	// Assess the health of all of the Pipelines
-	// if all Pipelines passed the assessment, return Success
-	// if any Pipelines failed the assessment, return Failed
-	// if any Pipelines are still being assessed, return Unknown
-	for pipelineRollout, pipeline := range rolloutToPipeline {
-
-		// Look for this Pipeline in the PipelineRollout's ProgressiveStatus
-		if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Name == pipeline.GetName() {
-			switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
-			case apiv1.AssessmentResultFailure:
-				return apiv1.AssessmentResultFailure, nil
-			case apiv1.AssessmentResultUnknown:
-				return apiv1.AssessmentResultUnknown, nil
-			}
-		} else {
+		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
+		case apiv1.AssessmentResultFailure:
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
+			return apiv1.AssessmentResultFailure, nil
+		case apiv1.AssessmentResultUnknown:
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, nil
 		}
 	}
