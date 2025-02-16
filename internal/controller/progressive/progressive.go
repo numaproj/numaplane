@@ -279,12 +279,6 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			// this shouldn't happen but just in case the PromotedChildStatus isn't there or is identifying the wrong Pipeline, reset it
-			//promotedChildStatus := rolloutObject.GetPromotedChildStatus()
-			//if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChildDef.GetName() {
-			//	rolloutObject.ResetPromotedChildStatus(existingPromotedChildDef)
-			//}
-
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
@@ -309,12 +303,6 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			// this shouldn't happen but just in case the PromotedChildStatus isn't there or is identifying the wrong Pipeline, reset it
-			//promotedChildStatus := rolloutObject.GetPromotedChildStatus()
-			//if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChildDef.GetName() {
-			//	rolloutObject.ResetPromotedChildStatus(existingPromotedChildDef)
-			//}
-
 			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
