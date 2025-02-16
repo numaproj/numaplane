@@ -80,6 +80,7 @@ type PromotedPipelineTypeStatus struct {
 // assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
 var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
+/*
 // InitAssessUntil initializes the AssessUntil field to a large value.
 func (ucs *UpgradingChildStatus) InitAssessUntil() {
 	if ucs == nil {
@@ -88,7 +89,7 @@ func (ucs *UpgradingChildStatus) InitAssessUntil() {
 
 	assessUntil := metav1.NewTime(assessUntilInitValue)
 	ucs.AssessUntil = &assessUntil
-}
+}*/
 
 // IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
 func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {

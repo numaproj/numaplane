@@ -220,15 +220,14 @@ func processUpgradingChild(
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
 
-		// TODO: replace this with ResetUpgradingChild()
-		childStatus = &apiv1.UpgradingChildStatus{
-			Name:             existingUpgradingChildDef.GetName(),
-			AssessmentResult: apiv1.AssessmentResultUnknown,
+		err = rolloutObject.ResetUpgradingChildStatus(existingUpgradingChildDef)
+		if err != nil {
+			return false, false, 0, fmt.Errorf("processing upgrading child, failed to reset the upgrading child status for child %s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
 		}
-		childStatus.InitAssessUntil()
 	} else {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
 	}
+	childStatus = rolloutObject.GetUpgradingChildStatus()
 
 	// If no NextAssessmentTime has been set already, calculate it and set it
 	if childStatus.NextAssessmentTime == nil {

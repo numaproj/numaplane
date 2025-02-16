@@ -63,7 +63,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 		if upgradingPipelineStatus == nil || upgradingPipelineStatus.InterStepBufferServiceName != existingUpgradingChildDef.GetName() {
-			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
+			numaLogger.WithValues("pipelinerollout", pipelineRollout.GetName()).Debug("can't assess ISBService; pipeline is not yet upgrading with this ISBService")
 			return apiv1.AssessmentResultUnknown, nil
 		}
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
@@ -73,8 +73,12 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, nil
+		case apiv1.AssessmentResultSuccess:
+			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline succeeded")
+
 		}
 	}
+
 	return apiv1.AssessmentResultSuccess, nil
 }
 
