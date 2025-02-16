@@ -90,6 +90,15 @@ func ProcessResource(
 
 	numaLogger := logger.FromContext(ctx)
 
+	// Make sure that our Promoted Child Status reflects the current promoted child
+	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
+		err := rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
+		if err != nil {
+			return false, false, 0, err
+		}
+	}
+
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, false, c)
 	if err != nil {
@@ -104,13 +113,6 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			promotedChildStatus := rolloutObject.GetPromotedChildStatus()
-			if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
-				err = rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
-				if err != nil {
-					return false, false, 0, err
-				}
-			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 			if err != nil {
@@ -279,6 +281,7 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
+
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
