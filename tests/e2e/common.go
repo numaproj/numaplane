@@ -44,7 +44,6 @@ var (
 	dynamicClient       dynamic.DynamicClient
 	testEnv             *envtest.Environment
 	ctx                 context.Context
-	cancel              context.CancelFunc
 	testTimeout         = 4 * time.Minute // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
 	testPollingInterval = 10 * time.Millisecond
 
