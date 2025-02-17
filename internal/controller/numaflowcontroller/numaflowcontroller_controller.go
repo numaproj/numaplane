@@ -236,6 +236,12 @@ func (r *NumaflowControllerReconciler) reconcile(
 			if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err
 			}
+			// Get the controller live resource
+			liveController, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllers(controller.Namespace).Get(ctx, controller.Name, metav1.GetOptions{})
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
+			}
+			*controller = *liveController
 			// Check if dependent resources are deleted, if not then requeue
 			if ok, err := r.areDependentResourcesDeleted(ctx, controller); !ok || err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete dependent resources: %v", err)
