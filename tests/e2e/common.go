@@ -510,7 +510,6 @@ func BeforeSuiteSetup() {
 
 var _ = AfterSuite(func() {
 
-	cancel()
 	By("tearing down test environment")
 	close(stopCh)
 
