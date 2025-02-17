@@ -128,7 +128,7 @@ test: codegen fmt vet envtest ## Run unit tests.
 
 test-functional-e2e:
 test-ppnd-e2e:
-test-%: codegen fmt vet envtest ## Run e2e tests.
+test-%: codegen fmt vet envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
 	GOFLAGS="-count=1" go test -timeout 35m -v ./tests/e2e/$* 
 
 
