@@ -318,26 +318,31 @@ func processUpgradingChild(
 		return false, false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
-		// Label the new child as promoted and then remove the label from the old one
-		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		reasonSuccess := common.LabelValueProgressiveSuccess
-		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
-		if err != nil {
-			return false, false, 0, err
+		if childStatus.CanDeclareSuccess() {
+
+			// Label the new child as promoted and then remove the label from the old one
+			numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
+			reasonSuccess := common.LabelValueProgressiveSuccess
+			err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+			if err != nil {
+				return false, false, 0, err
+			}
+
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
+			if err != nil {
+				return false, false, 0, err
+			}
+
+			rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+			childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+			rolloutObject.SetUpgradingChildStatus(childStatus)
+			rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
+
+			// we're done
+			return true, false, assessmentInterval, nil
+		} else {
+			return false, false, assessmentInterval, nil
 		}
-
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
-		if err != nil {
-			return false, false, 0, err
-		}
-
-		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-		rolloutObject.SetUpgradingChildStatus(childStatus)
-		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
-
-		// if we are still in the assessment window, return we are not done
-		return !childStatus.CanAssess(), false, assessmentInterval, nil
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown

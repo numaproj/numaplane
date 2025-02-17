@@ -167,7 +167,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 
-	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debug("patching upgradeState and upgradeStateReason to %s:%s/%s",
+	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debugf("patching upgradeState and upgradeStateReason to %s:%s/%s",
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 	var patchJson string
 	labels := childObject.GetLabels()
@@ -191,7 +191,7 @@ func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstruct
 		return nil, nil
 	} else {
 		reasonStr, found := childObject.GetLabels()[common.LabelKeyUpgradeStateReason]
-		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debug("reading upgradeState and upgradeStateReason for %s:%s/%s",
+		numaLogger.WithValues("upgradeState", upgradeStateStr, "upgradeStateReason", util.OptionalString(reasonStr)).Debugf("reading upgradeState and upgradeStateReason for %s:%s/%s",
 			childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 		if !found {
 			upgradeState := common.UpgradeState(upgradeStateStr)
