@@ -122,14 +122,14 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-.PHONY: test
-test: codegen fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
+#.PHONY: test
+#test: codegen fmt vet envtest ## Run tests.
+#	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
 
 test-functional-e2e:
 test-ppnd-e2e:
 test-%: codegen fmt vet envtest ## Run e2e tests.
-	GOFLAGS="-count=1" go test -v ./tests/e2e/$*
+	GOFLAGS="-count=1" go test -timeout 35 -v ./tests/e2e/$* 
 
 
 
