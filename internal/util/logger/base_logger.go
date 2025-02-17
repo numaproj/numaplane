@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -35,13 +36,13 @@ func GetBaseLogger() *NumaLogger {
 func refreshBaseLoggerLevel(newConfig config.GlobalConfig) {
 
 	// if it changed, propagate it to our Base Logger
-	if newConfig.LogLevel != baseLogger.LogLevel {
+	if LogLevelMap[strings.ToUpper(newConfig.LogLevel)] != baseLogger.LogLevel {
 
 		baseLoggerMutex.Lock()
 		defer baseLoggerMutex.Unlock()
 
 		// update the logger with the new log level
-		baseLogger.SetLevel(newConfig.LogLevel)
-		baseLogger.Infof("log level=%d\n", newConfig.LogLevel)
+		baseLogger.SetLevel(LogLevelMap[strings.ToUpper(newConfig.LogLevel)])
+		baseLogger.Infof("updated log level=%s", newConfig.LogLevel)
 	}
 }

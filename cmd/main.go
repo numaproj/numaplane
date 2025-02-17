@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -255,7 +256,7 @@ func loadConfigs() {
 	}
 
 	// anything we need to set based on our main Numaplane Config?
-	numaLogger.SetLevel(config.LogLevel)
+	numaLogger.SetLevel(logger.LogLevelMap[strings.ToUpper(config.LogLevel)])
 	logger.SetBaseLogger(numaLogger)
 	clog.SetLogger(*numaLogger.LogrLogger)
 

@@ -41,7 +41,7 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Nil(t, err, "Failed to load configuration")
-	assert.Equal(t, 3, config.LogLevel, "Log Level does not match")
+	assert.Equal(t, "INFO", config.LogLevel, "Log Level does not match")
 	assert.Contains(t, config.NumaflowControllerImageNames, "numaflow")
 	assert.Contains(t, config.NumaflowControllerImageNames, "numaflow-rc")
 	// now verify that if we modify the file, it will still be okay
@@ -163,7 +163,7 @@ func TestGetConfigManagerInstanceSingleton(t *testing.T) {
 
 func TestCloneWithSerialization(t *testing.T) {
 	original := &GlobalConfig{
-		LogLevel:               0,
+		LogLevel:               "ERROR",
 		DefaultUpgradeStrategy: NoStrategyID,
 	}
 
@@ -179,15 +179,15 @@ func TestCloneWithSerialization(t *testing.T) {
 		t.Errorf("Cloned object is not deeply equal to the original")
 	}
 
-	cloned.LogLevel = 1
-	if original.LogLevel == 1 {
+	cloned.LogLevel = "INFO"
+	if original.LogLevel == "INFO" {
 		t.Errorf("Modifying clone affected the original object")
 	}
 }
 
 func createGlobalConfigForBenchmarking() *GlobalConfig {
 	return &GlobalConfig{
-		LogLevel: 0,
+		LogLevel: "ERROR",
 	}
 }
 
