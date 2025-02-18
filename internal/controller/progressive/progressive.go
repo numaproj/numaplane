@@ -88,7 +88,7 @@ func ProcessResource(
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	//numaLogger := logger.FromContext(ctx)
 
 	// Make sure that our Promoted Child Status reflects the current promoted child
 	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
@@ -113,24 +113,30 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
-			if err != nil {
-				return false, false, 0, err
+			newUpgradingChildDef, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
+			if needRequeue {
+				return false, newUpgradingChildDef != nil, common.DefaultRequeueDelay, err
+			} else {
+				return false, newUpgradingChildDef != nil, 0, err
 			}
-			if requeue {
-				return false, false, common.DefaultRequeueDelay, nil
-			}
+			/*
+				requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
+				if err != nil {
+					return false, false, 0, err
+				}
+				if requeue {
+					return false, false, common.DefaultRequeueDelay, nil
+				}
 
-			// create object as it doesn't exist
-			newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
-			if err != nil {
-				return false, false, 0, err
-			}
+				// create object as it doesn't exist
+				newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
+				if err != nil {
+					return false, false, 0, err
+				}
 
-			numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			return false, true, 0, err
+				numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
+				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+				return false, true, 0, err*/
 		}
 	}
 
@@ -282,7 +288,15 @@ func processUpgradingChild(
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
 
-			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
+			newUpgradingChildDef, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if needRequeue {
+				return false, newUpgradingChildDef != nil, common.DefaultRequeueDelay, nil
+			}
+
+			/*requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -294,7 +308,7 @@ func processUpgradingChild(
 			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 			if err != nil {
 				return false, false, 0, err
-			}
+			}*/
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			reasonFailure := common.LabelValueProgressiveFailure
@@ -303,8 +317,8 @@ func processUpgradingChild(
 				return false, false, 0, err
 			}
 
-			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			return false, true, 0, err
+			//err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+			//return false, true, 0, err
 		} else {
 			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
@@ -350,6 +364,38 @@ func processUpgradingChild(
 
 		return false, false, assessmentInterval, nil
 	}
+}
+
+// return:
+// - whether we just created a new child
+// - whether we need to requeue
+// - error if any
+func startUpgradeProcess(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	existingPromotedChild *unstructured.Unstructured,
+	controller progressiveController,
+	c client.Client,
+) (*unstructured.Unstructured, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
+	if err != nil {
+		return nil, false, err
+	}
+	if requeue {
+		return nil, true, nil
+	}
+
+	// create object as it doesn't exist
+	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
+	if err != nil {
+		return newUpgradingChildDef, false, err
+	}
+
+	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
+	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	return nil, false, err
 }
 
 func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
