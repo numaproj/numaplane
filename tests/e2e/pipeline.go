@@ -24,12 +24,12 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func getPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(getGVRForPipeline(), namespace, pipelineRolloutName)
+func GetPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
+	return getChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
 }
 
-func getPipelineName(namespace, pipelineRolloutName string) (string, error) {
-	pipeline, err := getPipeline(namespace, pipelineRolloutName)
+func GetPipelineName(namespace, pipelineRolloutName string) (string, error) {
+	pipeline, err := GetPipeline(namespace, pipelineRolloutName)
 	if err != nil {
 		return "", err
 	}
@@ -41,11 +41,11 @@ func VerifyPipelineSpec(namespace string, pipelineRolloutName string, f func(num
 	Document("verifying Pipeline Spec")
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	Eventually(func() bool {
-		unstruct, err := getPipeline(namespace, pipelineRolloutName)
+		unstruct, err := GetPipeline(namespace, pipelineRolloutName)
 		if err != nil {
 			return false
 		}
-		if retrievedPipelineSpec, err = getPipelineSpec(unstruct); err != nil {
+		if retrievedPipelineSpec, err = GetPipelineSpec(unstruct); err != nil {
 			return false
 		}
 
@@ -56,7 +56,7 @@ func VerifyPipelineSpec(namespace string, pipelineRolloutName string, f func(num
 func VerifyPipelineStatusEventually(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 
 	Eventually(func() bool {
-		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineSpecAndStatus(namespace, pipelineRolloutName)
+		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}, testTimeout).Should(BeTrue())
 }
@@ -64,7 +64,7 @@ func VerifyPipelineStatusEventually(namespace string, pipelineRolloutName string
 func VerifyPipelineStatusConsistently(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 
 	Consistently(func() bool {
-		_, retrievedPipelineSpec, retrievedPipelineStatus, err := getPipelineSpecAndStatus(namespace, pipelineRolloutName)
+		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
 	}, 15*time.Second, testPollingInterval).Should(BeTrue())
 
@@ -106,9 +106,9 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVert
 	// Get Pipeline Pods to verify they're all up
 	Document("Verifying that the Pipeline is ready")
 	// check "vertex" Pods
-	pipeline, err := getPipeline(namespace, pipelineRolloutName)
+	pipeline, err := GetPipeline(namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
-	spec, err := getPipelineSpec(pipeline)
+	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	numPods := len(spec.Vertices)
@@ -165,14 +165,14 @@ func VerifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy api
 }
 
 // Get PipelineSpec from Unstructured type
-func getPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, error) {
+func GetPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, error) {
 	specMap := u.Object["spec"]
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	return pipelineSpec, err
 }
 
-func getGVRForPipeline() schema.GroupVersionResource {
+func GetGVRForPipeline() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
@@ -180,7 +180,7 @@ func getGVRForPipeline() schema.GroupVersionResource {
 	}
 }
 
-func getGVRForVertex() schema.GroupVersionResource {
+func GetGVRForVertex() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
@@ -206,21 +206,21 @@ func UpdatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func getPipelineSpecAndStatus(namespace string, pipelineRolloutName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
+func GetPipelineSpecAndStatus(namespace string, pipelineRolloutName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus numaflowv1.PipelineStatus
 
-	unstruct, err := getPipeline(namespace, pipelineRolloutName)
+	unstruct, err := GetPipeline(namespace, pipelineRolloutName)
 	if err != nil {
 		return nil, retrievedPipelineSpec, retrievedPipelineStatus, err
 	}
-	retrievedPipelineSpec, err = getPipelineSpec(unstruct)
+	retrievedPipelineSpec, err = GetPipelineSpec(unstruct)
 	if err != nil {
 		return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, err
 	}
 
-	retrievedPipelineStatus, err = getPipelineStatus(unstruct)
+	retrievedPipelineStatus, err = GetPipelineStatus(unstruct)
 
 	if err != nil {
 		return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, err
@@ -228,7 +228,7 @@ func getPipelineSpecAndStatus(namespace string, pipelineRolloutName string) (*un
 	return unstruct, retrievedPipelineSpec, retrievedPipelineStatus, nil
 }
 
-func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus, error) {
+func GetPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus, error) {
 	statusMap := u.Object["status"]
 	var status numaflowv1.PipelineStatus
 	err := util.StructToStruct(&statusMap, &status)
@@ -238,14 +238,14 @@ func getPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus,
 func UpdatePipelineSpecInK8S(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		unstruct, err := getPipeline(namespace, pipelineRolloutName)
+		unstruct, err := GetPipeline(namespace, pipelineRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 		retrievedPipeline := unstruct
 
 		// modify Pipeline Spec to verify it gets auto-healed
-		err = updatePipelineSpec(retrievedPipeline, f)
+		err = UpdatePipelineSpec(retrievedPipeline, f)
 		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(getGVRForPipeline()).Namespace(namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
+		_, err = dynamicClient.Resource(GetGVRForPipeline()).Namespace(namespace).Update(ctx, retrievedPipeline, metav1.UpdateOptions{})
 		return err
 	})
 
@@ -253,7 +253,7 @@ func UpdatePipelineSpecInK8S(namespace string, pipelineRolloutName string, f fun
 }
 
 // Take a Pipeline Unstructured type and update the PipelineSpec in some way
-func updatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) error {
+func UpdatePipelineSpec(u *unstructured.Unstructured, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) error {
 
 	// get PipelineSpec from unstructured object
 	specMap := u.Object["spec"]
@@ -309,7 +309,7 @@ func watchPipelineRollout() {
 func watchPipeline() {
 
 	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		watcher, err := dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
 		return watcher, err
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
@@ -336,7 +336,7 @@ func watchPipeline() {
 func watchVertices() {
 
 	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		watcher, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
 		return watcher, err
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
@@ -451,7 +451,7 @@ func DeletePipelineRollout(name string) {
 	Eventually(func() bool {
 		// ensures deletion of single pipeline
 		pipelineRolloutLabel := fmt.Sprintf("numaplane.numaproj.io/parent-rollout-name=%v", name)
-		list, err := dynamicClient.Resource(getGVRForPipeline()).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: pipelineRolloutLabel})
+		list, err := dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: pipelineRolloutLabel})
 		if err != nil {
 			return false
 		}
@@ -503,15 +503,15 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	if overrideSourceVertexReplicas {
 		scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
 
-		pipeline, err := getPipeline(Namespace, name)
+		pipeline, err := GetPipeline(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
 		vertexName := fmt.Sprintf("%s-%s", pipeline.GetName(), PipelineSourceVertexName)
 
-		vertex, err := dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
+		vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
 		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(getGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
+		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 	}
 
@@ -548,7 +548,7 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 	Document("verifying Pipeline stays in paused or otherwise pausing")
 	Consistently(func() bool {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		_, _, retrievedPipelineStatus, err := getPipelineSpecAndStatus(Namespace, pipelineRolloutName)
+		_, _, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineRolloutName)
 		if err != nil {
 			return false
 		}
@@ -558,7 +558,7 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 
 	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-	pipeline, err := getPipeline(Namespace, pipelineRolloutName)
+	pipeline, err := GetPipeline(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
 }
