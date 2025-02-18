@@ -200,6 +200,12 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err
 			}
+			// Get the monoVertexRollout live resource
+			liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
+			}
+			*monoVertexRollout = *liveMonoVertexRollout
 			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
 		}
 		// generate metrics for MonoVertex deletion

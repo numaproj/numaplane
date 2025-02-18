@@ -207,6 +207,12 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err
 			}
+			// Get the nfcRollout live resource
+			liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
+			}
+			*isbServiceRollout = *liveISBServiceRollout
 			controllerutil.RemoveFinalizer(isbServiceRollout, common.FinalizerName)
 		}
 		// generate metrics for ISB Service deletion.
