@@ -47,7 +47,7 @@ type ScaleValues struct {
 	// OriginalScaleDefinition stores the original scale definition as JSON string
 	OriginalScaleDefinition *string `json:"originalScaleDefinition,omitempty"`
 	// ScaleTo indicates how many pods to scale down to
-	ScaleTo *int64 `json:"scaleTo"`
+	ScaleTo int64 `json:"scaleTo"`
 	// Actual indicates how many pods are actually running for the vertex
 	Actual int64 `json:"actual"`
 }
@@ -125,7 +125,7 @@ func (pcs *PromotedPipelineTypeStatus) MarkAllSourceVerticesScaledDown() {
 
 	allScaledDown := true
 	for _, sv := range pcs.ScaleValues {
-		if sv.ScaleTo != nil && sv.Actual > *sv.ScaleTo {
+		if sv.Actual > sv.ScaleTo {
 			allScaledDown = false
 			break
 		}

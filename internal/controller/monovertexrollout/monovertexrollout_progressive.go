@@ -212,7 +212,7 @@ func scaleDownMonoVertex(
 	// We want to skip scaling down again.
 	// TODO: why do we concern ourselves if vertexScaleValues.ScaleTo != 0? If we scale 1 Pod to 0, we go past here even if the scale values
 	// were found
-	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist && vertexScaleValues.ScaleTo != nil {
+	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist {
 		vertexScaleValues.Actual = actualPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
@@ -254,7 +254,7 @@ func scaleDownMonoVertex(
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
 		OriginalScaleDefinition: originalScaleDefAsString,
-		ScaleTo:                 &newMax,
+		ScaleTo:                 newMax,
 		Actual:                  actualPodsCount,
 	}
 
