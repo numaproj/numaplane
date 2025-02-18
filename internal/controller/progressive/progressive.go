@@ -321,7 +321,7 @@ func processUpgradingChild(
 		if childStatus.CanDeclareSuccess() {
 
 			// Label the new child as promoted and then remove the label from the old one
-			numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
+			numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
 			reasonSuccess := common.LabelValueProgressiveSuccess
 			err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 			if err != nil {

@@ -132,7 +132,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 }
 
 /*
-ProcessPromotedChildPostFailure handles the post-upgrade processing of a promoted pipeline.
+ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" child has failed.
 It performs the following post-upgrade operations:
 - it restores the promoted pipeline source vertices scale values to the desired values retrieved from the rollout status.
 
