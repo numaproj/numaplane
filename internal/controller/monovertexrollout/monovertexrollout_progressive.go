@@ -114,7 +114,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 }
 
 /*
-ProcessPromotedChildPostUpgrade handles the post-upgrade processing of a promoted monovertex.
+ProcessPromotedChildPostFailure andles the post-upgrade processing of the promoted monovertex after the "upgrading" child has failed.
 It performs the following post-upgrade operations:
 - it restores the promoted monovertex scale values to the desired values retrieved from the rollout status.
 
@@ -128,7 +128,7 @@ Returns:
   - A boolean indicating whether we should requeue.
   - An error if any issues occur during processing.
 */
-func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	promotedChildDef *unstructured.Unstructured,
@@ -209,6 +209,8 @@ func scaleDownMonoVertex(
 	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 	// to later verify that the pods were actually scaled down.
 	// We want to skip scaling down again.
+	// TODO: why do we concern ourselves if vertexScaleValues.ScaleTo != 0? If we scale 1 Pod to 0, we go past here even if the scale values
+	// were found
 	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist && vertexScaleValues.ScaleTo != 0 {
 		vertexScaleValues.Actual = actualPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues

@@ -80,30 +80,28 @@ type PromotedPipelineTypeStatus struct {
 // assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
 var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
-// InitAssessUntil initializes the AssessUntil field to a large value.
-func (ucs *UpgradingChildStatus) InitAssessUntil() {
-	if ucs == nil {
-		ucs = &UpgradingChildStatus{}
-	}
-
-	assessUntil := metav1.NewTime(assessUntilInitValue)
-	ucs.AssessUntil = &assessUntil
-}
-
 // IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
 func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {
 	return ucs != nil && ucs.AssessUntil != nil && !ucs.AssessUntil.Time.Equal(assessUntilInitValue)
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
-// It checks that the current time is after the NextAssessmentTime and
-// before the AssessUntil time, and that it hasn't already previously failed
+// It checks that the current time is after the NextAssessmentTime and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
 func (ucs *UpgradingChildStatus) CanAssess() bool {
 	return ucs != nil &&
 		ucs.NextAssessmentTime != nil && time.Now().After(ucs.NextAssessmentTime.Time) &&
-		ucs.AssessUntil != nil && time.Now().Before(ucs.AssessUntil.Time) &&
 		ucs.AssessmentResult != AssessmentResultFailure
+}
+
+// CanDeclareSuccess() determines if it's okay to declare success:
+// We must have arrived at the AssessUntil time
+// Note that if we've arrived at the AssessUntil time, then the assumption is that it never failed within the window;
+// otherwise we would've stopped assessing
+func (ucs *UpgradingChildStatus) CanDeclareSuccess() bool {
+	return ucs != nil &&
+		ucs.AssessUntil != nil &&
+		time.Now().After(ucs.AssessUntil.Time)
 }
 
 func (ucs *UpgradingChildStatus) IsFailed() bool {

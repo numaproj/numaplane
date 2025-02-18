@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -105,8 +106,8 @@ func (isbServiceRollout *ISBServiceRollout) GetRolloutGVK() schema.GroupVersionK
 
 func (isbServiceRollout *ISBServiceRollout) GetChildGVR() metav1.GroupVersionResource {
 	return metav1.GroupVersionResource{
-		Group:    numaflowv1.PipelineGroupVersionKind.Group,
-		Version:  numaflowv1.PipelineGroupVersionKind.Version,
+		Group:    numaflowv1.ISBGroupVersionKind.Group,
+		Version:  numaflowv1.ISBGroupVersionKind.Version,
 		Resource: "interstepbufferservices",
 	}
 }
@@ -139,12 +140,39 @@ func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedCh
 	return &isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus.PromotedChildStatus
 }
 
+// ResetUpgradingChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+func (isbServiceRollout *ISBServiceRollout) ResetUpgradingChildStatus(upgradingISBService *unstructured.Unstructured) error {
+	assessUntil := metav1.NewTime(assessUntilInitValue)
+	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{
+		UpgradingChildStatus: UpgradingChildStatus{
+			Name:             upgradingISBService.GetName(),
+			AssessUntil:      &assessUntil,
+			AssessmentResult: AssessmentResultUnknown,
+		},
+	}
+
+	return nil
+}
+
 // SetUpgradingChildStatus is a function of the progressiveRolloutObject
 func (isbServiceRollout *ISBServiceRollout) SetUpgradingChildStatus(status *UpgradingChildStatus) {
 	if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
 		isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{}
 	}
 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// ResetPromotedChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+func (isbServiceRollout *ISBServiceRollout) ResetPromotedChildStatus(promotedISBService *unstructured.Unstructured) error {
+	isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus = &PromotedISBServiceStatus{
+		PromotedChildStatus: PromotedChildStatus{
+			Name: promotedISBService.GetName(),
+		},
+	}
+
+	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject

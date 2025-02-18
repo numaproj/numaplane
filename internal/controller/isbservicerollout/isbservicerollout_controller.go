@@ -424,13 +424,16 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
 
-		// Get the ISBServiceRollout live resource
+		// Get the ISBServiceRollout live resource so we can grab the ProgressiveStatus from that for our own local isbServiceRollout
+		// (Note we don't copy the entire Status in case we've updated something locally)
 		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			return 0, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, liveISBServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		isbServiceRollout.Status.ProgressiveStatus = *liveISBServiceRollout.Status.ProgressiveStatus.DeepCopy()
+
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
 		}
