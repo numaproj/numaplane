@@ -205,11 +205,11 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 				return ctrl.Result{}, err
 			}
 			// Get the nfcRollout live resource
-			nfcLiveRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(nfcRollout.Namespace).Get(ctx, nfcRollout.Name, metav1.GetOptions{})
+			liveControllerRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(nfcRollout.Namespace).Get(ctx, nfcRollout.Name, metav1.GetOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
 			}
-			*nfcRollout = *nfcLiveRollout
+			*nfcRollout = *liveControllerRollout
 			controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
 		}
 

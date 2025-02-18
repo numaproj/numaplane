@@ -51,6 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	sigsyaml "sigs.k8s.io/yaml"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -730,7 +731,7 @@ func (r *NumaflowControllerReconciler) ErrorHandler(numaflowController *apiv1.Nu
 
 // areDependentResourcesDeleted checks if dependent resources are deleted.
 func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.Context, controller *apiv1.NumaflowController) (bool, error) {
-	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowPipelineKind,
+	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.PipelineGroupVersionResource.Resource,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -738,7 +739,7 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 		}
 		pipelineList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
-	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowMonoVertexKind,
+	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.MonoVertexGroupVersionResource.Resource,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -746,7 +747,7 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 		}
 		monoVertexList = &unstructured.UnstructuredList{} // Assume it as an empty list
 	}
-	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, common.NumaflowISBServiceKind,
+	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.ISBGroupVersionResource.Resource,
 		controller.Namespace, common.LabelKeyParentRollout, "")
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
