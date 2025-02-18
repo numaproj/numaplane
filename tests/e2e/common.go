@@ -44,8 +44,8 @@ var (
 	dynamicClient       dynamic.DynamicClient
 	testEnv             *envtest.Environment
 	ctx                 context.Context
-	testTimeout         = 4 * time.Minute // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
-	testPollingInterval = 10 * time.Millisecond
+	TestTimeout         = 4 * time.Minute // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
+	TestPollingInterval = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
@@ -143,7 +143,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 		}
 		return false
 
-	}).WithTimeout(testTimeout).Should(BeTrue())
+	}).WithTimeout(TestTimeout).Should(BeTrue())
 
 }
 
@@ -406,6 +406,20 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 
 	return &unstructList.Items[0], nil
 
+}
+
+func GetChildren(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.UnstructuredList, error) {
+	label := fmt.Sprintf("%s=%s", ParentRolloutLabel, rolloutName)
+
+	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+}
+
+func GetNumberOfChildren(gvr schema.GroupVersionResource, namespace, rolloutName string) int {
+	children, err := GetChildren(gvr, namespace, rolloutName)
+	if err != nil || children == nil {
+		return 0
+	}
+	return len(children.Items)
 }
 
 func getUpgradeStrategy() config.USDEUserStrategy {

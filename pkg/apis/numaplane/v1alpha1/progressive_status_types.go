@@ -91,7 +91,6 @@ func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {
 func (ucs *UpgradingChildStatus) CanAssess() bool {
 	return ucs != nil &&
 		ucs.NextAssessmentTime != nil && time.Now().After(ucs.NextAssessmentTime.Time) &&
-		//ucs.AssessUntil != nil && time.Now().Before(ucs.AssessUntil.Time) &&
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 

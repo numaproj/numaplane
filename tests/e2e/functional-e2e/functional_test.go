@@ -392,6 +392,23 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	})
 
+	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
+		Document("verifying just 1 Pipeline")
+		Eventually(func() int {
+			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+
+		Document("verifying just 1 MonoVertex")
+		Eventually(func() int {
+			return GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
+		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+
+		Document("verifying just 1 InterstepBufferService")
+		Eventually(func() int {
+			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+	})
+
 	It("Should delete the PipelineRollout and child Pipeline", func() {
 		DeletePipelineRollout(pipelineRolloutName)
 	})
