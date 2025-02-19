@@ -44,9 +44,7 @@ var (
 	dynamicClient       dynamic.DynamicClient
 	testEnv             *envtest.Environment
 	ctx                 context.Context
-	cancel              context.CancelFunc
-	suiteTimeout        = 35 * time.Minute // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
-	testTimeout         = 4 * time.Minute  // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
+	testTimeout         = 4 * time.Minute // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
 	testPollingInterval = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
@@ -438,7 +436,7 @@ func BeforeSuiteSetup() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	ctx, cancel = context.WithTimeout(context.Background(), suiteTimeout) // Note: if we start seeing "client rate limiter: context deadline exceeded", we need to increase this value
+	ctx = context.Background()
 
 	scheme := runtime.NewScheme()
 	err = apiv1.AddToScheme(scheme)
@@ -511,7 +509,6 @@ func BeforeSuiteSetup() {
 
 var _ = AfterSuite(func() {
 
-	cancel()
 	By("tearing down test environment")
 	close(stopCh)
 

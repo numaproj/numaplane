@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -132,6 +133,20 @@ func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *Upgrading
 	return &monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus
 }
 
+// ResetUpgradingChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingMonoVertex *unstructured.Unstructured) error {
+	assessUntil := metav1.NewTime(assessUntilInitValue)
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{
+		UpgradingChildStatus: UpgradingChildStatus{
+			Name:             upgradingMonoVertex.GetName(),
+			AssessUntil:      &assessUntil,
+			AssessmentResult: AssessmentResultUnknown,
+		},
+	}
+	return nil
+}
+
 // GetPromotedChildStatus is a function of the progressiveRolloutObject
 func (monoVertexRollout *MonoVertexRollout) GetPromotedChildStatus() *PromotedChildStatus {
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
@@ -146,6 +161,19 @@ func (monoVertexRollout *MonoVertexRollout) SetUpgradingChildStatus(status *Upgr
 		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{}
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+// ResetPromotedChildStatus is a function of the progressiveRolloutObject
+// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+func (monoVertexRollout *MonoVertexRollout) ResetPromotedChildStatus(promotedMonoVertex *unstructured.Unstructured) error {
+	monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = &PromotedMonoVertexStatus{
+		PromotedPipelineTypeStatus: PromotedPipelineTypeStatus{
+			PromotedChildStatus: PromotedChildStatus{
+				Name: promotedMonoVertex.GetName(),
+			},
+		},
+	}
+	return nil
 }
 
 // SetPromotedChildStatus is a function of the progressiveRolloutObject

@@ -303,7 +303,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Document("setting desiredPhase=Paused")
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused)
+		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
+			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
+		})
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -315,7 +317,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		Document("setting desiredPhase=Running")
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning)
+		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
+			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
+		})
 
 	})
 
@@ -378,7 +382,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning)
+		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
+			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
+		})
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil

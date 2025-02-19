@@ -51,8 +51,8 @@ type progressiveController interface {
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the upgrade
-	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails
+	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -65,7 +65,13 @@ type ProgressiveRolloutObject interface {
 
 	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
+	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
+	ResetUpgradingChildStatus(upgradingChild *unstructured.Unstructured) error
+
 	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
+
+	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
+	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
 }
 
 // return:
@@ -76,7 +82,6 @@ type ProgressiveRolloutObject interface {
 func ProcessResource(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
-	liveRolloutObject ProgressiveRolloutObject,
 	existingPromotedChild *unstructured.Unstructured,
 	promotedDifference bool,
 	controller progressiveController,
@@ -84,6 +89,15 @@ func ProcessResource(
 ) (bool, bool, time.Duration, error) {
 
 	numaLogger := logger.FromContext(ctx)
+
+	// Make sure that our Promoted Child Status reflects the current promoted child
+	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
+		err := rolloutObject.ResetPromotedChildStatus(existingPromotedChild)
+		if err != nil {
+			return false, false, 0, err
+		}
+	}
 
 	// is there currently an "upgrading" child?
 	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, false, c)
@@ -99,11 +113,6 @@ func ProcessResource(
 			return false, false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
 		}
 		if currentUpgradingChildDef == nil {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChild.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
-			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 			if err != nil {
@@ -138,7 +147,7 @@ func ProcessResource(
 		return false, false, 0, err
 	}
 
-	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, liveRolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	done, newChild, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, newChild, 0, err
 	}
@@ -173,7 +182,6 @@ assessment result.
 Parameters:
 - ctx: The context for managing request-scoped values, cancellation, and timeouts.
 - rolloutObject: The current rollout object (this could be from cache).
-- liveRolloutObject: The live rollout object reflecting the current state of the rollout.
 - controller: The progressive controller responsible for managing the upgrade process.
 - existingPromotedChildDef: The definition of the currently promoted child resource.
 - existingUpgradingChildDef: The definition of the child resource currently being upgraded.
@@ -188,7 +196,6 @@ Returns:
 func processUpgradingChild(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
-	liveRolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
@@ -205,7 +212,7 @@ func processUpgradingChild(
 		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
 	}
 
-	childStatus := liveRolloutObject.GetUpgradingChildStatus()
+	childStatus := rolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
 	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
@@ -215,14 +222,14 @@ func processUpgradingChild(
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
 
-		childStatus = &apiv1.UpgradingChildStatus{
-			Name:             existingUpgradingChildDef.GetName(),
-			AssessmentResult: apiv1.AssessmentResultUnknown,
+		err = rolloutObject.ResetUpgradingChildStatus(existingUpgradingChildDef)
+		if err != nil {
+			return false, false, 0, fmt.Errorf("processing upgrading child, failed to reset the upgrading child status for child %s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
 		}
-		childStatus.InitAssessUntil()
 	} else {
 		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
 	}
+	childStatus = rolloutObject.GetUpgradingChildStatus()
 
 	// If no NextAssessmentTime has been set already, calculate it and set it
 	if childStatus.NextAssessmentTime == nil {
@@ -274,11 +281,6 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
-			}
 
 			requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
@@ -304,13 +306,7 @@ func processUpgradingChild(
 			err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			return false, true, 0, err
 		} else {
-			if liveRolloutObject.GetPromotedChildStatus() == nil {
-				rolloutObject.SetPromotedChildStatus(&apiv1.PromotedChildStatus{Name: existingPromotedChildDef.GetName()})
-			} else {
-				rolloutObject.SetPromotedChildStatus(liveRolloutObject.GetPromotedChildStatus().DeepCopy())
-			}
-
-			requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
+			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
 				return false, false, 0, err
 			}
@@ -322,26 +318,31 @@ func processUpgradingChild(
 		return false, false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
-		// Label the new child as promoted and then remove the label from the old one
-		numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName(), "replacing 'promoted' child")
-		reasonSuccess := common.LabelValueProgressiveSuccess
-		err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
-		if err != nil {
-			return false, false, 0, err
+		if childStatus.CanDeclareSuccess() {
+
+			// Label the new child as promoted and then remove the label from the old one
+			numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
+			reasonSuccess := common.LabelValueProgressiveSuccess
+			err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+			if err != nil {
+				return false, false, 0, err
+			}
+
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
+			if err != nil {
+				return false, false, 0, err
+			}
+
+			rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+			childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+			rolloutObject.SetUpgradingChildStatus(childStatus)
+			rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
+
+			// we're done
+			return true, false, assessmentInterval, nil
+		} else {
+			return false, false, assessmentInterval, nil
 		}
-
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
-		if err != nil {
-			return false, false, 0, err
-		}
-
-		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-		rolloutObject.SetUpgradingChildStatus(childStatus)
-		rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
-
-		// if we are still in the assessment window, return we are not done
-		return !childStatus.CanAssess(), false, assessmentInterval, nil
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown

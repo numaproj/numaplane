@@ -352,7 +352,7 @@ func DeleteMonoVertexRollout(name string) {
 	}).WithTimeout(testTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
 }
 
-func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase) {
+func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -362,9 +362,12 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
 		return rollout, nil
 	})
+	Document("Verifying MonoVertex spec got updated")
+	// get Pipeline to check that spec has been updated to correct spec
+	VerifyMonoVertexSpec(Namespace, name, verifySpecFunc)
 
-	Document("verifying MonoVertexRollout spec deployed")
-	VerifyMonoVertexRolloutDeployed(name)
+	Document("verifying MonoVertexRollout Phase=Deployed")
+  VerifyMonoVertexRolloutDeployed(name)
 	if expectedFinalPhase == numaflowv1.MonoVertexPhaseRunning {
 		VerifyMonoVertexRolloutHealthy(name)
 	}

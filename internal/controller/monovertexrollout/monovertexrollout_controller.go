@@ -334,11 +334,14 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing MonoVertex with Progressive")
 
-		// Get the MonoVertexRollout live resource
+		// Get the MonoVertexRollout live resource so we can grab the ProgressiveStatus from that for our own local monoVertexRollout
+		// (Note we don't copy the entire Status in case we've updated something locally)
 		liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			return 0, fmt.Errorf("error getting the live MonoVertexRollout for assessment processing: %w", err)
 		}
+
+		monoVertexRollout.Status.ProgressiveStatus = *liveMonoVertexRollout.Status.ProgressiveStatus.DeepCopy()
 
 		// don't risk out-of-date cache while performing Progressive strategy - get
 		// the most current version of the MonoVertex just in case
@@ -351,7 +354,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, liveMonoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
