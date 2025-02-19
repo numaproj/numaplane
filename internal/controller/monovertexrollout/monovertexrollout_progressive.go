@@ -210,8 +210,6 @@ func scaleDownMonoVertex(
 	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 	// to later verify that the pods were actually scaled down.
 	// We want to skip scaling down again.
-	// TODO: why do we concern ourselves if vertexScaleValues.ScaleTo != 0? If we scale 1 Pod to 0, we go past here even if the scale values
-	// were found
 	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist {
 		vertexScaleValues.Actual = actualPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
