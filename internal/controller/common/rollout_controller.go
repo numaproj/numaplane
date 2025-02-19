@@ -145,7 +145,6 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 			}
 		}
 		// recycle the previous children
-		// TODO: do we want this? consider the cases that would actually use it
 		for _, recyclableChild := range recycleList {
 			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
 				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
