@@ -259,22 +259,22 @@ spec:
                     description: UpgradingISBServiceStatus represents either the current
                       or otherwise the most recent "upgrading" isbservice
                     properties:
-                      assessUntil:
-                        description: AssessUntil indicates the time after which no
-                          more assessments will be performed
+                      assessmentEndTime:
+                        description: AssessmentEndTime indicates the time after which
+                          no more assessments will be performed
                         format: date-time
                         type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
-                      name:
-                        description: Name of the upgrading child
-                        type: string
-                      nextAssessmentTime:
-                        description: NextAssessmentTime indicates the time at/after
+                      assessmentStartTime:
+                        description: AssessmentStartTime indicates the time at/after
                           which the assessment result will be computed
                         format: date-time
+                        type: string
+                      name:
+                        description: Name of the upgrading child
                         type: string
                     required:
                     - name
@@ -534,22 +534,22 @@ spec:
                     description: UpgradingMonoVertexStatus represents either the current
                       or otherwise the most recent "upgrading" MonoVertex
                     properties:
-                      assessUntil:
-                        description: AssessUntil indicates the time after which no
-                          more assessments will be performed
+                      assessmentEndTime:
+                        description: AssessmentEndTime indicates the time after which
+                          no more assessments will be performed
                         format: date-time
                         type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
-                      name:
-                        description: Name of the upgrading child
-                        type: string
-                      nextAssessmentTime:
-                        description: NextAssessmentTime indicates the time at/after
+                      assessmentStartTime:
+                        description: AssessmentStartTime indicates the time at/after
                           which the assessment result will be computed
                         format: date-time
+                        type: string
+                      name:
+                        description: Name of the upgrading child
                         type: string
                     required:
                     - name
@@ -1262,24 +1262,24 @@ spec:
                     description: UpgradingPipelineStatus represents either the current
                       or otherwise the most recent "upgrading" pipeline
                     properties:
-                      assessUntil:
-                        description: AssessUntil indicates the time after which no
-                          more assessments will be performed
+                      assessmentEndTime:
+                        description: AssessmentEndTime indicates the time after which
+                          no more assessments will be performed
                         format: date-time
                         type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
+                      assessmentStartTime:
+                        description: AssessmentStartTime indicates the time at/after
+                          which the assessment result will be computed
+                        format: date-time
+                        type: string
                       interStepBufferServiceName:
                         type: string
                       name:
                         description: Name of the upgrading child
-                        type: string
-                      nextAssessmentTime:
-                        description: NextAssessmentTime indicates the time at/after
-                          which the assessment result will be computed
-                        format: date-time
                         type: string
                     required:
                     - name

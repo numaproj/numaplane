@@ -143,12 +143,12 @@ func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedCh
 // ResetUpgradingChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 func (isbServiceRollout *ISBServiceRollout) ResetUpgradingChildStatus(upgradingISBService *unstructured.Unstructured) error {
-	assessUntil := metav1.NewTime(assessUntilInitValue)
+	assessUntil := metav1.NewTime(assessmentEndTimeInitValue)
 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{
 		UpgradingChildStatus: UpgradingChildStatus{
-			Name:             upgradingISBService.GetName(),
-			AssessUntil:      &assessUntil,
-			AssessmentResult: AssessmentResultUnknown,
+			Name:              upgradingISBService.GetName(),
+			AssessmentEndTime: &assessUntil,
+			AssessmentResult:  AssessmentResultUnknown,
 		},
 	}
 

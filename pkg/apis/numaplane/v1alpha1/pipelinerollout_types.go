@@ -157,13 +157,13 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 	if !found {
 		isbsvcName = "default" // if not set, the default value is "default"
 	}
-	assessUntil := metav1.NewTime(assessUntilInitValue)
+	assessUntil := metav1.NewTime(assessmentEndTimeInitValue)
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{
 		InterStepBufferServiceName: isbsvcName,
 		UpgradingChildStatus: UpgradingChildStatus{
-			Name:             upgradingPipeline.GetName(),
-			AssessUntil:      &assessUntil,
-			AssessmentResult: AssessmentResultUnknown,
+			Name:              upgradingPipeline.GetName(),
+			AssessmentEndTime: &assessUntil,
+			AssessmentResult:  AssessmentResultUnknown,
 		},
 	}
 

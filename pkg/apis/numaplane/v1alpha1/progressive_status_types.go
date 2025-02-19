@@ -36,10 +36,10 @@ type UpgradingChildStatus struct {
 	Name string `json:"name"`
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
-	// NextAssessmentTime indicates the time at/after which the assessment result will be computed
-	NextAssessmentTime *metav1.Time `json:"nextAssessmentTime,omitempty"`
-	// AssessUntil indicates the time after which no more assessments will be performed
-	AssessUntil *metav1.Time `json:"assessUntil,omitempty"`
+	// AssessmentStartTime indicates the time at/after which the assessment result will be computed
+	AssessmentStartTime *metav1.Time `json:"assessmentStartTime,omitempty"`
+	// AssessmentEndTime indicates the time after which no more assessments will be performed
+	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
 }
 
 // ScaleValues stores the desired min and max, scaleTo, and actual scale values of a pipeline or monovertex vertex
@@ -77,31 +77,31 @@ type PromotedPipelineTypeStatus struct {
 	ScaleValuesRestoredToDesired bool `json:"scaleValuesRestoredToDesired,omitempty"`
 }
 
-// assessUntilInitValue is an arbitrary value in the far future to use as a maximum value for AssessUntil
-var assessUntilInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
+// assessmentEndTimeInitValue is an arbitrary value in the far future to use as a maximum value for AssessmentEndTime
+var assessmentEndTimeInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
 
-// IsAssessUntilSet checks if the AssessUntil field is not nil nor set to a maximum arbitrary value in the far future.
-func (ucs *UpgradingChildStatus) IsAssessUntilSet() bool {
-	return ucs != nil && ucs.AssessUntil != nil && !ucs.AssessUntil.Time.Equal(assessUntilInitValue)
+// IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil nor set to a maximum arbitrary value in the far future.
+func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
+	return ucs != nil && ucs.AssessmentEndTime != nil && !ucs.AssessmentEndTime.Time.Equal(assessmentEndTimeInitValue)
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
-// It checks that the current time is after the NextAssessmentTime and that it hasn't already previously failed
+// It checks that the current time is after the AssessmentStartTime and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
 func (ucs *UpgradingChildStatus) CanAssess() bool {
 	return ucs != nil &&
-		ucs.NextAssessmentTime != nil && time.Now().After(ucs.NextAssessmentTime.Time) &&
+		ucs.AssessmentStartTime != nil && time.Now().After(ucs.AssessmentStartTime.Time) &&
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 
 // CanDeclareSuccess() determines if it's okay to declare success:
-// We must have arrived at the AssessUntil time
-// Note that if we've arrived at the AssessUntil time, then the assumption is that it never failed within the window;
+// We must have arrived at the AssessmentEndTime
+// Note that if we've arrived at the AssessmentEndTime, then the assumption is that it never failed within the window;
 // otherwise we would've stopped assessing
 func (ucs *UpgradingChildStatus) CanDeclareSuccess() bool {
 	return ucs != nil &&
-		ucs.AssessUntil != nil &&
-		time.Now().After(ucs.AssessUntil.Time)
+		ucs.AssessmentEndTime != nil &&
+		time.Now().After(ucs.AssessmentEndTime.Time)
 }
 
 func (ucs *UpgradingChildStatus) IsFailed() bool {

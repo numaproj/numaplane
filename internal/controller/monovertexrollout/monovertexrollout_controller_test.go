@@ -293,10 +293,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:   apiv1.AssessmentResultSuccess,
+					Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:    apiv1.AssessmentResultSuccess,
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
@@ -346,10 +346,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:               ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:   apiv1.AssessmentResultFailure,
+					Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:    apiv1.AssessmentResultFailure,
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
