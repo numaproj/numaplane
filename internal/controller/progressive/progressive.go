@@ -396,7 +396,7 @@ func startUpgradeProcess(
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-	return nil, false, err
+	return newUpgradingChildDef, false, err
 }
 
 func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
