@@ -367,7 +367,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	VerifyMonoVertexSpec(Namespace, name, verifySpecFunc)
 
 	Document("verifying MonoVertexRollout Phase=Deployed")
-  VerifyMonoVertexRolloutDeployed(name)
+	VerifyMonoVertexRolloutDeployed(name)
 	if expectedFinalPhase == numaflowv1.MonoVertexPhaseRunning {
 		VerifyMonoVertexRolloutHealthy(name)
 	}
