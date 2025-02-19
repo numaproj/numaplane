@@ -23,11 +23,11 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func getMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
-	return getChildResource(getGVRForMonoVertex(), namespace, monoVertexRolloutName)
+func GetMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
+	return getChildResource(GetGVRForMonoVertex(), namespace, monoVertexRolloutName)
 }
 
-func getGVRForMonoVertex() schema.GroupVersionResource {
+func GetGVRForMonoVertex() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
@@ -48,7 +48,7 @@ func VerifyMonoVertexSpec(namespace, monoVertexRolloutName string, f func(numafl
 	Document("verifying MonoVertex Spec")
 	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
 	Eventually(func() bool {
-		unstruct, err := getMonoVertex(namespace, monoVertexRolloutName)
+		unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
 		if err != nil {
 			return false
 		}
@@ -60,7 +60,7 @@ func VerifyMonoVertexSpec(namespace, monoVertexRolloutName string, f func(numafl
 
 }
 
-func verifyMonoVertexRolloutReady(monoVertexRolloutName string) {
+func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 	Document("verifying that the MonoVertexRollout is ready")
 
 	Eventually(func() bool {
@@ -79,10 +79,10 @@ func verifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
-func verifyMonoVertexReady(namespace, monoVertexRolloutName string) {
+func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) {
 
 	Document("Verifying that the MonoVertex is running")
-	monoVertexName := verifyMonoVertexStatus(namespace, monoVertexRolloutName,
+	monoVertexName := VerifyMonoVertexStatus(namespace, monoVertexRolloutName,
 		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus kubernetes.GenericStatus) bool {
 			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
 		})
@@ -96,14 +96,14 @@ func verifyMonoVertexReady(namespace, monoVertexRolloutName string) {
 
 }
 
-func verifyMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, kubernetes.GenericStatus) bool) string {
+func VerifyMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, kubernetes.GenericStatus) bool) string {
 
 	Document("verifying MonoVertexStatus")
 	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
 	var retrievedMonoVertexStatus kubernetes.GenericStatus
 	var monoVertexName string
 	Eventually(func() bool {
-		unstruct, err := getMonoVertex(namespace, monoVertexRolloutName)
+		unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
 		if err != nil {
 			return false
 		}
@@ -120,7 +120,7 @@ func verifyMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numa
 	return monoVertexName
 }
 
-func updateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
+func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
 
 	Document("updating MonoVertexRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -164,7 +164,7 @@ func watchMonoVertexRollout() {
 func watchMonoVertex() {
 
 	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
+		watcher, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
 		return watcher, err
 	}, func(o runtime.Object) Output {
 		if obj, ok := o.(*unstructured.Unstructured); ok {
@@ -188,7 +188,7 @@ func watchMonoVertex() {
 
 }
 
-func verifyMonoVertexPaused(namespace string, monoVertexRolloutName string) {
+func VerifyMonoVertexPaused(namespace string, monoVertexRolloutName string) {
 
 	Document("Verify that MonoVertex Rollout condition is Pausing/Paused")
 	Eventually(func() metav1.ConditionStatus {
@@ -197,24 +197,24 @@ func verifyMonoVertexPaused(namespace string, monoVertexRolloutName string) {
 	}, testTimeout).Should(Equal(metav1.ConditionTrue))
 
 	Document("Verify that MonoVertex is paused")
-	verifyMonoVertexStatusEventually(namespace, monoVertexRolloutName,
+	VerifyMonoVertexStatusEventually(namespace, monoVertexRolloutName,
 		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus) bool {
 			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused
 		})
 }
 
-func verifyMonoVertexStatusEventually(namespace string, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus) bool) {
+func VerifyMonoVertexStatusEventually(namespace string, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus) bool) {
 	Eventually(func() bool {
-		_, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(namespace, monoVertexRolloutName)
+		_, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetMonoVertexFromK8S(namespace, monoVertexRolloutName)
 		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
 	}, testTimeout).Should(BeTrue())
 }
 
-func getMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unstructured.Unstructured, numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus, error) {
+func GetMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unstructured.Unstructured, numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus, error) {
 	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
 	var retrievedMonoVertexStatus numaflowv1.MonoVertexStatus
 
-	unstruct, err := getMonoVertex(namespace, monoVertexRolloutName)
+	unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
 	if err != nil {
 		return nil, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
 	}
@@ -224,7 +224,7 @@ func getMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unst
 		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
 	}
 
-	retrievedMonoVertexStatus, err = getMonoVertexStatus(unstruct)
+	retrievedMonoVertexStatus, err = GetMonoVertexStatus(unstruct)
 
 	if err != nil {
 		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
@@ -232,14 +232,14 @@ func getMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unst
 	return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, nil
 }
 
-func getMonoVertexStatus(u *unstructured.Unstructured) (numaflowv1.MonoVertexStatus, error) {
+func GetMonoVertexStatus(u *unstructured.Unstructured) (numaflowv1.MonoVertexStatus, error) {
 	statusMap := u.Object["status"]
 	var status numaflowv1.MonoVertexStatus
 	err := util.StructToStruct(&statusMap, &status)
 	return status, err
 }
 
-func verifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
+func VerifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
 	Document("Verifying that the MonoVertexRollout Child Condition is Healthy")
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
@@ -247,7 +247,7 @@ func verifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
 	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
-func verifyMonoVertexRolloutDeployed(monoVertexRolloutName string) {
+func VerifyMonoVertexRolloutDeployed(monoVertexRolloutName string) {
 	Document("Verifying that the MonoVertexRollout is Deployed")
 	Eventually(func() bool {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
@@ -289,9 +289,9 @@ func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexS
 		return spec.Source != nil
 	})
 
-	verifyMonoVertexRolloutReady(name)
+	VerifyMonoVertexRolloutReady(name)
 
-	verifyMonoVertexReady(namespace, name)
+	VerifyMonoVertexReady(namespace, name)
 
 }
 
@@ -341,7 +341,7 @@ func DeleteMonoVertexRollout(name string) {
 
 	Document("Verifying MonoVertex deletion")
 	Eventually(func() bool {
-		list, err := dynamicClient.Resource(getGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		list, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false
 		}
@@ -358,7 +358,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	Expect(err).ShouldNot(HaveOccurred())
 
 	// update the MonoVertexRollout
-	updateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+	UpdateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
 		return rollout, nil
 	})
@@ -367,17 +367,17 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	VerifyMonoVertexSpec(Namespace, name, verifySpecFunc)
 
 	Document("verifying MonoVertexRollout Phase=Deployed")
-	verifyMonoVertexRolloutDeployed(name)
+	VerifyMonoVertexRolloutDeployed(name)
 	if expectedFinalPhase == numaflowv1.MonoVertexPhaseRunning {
-		verifyMonoVertexRolloutHealthy(name)
+		VerifyMonoVertexRolloutHealthy(name)
 	}
 
 	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
 	if expectedFinalPhase == numaflowv1.MonoVertexPhasePaused {
-		verifyMonoVertexPaused(Namespace, name)
+		VerifyMonoVertexPaused(Namespace, name)
 	} else {
-		verifyMonoVertexReady(Namespace, name)
+		VerifyMonoVertexReady(Namespace, name)
 	}
 
 }
@@ -386,7 +386,7 @@ func VerifyMonoVertexStaysPaused(name string) {
 	Document("verifying MonoVertex stays in paused or otherwise pausing")
 	Consistently(func() bool {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, name, metav1.GetOptions{})
-		_, _, retrievedMonoVertexStatus, err := getMonoVertexFromK8S(Namespace, name)
+		_, _, retrievedMonoVertexStatus, err := GetMonoVertexFromK8S(Namespace, name)
 		if err != nil {
 			return false
 		}
