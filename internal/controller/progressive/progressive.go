@@ -119,24 +119,6 @@ func ProcessResource(
 			} else {
 				return false, newUpgradingChildDef != nil, 0, err
 			}
-			/*
-				requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
-				if err != nil {
-					return false, false, 0, err
-				}
-				if requeue {
-					return false, false, common.DefaultRequeueDelay, nil
-				}
-
-				// create object as it doesn't exist
-				newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
-				if err != nil {
-					return false, false, 0, err
-				}
-
-				numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-				err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-				return false, true, 0, err*/
 		}
 	}
 
@@ -296,20 +278,6 @@ func processUpgradingChild(
 				return false, newUpgradingChildDef != nil, common.DefaultRequeueDelay, nil
 			}
 
-			/*requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChildDef, c)
-			if err != nil {
-				return false, false, 0, err
-			}
-			if requeue {
-				return false, false, common.DefaultRequeueDelay, nil
-			}
-
-			// create a definition for the "upgrading" child which has a new name (the definition created above had the previous child's name which was necessary for comparison)
-			newUpgradingChildDef, err = makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
-			if err != nil {
-				return false, false, 0, err
-			}*/
-
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			reasonFailure := common.LabelValueProgressiveFailure
 			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
@@ -317,8 +285,6 @@ func processUpgradingChild(
 				return false, false, 0, err
 			}
 
-			//err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
-			//return false, true, 0, err
 			return false, newUpgradingChildDef != nil, 0, nil
 		} else {
 			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
