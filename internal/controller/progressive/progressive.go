@@ -385,6 +385,7 @@ Returns:
 func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin []string) (int64, int64, error) {
 	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
 
+	// Get the min from the resource definition; if it is not set, use 0
 	min, _, err := unstructured.NestedInt64(object, pathToMin...)
 	if err != nil {
 		return -1, -1, err
