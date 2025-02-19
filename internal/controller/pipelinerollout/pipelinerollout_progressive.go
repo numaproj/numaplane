@@ -222,19 +222,19 @@ func scaleDownPipelineSourceVertices(
 	promotedChildNeedsUpdate := false
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
-			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
+			_, foundVertexSource, err := unstructured.NestedMap(vertexAsMap, "source")
 			if err != nil {
 				return true, err
 			}
-			if !found {
+			if !foundVertexSource {
 				continue
 			}
 
-			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
 				return true, err
 			}
-			if !found {
+			if !foundVertexName {
 				return true, errors.New("a vertex must have a name")
 			}
 
@@ -254,7 +254,7 @@ func scaleDownPipelineSourceVertices(
 			// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.
-			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist {
+			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist && vertexScaleValues.ScaleTo != 0 {
 				vertexScaleValues.Actual = actualPodsCount
 				scaleValuesMap[vertexName] = vertexScaleValues
 
@@ -264,13 +264,13 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			originalScaleDef, found, err := unstructured.NestedMap(vertexAsMap, "scale")
+			originalScaleDef, foundVertexScale, err := unstructured.NestedMap(vertexAsMap, "scale")
 			if err != nil {
 				return true, err
 			}
 
 			var originalScaleDefAsString *string
-			if found {
+			if foundVertexScale {
 				jsonBytes, err := json.Marshal(originalScaleDef)
 				if err != nil {
 					return true, err

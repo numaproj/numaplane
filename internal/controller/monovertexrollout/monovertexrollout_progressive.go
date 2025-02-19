@@ -223,13 +223,13 @@ func scaleDownMonoVertex(
 		return true, nil
 	}
 
-	originalScaleDef, found, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "scale")
+	originalScaleDef, foundScale, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "scale")
 	if err != nil {
 		return true, err
 	}
 
 	var originalScaleDefAsString *string
-	if found {
+	if foundScale {
 		jsonBytes, err := json.Marshal(originalScaleDef)
 		if err != nil {
 			return true, err
