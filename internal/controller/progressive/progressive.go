@@ -88,8 +88,6 @@ func ProcessResource(
 	c client.Client,
 ) (bool, bool, time.Duration, error) {
 
-	//numaLogger := logger.FromContext(ctx)
-
 	// Make sure that our Promoted Child Status reflects the current promoted child
 	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
 	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
