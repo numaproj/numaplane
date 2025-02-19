@@ -319,6 +319,7 @@ func processUpgradingChild(
 
 			//err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
 			//return false, true, 0, err
+			return false, newUpgradingChildDef != nil, 0, nil
 		} else {
 			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 			if err != nil {
