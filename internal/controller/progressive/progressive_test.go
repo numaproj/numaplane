@@ -114,9 +114,9 @@ func Test_processUpgradingChild(t *testing.T) {
 				defaultMonoVertexRollout.DeepCopy(),
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:               "test-success",
-						AssessmentResult:   apiv1.AssessmentResultUnknown,
-						NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						Name:                "test-success",
+						AssessmentResult:    apiv1.AssessmentResultUnknown,
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 					},
 				},
 				nil,
@@ -133,9 +133,9 @@ func Test_processUpgradingChild(t *testing.T) {
 				defaultMonoVertexRollout.DeepCopy(),
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:               "test-failure",
-						AssessmentResult:   apiv1.AssessmentResultFailure,
-						NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						Name:                "test-failure",
+						AssessmentResult:    apiv1.AssessmentResultFailure,
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 					},
 				},
 				&apiv1.PromotedMonoVertexStatus{

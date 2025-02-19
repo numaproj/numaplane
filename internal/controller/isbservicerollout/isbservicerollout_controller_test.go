@@ -487,10 +487,10 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:   apiv1.AssessmentResultSuccess,
+					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:    apiv1.AssessmentResultSuccess,
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
@@ -528,10 +528,10 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:   apiv1.AssessmentResultFailure,
+					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:    apiv1.AssessmentResultFailure,
 				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,
@@ -570,10 +570,10 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:               ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					NextAssessmentTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessUntil:        &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:   apiv1.AssessmentResultFailure,
+					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:    apiv1.AssessmentResultFailure,
 				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,

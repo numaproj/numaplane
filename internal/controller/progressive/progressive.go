@@ -217,12 +217,12 @@ func processUpgradingChild(
 	}
 	childStatus = rolloutObject.GetUpgradingChildStatus()
 
-	// If no NextAssessmentTime has been set already, calculate it and set it
-	if childStatus.NextAssessmentTime == nil {
-		// Add to the current time the assessmentDelay and set the NextAssessmentTime in the Rollout object
+	// If no AssessmentStartTime has been set already, calculate it and set it
+	if childStatus.AssessmentStartTime == nil {
+		// Add to the current time the assessmentDelay and set the AssessmentStartTime in the Rollout object
 		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentDelay))
-		childStatus.NextAssessmentTime = &nextAssessmentTime
-		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child nextAssessmentTime")
+		childStatus.AssessmentStartTime = &nextAssessmentTime
+		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
 
 	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
@@ -242,10 +242,10 @@ func processUpgradingChild(
 	}
 
 	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
-	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessUntilSet() {
-		assessUntil := metav1.NewTime(time.Now().Add(assessmentPeriod))
-		childStatus.AssessUntil = &assessUntil
-		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child assessUntil")
+	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessmentEndTimeSet() {
+		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentPeriod))
+		childStatus.AssessmentEndTime = &assessmentEndTime
+		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
 	}
 
 	switch assessment {
