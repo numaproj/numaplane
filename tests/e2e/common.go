@@ -118,26 +118,8 @@ func GetVerticesScaleValue() int {
 	}
 }
 
-// document for Ginkgo framework and print to console
-func Document(testName string) {
-	snapshotCluster(testName)
-	By(testName)
-}
-
-func snapshotCluster(testName string) {
-	fmt.Printf("*** %+v: NAMESPACE POD STATE BEFORE TEST: %s\n", time.Now(), testName)
-	podList, _ := kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{})
-	if podList != nil {
-		for _, pod := range podList.Items {
-			fmt.Printf("Pod: %q, %q\n", pod.Name, pod.Status.Phase)
-		}
-	}
-}
-
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
-	Document(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector))
-
-	Eventually(func() bool {
+	CheckEventually(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector), func() bool {
 		podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 		if podsList != nil && len(podsList.Items) == numPods {
 			for _, pod := range podsList.Items {
@@ -590,4 +572,14 @@ func setupOutputDir() {
 		}
 	}
 
+}
+
+func CheckEventually(testData string, actualOrCtx interface{}) AsyncAssertion {
+	By(testData)
+	return Eventually(actualOrCtx, TestTimeout, TestPollingInterval)
+}
+
+func CheckConsistently(testData string, actualOrCtx interface{}) AsyncAssertion {
+	By(testData)
+	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
 }

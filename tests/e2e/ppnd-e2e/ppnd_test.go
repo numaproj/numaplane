@@ -163,7 +163,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			createSlowPipelineRollout()
 
-			Document("Updating Pipeline Topology to cause a PPND change")
+			By("Updating Pipeline Topology to cause a PPND change")
 			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
 			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
 			slowPipelineSpec.Edges = []numaflowv1.Edge{
@@ -189,7 +189,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			createSlowPipelineRollout()
 
-			Document("Updating ISBService to cause a PPND change")
+			By("Updating ISBService to cause a PPND change")
 			updatedISBServiceSpec := isbServiceSpec
 			updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 			rawSpec, err := json.Marshal(updatedISBServiceSpec)
@@ -218,7 +218,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			createSlowPipelineRollout()
 
-			Document("Updating Numaflow controller to cause a PPND change")
+			By("Updating Numaflow controller to cause a PPND change")
 			updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
 				Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
 			}
@@ -276,7 +276,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		// update ISBService to have data loss update
-		Document("Updating ISBService to cause a PPND change")
+		By("Updating ISBService to cause a PPND change")
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
 
@@ -305,7 +305,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 		time.Sleep(5 * time.Second)
 
-		Document("Updating Numaflow controller to cause a PPND change")
+		By("Updating Numaflow controller to cause a PPND change")
 		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
 
 		time.Sleep(5 * time.Second)
@@ -323,7 +323,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 func createSlowPipelineRollout() {
 
-	Document("Creating a slow pipeline")
+	By("Creating a slow pipeline")
 	slowPipelineSpec = updatedPipelineSpec.DeepCopy()
 	highRPU := int64(10000000)
 	readBatchSize := uint64(1)
@@ -337,7 +337,7 @@ func createSlowPipelineRollout() {
 
 	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false)
 
-	Document("Verifying that the slow pipeline was created")
+	By("Verifying that the slow pipeline was created")
 	VerifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 	})
@@ -349,11 +349,11 @@ func createSlowPipelineRollout() {
 
 func verifyPipelineIsSlowToPause() {
 
-	Document("Verifying that Pipeline tries to pause")
+	By("Verifying that Pipeline tries to pause")
 	VerifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 		return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
 	})
-	Document("Verifying that Pipeline keeps trying to pause")
+	By("Verifying that Pipeline keeps trying to pause")
 	VerifyPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 		return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
 	})
@@ -371,7 +371,7 @@ func allowDataLoss() {
 		return rollout, nil
 	})
 
-	Document("Verifying that Pipeline has stopped trying to pause")
+	By("Verifying that Pipeline has stopped trying to pause")
 	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
 
 }
