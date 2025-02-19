@@ -34,7 +34,7 @@ func VerifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployme
 	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
-func verifyNumaflowControllerRolloutReady() {
+func VerifyNumaflowControllerRolloutReady() {
 	Document("Verifying that the NumaflowControllerRollout is ready")
 
 	Eventually(func() bool {
@@ -63,7 +63,7 @@ func verifyNumaflowControllerRolloutReady() {
 }
 
 // verify that the NumaflowControllerRollout matches some criteria
-func verifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowControllerRollout) bool) {
+func VerifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowControllerRollout) bool) {
 	Document("verifying Numaflow Controller Rollout")
 	Eventually(func() bool {
 		rollout, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -74,7 +74,7 @@ func verifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowCont
 	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
-func verifyNumaflowControllerExists(namespace string) {
+func VerifyNumaflowControllerExists(namespace string) {
 	Document("Verifying that the Numaflow Controller Deployment exists")
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -136,9 +136,9 @@ func CreateNumaflowControllerRollout(version string) {
 		return err
 	}, TestTimeout, TestPollingInterval).Should(Succeed())
 
-	verifyNumaflowControllerRolloutReady()
+	VerifyNumaflowControllerRolloutReady()
 
-	verifyNumaflowControllerExists(Namespace)
+	VerifyNumaflowControllerExists(Namespace)
 
 }
 
@@ -245,10 +245,10 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 	})
 
 	if valid {
-		verifyNumaflowControllerRolloutReady()
+		VerifyNumaflowControllerRolloutReady()
 	} else {
 		// verify NumaflowControllerRollout ChildResourcesHealthy condition == false but NumaflowControllerRollout itself is marked "Deployed"
-		verifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
+		VerifyNumaflowControllerRollout(Namespace, func(rollout apiv1.NumaflowControllerRollout) bool {
 			healthCondition := getRolloutCondition(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 			return rollout.Status.Phase == apiv1.PhaseDeployed && healthCondition != nil && healthCondition.Status == metav1.ConditionFalse && healthCondition.Reason == "Failed"
 		})
