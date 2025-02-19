@@ -31,7 +31,7 @@ func VerifyNumaflowControllerDeployment(namespace string, f func(appsv1.Deployme
 			return false
 		}
 		return f(*deployment)
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
 func VerifyNumaflowControllerRolloutReady() {
@@ -40,24 +40,24 @@ func VerifyNumaflowControllerRolloutReady() {
 	Eventually(func() bool {
 		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return rollout.Status.Phase == apiv1.PhaseDeployed
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 	if UpgradeStrategy == config.PPNDStrategyID {
 		Document("Verifying that the NumaflowControllerRollout PausingPipelines condition is as expected")
 		Eventually(func() metav1.ConditionStatus {
 			rollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionFalse))
+		}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionFalse))
 	}
 
 }
@@ -71,7 +71,7 @@ func VerifyNumaflowControllerRollout(namespace string, f func(apiv1.NumaflowCont
 			return false
 		}
 		return f(*rollout)
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
 func VerifyNumaflowControllerExists(namespace string) {
@@ -79,7 +79,7 @@ func VerifyNumaflowControllerExists(namespace string) {
 	Eventually(func() error {
 		_, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return err
-	}, testTimeout, testPollingInterval).Should(Succeed())
+	}, TestTimeout, TestPollingInterval).Should(Succeed())
 }
 
 func UpdateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error)) {
@@ -134,7 +134,7 @@ func CreateNumaflowControllerRollout(version string) {
 	Eventually(func() error {
 		_, err := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 		return err
-	}, testTimeout, testPollingInterval).Should(Succeed())
+	}, TestTimeout, TestPollingInterval).Should(Succeed())
 
 	VerifyNumaflowControllerRolloutReady()
 
@@ -178,7 +178,7 @@ func DeleteNumaflowControllerRollout() {
 			return false
 		}
 		return true
-	}).WithTimeout(testTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+	}).WithTimeout(TestTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 	Document("Verifying Numaflow Controller deletion")
 	Eventually(func() bool {
@@ -190,7 +190,7 @@ func DeleteNumaflowControllerRollout() {
 			return false
 		}
 		return true
-	}).WithTimeout(testTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+	}).WithTimeout(TestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 }
 
 // TODO: pipelinerolloutname should be an array of names to verify multiple pipelines should be paused
@@ -230,7 +230,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 				return false
 			}
 			return true
-		}, testTimeout).Should(BeTrue())
+		}, TestTimeout).Should(BeTrue())
 	}
 
 	var versionToCheck string

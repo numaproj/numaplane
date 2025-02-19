@@ -50,7 +50,7 @@ func VerifyPipelineSpec(namespace string, pipelineRolloutName string, f func(num
 		}
 
 		return f(retrievedPipelineSpec)
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
 func VerifyPipelineStatusEventually(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
@@ -58,7 +58,7 @@ func VerifyPipelineStatusEventually(namespace string, pipelineRolloutName string
 	Eventually(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, testTimeout).Should(BeTrue())
+	}, TestTimeout).Should(BeTrue())
 }
 
 func VerifyPipelineStatusConsistently(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
@@ -66,7 +66,7 @@ func VerifyPipelineStatusConsistently(namespace string, pipelineRolloutName stri
 	Consistently(func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}, 15*time.Second, testPollingInterval).Should(BeTrue())
+	}, 15*time.Second, TestPollingInterval).Should(BeTrue())
 
 }
 
@@ -75,12 +75,12 @@ func VerifyPipelineRolloutDeployed(pipelineRolloutName string) {
 	Eventually(func() bool {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return rollout.Status.Phase == apiv1.PhaseDeployed
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
 
 }
 
@@ -89,7 +89,7 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}, testTimeout, testPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
 }
 
 func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVerticesScaleValue bool) {
@@ -101,7 +101,7 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVert
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-	}, testTimeout).Should(Not(Equal(metav1.ConditionTrue)))
+	}, TestTimeout).Should(Not(Equal(metav1.ConditionTrue)))
 
 	// Get Pipeline Pods to verify they're all up
 	Document("Verifying that the Pipeline is ready")
@@ -126,7 +126,7 @@ func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-	}, testTimeout).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout).Should(Equal(metav1.ConditionTrue))
 
 	Document("Verify that Pipeline is paused and fully drained")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
@@ -152,7 +152,7 @@ func VerifyPipelinePausing(namespace string, pipelineRolloutName string) {
 	Eventually(func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-	}, testTimeout).Should(Equal(metav1.ConditionTrue))
+	}, TestTimeout).Should(Equal(metav1.ConditionTrue))
 
 }
 
@@ -161,7 +161,7 @@ func VerifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy api
 	Eventually(func() bool {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return rollout.Status.UpgradeInProgress == inProgressStrategy
-	}, testTimeout, testPollingInterval).Should(BeTrue())
+	}, TestTimeout, TestPollingInterval).Should(BeTrue())
 }
 
 // Get PipelineSpec from Unstructured type
@@ -384,7 +384,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	Eventually(func() error {
 		_, err := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		return err
-	}, testTimeout, testPollingInterval).Should(Succeed())
+	}, TestTimeout, TestPollingInterval).Should(Succeed())
 
 	Document("Verifying that the Pipeline was created")
 	VerifyPipelineSpec(namespace, name, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -445,7 +445,7 @@ func DeletePipelineRollout(name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(testTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+	}).WithTimeout(TestTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 	Document("Verifying Pipeline deletion")
 	Eventually(func() bool {
@@ -459,7 +459,7 @@ func DeletePipelineRollout(name string) {
 			return true
 		}
 		return false
-	}).WithTimeout(testTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
+	}).WithTimeout(TestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 }
 
 // update PipelineRollout and verify correct process
@@ -554,7 +554,7 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 		}
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused) == metav1.ConditionTrue &&
 			(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
-	}, 10*time.Second, testPollingInterval).Should(BeTrue())
+	}, 10*time.Second, TestPollingInterval).Should(BeTrue())
 
 	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
