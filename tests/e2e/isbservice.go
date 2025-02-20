@@ -321,7 +321,6 @@ func DeleteISBServiceRollout(name string) {
 	}).WithTimeout(TestTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
 }
 
-// TODO: replace pipelineRolloutName with an array of names to check that each is paused
 // pipelineRolloutName is pipelinerollout and child pipeline that may be checked to see if it is pausing or not after update
 // newSpec is the updated spec of the ISBService defined in the rollout
 // verifySpecFunc is passed to the verifyISBServiceSpec func which verifies the ISBService spec defined in the updated rollout
@@ -330,8 +329,8 @@ func DeleteISBServiceRollout(name string) {
 // recreateFieldChanged determines if the change of spec should result in a recreation of InterstepBufferService and its underlying pipelines - also defined in the USDE config
 // pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
 func UpdateISBServiceRollout(
-	isbServiceRolloutName,
-	pipelineRolloutName string,
+	isbServiceRolloutName string,
+	pipelineRolloutNames []string,
 	newSpec numaflowv1.InterStepBufferServiceSpec,
 	verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool,
 	dataLossFieldChanged bool,
@@ -346,8 +345,14 @@ func UpdateISBServiceRollout(
 	originalISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	originalPipelineName, err := GetPipelineName(Namespace, pipelineRolloutName)
-	Expect(err).ShouldNot(HaveOccurred())
+	// need to iterate over rollout names
+	originalPipelineNames := make(map[string]string)
+	for _, name := range pipelineRolloutNames {
+		originalPipelineName, err := GetPipelineName(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		originalPipelineNames[name] = originalPipelineName
+	}
 
 	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
 		rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
@@ -363,18 +368,22 @@ func UpdateISBServiceRollout(
 			VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			// if we expect the pipeline to be healthy after update
 			if !pipelineIsFailed {
-				VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-				VerifyPipelinePaused(Namespace, pipelineRolloutName)
+				for _, name := range pipelineRolloutNames {
+					VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
+					VerifyPipelinePaused(Namespace, name)
+				}
 			}
 
 			Document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
 			Eventually(func() bool {
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-				if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-					return false
+				for _, name := range pipelineRolloutNames {
+					plRollout, _ := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+					plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+					if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+						return false
+					}
 				}
 				return true
 			}, TestTimeout).Should(BeTrue())
@@ -382,18 +391,20 @@ func UpdateISBServiceRollout(
 		} else {
 			Document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
 			verifyNotPausing := func() bool {
-				_, _, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineRolloutName)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
 				isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 				isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-				plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-				if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-					return false
-				}
-				if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
-					return false
+				for _, name := range pipelineRolloutNames {
+					_, _, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, name)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused).To(BeTrue())
+					plRollout, _ := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+					plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+					if isbCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+						return false
+					}
+					if isbRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp || plRollout.Status.UpgradeInProgress != apiv1.UpgradeStrategyNoOp {
+						return false
+					}
 				}
 				return true
 			}
@@ -405,16 +416,16 @@ func UpdateISBServiceRollout(
 	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
 	// when scaling to 0 is also allowed.
 	if overrideSourceVertexReplicas && UpgradeStrategy == config.ProgressiveStrategyID {
-		scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
-
-		vertexName := fmt.Sprintf("%s-%s", originalPipelineName, PipelineSourceVertexName)
-
-		vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
-		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
+		for _, name := range originalPipelineNames {
+			scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
+			vertexName := fmt.Sprintf("%s-%s", name, PipelineSourceVertexName)
+			vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred())
+			err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
 	}
 
 	VerifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
@@ -422,32 +433,38 @@ func UpdateISBServiceRollout(
 	VerifyISBSvcRolloutReady(isbServiceRolloutName)
 	VerifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
-	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	// check that pipeline will be failed if we expect it to be
-	if pipelineIsFailed {
-		VerifyPipelineFailed(Namespace, pipelineRolloutName)
-	} else {
-		VerifyPipelineRunning(Namespace, pipelineRolloutName, true)
+	for _, name := range pipelineRolloutNames {
+		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+		// check that pipeline will be failed if we expect it to be
+		if pipelineIsFailed {
+			VerifyPipelineFailed(Namespace, name)
+		} else {
+			VerifyPipelineRunning(Namespace, name, true)
+		}
 	}
 
 	Document("getting new isbservice name")
 	newISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	Document("getting new pipeline name")
-	newPipelineName, err := GetPipelineName(Namespace, pipelineRolloutName)
-	Expect(err).ShouldNot(HaveOccurred())
+	for _, name := range pipelineRolloutNames {
 
-	if recreateFieldChanged || (dataLossFieldChanged && UpgradeStrategy == config.ProgressiveStrategyID) {
-		// make sure the names of isbsvc and pipeline have changed
-		Document(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineName))
-		Expect(originalISBServiceName != newISBServiceName).To(BeTrue())
-		Expect(originalPipelineName != newPipelineName).To(BeTrue())
-	} else {
-		// make sure the names of isbsvc and pipeline have not changed
-		Document(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineName))
-		Expect(originalISBServiceName == newISBServiceName).To(BeTrue())
-		Expect(originalPipelineName == newPipelineName).To(BeTrue())
+		Document("getting new pipeline name")
+		newPipelineName, err := GetPipelineName(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		if recreateFieldChanged || (dataLossFieldChanged && UpgradeStrategy == config.ProgressiveStrategyID) {
+			// make sure the names of isbsvc and pipeline have changed
+			Document(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineNames[name]))
+			Expect(originalISBServiceName != newISBServiceName).To(BeTrue())
+			Expect(originalPipelineNames[name] != newPipelineName).To(BeTrue())
+		} else {
+			// make sure the names of isbsvc and pipeline have not changed
+			Document(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineNames[name]))
+			Expect(originalISBServiceName == newISBServiceName).To(BeTrue())
+			Expect(originalPipelineNames[name] == newPipelineName).To(BeTrue())
+		}
+
 	}
 
 }
