@@ -207,7 +207,10 @@ func processUpgradingChild(
 		} else {
 			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
 		}
-
+		err = rolloutObject.ResetPromotedChildStatus(existingPromotedChildDef)
+		if err != nil {
+			return false, false, 0, fmt.Errorf("processing upgrading child, failed to reset the promoted child status for child %s/%s", existingPromotedChildDef.GetNamespace(), existingPromotedChildDef.GetName())
+		}
 		err = rolloutObject.ResetUpgradingChildStatus(existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, fmt.Errorf("processing upgrading child, failed to reset the upgrading child status for child %s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
