@@ -195,7 +195,7 @@ func DeleteNumaflowControllerRollout() {
 
 // originalVersion is the original version of the current NumaflowController defined in the rollout
 // newVersion is the new version the updated NumaflowController should have if it is a valid version
-// pipelineRolloutName is the pipeline we check to be sure that it is pausing during the update
+// pipelineRolloutNames is an array of PipelineRollout names we check to be sure that they are pausing during an update
 // valid boolean indicates if newVersion is a valid version or not (which will change the check we make)
 // pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
 func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelineRolloutNames []string, valid bool, pipelineIsFailed bool) {
