@@ -367,7 +367,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
-			monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
