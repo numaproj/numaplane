@@ -302,7 +302,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false, true)
+		}, false, false)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
@@ -369,7 +369,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		}, false, false, true, false)
+		}, false, false, false, false)
 
 	})
 
