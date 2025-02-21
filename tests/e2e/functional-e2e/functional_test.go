@@ -45,6 +45,7 @@ const (
 )
 
 var (
+	deletionGracePeriodSeconds = int64(10)
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
@@ -53,6 +54,10 @@ var (
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
 	initialPipelineSpec = numaflowv1.PipelineSpec{
+		Lifecycle: numaflowv1.Lifecycle{
+			DeletionGracePeriodSeconds: &deletionGracePeriodSeconds,
+		},
+
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -84,6 +89,9 @@ var (
 	}
 
 	updatedPipelineSpec = numaflowv1.PipelineSpec{
+		Lifecycle: numaflowv1.Lifecycle{
+			DeletionGracePeriodSeconds: &deletionGracePeriodSeconds,
+		},
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
