@@ -285,12 +285,19 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		Document("setting desiredPhase=Paused")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+		initialPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
 		}, false, false)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
+
+		UpdatePipelineRollout(anotherPipelineRolloutName, initialPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
+		}, false, false)
+
+		VerifyPipelineStaysPaused(anotherPipelineRolloutName)
 	})
 
 	time.Sleep(2 * time.Second)
@@ -299,8 +306,13 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		Document("setting desiredPhase=Running")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+		initialPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
+		}, false, false)
+
+		UpdatePipelineRollout(anotherPipelineRolloutName, initialPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
 		}, false, false)
 	})
