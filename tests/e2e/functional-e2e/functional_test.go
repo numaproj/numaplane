@@ -288,7 +288,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false, false)
+		}, false, true)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
@@ -302,7 +302,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false, false)
+		}, false, true)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
