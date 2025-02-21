@@ -282,9 +282,9 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 		// need to update function
 		// update would normally cause data loss
-		UpdateISBServiceRollout(isbServiceRolloutName, []string{failedPipelineRolloutName}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true, false, false, true)
+		}, true, false)
 
 		time.Sleep(5 * time.Second)
 
@@ -306,7 +306,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		Document("Updating Numaflow controller to cause a PPND change")
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, []string{failedPipelineRolloutName}, true, true)
+		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
 
 		time.Sleep(5 * time.Second)
 

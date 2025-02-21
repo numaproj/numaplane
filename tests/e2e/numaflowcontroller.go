@@ -198,7 +198,7 @@ func DeleteNumaflowControllerRollout() {
 // pipelineRolloutNames is an array of PipelineRollout names we check to be sure that they are pausing during an update
 // valid boolean indicates if newVersion is a valid version or not (which will change the check we make)
 // pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
-func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelineRolloutNames []string, valid bool, pipelineIsFailed bool) {
+func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelineRollouts []PipelineRolloutInfo, valid bool) {
 	// new NumaflowController spec
 	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
 		Controller: apiv1.Controller{Version: newVersion},
@@ -213,11 +213,11 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
 	if UpgradeStrategy == config.PPNDStrategyID && valid {
 
-		if !pipelineIsFailed {
-			Document("Verify that in-progress-strategy gets set to PPND")
-			for _, name := range pipelineRolloutNames {
-				VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
-				VerifyPipelinePaused(Namespace, name)
+		for _, rolloutInfo := range pipelineRollouts {
+			if !rolloutInfo.PipelineIsFailed {
+				Document("Verify that in-progress-strategy gets set to PPND")
+				VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
+				VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
 			}
 		}
 
@@ -225,8 +225,8 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		Eventually(func() bool {
 			ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			for _, name := range pipelineRolloutNames {
-				plRollout, _ := pipelineRolloutClient.Get(ctx, name, metav1.GetOptions{})
+			for _, rolloutInfo := range pipelineRollouts {
+				plRollout, _ := pipelineRolloutClient.Get(ctx, rolloutInfo.PipelineRolloutName, metav1.GetOptions{})
 				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 				if ncCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
 					return false
@@ -257,13 +257,15 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		})
 	}
 
-	for _, name := range pipelineRolloutNames {
-		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+	for _, rolloutInfo := range pipelineRollouts {
+		rolloutName := rolloutInfo.PipelineRolloutName
+
+		VerifyInProgressStrategy(rolloutName, apiv1.UpgradeStrategyNoOp)
 		// don't check that pipeline is running if we expect failed
-		if pipelineIsFailed {
-			VerifyPipelineFailed(Namespace, name)
+		if rolloutInfo.PipelineIsFailed {
+			VerifyPipelineFailed(Namespace, rolloutName)
 		} else {
-			VerifyPipelineRunning(Namespace, name, false)
+			VerifyPipelineRunning(Namespace, rolloutName, false)
 		}
 	}
 
