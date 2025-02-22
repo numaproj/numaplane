@@ -33,7 +33,8 @@ const (
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
-	Pipeline Pipeline `json:"pipeline"`
+	Pipeline Pipeline                    `json:"pipeline"`
+	Strategy PipelineTypeRolloutStrategy `json:"strategy"`
 }
 
 // Pipeline includes the spec of Pipeline in Numaflow
@@ -128,6 +129,27 @@ func (pipelineRollout *PipelineRollout) GetRolloutObjectMeta() *metav1.ObjectMet
 
 func (pipelineRollout *PipelineRollout) GetRolloutStatus() *Status {
 	return &pipelineRollout.Status.Status
+}
+
+func (pipelineRollout *PipelineRollout) GetChildStatusAssessmentSchedule() string {
+	/*globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+	}
+	schedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule("Pipeline")
+	if err != nil {
+		return nil, fmt.Errorf("error getting default child status assessment schedule for type 'Pipeline': %w", err)
+	}
+	// see if it's specified for this PipelineRollout, and if so use that
+	rolloutSpecificSchedule := pipelineRollout.Spec.Strategy.Progressive.AssessmentSchedule
+	if rolloutSpecificSchedule != "" {
+		schedule, err = config.ParseAssessmentSchedule(rolloutSpecificSchedule)
+		if err != nil {
+
+		}
+	}
+	return schedule, err*/
+	return pipelineRollout.Spec.Strategy.Progressive.AssessmentSchedule
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject

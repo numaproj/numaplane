@@ -39,3 +39,17 @@ const (
 	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
 	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
+
+type RolloutStrategy struct {
+	Progressive ProgressiveStrategy `json:"progressiveStrategy"`
+}
+
+type PipelineTypeRolloutStrategy struct {
+	RolloutStrategy `json:",inline"`
+}
+
+type ProgressiveStrategy struct {
+	// optional string: comma-separated list consisting of:
+	// assessmentDelay, assessmentPeriod, assessmentInterval
+	AssessmentSchedule string `json:"assessmentSchedule"`
+}

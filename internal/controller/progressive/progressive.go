@@ -59,6 +59,8 @@ type progressiveController interface {
 type ProgressiveRolloutObject interface {
 	ctlrcommon.RolloutObject
 
+	GetChildStatusAssessmentSchedule() string
+
 	GetUpgradingChildStatus() *apiv1.UpgradingChildStatus
 
 	GetPromotedChildStatus() *apiv1.PromotedChildStatus
@@ -160,6 +162,34 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	return upgradingChild, nil
 }
 
+// TODO: add unit test
+func getChildStatusAssessmentSchedule(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+) (*config.AssessmentSchedule, error) {
+	numaLogger := logger.FromContext(ctx)
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+	}
+	// get the default schedule for this kind
+	schedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule(rolloutObject.GetChildGVK().Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error getting default child status assessment schedule for type '%s': %w", rolloutObject.GetChildGVK().Kind, err)
+	}
+	// see if it's specified for this Rollout, and if so use that
+	rolloutSpecificSchedule := rolloutObject.GetChildStatusAssessmentSchedule()
+	if rolloutSpecificSchedule != "" {
+		rolloutSchedule, err := config.ParseAssessmentSchedule(rolloutSpecificSchedule)
+		if err != nil {
+			numaLogger.WithValues("schedule", rolloutSpecificSchedule, "error", err.Error()).Warn("failed to parse schedule")
+		} else {
+			schedule = rolloutSchedule
+		}
+	}
+	return schedule, nil
+}
+
 /*
 processUpgradingChild handles the assessment and potential update of a child resource during a progressive upgrade.
 It evaluates the current status of the upgrading child, determines if an assessment is needed, and processes the
@@ -188,14 +218,9 @@ func processUpgradingChild(
 ) (bool, bool, time.Duration, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	assessmentSchedule, err := getChildStatusAssessmentSchedule(ctx, rolloutObject)
 	if err != nil {
-		return false, false, 0, fmt.Errorf("error getting the global config for assessment processing: %w", err)
-	}
-
-	assessmentDelay, assessmentPeriod, assessmentInterval, err := globalConfig.GetChildStatusAssessmentSchedule()
-	if err != nil {
-		return false, false, 0, fmt.Errorf("error getting the child status assessment schedule from global config: %w", err)
+		return false, false, 0, err
 	}
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
@@ -219,8 +244,8 @@ func processUpgradingChild(
 
 	// If no AssessmentStartTime has been set already, calculate it and set it
 	if childStatus.AssessmentStartTime == nil {
-		// Add to the current time the assessmentDelay and set the AssessmentStartTime in the Rollout object
-		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentDelay))
+		// Add to the current time the assessmentSchedule.Delay and set the AssessmentStartTime in the Rollout object
+		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
 		childStatus.AssessmentStartTime = &nextAssessmentTime
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
@@ -243,7 +268,7 @@ func processUpgradingChild(
 
 	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
 	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessmentEndTimeSet() {
-		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentPeriod))
+		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
 		childStatus.AssessmentEndTime = &assessmentEndTime
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
 	}
@@ -318,17 +343,47 @@ func processUpgradingChild(
 			rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 			// we're done
-			return true, false, assessmentInterval, nil
+			return true, false, assessmentSchedule.Interval, nil
 		} else {
-			return false, false, assessmentInterval, nil
+			return false, false, assessmentSchedule.Interval, nil
 		}
 
 	default:
 		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
-		return false, false, assessmentInterval, nil
+		return false, false, assessmentSchedule.Interval, nil
 	}
+}
+
+// AssessUpgradingPipelineType makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// Assessment:
+// Success: phase must be "Running" and all conditions must be True
+// Failure: phase is "Failed" or any condition is False
+// Unknown: neither of the above if met
+func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, err
+	}
+
+	healthyConditions := IsNumaflowChildReady(&upgradingObjectStatus)
+
+	numaLogger.
+		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+		Debugf("Upgrading child is in phase %s, conditions healthy=%t", upgradingObjectStatus.Phase, healthyConditions)
+
+	if upgradingObjectStatus.Phase == "Running" && healthyConditions {
+		return apiv1.AssessmentResultSuccess, nil
+	}
+
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions {
+		return apiv1.AssessmentResultFailure, nil
+	}
+
+	return apiv1.AssessmentResultUnknown, nil
 }
 
 // return:

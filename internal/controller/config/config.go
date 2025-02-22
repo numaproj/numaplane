@@ -96,15 +96,27 @@ type GlobalConfig struct {
 	// If user's config doesn't exist or doesn't specify strategy, this is the default
 	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 
-	// ChildStatusAssessmentSchedule defines time information used when assessing a child health status.
+	ProgressiveConfig ProgressiveConfig `json:"progressiveConfig" mapstructure:"progressiveConfig"`
+}
+
+type ProgressiveConfig struct {
+	DefaultAssessmentSchedule []DefaultAssessmentSchedule `json:"defaultAssessmentSchedule" mapstructure:"defaultAssessmentSchedule"`
+}
+
+// DefaultAssessmentSchedule defines a default schedule for each kind
+type DefaultAssessmentSchedule struct {
+	Kind string `json:"kind" mapstructure:"kind"`
+
+	// The Schedule variables defines time information used when assessing a child health status.
 	// It is a string with 3 comma-separated integer values representing the following:
 	// 1. AssessmentDelay: indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
 	// 2. AssessmentPeriod: indicates the amount of seconds to perform assessments for after the first assessment has been performed
 	// 3. AssessmentInterval: indicates how often to assess the child status once the first assessment has been performed and before the end
 	// of the assessments window defined by adding the AssessmentDelay seconds to the AssessmentPeriod seconds
 	// NOTE: the order of the values is important since each value represents a specific amount of time
-	// Example: ChildStatusAssessmentSchedule = "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
-	ChildStatusAssessmentSchedule string `json:"childStatusAssessmentSchedule" mapstructure:"childStatusAssessmentSchedule"`
+	// Example: "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
+	// If string is empty, then no schedule is defined
+	Schedule string `json:"schedule" mapstructure:"schedule"`
 }
 
 type NumaflowControllerDefinitionConfig struct {
@@ -281,32 +293,56 @@ func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 	return &nsConfigMap
 }
 
-// GetChildStatusAssessmentSchedule parses the GlobalConfig ChildStatusAssessmentSchedule string and returns the assessmentDelay, assessmentPeriod, and assessmentInterval durations.
-func (gc *GlobalConfig) GetChildStatusAssessmentSchedule() (assessmentDelay, assessmentPeriod, assessmentInterval time.Duration, err error) {
+type AssessmentSchedule struct {
+	Delay    time.Duration
+	Period   time.Duration
+	Interval time.Duration
+}
+
+func ParseAssessmentSchedule(str string) (*AssessmentSchedule, error) {
+	if str == "" {
+		return nil, nil
+	}
 	// Split the schedule string by commas
-	parts := strings.Split(gc.ChildStatusAssessmentSchedule, ",")
+	parts := strings.Split(str, ",")
 	if len(parts) != 3 {
-		return 0, 0, 0, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
+		return nil, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
 	}
 
 	// Convert each part to an integer and then to a time.Duration
 	assessmentDelaySeconds, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid assessmentDelay value: %w", err)
+		return nil, fmt.Errorf("invalid assessmentDelay value: %w", err)
 	}
 	assessmentPeriodSeconds, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid assessmentPeriod value: %w", err)
+		return nil, fmt.Errorf("invalid assessmentPeriod value: %w", err)
 	}
 	assessmentIntervalSeconds, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid assessmentInterval value: %w", err)
+		return nil, fmt.Errorf("invalid assessmentInterval value: %w", err)
 	}
 
 	// Convert seconds to time.Duration
-	assessmentDelay = time.Duration(assessmentDelaySeconds) * time.Second
-	assessmentPeriod = time.Duration(assessmentPeriodSeconds) * time.Second
-	assessmentInterval = time.Duration(assessmentIntervalSeconds) * time.Second
+	assessmentDelay := time.Duration(assessmentDelaySeconds) * time.Second
+	assessmentPeriod := time.Duration(assessmentPeriodSeconds) * time.Second
+	assessmentInterval := time.Duration(assessmentIntervalSeconds) * time.Second
 
-	return assessmentDelay, assessmentPeriod, assessmentInterval, nil
+	return &AssessmentSchedule{
+		Delay:    assessmentDelay,
+		Period:   assessmentPeriod,
+		Interval: assessmentInterval,
+	}, nil
+}
+
+// GetChildStatusAssessmentSchedule parses the GlobalConfig Default Assessment Schedule string for this kind,
+// and returns the assessmentDelay, assessmentPeriod, and assessmentInterval durations.
+func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (*AssessmentSchedule, error) {
+
+	for _, schedule := range config.DefaultAssessmentSchedule {
+		if schedule.Kind == kind {
+			return ParseAssessmentSchedule(schedule.Schedule)
+		}
+	}
+	return nil, nil // no error returned - this will be okay to not specify one for a given kind
 }
