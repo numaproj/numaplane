@@ -193,13 +193,12 @@ func DeleteNumaflowControllerRollout() {
 	}).WithTimeout(TestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 }
 
-// TODO: pipelinerolloutname should be an array of names to verify multiple pipelines should be paused
 // originalVersion is the original version of the current NumaflowController defined in the rollout
 // newVersion is the new version the updated NumaflowController should have if it is a valid version
-// pipelineRolloutName is the pipeline we check to be sure that it is pausing during the update
+// pipelineRolloutNames is an array of PipelineRollout names we check to be sure that they are pausing during an update
 // valid boolean indicates if newVersion is a valid version or not (which will change the check we make)
 // pipelineIsFailed informs us if any dependent pipelines are currently failed and to not check if they are running
-func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRolloutName string, valid bool, pipelineIsFailed bool) {
+func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelineRollouts []PipelineRolloutInfo, valid bool) {
 	// new NumaflowController spec
 	updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
 		Controller: apiv1.Controller{Version: newVersion},
@@ -214,20 +213,24 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 	// the NumaflowController and Pipeline rollouts change too rapidly making the test flaky (intermittently pass or fail)
 	if UpgradeStrategy == config.PPNDStrategyID && valid {
 
-		if !pipelineIsFailed {
-			Document("Verify that in-progress-strategy gets set to PPND")
-			VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyPPND)
-			VerifyPipelinePaused(Namespace, pipelineRolloutName)
+		for _, rolloutInfo := range pipelineRollouts {
+			if !rolloutInfo.PipelineIsFailed {
+				Document("Verify that in-progress-strategy gets set to PPND")
+				VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
+				VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
+			}
 		}
 
 		Document("Verify that the pipelines are unpaused by checking the PPND conditions on NumaflowController Rollout and PipelineRollout")
 		Eventually(func() bool {
 			ncRollout, _ := numaflowControllerRolloutClient.Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
 			ncCondStatus := getRolloutConditionStatus(ncRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-			plRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-			plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
-			if ncCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
-				return false
+			for _, rolloutInfo := range pipelineRollouts {
+				plRollout, _ := pipelineRolloutClient.Get(ctx, rolloutInfo.PipelineRolloutName, metav1.GetOptions{})
+				plCondStatus := getRolloutConditionStatus(plRollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
+				if ncCondStatus == metav1.ConditionTrue || plCondStatus == metav1.ConditionTrue {
+					return false
+				}
 			}
 			return true
 		}, TestTimeout).Should(BeTrue())
@@ -254,12 +257,16 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion, pipelineRollou
 		})
 	}
 
-	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	// don't check that pipeline is running if we expect failed
-	if pipelineIsFailed {
-		VerifyPipelineFailed(Namespace, pipelineRolloutName)
-	} else {
-		VerifyPipelineRunning(Namespace, pipelineRolloutName, false)
+	for _, rolloutInfo := range pipelineRollouts {
+		rolloutName := rolloutInfo.PipelineRolloutName
+
+		VerifyInProgressStrategy(rolloutName, apiv1.UpgradeStrategyNoOp)
+		// don't check that pipeline is running if we expect failed
+		if rolloutInfo.PipelineIsFailed {
+			VerifyPipelineFailed(Namespace, rolloutName)
+		} else {
+			VerifyPipelineRunning(Namespace, rolloutName, false)
+		}
 	}
 
 }
