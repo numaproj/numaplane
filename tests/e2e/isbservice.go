@@ -366,7 +366,9 @@ func UpdateISBServiceRollout(
 			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 			for _, rolloutInfo := range pipelineRollouts {
 				_, _, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, rolloutInfo.PipelineRolloutName)
-				Expect(err).ShouldNot(HaveOccurred())
+				if err != nil {
+					return false
+				}
 				if retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused {
 					return false
 				}
