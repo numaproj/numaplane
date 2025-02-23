@@ -68,8 +68,24 @@ spec:
                 required:
                 - spec
                 type: object
+              strategy:
+                properties:
+                  progressiveStrategy:
+                    properties:
+                      assessmentSchedule:
+                        description: |-
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
+                        type: string
+                    required:
+                    - assessmentSchedule
+                    type: object
+                required:
+                - progressiveStrategy
+                type: object
             required:
             - interStepBufferService
+            - strategy
             type: object
           status:
             description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
