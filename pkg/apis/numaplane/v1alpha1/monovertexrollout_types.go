@@ -31,7 +31,8 @@ const (
 
 // MonoVertexRolloutSpec defines the desired state of MonoVertexRollout
 type MonoVertexRolloutSpec struct {
-	MonoVertex MonoVertex `json:"monoVertex"`
+	MonoVertex MonoVertex                  `json:"monoVertex"`
+	Strategy   PipelineTypeRolloutStrategy `json:"strategy"`
 }
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
@@ -123,6 +124,11 @@ func (monoVertexRollout *MonoVertexRollout) GetRolloutObjectMeta() *metav1.Objec
 
 func (monoVertexRollout *MonoVertexRollout) GetRolloutStatus() *Status {
 	return &monoVertexRollout.Status.Status
+}
+
+// GetProgressiveStrategy is a function of the progressiveRolloutObject
+func (monoVertexRollout *MonoVertexRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	return monoVertexRollout.Spec.Strategy.Progressive
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject

@@ -59,7 +59,7 @@ type progressiveController interface {
 type ProgressiveRolloutObject interface {
 	ctlrcommon.RolloutObject
 
-	GetChildStatusAssessmentSchedule() string
+	GetProgressiveStrategy() apiv1.ProgressiveStrategy
 
 	GetUpgradingChildStatus() *apiv1.UpgradingChildStatus
 
@@ -166,27 +166,31 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 func getChildStatusAssessmentSchedule(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
-) (*config.AssessmentSchedule, error) {
+) (config.AssessmentSchedule, error) {
 	numaLogger := logger.FromContext(ctx)
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
-		return nil, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+		return config.AssessmentSchedule{}, fmt.Errorf("error getting the global config for assessment processing: %w", err)
 	}
 	// get the default schedule for this kind
 	schedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule(rolloutObject.GetChildGVK().Kind)
 	if err != nil {
-		return nil, fmt.Errorf("error getting default child status assessment schedule for type '%s': %w", rolloutObject.GetChildGVK().Kind, err)
+		return config.AssessmentSchedule{}, fmt.Errorf("error getting default child status assessment schedule for type '%s': %w", rolloutObject.GetChildGVK().Kind, err)
 	}
 	// see if it's specified for this Rollout, and if so use that
-	rolloutSpecificSchedule := rolloutObject.GetChildStatusAssessmentSchedule()
+	rolloutSpecificSchedule := rolloutObject.GetProgressiveStrategy().AssessmentSchedule
 	if rolloutSpecificSchedule != "" {
 		rolloutSchedule, err := config.ParseAssessmentSchedule(rolloutSpecificSchedule)
 		if err != nil {
 			numaLogger.WithValues("schedule", rolloutSpecificSchedule, "error", err.Error()).Warn("failed to parse schedule")
 		} else {
 			schedule = rolloutSchedule
+			numaLogger.Debugf("using assessment schedule specified by rollout: %q", rolloutSpecificSchedule)
 		}
+	} else {
+		numaLogger.Debugf("using default assessment schedule for kind %q", rolloutObject.GetChildGVK().Kind)
 	}
+
 	return schedule, nil
 }
 

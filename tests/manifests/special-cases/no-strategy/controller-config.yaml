@@ -9,4 +9,11 @@ data:
     group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
     group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
     defaultUpgradeStrategy: "no-strategy"
-    childStatusAssessmentSchedule: "120,60,10"
+    progressiveConfig:
+      defaultAssessmentSchedule: 
+        - kind: Pipeline
+          schedule: "120,60,10"
+        - kind: MonoVertex
+          schedule: "120,60,10"
+        - kind: InterstepBufferService
+          schedule: "0,0,10"

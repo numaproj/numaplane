@@ -131,25 +131,9 @@ func (pipelineRollout *PipelineRollout) GetRolloutStatus() *Status {
 	return &pipelineRollout.Status.Status
 }
 
-func (pipelineRollout *PipelineRollout) GetChildStatusAssessmentSchedule() string {
-	/*globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("error getting the global config for assessment processing: %w", err)
-	}
-	schedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule("Pipeline")
-	if err != nil {
-		return nil, fmt.Errorf("error getting default child status assessment schedule for type 'Pipeline': %w", err)
-	}
-	// see if it's specified for this PipelineRollout, and if so use that
-	rolloutSpecificSchedule := pipelineRollout.Spec.Strategy.Progressive.AssessmentSchedule
-	if rolloutSpecificSchedule != "" {
-		schedule, err = config.ParseAssessmentSchedule(rolloutSpecificSchedule)
-		if err != nil {
-
-		}
-	}
-	return schedule, err*/
-	return pipelineRollout.Spec.Strategy.Progressive.AssessmentSchedule
+// GetProgressiveStrategy is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	return pipelineRollout.Spec.Strategy.Progressive
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject

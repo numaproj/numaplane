@@ -299,28 +299,25 @@ type AssessmentSchedule struct {
 	Interval time.Duration
 }
 
-func ParseAssessmentSchedule(str string) (*AssessmentSchedule, error) {
-	if str == "" {
-		return nil, nil
-	}
+func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
+		return AssessmentSchedule{}, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
 	}
 
 	// Convert each part to an integer and then to a time.Duration
 	assessmentDelaySeconds, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid assessmentDelay value: %w", err)
+		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentDelay value: %w", err)
 	}
 	assessmentPeriodSeconds, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("invalid assessmentPeriod value: %w", err)
+		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentPeriod value: %w", err)
 	}
 	assessmentIntervalSeconds, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return nil, fmt.Errorf("invalid assessmentInterval value: %w", err)
+		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentInterval value: %w", err)
 	}
 
 	// Convert seconds to time.Duration
@@ -328,7 +325,7 @@ func ParseAssessmentSchedule(str string) (*AssessmentSchedule, error) {
 	assessmentPeriod := time.Duration(assessmentPeriodSeconds) * time.Second
 	assessmentInterval := time.Duration(assessmentIntervalSeconds) * time.Second
 
-	return &AssessmentSchedule{
+	return AssessmentSchedule{
 		Delay:    assessmentDelay,
 		Period:   assessmentPeriod,
 		Interval: assessmentInterval,
@@ -337,12 +334,12 @@ func ParseAssessmentSchedule(str string) (*AssessmentSchedule, error) {
 
 // GetChildStatusAssessmentSchedule parses the GlobalConfig Default Assessment Schedule string for this kind,
 // and returns the assessmentDelay, assessmentPeriod, and assessmentInterval durations.
-func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (*AssessmentSchedule, error) {
+func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (AssessmentSchedule, error) {
 
 	for _, schedule := range config.DefaultAssessmentSchedule {
-		if schedule.Kind == kind {
+		if strings.ToLower(schedule.Kind) == strings.ToLower(kind) {
 			return ParseAssessmentSchedule(schedule.Schedule)
 		}
 	}
-	return nil, nil // no error returned - this will be okay to not specify one for a given kind
+	return AssessmentSchedule{}, fmt.Errorf("No Assessment Schedule found for kind %q", kind)
 }
