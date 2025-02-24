@@ -56,10 +56,8 @@ func GetISBServiceName(namespace, isbServiceRolloutName string) (string, error) 
 }
 
 func VerifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
-
-	Document("verifying ISBService Spec")
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
-	Eventually(func() bool {
+	CheckEventually("verifying ISBService Spec", func() bool {
 		unstruct, err := GetPromotedISBService(namespace, isbServiceRolloutName)
 		if err != nil {
 			return false
@@ -69,33 +67,32 @@ func VerifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func
 		}
 
 		return f(retrievedISBServiceSpec)
-	}, 8*time.Minute, TestPollingInterval).Should(BeTrue())
+	}).WithTimeout(8 * time.Minute).Should(BeTrue())
 }
 
 func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
-	Document("Verifying that the ISBServiceRollout is ready")
+	By("Verifying that the ISBServiceRollout is ready")
 
-	Eventually(func() bool {
+	CheckEventually("verify ISBServiceRollout is deployed", func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return rollout.Status.Phase == apiv1.PhaseDeployed
-	}, TestTimeout, TestPollingInterval).Should(BeTrue())
+	}).Should(BeTrue())
 
-	Eventually(func() metav1.ConditionStatus {
+	CheckEventually("verify ISBServiceRollout child resource is deployed", func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-	}, TestTimeout, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}).Should(Equal(metav1.ConditionTrue))
 
-	Eventually(func() metav1.ConditionStatus {
+	CheckEventually("verify ISBServiceRollout child resource is healthy", func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}, 4*time.Minute, TestPollingInterval).Should(Equal(metav1.ConditionTrue))
+	}).WithTimeout(4 * time.Minute).Should(Equal(metav1.ConditionTrue))
 
 	if UpgradeStrategy == config.PPNDStrategyID {
-		Document("Verifying that the ISBServiceRollout PausingPipelines condition is as expected")
-		Eventually(func() metav1.ConditionStatus {
+		CheckEventually("Verifying that the ISBServiceRollout PausingPipelines condition is as expected", func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
-		}, TestTimeout, TestPollingInterval).Should(Or(Equal(metav1.ConditionFalse), Equal(metav1.ConditionUnknown)))
+		}).Should(Or(Equal(metav1.ConditionFalse), Equal(metav1.ConditionUnknown)))
 	}
 
 }
@@ -103,26 +100,22 @@ func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
 func VerifyISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize int) {
 
 	var isbsvcName string
-
-	Document("Verifying that the ISBService exists")
-	Eventually(func() error {
+	CheckEventually("Verifying that the ISBService exists", func() error {
 		unstruct, err := GetPromotedISBService(namespace, isbServiceRolloutName)
 		if err == nil {
 			isbsvcName = unstruct.GetName()
 		}
 		return err
-	}, TestTimeout, TestPollingInterval).Should(Succeed())
+	}).Should(Succeed())
 
 	// TODO: eventually we can use ISBServiceRollout.Status.Conditions(ChildResourcesHealthy) to get this instead
 
-	Document("Verifying that the StatefulSet exists and is ready")
-	Eventually(func() bool {
+	CheckEventually("Verifying that the StatefulSet exists and is ready", func() bool {
 		statefulSet, _ := kubeClient.AppsV1().StatefulSets(namespace).Get(ctx, fmt.Sprintf("isbsvc-%s-js", isbsvcName), metav1.GetOptions{})
 		return statefulSet != nil && statefulSet.Generation == statefulSet.Status.ObservedGeneration && statefulSet.Status.UpdatedReplicas == int32(nodeSize)
-	}, TestTimeout, TestPollingInterval).Should(BeTrue())
+	}).Should(BeTrue())
 
-	Document("Verifying that the StatefulSet Pods are in Running phase")
-	Eventually(func() bool {
+	CheckEventually("Verifying that the StatefulSet Pods are in Running phase", func() bool {
 		podList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", numaflowv1.KeyISBSvcName, isbsvcName)})
 		podsInRunning := 0
 		if podList != nil {
@@ -133,11 +126,11 @@ func VerifyISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize 
 			}
 		}
 		return podsInRunning == nodeSize
-	}, TestTimeout, TestPollingInterval).Should(BeTrue())
+	}).Should(BeTrue())
 }
 
 func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error)) {
-	Document("updating ISBServiceRollout")
+	By("updating ISBServiceRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		rollout, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -155,11 +148,10 @@ func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 }
 
 func VerifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	Document("Verifying InProgressStrategy for ISBService")
-	Eventually(func() bool {
+	CheckEventually("Verifying InProgressStrategy for ISBService", func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
 		return rollout.Status.UpgradeInProgress == inProgressStrategy
-	}, TestTimeout, TestPollingInterval).Should(BeTrue())
+	}).Should(BeTrue())
 }
 
 func watchISBServiceRollout() {
@@ -251,11 +243,10 @@ func CreateISBServiceRollout(name string, isbServiceSpec numaflowv1.InterStepBuf
 	_, err := isbServiceRolloutClient.Create(ctx, isbServiceRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	Document("Verifying that the ISBServiceRollout was created")
-	Eventually(func() error {
+	CheckEventually("Verifying that the ISBServiceRollout was created", func() error {
 		_, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		return err
-	}, TestTimeout, TestPollingInterval).Should(Succeed())
+	}).Should(Succeed())
 
 	VerifyISBSvcRolloutReady(name)
 
@@ -292,12 +283,11 @@ func createISBServiceRolloutSpec(name, namespace string, isbServiceSpec numaflow
 
 // delete ISBServiceRollout and verify deletion
 func DeleteISBServiceRollout(name string) {
-	Document("Deleting ISBServiceRollout")
+	By("Deleting ISBServiceRollout")
 	err := isbServiceRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	Document("Verifying ISBServiceRollout deletion")
-	Eventually(func() bool {
+	CheckEventually("Verifying ISBServiceRollout deletion", func() bool {
 		_, err := isbServiceRolloutClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if !errors.IsNotFound(err) {
@@ -308,8 +298,7 @@ func DeleteISBServiceRollout(name string) {
 		return true
 	}).WithTimeout(TestTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
-	Document("Verifying ISBService deletion")
-	Eventually(func() bool {
+	CheckEventually("Verifying ISBService deletion", func() bool {
 		list, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false
@@ -386,7 +375,7 @@ func UpdateISBServiceRollout(
 
 		if dataLossRisk {
 
-			Document("Verify that in-progress-strategy gets set to PPND")
+			By("Verify that in-progress-strategy gets set to PPND")
 			VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			// if we expect the pipeline to be healthy after update
 			for _, rolloutInfo := range pipelineRollouts {
@@ -396,12 +385,10 @@ func UpdateISBServiceRollout(
 				}
 			}
 
-			Document("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout")
-			Eventually(verifyNotPausing, TestTimeout).Should(BeTrue())
+			CheckEventually("Verify that the pipelines are unpaused by checking the PPND conditions on ISBService Rollout and PipelineRollout", verifyNotPausing).Should(BeTrue())
 
 		} else {
-			Document("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made")
-			Consistently(verifyNotPausing, 15*time.Second).Should(BeTrue())
+			CheckConsistently("Verify that dependent Pipeline is not paused when an update to ISBService not requiring pause is made", verifyNotPausing).WithTimeout(15 * time.Second).Should(BeTrue())
 		}
 	}
 
@@ -435,7 +422,7 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	Document("getting new isbservice name")
+	By("getting new isbservice name")
 	newISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -443,18 +430,18 @@ func UpdateISBServiceRollout(
 
 		rolloutName := rolloutInfo.PipelineRolloutName
 
-		Document("getting new pipeline name")
+		By("getting new pipeline name")
 		newPipelineName, err := GetPipelineName(Namespace, rolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		if recreateFieldChanged || (dataLossFieldChanged && UpgradeStrategy == config.ProgressiveStrategyID) {
 			// make sure the names of isbsvc and pipeline have changed
-			Document(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
+			By(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
 			Expect(originalISBServiceName != newISBServiceName).To(BeTrue())
 			Expect(originalPipelineNames[rolloutName] != newPipelineName).To(BeTrue())
 		} else {
 			// make sure the names of isbsvc and pipeline have not changed
-			Document(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
+			By(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
 			Expect(originalISBServiceName == newISBServiceName).To(BeTrue())
 			Expect(originalPipelineNames[rolloutName] == newPipelineName).To(BeTrue())
 		}
