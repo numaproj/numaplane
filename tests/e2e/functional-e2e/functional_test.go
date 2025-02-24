@@ -37,7 +37,7 @@ const (
 	isbServiceRolloutName            = "test-isbservice-rollout"
 	pipelineRolloutName              = "test-pipeline-rollout"
 	monoVertexRolloutName            = "test-monovertex-rollout"
-	initialNumaflowControllerVersion = "1.4.3-rc2"
+	initialNumaflowControllerVersion = "1.4.3-rc3"
 	updatedNumaflowControllerVersion = "1.4.2"
 	invalidNumaflowControllerVersion = "99.99.99"
 	initialJetstreamVersion          = "2.10.17"
