@@ -298,12 +298,19 @@ func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 	return &nsConfigMap
 }
 
+// AssessmentSchedule is used for progressive rollout to assess the upgrading child
 type AssessmentSchedule struct {
-	Delay    time.Duration
-	Period   time.Duration
+	// Delay indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
+	Delay time.Duration
+	// Period indicates the amount of seconds to perform assessments for after the first assessment has been performed
+	// (if failure is indicated before that, it will not continue however)
+	Period time.Duration
+	// Interval indicates how often to assess the child status once the first assessment has been performed and before the end
 	Interval time.Duration
 }
 
+// parse the string indicating the AssessmentSchedule
+// Example: "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
 func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")
@@ -337,8 +344,7 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	}, nil
 }
 
-// GetChildStatusAssessmentSchedule parses the GlobalConfig Default Assessment Schedule string for this kind,
-// and returns the assessmentDelay, assessmentPeriod, and assessmentInterval durations.
+// GetChildStatusAssessmentSchedule parses the GlobalConfig Default Assessment Schedule string for this kind into an AssessmentSchedule
 func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (AssessmentSchedule, error) {
 
 	for _, schedule := range config.DefaultAssessmentSchedule {
