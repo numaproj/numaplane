@@ -76,7 +76,7 @@ spec:
                 description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
                   for fields shared by Pipeline and MonoVertex
                 properties:
-                  progressiveStrategy:
+                  progressive:
                     properties:
                       assessmentSchedule:
                         description: |-
@@ -87,7 +87,7 @@ spec:
                     - assessmentSchedule
                     type: object
                 required:
-                - progressiveStrategy
+                - progressive
                 type: object
             required:
             - pipeline

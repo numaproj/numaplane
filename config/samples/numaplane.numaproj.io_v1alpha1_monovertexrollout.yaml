@@ -4,6 +4,9 @@ metadata:
   name: my-monovertex
   namespace: example-namespace
 spec:
+  strategy:
+    progressive:
+      assessmentSchedule: "60,60,10"
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
