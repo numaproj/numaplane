@@ -8,4 +8,4 @@ resources:
 
 images:
   - name: quay.io/numaproj/numaplane-controller
-    newTag: latest
+    newTag: v0.14.0
