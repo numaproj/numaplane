@@ -260,7 +260,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		if rolloutInfo.PipelineIsFailed {
 			VerifyPipelineFailed(Namespace, rolloutName)
 		} else {
-			VerifyPipelineRunning(Namespace, rolloutName, false)
+			VerifyPipelineRunning(Namespace, rolloutName, true)
 		}
 	}
 
