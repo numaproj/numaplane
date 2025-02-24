@@ -379,6 +379,8 @@ spec:
                 - spec
                 type: object
               strategy:
+                description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
+                  for fields shared by Pipeline and MonoVertex
                 properties:
                   progressiveStrategy:
                     properties:
@@ -1092,6 +1094,8 @@ spec:
                 - spec
                 type: object
               strategy:
+                description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
+                  for fields shared by Pipeline and MonoVertex
                 properties:
                   progressiveStrategy:
                     properties:
