@@ -103,6 +103,12 @@ type Output struct {
 	Status     interface{}       `json:"status,omitempty"`
 }
 
+type PipelineRolloutInfo struct {
+	PipelineRolloutName          string `json:"pipelineRolloutName"`
+	PipelineIsFailed             bool   `json:"pipelineIsFailed,omitempty"`
+	OverrideSourceVertexReplicas bool   `json:"overrideSourceVertexReplicas,omitempty"`
+}
+
 func GetVerticesScaleValue() int {
 	switch getUpgradeStrategy() {
 	case config.ProgressiveStrategyID:
