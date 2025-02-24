@@ -30,6 +30,7 @@ import (
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
 	InterStepBufferService InterStepBufferService `json:"interStepBufferService"`
+	Strategy               RolloutStrategy        `json:"strategy"`
 }
 
 // InterStepBufferService includes the spec of InterStepBufferService in Numaflow
@@ -122,6 +123,11 @@ func (isbServiceRollout *ISBServiceRollout) GetRolloutObjectMeta() *metav1.Objec
 
 func (isbServiceRollout *ISBServiceRollout) GetRolloutStatus() *Status {
 	return &isbServiceRollout.Status.Status
+}
+
+// GetProgressiveStrategy is a function of the progressiveRolloutObject
+func (isbServiceRollout *ISBServiceRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	return isbServiceRollout.Spec.Strategy.Progressive
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject
