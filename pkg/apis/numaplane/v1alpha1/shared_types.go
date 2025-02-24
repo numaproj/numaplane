@@ -44,6 +44,7 @@ type RolloutStrategy struct {
 	Progressive ProgressiveStrategy `json:"progressiveStrategy"`
 }
 
+// PipelineTypeRolloutStrategy specifies the RolloutStrategy for fields shared by Pipeline and MonoVertex
 type PipelineTypeRolloutStrategy struct {
 	RolloutStrategy `json:",inline"`
 }

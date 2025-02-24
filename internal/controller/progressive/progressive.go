@@ -360,7 +360,8 @@ func processUpgradingChild(
 	}
 }
 
-// AssessUpgradingPipelineType makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
+// AssessUpgradingPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
+// if it was successful, failed, or still not known
 // Assessment:
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
@@ -373,7 +374,7 @@ func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef 
 		return apiv1.AssessmentResultUnknown, err
 	}
 
-	healthyConditions := IsNumaflowChildReady(&upgradingObjectStatus)
+	healthyConditions := checkChildConditions(&upgradingObjectStatus)
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
@@ -422,7 +423,8 @@ func startUpgradeProcess(
 	return newUpgradingChildDef, false, err
 }
 
-func IsNumaflowChildReady(upgradingObjectStatus *kubernetes.GenericStatus) bool {
+// return true if all Conditions are true
+func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) bool {
 	if len(upgradingObjectStatus.Conditions) == 0 {
 		return false
 	}
