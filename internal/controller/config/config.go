@@ -96,14 +96,16 @@ type GlobalConfig struct {
 	// If user's config doesn't exist or doesn't specify strategy, this is the default
 	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 
-	ProgressiveConfig ProgressiveConfig `json:"progressiveConfig" mapstructure:"progressiveConfig"`
+	// Configuration related to the Progressive strategy
+	Progressive ProgressiveConfig `json:"progressive" mapstructure:"progressiveConfig"`
 }
 
 type ProgressiveConfig struct {
+	// schedules for assessing upgrading child (one schedule per Kind)
 	DefaultAssessmentSchedule []DefaultAssessmentSchedule `json:"defaultAssessmentSchedule" mapstructure:"defaultAssessmentSchedule"`
 }
 
-// DefaultAssessmentSchedule defines a default schedule for each kind
+// DefaultAssessmentSchedule defines a default schedule for each Kind
 type DefaultAssessmentSchedule struct {
 	Kind string `json:"kind" mapstructure:"kind"`
 
@@ -111,11 +113,14 @@ type DefaultAssessmentSchedule struct {
 	// It is a string with 3 comma-separated integer values representing the following:
 	// 1. AssessmentDelay: indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
 	// 2. AssessmentPeriod: indicates the amount of seconds to perform assessments for after the first assessment has been performed
+	//    (if failure is indicated before that, it will not continue however)
 	// 3. AssessmentInterval: indicates how often to assess the child status once the first assessment has been performed and before the end
 	// of the assessments window defined by adding the AssessmentDelay seconds to the AssessmentPeriod seconds
 	// NOTE: the order of the values is important since each value represents a specific amount of time
 	// Example: "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
-	// If string is empty, then no schedule is defined
+	// 0 can be used for AssessmentDelay to mean no delay
+	// 0 can be used for AssessmentPeriod to not require a period of time to wait before assessment
+	// Don't use 0 for AssessmentInterval: if the result is initially "unknown", this value is still needed as a requeing time interval for checking
 	Schedule string `json:"schedule" mapstructure:"schedule"`
 }
 

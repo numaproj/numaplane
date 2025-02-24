@@ -173,7 +173,7 @@ func getChildStatusAssessmentSchedule(
 		return config.AssessmentSchedule{}, fmt.Errorf("error getting the global config for assessment processing: %w", err)
 	}
 	// get the default schedule for this kind
-	schedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule(rolloutObject.GetChildGVK().Kind)
+	schedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule(rolloutObject.GetChildGVK().Kind)
 	if err != nil {
 		return config.AssessmentSchedule{}, fmt.Errorf("error getting default child status assessment schedule for type '%s': %w", rolloutObject.GetChildGVK().Kind, err)
 	}

@@ -72,7 +72,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	assert.NoError(t, err)
 
-	assessmentSchedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule("MonoVertex")
+	assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
 	assert.NoError(t, err)
 
 	defaultExistingPromotedChildDef := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}}
