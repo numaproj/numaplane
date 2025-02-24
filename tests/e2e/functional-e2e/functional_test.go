@@ -203,7 +203,7 @@ func TestFunctionalE2E(t *testing.T) {
 	RunSpecs(t, "Functional E2E Suite")
 }
 
-var _ = Describe("Functional e2e", Serial, func() {
+var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 		CreateNumaflowControllerRollout(initialNumaflowControllerVersion)
@@ -234,7 +234,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
-		Document("Updating Pipeline directly")
+		By("Updating Pipeline directly")
 
 		// update child Pipeline
 		UpdatePipelineSpecInK8S(Namespace, pipelineRolloutName, func(pipelineSpec numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error) {
@@ -243,7 +243,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		})
 
 		if UpgradeStrategy == config.PPNDStrategyID {
-			Document("Verify that child Pipeline is not paused when an update not requiring pause is made")
+			By("Verify that child Pipeline is not paused when an update not requiring pause is made")
 			VerifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
@@ -253,7 +253,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		// get updated Pipeline again to compare spec
-		Document("Verifying self-healing")
+		By("Verifying self-healing")
 		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return !retrievedPipelineSpec.Watermark.Disabled
 		})
@@ -283,7 +283,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should pause the Pipeline if user requests it", func() {
 
-		Document("setting desiredPhase=Paused")
+		By("setting desiredPhase=Paused")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -297,7 +297,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should resume the Pipeline if user requests it", func() {
 
-		Document("setting desiredPhase=Running")
+		By("setting desiredPhase=Running")
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -307,7 +307,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should pause the MonoVertex if user requests it", func() {
 
-		Document("setting desiredPhase=Paused")
+		By("setting desiredPhase=Paused")
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
@@ -321,7 +321,7 @@ var _ = Describe("Functional e2e", Serial, func() {
 
 	It("Should resume the MonoVertex if user requests it", func() {
 
-		Document("setting desiredPhase=Running")
+		By("setting desiredPhase=Running")
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
@@ -415,20 +415,17 @@ var _ = Describe("Functional e2e", Serial, func() {
 	})
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
-		Document("verifying just 1 Pipeline")
-		Eventually(func() int {
+		CheckEventually("verifying just 1 Pipeline", func() int {
 			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
-		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+		}).Should(Equal(1))
 
-		Document("verifying just 1 MonoVertex")
-		Eventually(func() int {
+		CheckEventually("verifying just 1 MonoVertex", func() int {
 			return GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
-		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+		}).Should(Equal(1))
 
-		Document("verifying just 1 InterstepBufferService")
-		Eventually(func() int {
+		CheckEventually("verifying just 1 InterstepBufferService", func() int {
 			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
-		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+		}).Should(Equal(1))
 	})
 
 	It("Should delete the PipelineRollouts and child Pipelines", func() {
@@ -447,5 +444,4 @@ var _ = Describe("Functional e2e", Serial, func() {
 	It("Should delete the NumaflowControllerRollout and child NumaflowController", func() {
 		DeleteNumaflowControllerRollout()
 	})
-
 })
