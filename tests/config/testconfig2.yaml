@@ -1,3 +1,10 @@
 logLevel: DEBUG # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
 defaultUpgradeStrategy: "progressive"
-childStatusAssessmentSchedule: "30,90,5"
+progressiveConfig:
+  defaultAssessmentSchedule: 
+    - kind: Pipeline
+      schedule: "120,60,10"
+    - kind: MonoVertex
+      schedule: "120,60,10"
+    - kind: InterstepBufferService
+      schedule: "0,0,10"
