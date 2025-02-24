@@ -39,3 +39,18 @@ const (
 	UpgradeStrategyPPND        UpgradeStrategy = "PipelinePauseAndDrain"
 	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
+
+type RolloutStrategy struct {
+	Progressive ProgressiveStrategy `json:"progressive"`
+}
+
+// PipelineTypeRolloutStrategy specifies the RolloutStrategy for fields shared by Pipeline and MonoVertex
+type PipelineTypeRolloutStrategy struct {
+	RolloutStrategy `json:",inline"`
+}
+
+type ProgressiveStrategy struct {
+	// optional string: comma-separated list consisting of:
+	// assessmentDelay, assessmentPeriod, assessmentInterval
+	AssessmentSchedule string `json:"assessmentSchedule"`
+}

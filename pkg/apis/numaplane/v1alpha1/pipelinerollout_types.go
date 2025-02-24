@@ -33,7 +33,8 @@ const (
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
-	Pipeline Pipeline `json:"pipeline"`
+	Pipeline Pipeline                    `json:"pipeline"`
+	Strategy PipelineTypeRolloutStrategy `json:"strategy"`
 }
 
 // Pipeline includes the spec of Pipeline in Numaflow
@@ -128,6 +129,11 @@ func (pipelineRollout *PipelineRollout) GetRolloutObjectMeta() *metav1.ObjectMet
 
 func (pipelineRollout *PipelineRollout) GetRolloutStatus() *Status {
 	return &pipelineRollout.Status.Status
+}
+
+// GetProgressiveStrategy is a function of the progressiveRolloutObject
+func (pipelineRollout *PipelineRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	return pipelineRollout.Spec.Strategy.Progressive
 }
 
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject
