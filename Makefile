@@ -129,7 +129,7 @@ test: codegen fmt vet envtest ## Run unit tests.
 test-functional-e2e:
 test-ppnd-e2e:
 test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
-	GOFLAGS="-count=1" ginkgo -v ./tests/e2e/$*
+	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$*
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v1.61.0
