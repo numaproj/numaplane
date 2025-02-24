@@ -337,7 +337,7 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (AssessmentSchedule, error) {
 
 	for _, schedule := range config.DefaultAssessmentSchedule {
-		if strings.ToLower(schedule.Kind) == strings.ToLower(kind) {
+		if strings.EqualFold(schedule.Kind, kind) { // case insensitive equals check
 			return ParseAssessmentSchedule(schedule.Schedule)
 		}
 	}
