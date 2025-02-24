@@ -72,7 +72,7 @@ func Test_processUpgradingChild(t *testing.T) {
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	assert.NoError(t, err)
 
-	_, _, assessmentInterval, err := globalConfig.GetChildStatusAssessmentSchedule()
+	assessmentSchedule, err := globalConfig.ProgressiveConfig.GetChildStatusAssessmentSchedule("MonoVertex")
 	assert.NoError(t, err)
 
 	defaultExistingPromotedChildDef := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}}
@@ -92,7 +92,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
-			expectedRequeueDelay:      assessmentInterval,
+			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
 		},
 		{
@@ -105,7 +105,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-1"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
-			expectedRequeueDelay:      assessmentInterval,
+			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
 		},
 		{
@@ -124,7 +124,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-success"}}},
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
-			expectedRequeueDelay:      assessmentInterval,
+			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
 		},
 		{
