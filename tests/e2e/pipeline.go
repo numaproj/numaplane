@@ -451,7 +451,7 @@ func DeletePipelineRollout(name string) {
 // expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
-func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool, overrideSourceVertexReplicas bool) {
+func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool, overrideSourceVertexReplicas, scaleInVertex bool) {
 
 	By("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -483,7 +483,7 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
 	// when scaling to 0 is also allowed.
-	if overrideSourceVertexReplicas {
+	if overrideSourceVertexReplicas && UpgradeStrategy == config.ProgressiveStrategyID {
 		scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
 
 		pipeline, err := GetPipeline(Namespace, name)
@@ -496,6 +496,27 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		Expect(err).ShouldNot(HaveOccurred())
 		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
+	}
+	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
+	// when scaling to 0 is also allowed.
+	// NOTE: this is needed because after resuming a pipeline, only 1 replica of the vertex is created.
+	// Numaflow does not respect the scale values also in this circumstance.
+	if scaleInVertex {
+		scaleTo := int64(GetVerticesScaleValue())
+
+		pipeline, err := GetPipeline(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
+		vertexName := fmt.Sprintf("%s-%s", pipeline.GetName(), PipelineSourceVertexName)
+
+		vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Give time to the vertex pods to start
+		time.Sleep(30 * time.Second)
 	}
 
 	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
