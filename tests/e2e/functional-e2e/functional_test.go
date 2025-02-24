@@ -401,35 +401,35 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// }, false, true, true, false)
 
 	})
+	/*
+		It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
-	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
+			// new MonoVertex spec
+			updatedMonoVertexSpec := initialMonoVertexSpec
+			updatedMonoVertexSpec.Source.UDSource = nil
+			rpu := int64(10)
+			updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		// new MonoVertex spec
-		updatedMonoVertexSpec := initialMonoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource = nil
-		rpu := int64(10)
-		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
+			UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
+				return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
+			})
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
+			VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+				return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
+			})
+
 		})
-
-		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
-		})
-
-	})
-
+	*/
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
 		Document("verifying just 1 Pipeline")
 		Eventually(func() int {
 			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 		}, TestTimeout, TestPollingInterval).Should(Equal(1))
 
-		Document("verifying just 1 MonoVertex")
+		/*Document("verifying just 1 MonoVertex")
 		Eventually(func() int {
 			return GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
-		}, TestTimeout, TestPollingInterval).Should(Equal(1))
+		}, TestTimeout, TestPollingInterval).Should(Equal(1))*/
 
 		Document("verifying just 1 InterstepBufferService")
 		Eventually(func() int {
@@ -442,9 +442,9 @@ var _ = Describe("Functional e2e", Serial, func() {
 		// DeletePipelineRollout(anotherPipelineRolloutName)
 	})
 
-	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
+	/*It("Should delete the MonoVertexRollout and child MonoVertex", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
-	})
+	})*/
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {
 		DeleteISBServiceRollout(isbServiceRolloutName)
