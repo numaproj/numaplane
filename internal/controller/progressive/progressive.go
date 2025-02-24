@@ -162,7 +162,6 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	return upgradingChild, nil
 }
 
-// TODO: add unit test
 func getChildStatusAssessmentSchedule(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,

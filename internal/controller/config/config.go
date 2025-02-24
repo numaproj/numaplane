@@ -97,7 +97,7 @@ type GlobalConfig struct {
 	DefaultUpgradeStrategy USDEUserStrategy `json:"defaultUpgradeStrategy" mapstructure:"defaultUpgradeStrategy"`
 
 	// Configuration related to the Progressive strategy
-	Progressive ProgressiveConfig `json:"progressive" mapstructure:"progressiveConfig"`
+	Progressive ProgressiveConfig `json:"progressive" mapstructure:"progressive"`
 }
 
 type ProgressiveConfig struct {

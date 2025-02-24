@@ -258,3 +258,83 @@ func Test_CalculateScaleMinMaxValues(t *testing.T) {
 		})
 	}
 }
+
+func Test_getChildStatusAssessmentSchedule(t *testing.T) {
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig"))
+	assert.NoError(t, err)
+
+	testCases := []struct {
+		name             string
+		rolloutSchedule  string
+		expectedSchedule config.AssessmentSchedule
+		expectedError    bool
+	}{
+		{
+			name:            "rollout defines schedule",
+			rolloutSchedule: "300,200,10",
+			expectedSchedule: config.AssessmentSchedule{
+				Delay:    300 * time.Second,
+				Period:   200 * time.Second,
+				Interval: 10 * time.Second,
+			},
+			expectedError: false,
+		},
+		{
+			name:            "rollout doesn't define schedule, use default for the Kind",
+			rolloutSchedule: "",
+			expectedSchedule: config.AssessmentSchedule{
+				Delay:    120 * time.Second,
+				Period:   60 * time.Second,
+				Interval: 10 * time.Second,
+			},
+			expectedError: false,
+		},
+		{
+			name:            "rollout defines invalid format, so default is used for the Kind",
+			rolloutSchedule: "10,20",
+			expectedSchedule: config.AssessmentSchedule{
+				Delay:    120 * time.Second,
+				Period:   60 * time.Second,
+				Interval: 10 * time.Second,
+			},
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			pipelineRollout := apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pipeline",
+					Namespace: "my-namespace",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						// not needed for test
+					},
+					Strategy: apiv1.PipelineTypeRolloutStrategy{
+						RolloutStrategy: apiv1.RolloutStrategy{
+							Progressive: apiv1.ProgressiveStrategy{
+								AssessmentSchedule: tc.rolloutSchedule,
+							},
+						},
+					},
+				},
+			}
+
+			resultSchedule, err := getChildStatusAssessmentSchedule(context.Background(), &pipelineRollout)
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedSchedule, resultSchedule)
+			}
+		})
+	}
+}
