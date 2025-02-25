@@ -319,6 +319,14 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 
+	It("Should test nil pointer", func() {
+		// test nil pointer
+		var nilPointer *numaflowv1.PipelineSpec
+
+		nilPointer.InterStepBufferServiceName = "test-name"
+		nilPointer.Limits = &numaflowv1.PipelineLimits{ReadBatchSize: nil}
+	})
+
 })
 
 func createSlowPipelineRollout() {
