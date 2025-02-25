@@ -34,7 +34,7 @@ const (
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
 	Pipeline Pipeline                    `json:"pipeline"`
-	Strategy PipelineTypeRolloutStrategy `json:"strategy"`
+	Strategy PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
 }
 
 // Pipeline includes the spec of Pipeline in Numaflow

@@ -128,15 +128,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
-                    required:
-                    - assessmentSchedule
                     type: object
-                required:
-                - progressive
                 type: object
             required:
             - interStepBufferService
-            - strategy
             type: object
           status:
             description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
@@ -389,15 +384,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
-                    required:
-                    - assessmentSchedule
                     type: object
-                required:
-                - progressive
                 type: object
             required:
             - monoVertex
-            - strategy
             type: object
           status:
             description: MonoVertexRolloutStatus defines the observed state of MonoVertexRollout
@@ -1104,15 +1094,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
-                    required:
-                    - assessmentSchedule
                     type: object
-                required:
-                - progressive
                 type: object
             required:
             - pipeline
-            - strategy
             type: object
           status:
             description: PipelineRolloutStatus defines the observed state of PipelineRollout

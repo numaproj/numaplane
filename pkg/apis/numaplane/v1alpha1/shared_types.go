@@ -41,7 +41,7 @@ const (
 )
 
 type RolloutStrategy struct {
-	Progressive ProgressiveStrategy `json:"progressive"`
+	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
 }
 
 // PipelineTypeRolloutStrategy specifies the RolloutStrategy for fields shared by Pipeline and MonoVertex
@@ -52,5 +52,5 @@ type PipelineTypeRolloutStrategy struct {
 type ProgressiveStrategy struct {
 	// optional string: comma-separated list consisting of:
 	// assessmentDelay, assessmentPeriod, assessmentInterval
-	AssessmentSchedule string `json:"assessmentSchedule"`
+	AssessmentSchedule string `json:"assessmentSchedule,omitempty"`
 }
