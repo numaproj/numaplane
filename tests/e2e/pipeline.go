@@ -103,7 +103,10 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	numPods := len(spec.Vertices)
+	// The number of total pods is the scaled number of source vertex pods (GetSourceVertexScaleMin()) + the output vertex pod.
+	// The '-1' removes 1 from the number of pods, since the source vertex pods are all included in the GetSourceVertexScaleMin()
+	// and we should not count 1 additional from the number of total vertices.
+	numPods := len(spec.Vertices) + GetSourceVertexScaleMin() - 1
 	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
 
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))

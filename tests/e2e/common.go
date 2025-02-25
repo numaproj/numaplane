@@ -106,6 +106,15 @@ type PipelineRolloutInfo struct {
 	PipelineIsFailed    bool   `json:"pipelineIsFailed,omitempty"`
 }
 
+func GetSourceVertexScaleMin() int {
+	switch getUpgradeStrategy() {
+	case config.ProgressiveStrategyID:
+		return 5
+	default:
+		return 1
+	}
+}
+
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 	CheckEventually(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector), func() bool {
 		podsList, _ := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
