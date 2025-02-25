@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -392,21 +391,6 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
-	// when scaling to 0 is also allowed.
-	for _, rolloutInfo := range pipelineRollouts {
-		if rolloutInfo.OverrideSourceVertexReplicas && UpgradeStrategy == config.ProgressiveStrategyID {
-			scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
-			vertexName := fmt.Sprintf("%s-%s", originalPipelineNames[rolloutInfo.PipelineRolloutName], PipelineSourceVertexName)
-			vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
-			Expect(err).ShouldNot(HaveOccurred())
-			err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
-			Expect(err).ShouldNot(HaveOccurred())
-			_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
-			Expect(err).ShouldNot(HaveOccurred())
-		}
-	}
-
 	VerifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
 
 	VerifyISBSvcRolloutReady(isbServiceRolloutName)
@@ -418,7 +402,7 @@ func UpdateISBServiceRollout(
 		if rolloutInfo.PipelineIsFailed {
 			VerifyPipelineFailed(Namespace, rolloutInfo.PipelineRolloutName)
 		} else {
-			VerifyPipelineRunning(Namespace, rolloutInfo.PipelineRolloutName, true)
+			VerifyPipelineRunning(Namespace, rolloutInfo.PipelineRolloutName)
 		}
 	}
 
