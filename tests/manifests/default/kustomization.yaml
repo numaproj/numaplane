@@ -6,6 +6,7 @@ resources:
   - ./controller_def_1.4.1.yaml
   - ./controller_def_1.4.2.yaml
   - ./controller_def_1.4.3-rc3.yaml
+  - ./controller_def_1.4.3-rc33.yaml
 
 patches:
   - patch: |-
