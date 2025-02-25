@@ -1960,9 +1960,8 @@ subjects:
 ---
 apiVersion: v1
 data:
-  config.yaml: "logLevel: INFO # Supported log levels are: VERBOSE, DEBUG, INFO,
-    WARN. ERROR, FATAL will be printed regardless of the log level\nincludedResources:
-    \"group=apps,kind=Deployment;\\\ngroup=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\\\ngroup=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role\"\ndefaultUpgradeStrategy:
+  config.yaml: "logLevel: INFO # Supported log levels are: VERBOSE, DEBUG, INFO, WARN.
+    ERROR, FATAL will be printed regardless of the log level\nincludedResources: \"group=apps,kind=Deployment;\\\ngroup=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\\\ngroup=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role\"\ndefaultUpgradeStrategy:
     \"pause-and-drain\"\nprogressive:\n  defaultAssessmentSchedule: \n    - kind:
     Pipeline\n      schedule: \"120,60,10\"\n    - kind: MonoVertex\n      schedule:
     \"120,60,10\"\n    - kind: InterstepBufferService\n      schedule: \"0,0,10\"\n"
