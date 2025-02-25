@@ -91,8 +91,6 @@ const (
 	UpgradeStateLabelSelector = "numaplane.numaproj.io/upgrade-state=promoted"
 
 	LogSpacer = "================================"
-
-	SourceVertexScaleMin = 5
 )
 
 type Output struct {
@@ -106,6 +104,15 @@ type Output struct {
 type PipelineRolloutInfo struct {
 	PipelineRolloutName string `json:"pipelineRolloutName"`
 	PipelineIsFailed    bool   `json:"pipelineIsFailed,omitempty"`
+}
+
+func GetSourceVertexScaleMin() int {
+	switch getUpgradeStrategy() {
+	case config.ProgressiveStrategyID:
+		return 5
+	default:
+		return 1
+	}
 }
 
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {

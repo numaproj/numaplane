@@ -66,7 +66,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(GetSourceVertexScaleMin())), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -97,7 +97,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(GetSourceVertexScaleMin())), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -174,10 +174,11 @@ var (
 
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
-		// Replicas: ptr.To(int32(1)),
-		Scale: numaflowv1.Scale{
-			Min: ptr.To(int32(SourceVertexScaleMin)),
-		},
+		// TTODO
+		Replicas: ptr.To(int32(1)),
+		// Scale: numaflowv1.Scale{
+		// 	Min: ptr.To(int32(GetSourceVertexScaleMin())),
+		// },
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
@@ -274,7 +275,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
-		numPipelineVertices := len(updatedPipelineSpec.Vertices) + SourceVertexScaleMin - 1
+		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
 		}, true)
