@@ -396,23 +396,23 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			})
 
 			time.Sleep(2 * time.Second)
-
-			It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
-
-				// new ISBService spec
-				updatedISBServiceSpec := isbServiceSpec
-				updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
-
-				UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName, OverrideSourceVertexReplicas: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-					return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-				}, true, false)
-
-				// UpdateISBServiceRollout(isbServiceRolloutName, []string{pipelineRolloutName, anotherPipelineRolloutName}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-				// 	return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-				// }, true, false, true, false)
-
-			})
 	*/
+	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
+
+		// new ISBService spec
+		updatedISBServiceSpec := isbServiceSpec
+		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
+
+		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName, OverrideSourceVertexReplicas: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+		}, true, false)
+
+		// UpdateISBServiceRollout(isbServiceRolloutName, []string{pipelineRolloutName, anotherPipelineRolloutName}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		// 	return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+		// }, true, false, true, false)
+
+	})
+
 	It("Should update the child ISBService updating a no-data-loss field", func() {
 
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecNoDataLossField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
