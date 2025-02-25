@@ -276,6 +276,12 @@ func processUpgradingChild(
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
 	}
 
+	// check for Promote label here to force success logic
+	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
+		childStatus.ForcedSuccess = true
+		return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
+	}
+
 	switch assessment {
 	case apiv1.AssessmentResultFailure:
 
@@ -326,27 +332,7 @@ func processUpgradingChild(
 
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
-
-			// Label the new child as promoted and then remove the label from the old one
-			numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
-			reasonSuccess := common.LabelValueProgressiveSuccess
-			err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
-			if err != nil {
-				return false, false, 0, err
-			}
-
-			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
-			if err != nil {
-				return false, false, 0, err
-			}
-
-			rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-			childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
-			rolloutObject.SetUpgradingChildStatus(childStatus)
-			rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
-
-			// we're done
-			return true, false, assessmentSchedule.Interval, nil
+			return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
 		} else {
 			return false, false, assessmentSchedule.Interval, nil
 		}
@@ -388,6 +374,39 @@ func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef 
 	}
 
 	return apiv1.AssessmentResultUnknown, nil
+}
+
+func declareSuccess(ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	childStatus *apiv1.UpgradingChildStatus,
+	assessmentInterval time.Duration,
+	c client.Client,
+) (bool, bool, time.Duration, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// Label the new child as promoted and then remove the label from the old one
+	numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
+	reasonSuccess := common.LabelValueProgressiveSuccess
+	err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+	if err != nil {
+		return false, false, 0, err
+	}
+
+	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
+	if err != nil {
+		return false, false, 0, err
+	}
+
+	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
+	childStatus.AssessmentResult = apiv1.AssessmentResultSuccess
+	rolloutObject.SetUpgradingChildStatus(childStatus)
+	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
+
+	// we're done
+	return true, false, assessmentInterval, nil
+
 }
 
 // return:

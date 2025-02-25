@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -153,6 +154,15 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
+		{
+			name:                      "force promote",
+			rolloutObject:             forcePromoteMonoVertexRollout.DeepCopy(),
+			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}},
+			expectedDone:              false,
+			expectedNewChildCreated:   false,
+			expectedRequeueDelay:      assessmentSchedule.Interval,
+			expectedError:             nil,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -184,6 +194,20 @@ func setMonoVertexProgressiveStatus(mvRollout *apiv1.MonoVertexRollout, upgradin
 var defaultMonoVertexRollout = &apiv1.MonoVertexRollout{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "test",
+	},
+	Status: apiv1.MonoVertexRolloutStatus{
+
+		ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+			UpgradingMonoVertexStatus: nil,
+			PromotedMonoVertexStatus:  nil,
+		},
+	},
+}
+
+var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
+	ObjectMeta: metav1.ObjectMeta{
+		Name:   "test",
+		Labels: map[string]string{common.LabelKeyNumaplanePromote: "true"},
 	},
 	Status: apiv1.MonoVertexRolloutStatus{
 
