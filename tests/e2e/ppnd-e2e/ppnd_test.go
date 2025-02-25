@@ -175,7 +175,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
-			}, true, false, false)
+			}, true)
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
@@ -254,7 +254,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change
 		UpdatePipelineRollout(failedPipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, false)
+		}, true)
 
 		time.Sleep(5 * time.Second)
 
@@ -342,7 +342,7 @@ func createSlowPipelineRollout() {
 		return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 	})
 
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 	VerifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
@@ -372,6 +372,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 
 }

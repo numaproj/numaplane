@@ -51,14 +51,14 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(GetVerticesScaleValue())
+	numVertices         = int32(1)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	currentPipelineSpec numaflowv1.PipelineSpec
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: PipelineSourceVertexName,
+				Name: "in",
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -79,7 +79,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: PipelineSourceVertexName,
+				From: "in",
 				To:   "out",
 			},
 		},
@@ -89,7 +89,7 @@ var (
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: PipelineSourceVertexName,
+				Name: "in",
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -119,7 +119,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: PipelineSourceVertexName,
+				From: "in",
 				To:   "cat",
 			},
 			{
@@ -263,7 +263,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		VerifyPipelineRunning(Namespace, pipelineRolloutName, true)
+		VerifyPipelineRunning(Namespace, pipelineRolloutName)
 	})
 
 	time.Sleep(2 * time.Second)
@@ -273,7 +273,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true, true, false)
+		}, true)
 
 	})
 
@@ -288,7 +288,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false, false, false)
+		}, false)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
@@ -302,7 +302,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false, false, true)
+		}, false)
 	})
 
 	It("Should pause the MonoVertex if user requests it", func() {
@@ -356,7 +356,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 
-		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName, OverrideSourceVertexReplicas: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		}, true, false)
 
@@ -386,7 +386,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child ISBService updating a recreate field", func() {
 
-		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName, OverrideSourceVertexReplicas: true}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 		}, false, true)
 
