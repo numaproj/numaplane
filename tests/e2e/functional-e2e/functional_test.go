@@ -174,11 +174,9 @@ var (
 
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
-		// TTODO
-		Replicas: ptr.To(int32(1)),
-		// Scale: numaflowv1.Scale{
-		// 	Min: ptr.To(int32(GetSourceVertexScaleMin())),
-		// },
+		Scale: numaflowv1.Scale{
+			Min: ptr.To(int32(GetSourceVertexScaleMin())),
+		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
