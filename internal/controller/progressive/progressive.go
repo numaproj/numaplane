@@ -245,6 +245,12 @@ func processUpgradingChild(
 	}
 	childStatus = rolloutObject.GetUpgradingChildStatus()
 
+	// check for Promote label here to force success logic
+	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
+		childStatus.ForcedSuccess = true
+		return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
+	}
+
 	// If no AssessmentStartTime has been set already, calculate it and set it
 	if childStatus.AssessmentStartTime == nil {
 		// Add to the current time the assessmentSchedule.Delay and set the AssessmentStartTime in the Rollout object
@@ -274,12 +280,6 @@ func processUpgradingChild(
 		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
 		childStatus.AssessmentEndTime = &assessmentEndTime
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
-	}
-
-	// check for Promote label here to force success logic
-	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
-		childStatus.ForcedSuccess = true
-		return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
 	}
 
 	switch assessment {
