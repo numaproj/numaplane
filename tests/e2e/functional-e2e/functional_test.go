@@ -51,10 +51,11 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
-	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	currentPipelineSpec numaflowv1.PipelineSpec
-	initialPipelineSpec = numaflowv1.PipelineSpec{
+	sourceVertexScaleMax = int32(9)
+	numVertices          = int32(1)
+	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
+	currentPipelineSpec  numaflowv1.PipelineSpec
+	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -65,7 +66,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -96,7 +97,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -173,7 +174,10 @@ var (
 
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
-		Replicas: ptr.To(int32(1)),
+		// Replicas: ptr.To(int32(1)),
+		Scale: numaflowv1.Scale{
+			Min: ptr.To(int32(SourceVertexScaleMin)),
+		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
@@ -270,7 +274,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
-		numPipelineVertices := len(updatedPipelineSpec.Vertices)
+		numPipelineVertices := len(updatedPipelineSpec.Vertices) + SourceVertexScaleMin - 1
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
 		}, true)
