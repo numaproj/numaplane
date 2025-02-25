@@ -376,27 +376,27 @@ var _ = Describe("Functional e2e:", Serial, func() {
 				})
 
 			})
-
-			time.Sleep(2 * time.Second)
-
-			It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
-				UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-			})
-
-			time.Sleep(2 * time.Second)
-
-			It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
-				UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
-			})
-
-			time.Sleep(2 * time.Second)
-
-			It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
-				UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-			})
-
-			time.Sleep(2 * time.Second)
 	*/
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
+		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
+		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
+	})
+
+	time.Sleep(2 * time.Second)
+
+	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
+		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
+	})
+
+	time.Sleep(2 * time.Second)
+
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
 
 		// new ISBService spec
