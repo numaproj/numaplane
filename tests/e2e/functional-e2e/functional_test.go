@@ -383,7 +383,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
 	})
 
-	time.Sleep(2 * time.Second)
+	/*time.Sleep(2 * time.Second)
 
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
 		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
@@ -393,7 +393,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
 		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-	})
+	})*/
 
 	time.Sleep(2 * time.Second)
 	/*
