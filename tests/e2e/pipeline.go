@@ -103,10 +103,10 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	// The number of total pods is the scaled number of source vertex pods (GetSourceVertexScaleMin()) + the output vertex pod.
-	// The '-1' removes 1 from the number of pods, since the source vertex pods are all included in the GetSourceVertexScaleMin()
+	// The number of total pods is the scaled number of source vertex pods (SourceVertexScaleMin) + the output vertex pod.
+	// The '-1' removes 1 from the number of pods, since the source vertex pods are all included in the SourceVertexScaleMin
 	// and we should not count 1 additional from the number of total vertices.
-	numPods := len(spec.Vertices) + GetSourceVertexScaleMin() - 1
+	numPods := len(spec.Vertices) + SourceVertexScaleMin - 1
 	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
 
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
@@ -122,7 +122,6 @@ func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
-
 		})
 	// this happens too fast to verify it:
 	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
