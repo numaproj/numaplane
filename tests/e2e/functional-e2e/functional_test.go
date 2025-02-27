@@ -51,6 +51,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	sourceVertexScaleMin = int32(5)
 	sourceVertexScaleMax = int32(9)
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
@@ -66,7 +67,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -100,7 +101,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -178,7 +179,7 @@ var (
 	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
-			Min: ptr.To(int32(SourceVertexScaleMin)),
+			Min: &sourceVertexScaleMin,
 		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -210,7 +211,7 @@ func TestFunctionalE2E(t *testing.T) {
 }
 
 var _ = Describe("Functional e2e:", Serial, func() {
-	// TODO: try to elimiate these assignments
+	// TODO: try to eliminate these assignments
 	currentMonoVertexSpec = initialMonoVertexSpec
 	currentPipelineSpec = updatedPipelineSpec
 

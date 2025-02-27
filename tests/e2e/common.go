@@ -92,8 +92,6 @@ const (
 	UpgradeStateLabelSelector = "numaplane.numaproj.io/upgrade-state=promoted"
 
 	LogSpacer = "================================"
-
-	SourceVertexScaleMin = 5
 )
 
 type Output struct {
@@ -108,6 +106,13 @@ type PipelineRolloutInfo struct {
 	PipelineRolloutName string `json:"pipelineRolloutName"`
 	PipelineIsFailed    bool   `json:"pipelineIsFailed,omitempty"`
 }
+
+type ComponentType = string
+
+const (
+	ComponentVertex     ComponentType = "vertex"
+	ComponentMonoVertex ComponentType = "mono-vertex"
+)
 
 func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 	CheckEventually(fmt.Sprintf("verifying %d Pods running with label selector %q", numPods, labelSelector), func() bool {
@@ -125,18 +130,32 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 }
 
-func verifyVerticesPodsRunning(namespace, pipelineName string, specVertices []numaflowv1.AbstractVertex) {
-	CheckEventually("verifying that the correct number of Pods is running for each Vertex", func() bool {
+func verifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices []numaflowv1.AbstractVertex, component ComponentType) {
+	baseLabelSelector := fmt.Sprintf("%s=%s,%s=%s",
+		numaflowv1.KeyPartOf, "numaflow",
+		numaflowv1.KeyComponent, component,
+	)
 
-		baseLabelSelector := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
-			numaflowv1.KeyPartOf, "numaflow",
-			numaflowv1.KeyComponent, "vertex",
-			numaflowv1.KeyPipelineName, pipelineName,
-		)
+	msg := ""
+	switch component {
+	case ComponentVertex:
+		baseLabelSelector = fmt.Sprintf("%s,%s=%s", baseLabelSelector, numaflowv1.KeyPipelineName, rolloutChildName)
+		msg = "for each Pipeline Vertex"
+	case ComponentMonoVertex:
+		baseLabelSelector = fmt.Sprintf("%s,%s=%s", baseLabelSelector, numaflowv1.KeyMonoVertexName, rolloutChildName)
+		msg = "for the MonoVertex"
+	}
 
+	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s", msg), func() bool {
 		for _, vtx := range specVertices {
-			// vtxLabelSelector := fmt.Sprintf("%s=%s", numaflowv1.KeyVertexName, vtx.Name) // this only works for pipeline (not monovertex)
-			vtxLabelSelector := fmt.Sprintf("app.kubernetes.io/name=%s-%s", pipelineName, vtx.Name) // this should work also for monovertex
+			vtxLabelSelector := ""
+			switch component {
+			case ComponentVertex:
+				vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s-%s", rolloutChildName, vtx.Name)
+			case ComponentMonoVertex:
+				vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s", rolloutChildName)
+			}
+
 			labelSelector := fmt.Sprintf("%s,%s", baseLabelSelector, vtxLabelSelector)
 
 			min := vtx.Scale.Min

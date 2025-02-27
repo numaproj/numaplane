@@ -104,11 +104,11 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNuma
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices) once the related Numaflow bug is fixed
+	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex) once the related Numaflow bug is fixed
 	if UpgradeStrategy == config.PPNDStrategyID && tmpNumaflowBugOverride != nil && len(tmpNumaflowBugOverride) == 1 && tmpNumaflowBugOverride[0] {
 		verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
 	} else {
-		verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices)
+		verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
 	}
 
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
@@ -506,6 +506,8 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelinePaused(Namespace, name)
 	case numaflowv1.PipelinePhaseFailed:
 		VerifyPipelineFailed(Namespace, name)
+	case numaflowv1.PipelinePhaseRunning:
+		VerifyPipelineRunning(Namespace, name)
 	}
 
 }
