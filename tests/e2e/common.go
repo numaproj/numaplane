@@ -135,8 +135,7 @@ func verifyVerticesPodsRunning(namespace, pipelineName string, specVertices []nu
 		)
 
 		for _, vtx := range specVertices {
-			// TTODO
-			// vtxLabelSelector := fmt.Sprintf("%s=%s", numaflowv1.KeyVertexName, vtx.Name) // this only works for pipeline
+			// vtxLabelSelector := fmt.Sprintf("%s=%s", numaflowv1.KeyVertexName, vtx.Name) // this only works for pipeline (not monovertex)
 			vtxLabelSelector := fmt.Sprintf("app.kubernetes.io/name=%s-%s", pipelineName, vtx.Name) // this should work also for monovertex
 			labelSelector := fmt.Sprintf("%s,%s", baseLabelSelector, vtxLabelSelector)
 
@@ -152,7 +151,7 @@ func verifyVerticesPodsRunning(namespace, pipelineName string, specVertices []nu
 
 			podsList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 			if err != nil {
-				panic(err) // TTODO: panic or something else?
+				return false
 			}
 
 			if podsList == nil {

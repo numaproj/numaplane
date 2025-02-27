@@ -104,11 +104,7 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNuma
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	// // TTODO
-	// // The number of total pods is the scaled number of source vertex pods (SourceVertexScaleMin) + the output vertex pod.
-	// // The '-1' removes 1 from the number of pods, since the source vertex pods are all included in the SourceVertexScaleMin
-	// // and we should not count 1 additional from the number of total vertices.
-	// numPods := len(spec.Vertices) + SourceVertexScaleMin - 1
+	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices) once the related Numaflow bug is fixed
 	if UpgradeStrategy == config.PPNDStrategyID && tmpNumaflowBugOverride != nil && len(tmpNumaflowBugOverride) == 1 && tmpNumaflowBugOverride[0] {
 		verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
 	} else {
