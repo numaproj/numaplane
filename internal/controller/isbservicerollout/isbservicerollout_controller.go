@@ -123,7 +123,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	ctx = logger.WithLogger(ctx, numaLogger)
 	r.customMetrics.ISBServiceROSyncs.WithLabelValues().Inc()
 
-	isbServiceRollout := &apiv1.ISBServiceRollout{}
+	/*isbServiceRollout := &apiv1.ISBServiceRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, isbServiceRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -131,6 +131,10 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			r.ErrorHandler(isbServiceRollout, err, "GetISBServiceFailed", "Failed to get isb service rollout")
 			return ctrl.Result{}, err
 		}
+	}*/
+	isbServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(req.NamespacedName.Namespace).Get(ctx, req.NamespacedName.Name, metav1.GetOptions{})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
 	}
 
 	// save off a copy of the original before we modify it
@@ -426,12 +430,12 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 		// Get the ISBServiceRollout live resource so we can grab the ProgressiveStatus from that for our own local isbServiceRollout
 		// (Note we don't copy the entire Status in case we've updated something locally)
-		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
+		/*liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			return 0, fmt.Errorf("error getting the live ISBServiceRollout for assessment processing: %w", err)
 		}
 
-		isbServiceRollout.Status.ProgressiveStatus = *liveISBServiceRollout.Status.ProgressiveStatus.DeepCopy()
+		isbServiceRollout.Status.ProgressiveStatus = *liveISBServiceRollout.Status.ProgressiveStatus.DeepCopy()*/
 
 		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
 		if err != nil {

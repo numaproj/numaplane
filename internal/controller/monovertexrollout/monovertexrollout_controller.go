@@ -123,13 +123,17 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	ctx = logger.WithLogger(ctx, numaLogger)
 	r.customMetrics.MonoVertexROSyncs.WithLabelValues().Inc()
 
-	monoVertexRollout := &apiv1.MonoVertexRollout{}
+	/*monoVertexRollout := &apiv1.MonoVertexRollout{}
 	if err := r.client.Get(ctx, req.NamespacedName, monoVertexRollout); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
 			r.ErrorHandler(monoVertexRollout, err, "GetMonoVertexFailed", "Failed to get MonoVertexRollout")
 		}
+	}*/
+	monoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(req.NamespacedName.Namespace).Get(ctx, req.NamespacedName.Name, metav1.GetOptions{})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
 	}
 
 	// store copy of original rollout
@@ -336,12 +340,12 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 		// Get the MonoVertexRollout live resource so we can grab the ProgressiveStatus from that for our own local monoVertexRollout
 		// (Note we don't copy the entire Status in case we've updated something locally)
-		liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
+		/*liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			return 0, fmt.Errorf("error getting the live MonoVertexRollout for assessment processing: %w", err)
 		}
 
-		monoVertexRollout.Status.ProgressiveStatus = *liveMonoVertexRollout.Status.ProgressiveStatus.DeepCopy()
+		monoVertexRollout.Status.ProgressiveStatus = *liveMonoVertexRollout.Status.ProgressiveStatus.DeepCopy()*/
 
 		// don't risk out-of-date cache while performing Progressive strategy - get
 		// the most current version of the MonoVertex just in case
