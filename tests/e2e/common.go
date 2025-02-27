@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -120,9 +121,58 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 			return true
 		}
 		return false
-
 	}).WithTimeout(TestTimeout).Should(BeTrue())
 
+}
+
+func verifyVerticesPodsRunning(namespace, pipelineName string, specVertices []numaflowv1.AbstractVertex) {
+	CheckEventually("verifying that the correct number of Pods is running for each Vertex", func() bool {
+
+		baseLabelSelector := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
+			numaflowv1.KeyPartOf, "numaflow",
+			numaflowv1.KeyComponent, "vertex",
+			numaflowv1.KeyPipelineName, pipelineName,
+		)
+
+		for _, vtx := range specVertices {
+			// TTODO
+			// vtxLabelSelector := fmt.Sprintf("%s=%s", numaflowv1.KeyVertexName, vtx.Name) // this only works for pipeline
+			vtxLabelSelector := fmt.Sprintf("app.kubernetes.io/name=%s-%s", pipelineName, vtx.Name) // this should work also for monovertex
+			labelSelector := fmt.Sprintf("%s,%s", baseLabelSelector, vtxLabelSelector)
+
+			min := vtx.Scale.Min
+			if min == nil {
+				min = ptr.To(int32(0))
+			}
+
+			max := vtx.Scale.Max
+			if max == nil {
+				max = ptr.To(int32(numaflowv1.DefaultMaxReplicas))
+			}
+
+			podsList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+			if err != nil {
+				panic(err) // TTODO: panic or something else?
+			}
+
+			if podsList == nil {
+				return false
+			}
+
+			vtxPodsCount := int32(len(podsList.Items))
+			if vtxPodsCount < *min || vtxPodsCount > *max {
+				return false
+			}
+
+			for _, pod := range podsList.Items {
+				if pod.Status.Phase != "Running" {
+					return false
+				}
+			}
+		}
+
+		return true
+	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
 
 func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) *metav1.Condition {

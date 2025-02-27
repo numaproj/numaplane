@@ -166,6 +166,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			createSlowPipelineRollout()
 
 			By("Updating Pipeline Topology to cause a PPND change")
+			// This modifies the vertices resulting in having only in and out vertices (basically removes cat vertex)
 			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
 			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
 			slowPipelineSpec.Edges = []numaflowv1.Edge{
@@ -370,6 +371,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, true)
 
 }
