@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -50,9 +51,10 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
-	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	initialPipelineSpec = numaflowv1.PipelineSpec{
+	sourceVertexScaleMax = int32(9)
+	numVertices          = int32(1)
+	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
+	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -63,7 +65,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -94,7 +96,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: ptr.To(int32(SourceVertexScaleMin)), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -262,8 +264,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	})
 
-	time.Sleep(5 * time.Second)
-
 	It("Should update an ISBService even if the Pipeline is failed", func() {
 
 		// add bad edge to automatically fail Pipeline
@@ -291,8 +291,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
-
-	time.Sleep(5 * time.Second)
 
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
