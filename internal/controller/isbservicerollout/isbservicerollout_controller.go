@@ -778,7 +778,31 @@ func (r *ISBServiceRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
-	return r.client.Status().Update(ctx, isbServiceRollout)
+
+	numaLogger := logger.FromContext(ctx)
+
+	err := r.client.Status().Update(ctx, isbServiceRollout)
+
+	if err != nil && apierrors.IsConflict(err) {
+		// there was a Resource Version conflict error (i.e. an update was made to ISBServiceRollout after the version we retrieved), so retry using the latest Resource Version: get the ISBServiceRollout live resource
+		// and attach our Status to it.
+		// The reason this is okay is because we are the only ones who write the Status, and because we retrieved the live version of this ISBServiceRollout at the beginning of the reconciliation
+		// Therefore, we know that the Status is totally current.
+		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting the live ISBServiceRollout after attempting to update the ISBServiceRollout Status: %w", err)
+		}
+		status := isbServiceRollout.Status // save off the Status
+		*isbServiceRollout = *liveISBServiceRollout
+		numaLogger.Debug("resource version conflict error after getting latest ISBServiceRollout Status: try again with latest resource version")
+		isbServiceRollout.Status = status
+		err = r.client.Status().Update(ctx, isbServiceRollout)
+		if err != nil {
+			return fmt.Errorf("consecutive errors attempting to update ISBServiceRolloutStatus: %w", err)
+		}
+		return nil
+	}
+	return err
 }
 
 func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error) error {

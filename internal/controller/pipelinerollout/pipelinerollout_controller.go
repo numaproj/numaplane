@@ -813,8 +813,30 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
+	numaLogger := logger.FromContext(ctx)
 
-	return r.client.Status().Update(ctx, pipelineRollout)
+	err := r.client.Status().Update(ctx, pipelineRollout)
+
+	if err != nil && apierrors.IsConflict(err) {
+		// there was a Resource Version conflict error (i.e. an update was made to PipelineRollout after the version we retrieved), so retry using the latest Resource Version: get the PipelineRollout live resource
+		// and attach our Status to it.
+		// The reason this is okay is because we are the only ones who write the Status, and because we retrieved the live version of this ISBServiceRollout at the beginning of the reconciliation
+		// Therefore, we know that the Status is totally current.
+		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting the live PipelineRollout after attempting to update the PipelineRollout Status: %w", err)
+		}
+		status := pipelineRollout.Status // save off the Status
+		*pipelineRollout = *livePipelineRollout
+		numaLogger.Debug("resource version conflict error after getting latest PipelineRollout Status: try again with latest resource version")
+		pipelineRollout.Status = status
+		err = r.client.Status().Update(ctx, pipelineRollout)
+		if err != nil {
+			return fmt.Errorf("consecutive errors attempting to update PipelineRolloutStatus: %w", err)
+		}
+		return nil
+	}
+	return err
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
