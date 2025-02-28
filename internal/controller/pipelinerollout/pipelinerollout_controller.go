@@ -827,7 +827,15 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	err := r.client.Status().Update(ctx, pipelineRollout)
+
+	// temporary for debugging:
+	if err != nil && !apierrors.IsConflict(err) {
+		fmt.Printf("deletethis: error updating status is not of conflict type: %v\n", err)
+	}
+
 	if err != nil && apierrors.IsConflict(err) {
+		fmt.Printf("deletethis: error updating status is of conflict type: %v\n", err)
+
 		// there was a Resource Version conflict error (i.e. an update was made to PipelineRollout after the version we retrieved), so retry using the latest Resource Version: get the PipelineRollout live resource
 		// and attach our Status to it
 		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
@@ -835,12 +843,16 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 			return fmt.Errorf("error getting the live PipelineRollout after attempting to update the PipelineRollout Status: %w", err)
 		}
 		status := pipelineRollout.Status // save off the Status
+		originalResourceVersion := pipelineRollout.ResourceVersion
 		*pipelineRollout = *livePipelineRollout
+		newResourceVersion := pipelineRollout.ResourceVersion
+		fmt.Printf("deletethis: original resource version=%q, new resource version=%q\n", originalResourceVersion, newResourceVersion)
 		pipelineRollout.Status = status
 		err = r.client.Status().Update(ctx, pipelineRollout)
 		if err != nil {
 			return fmt.Errorf("consecutive errors attemptingt to update PipelineRolloutStatus: %w", err)
 		}
+		return nil
 	}
 	return err
 }
