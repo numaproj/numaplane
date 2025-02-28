@@ -36,13 +36,11 @@ import (
 )
 
 const (
-	isbServiceRolloutName            = "test-isbservice-rollout"
-	slowPipelineRolloutName          = "slow-pipeline-rollout"
-	failedPipelineRolloutName        = "failed-pipeline-rollout"
-	initialNumaflowControllerVersion = "1.4.1"
-	updatedNumaflowControllerVersion = "1.4.2"
-	initialJetstreamVersion          = "2.10.17"
-	updatedJetstreamVersion          = "2.10.11"
+	isbServiceRolloutName     = "test-isbservice-rollout"
+	slowPipelineRolloutName   = "slow-pipeline-rollout"
+	failedPipelineRolloutName = "failed-pipeline-rollout"
+	initialJetstreamVersion   = "2.10.17"
+	updatedJetstreamVersion   = "2.10.11"
 )
 
 var (
@@ -156,7 +154,7 @@ func TestPauseAndDrainE2E(t *testing.T) {
 var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(initialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
 	})
 
@@ -223,7 +221,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			By("Updating Numaflow controller to cause a PPND change")
 			updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
+				Controller: apiv1.Controller{Version: UpdatedNumaflowControllerVersion},
 			}
 			UpdateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
 				rollout.Spec = updatedNumaflowControllerROSpec
@@ -237,7 +235,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			// confirm update
 			VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 				colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
-				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
+				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+UpdatedNumaflowControllerVersion
 			})
 
 		}
@@ -305,7 +303,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		By("Updating Numaflow controller to cause a PPND change")
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
+		UpdateNumaflowControllerRollout(UpdatedNumaflowControllerVersion, InitialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
 
 		time.Sleep(5 * time.Second)
 
@@ -371,6 +369,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, true)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 
 }

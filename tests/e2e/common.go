@@ -67,6 +67,9 @@ var (
 )
 
 const (
+	InitialNumaflowControllerVersion = "1.4.3-rc3"
+	UpdatedNumaflowControllerVersion = "1.4.3-rc33" // note this one is really a clone of "1.4.3-rc3"
+
 	Namespace = "numaplane-system"
 
 	ControllerOutputPath = "../output/controllers"

@@ -84,8 +84,7 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-// TODO: remove tmpNumaflowBugOverride once the Numaflow bug (scale config not applied to replicas field) is fixed
-func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNumaflowBugOverride ...bool) {
+func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	By("Verifying that the Pipeline is running")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -104,13 +103,7 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNuma
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex) once the related Numaflow bug is fixed
-	if UpgradeStrategy == config.PPNDStrategyID && tmpNumaflowBugOverride != nil && len(tmpNumaflowBugOverride) == 1 && tmpNumaflowBugOverride[0] {
-		verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
-	} else {
-		verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
-	}
-
+	verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 }
 
