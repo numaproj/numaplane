@@ -129,7 +129,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: createMonoVertex("test-success"),
 			expectedDone:              true,
 			expectedNewChildCreated:   false,
-			expectedRequeueDelay:      assessmentSchedule.Interval,
+			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
 		{
@@ -181,7 +181,7 @@ func Test_processUpgradingChild(t *testing.T) {
 			existingUpgradingChildDef: createMonoVertex("test-full-promote"),
 			expectedDone:              true,
 			expectedNewChildCreated:   false,
-			expectedRequeueDelay:      assessmentSchedule.Interval,
+			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
 	}
