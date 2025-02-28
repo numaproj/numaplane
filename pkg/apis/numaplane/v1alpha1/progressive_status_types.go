@@ -40,6 +40,8 @@ type UpgradingChildStatus struct {
 	AssessmentStartTime *metav1.Time `json:"assessmentStartTime,omitempty"`
 	// AssessmentEndTime indicates the time after which no more assessments will be performed
 	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
+	// ForcedSuccess indicates if this promotion was forced to complete
+	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 }
 
 // ScaleValues stores the original scale definition, scaleTo value, and actual scale value of a pipeline or monovertex vertex

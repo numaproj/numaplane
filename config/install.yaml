@@ -284,6 +284,10 @@ spec:
                           which the assessment result will be computed
                         format: date-time
                         type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
                       name:
                         description: Name of the upgrading child
                         type: string
@@ -559,6 +563,10 @@ spec:
                           which the assessment result will be computed
                         format: date-time
                         type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
                       name:
                         description: Name of the upgrading child
                         type: string
@@ -1287,6 +1295,10 @@ spec:
                           which the assessment result will be computed
                         format: date-time
                         type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
                       interStepBufferServiceName:
                         type: string
                       name:

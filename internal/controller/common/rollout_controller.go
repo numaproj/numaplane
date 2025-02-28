@@ -170,6 +170,9 @@ func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
 	var patchJson string
 	labels := childObject.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
 	labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	if upgradeStateReason != nil {
 		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
