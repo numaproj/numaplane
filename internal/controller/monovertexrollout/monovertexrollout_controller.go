@@ -499,7 +499,29 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, mono
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {
-	return r.client.Status().Update(ctx, monoVertexRollout)
+	numaLogger := logger.FromContext(ctx)
+	err := r.client.Status().Update(ctx, monoVertexRollout)
+
+	if err != nil && apierrors.IsConflict(err) {
+		// there was a Resource Version conflict error (i.e. an update was made to MonoVertexRollout after the version we retrieved), so retry using the latest Resource Version: get the MonoVertexRollout live resource
+		// and attach our Status to it
+		// The reason this is okay is because we are the only ones who write the Status, and because we retrieved the live version of this ISBServiceRollout at the beginning of the reconciliation
+		// Therefore, we know that the Status is totally current.
+		liveRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting the live MonoVertexRollout after attempting to update the MonoVertexRollout Status: %w", err)
+		}
+		status := monoVertexRollout.Status // save off the Status
+		*monoVertexRollout = *liveRollout
+		numaLogger.Debug("resource version conflict error after getting latest MonoVertexRollout Status: try again with latest resource version")
+		monoVertexRollout.Status = status
+		err = r.client.Status().Update(ctx, monoVertexRollout)
+		if err != nil {
+			return fmt.Errorf("consecutive errors attempting to update MonoVertexRollout: %w", err)
+		}
+		return nil
+	}
+	return err
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, err error) error {
