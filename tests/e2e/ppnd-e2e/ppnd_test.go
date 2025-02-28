@@ -36,13 +36,11 @@ import (
 )
 
 const (
-	isbServiceRolloutName            = "test-isbservice-rollout"
-	slowPipelineRolloutName          = "slow-pipeline-rollout"
-	failedPipelineRolloutName        = "failed-pipeline-rollout"
-	initialNumaflowControllerVersion = "1.4.1"
-	updatedNumaflowControllerVersion = "1.4.2"
-	initialJetstreamVersion          = "2.10.17"
-	updatedJetstreamVersion          = "2.10.11"
+	isbServiceRolloutName     = "test-isbservice-rollout"
+	slowPipelineRolloutName   = "slow-pipeline-rollout"
+	failedPipelineRolloutName = "failed-pipeline-rollout"
+	initialJetstreamVersion   = "2.10.17"
+	updatedJetstreamVersion   = "2.10.11"
 )
 
 var (
@@ -50,9 +48,11 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
-	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	initialPipelineSpec = numaflowv1.PipelineSpec{
+	sourceVertexScaleMin = int32(5)
+	sourceVertexScaleMax = int32(9)
+	numVertices          = int32(1)
+	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
+	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -63,7 +63,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -94,7 +94,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -154,7 +154,7 @@ func TestPauseAndDrainE2E(t *testing.T) {
 var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(initialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
 	})
 
@@ -164,6 +164,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			createSlowPipelineRollout()
 
 			By("Updating Pipeline Topology to cause a PPND change")
+			// This modifies the vertices resulting in having only in and out vertices (basically removes cat vertex)
 			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
 			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
 			slowPipelineSpec.Edges = []numaflowv1.Edge{
@@ -175,7 +176,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
-			}, true, false, false)
+			}, true)
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
@@ -220,7 +221,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			By("Updating Numaflow controller to cause a PPND change")
 			updatedNumaflowControllerROSpec := apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{Version: updatedNumaflowControllerVersion},
+				Controller: apiv1.Controller{Version: UpdatedNumaflowControllerVersion},
 			}
 			UpdateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
 				rollout.Spec = updatedNumaflowControllerROSpec
@@ -234,7 +235,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			// confirm update
 			VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
 				colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
-				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+updatedNumaflowControllerVersion
+				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+UpdatedNumaflowControllerVersion
 			})
 
 		}
@@ -254,15 +255,13 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change
 		UpdatePipelineRollout(failedPipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, false)
+		}, true)
 
 		time.Sleep(5 * time.Second)
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
-
-	time.Sleep(5 * time.Second)
 
 	It("Should update an ISBService even if the Pipeline is failed", func() {
 
@@ -292,8 +291,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	})
 
-	time.Sleep(5 * time.Second)
-
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
 		// add bad edge to automatically fail Pipeline
@@ -306,7 +303,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		time.Sleep(5 * time.Second)
 
 		By("Updating Numaflow controller to cause a PPND change")
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, initialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
+		UpdateNumaflowControllerRollout(UpdatedNumaflowControllerVersion, InitialNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, true)
 
 		time.Sleep(5 * time.Second)
 
@@ -342,7 +339,7 @@ func createSlowPipelineRollout() {
 		return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 	})
 
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 	VerifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
@@ -372,6 +369,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, false)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 
 }

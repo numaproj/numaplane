@@ -166,15 +166,11 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	ctx = logger.WithLogger(ctx, numaLogger)
 	r.customMetrics.PipelineROSyncs.WithLabelValues().Inc()
 
-	// Get PipelineRollout CR
-	pipelineRollout := &apiv1.PipelineRollout{}
-	if err := r.client.Get(ctx, namespacedName, pipelineRollout); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		} else {
-			r.ErrorHandler(pipelineRollout, err, "GetPipelineRolloutFailed", "Failed to get PipelineRollout")
-			return ctrl.Result{}, err
-		}
+	// Get the live PipelineRollout since we need latest Status for Progressive rollout case
+	// TODO: consider storing PipelineRollout Status in a local cache instead of this
+	pipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespacedName.Namespace).Get(ctx, namespacedName.Name, metav1.GetOptions{})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 	}
 
 	// save off a copy of the original before we modify it
@@ -236,12 +232,12 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// generate the metrics for the Pipeline.
 	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
+	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
+	numaLogger.Debug("reconciliation successful")
+
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
-
-	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
-	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
 }
@@ -590,15 +586,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
 
-		// Get the PipelineRollout live resource so we can grab the ProgressiveStatus from that for our own local pipelineRollout
-		// (Note we don't copy the entire Status in case we've updated something locally)
-		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
-		if err != nil {
-			return 0, fmt.Errorf("error getting the live PipelineRollout for assessment processing: %w", err)
-		}
-
-		pipelineRollout.Status.ProgressiveStatus = *livePipelineRollout.Status.ProgressiveStatus.DeepCopy()
-
 		done, _, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err
@@ -826,6 +813,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
+
 	return r.client.Status().Update(ctx, pipelineRollout)
 }
 
