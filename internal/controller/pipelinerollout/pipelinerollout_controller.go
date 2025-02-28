@@ -232,12 +232,12 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// generate the metrics for the Pipeline.
 	r.customMetrics.IncPipelineROsRunning(pipelineRollout.Name, pipelineRollout.Namespace)
 
+	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
+	numaLogger.Debug("reconciliation successful")
+
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
-
-	r.recorder.Eventf(pipelineRollout, "Normal", "ReconcileSuccess", "Reconciliation successful")
-	numaLogger.Debug("reconciliation successful")
 
 	return ctrl.Result{}, nil
 }
