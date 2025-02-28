@@ -37,8 +37,6 @@ const (
 	isbServiceRolloutName            = "test-isbservice-rollout"
 	pipelineRolloutName              = "test-pipeline-rollout"
 	monoVertexRolloutName            = "test-monovertex-rollout"
-	initialNumaflowControllerVersion = "1.4.3-rc3"
-	updatedNumaflowControllerVersion = "1.4.3-rc33" // note this one is really a clone of "1.4.3-rc3"
 	invalidNumaflowControllerVersion = "99.99.99"
 	initialJetstreamVersion          = "2.10.17"
 	updatedJetstreamVersion          = "2.10.11"
@@ -211,7 +209,7 @@ func TestFunctionalE2E(t *testing.T) {
 var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
-		CreateNumaflowControllerRollout(initialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 	})
 
 	It("Should create the ISBServiceRollout if it doesn't exist", func() {
@@ -322,15 +320,15 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
-		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
+		UpdateNumaflowControllerRollout(InitialNumaflowControllerVersion, UpdatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
 	})
 
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
-		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
+		UpdateNumaflowControllerRollout(UpdatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
-		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
+		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, UpdatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
 	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
