@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -85,7 +84,8 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVerticesScaleValue bool) {
+// TODO: remove tmpNumaflowBugOverride once the Numaflow bug (scale config not applied to replicas field) is fixed
+func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNumaflowBugOverride ...bool) {
 	By("Verifying that the Pipeline is running")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -104,11 +104,12 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string, useVert
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	numPods := len(spec.Vertices)
-	if useVerticesScaleValue {
-		numPods *= GetVerticesScaleValue()
+	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex) once the related Numaflow bug is fixed
+	if UpgradeStrategy == config.PPNDStrategyID && tmpNumaflowBugOverride != nil && len(tmpNumaflowBugOverride) == 1 && tmpNumaflowBugOverride[0] {
+		verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
+	} else {
+		verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
 	}
-	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
 
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 }
@@ -123,7 +124,6 @@ func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
-
 		})
 	// this happens too fast to verify it:
 	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
@@ -382,7 +382,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 
 	if !failed {
 		VerifyPipelineRolloutHealthy(name)
-		VerifyPipelineRunning(namespace, name, true)
+		VerifyPipelineRunning(namespace, name)
 	}
 }
 
@@ -451,7 +451,7 @@ func DeletePipelineRollout(name string) {
 // expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
-func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool, overrideSourceVertexReplicas, scaleInVertex bool) {
+func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool) {
 
 	By("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -481,44 +481,6 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	// wait for update to reconcile
 	time.Sleep(5 * time.Second)
 
-	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
-	// when scaling to 0 is also allowed.
-	if overrideSourceVertexReplicas && UpgradeStrategy == config.ProgressiveStrategyID {
-		scaleTo := int64(math.Floor(float64(GetVerticesScaleValue()) / float64(2)))
-
-		pipeline, err := GetPipeline(Namespace, name)
-		Expect(err).ShouldNot(HaveOccurred())
-		vertexName := fmt.Sprintf("%s-%s", pipeline.GetName(), PipelineSourceVertexName)
-
-		vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
-		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-	}
-	// TODO: remove this logic once Numaflow is updated to scale vertices for sources other than Kafka and
-	// when scaling to 0 is also allowed.
-	// NOTE: this is needed because after resuming a pipeline, only 1 replica of the vertex is created.
-	// Numaflow does not respect the scale values also in this circumstance.
-	if scaleInVertex {
-		scaleTo := int64(GetVerticesScaleValue())
-
-		pipeline, err := GetPipeline(Namespace, name)
-		Expect(err).ShouldNot(HaveOccurred())
-		vertexName := fmt.Sprintf("%s-%s", pipeline.GetName(), PipelineSourceVertexName)
-
-		vertex, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Get(ctx, vertexName, metav1.GetOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-		err = unstructured.SetNestedField(vertex.Object, scaleTo, "spec", "replicas")
-		Expect(err).ShouldNot(HaveOccurred())
-		_, err = dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Update(ctx, vertex, metav1.UpdateOptions{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// Give time to the vertex pods to start
-		time.Sleep(30 * time.Second)
-	}
-
 	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
 	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
 		By("Verifying Pipeline got updated")
@@ -544,6 +506,8 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelinePaused(Namespace, name)
 	case numaflowv1.PipelinePhaseFailed:
 		VerifyPipelineFailed(Namespace, name)
+	case numaflowv1.PipelinePhaseRunning:
+		VerifyPipelineRunning(Namespace, name)
 	}
 
 }
