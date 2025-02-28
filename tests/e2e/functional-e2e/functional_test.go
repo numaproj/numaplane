@@ -55,7 +55,6 @@ var (
 	sourceVertexScaleMax = int32(9)
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	currentPipelineSpec  numaflowv1.PipelineSpec
 	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
@@ -176,7 +175,6 @@ var (
 		},
 	}
 
-	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &sourceVertexScaleMin,
@@ -211,9 +209,6 @@ func TestFunctionalE2E(t *testing.T) {
 }
 
 var _ = Describe("Functional e2e:", Serial, func() {
-	// TODO: try to eliminate these assignments
-	currentMonoVertexSpec = initialMonoVertexSpec
-	currentPipelineSpec = updatedPipelineSpec
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
 		CreateNumaflowControllerRollout(initialNumaflowControllerVersion)
@@ -281,6 +276,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should pause the Pipeline if user requests it", func() {
 
 		By("setting desiredPhase=Paused")
+		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -293,6 +289,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should resume the Pipeline if user requests it", func() {
 
 		By("setting desiredPhase=Running")
+		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -303,6 +300,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should pause the MonoVertex if user requests it", func() {
 
 		By("setting desiredPhase=Paused")
+		currentMonoVertexSpec := initialMonoVertexSpec
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
@@ -315,6 +313,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should resume the MonoVertex if user requests it", func() {
 
 		By("setting desiredPhase=Running")
+		currentMonoVertexSpec := initialMonoVertexSpec
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
