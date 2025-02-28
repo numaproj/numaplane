@@ -60,3 +60,15 @@ rules:
       - pods
     verbs:
       - 'list'
+  - apiGroups: ["argoproj.io"]
+    resources:
+      - analysisruns
+    verbs: ["*"]
+  - apiGroups: ["argoproj.io"]
+    resources:
+      - analysistemplates
+      - clusteranalysistemplates
+    verbs:
+      - 'get'
+      - 'list'
+      - 'watch'
