@@ -248,7 +248,11 @@ func processUpgradingChild(
 	// check for Promote label here to force success logic
 	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
 		childStatus.ForcedSuccess = true
-		return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
+		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+		if err != nil {
+			return done, false, 0, err
+		}
+		return done, false, assessmentSchedule.Interval, err
 	}
 
 	// If no AssessmentStartTime has been set already, calculate it and set it
@@ -332,7 +336,11 @@ func processUpgradingChild(
 
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
-			return declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, assessmentSchedule.Interval, c)
+			done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+			if err != nil {
+				return done, false, 0, err
+			}
+			return done, false, assessmentSchedule.Interval, err
 		} else {
 			return false, false, assessmentSchedule.Interval, nil
 		}
@@ -376,13 +384,28 @@ func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef 
 	return apiv1.AssessmentResultUnknown, nil
 }
 
+/*
+declareSuccess handles the success logic for the update of a child resource during a progressive upgrade.
+It patches both the existing and upgrading children, updates the child status and marks the rollout as deployed.
+
+Parameters:
+- ctx: The context for managing request-scoped values, cancellation, and timeouts.
+- rolloutObject: The current rollout object (this could be from cache).
+- existingPromotedChildDef: The definition of the currently promoted child resource.
+- existingUpgradingChildDef: The definition of the child resource currently being upgraded.
+- childStatus: The upgrading status of the child resource currently being upgraded.
+- c: The Kubernetes client for interacting with the cluster.
+
+Returns:
+- A boolean indicating if the upgrade is done.
+- An error if any issues occur during the process.
+*/
 func declareSuccess(ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	childStatus *apiv1.UpgradingChildStatus,
-	assessmentInterval time.Duration,
 	c client.Client,
-) (bool, bool, time.Duration, error) {
+) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -391,12 +414,12 @@ func declareSuccess(ctx context.Context,
 	reasonSuccess := common.LabelValueProgressiveSuccess
 	err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 	if err != nil {
-		return false, false, 0, err
+		return false, err
 	}
 
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
-		return false, false, 0, err
+		return false, err
 	}
 
 	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded(fmt.Sprintf("New Child Object %s/%s Running", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
@@ -405,7 +428,7 @@ func declareSuccess(ctx context.Context,
 	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 	// we're done
-	return true, false, assessmentInterval, nil
+	return true, err
 
 }
 

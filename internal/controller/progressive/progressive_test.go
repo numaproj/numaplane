@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -16,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -57,7 +60,7 @@ func (fpc fakeProgressiveController) ProcessPromotedChildPostFailure(ctx context
 }
 
 func Test_processUpgradingChild(t *testing.T) {
-	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
@@ -76,12 +79,12 @@ func Test_processUpgradingChild(t *testing.T) {
 	assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
 	assert.NoError(t, err)
 
-	defaultExistingPromotedChildDef := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}}
+	defaultExistingPromotedChildDef := createMonoVertex("test")
 
 	testCases := []struct {
 		name                      string
 		rolloutObject             ProgressiveRolloutObject
-		existingUpgradingChildDef *unstructured.Unstructured
+		existingUpgradingChildDef *numaflowv1.MonoVertex
 		expectedDone              bool
 		expectedNewChildCreated   bool
 		expectedRequeueDelay      time.Duration
@@ -90,7 +93,7 @@ func Test_processUpgradingChild(t *testing.T) {
 		{
 			name:                      "no upgrading child status on the live rollout",
 			rolloutObject:             defaultMonoVertexRollout.DeepCopy(),
-			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}},
+			existingUpgradingChildDef: createMonoVertex("test"),
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
@@ -103,7 +106,7 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: "test"}},
 				nil),
 			//setRolloutObjectChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.UpgradingChildStatus{Name: "test"}, &apiv1.PromotedChildStatus{}),
-			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-1"}}},
+			existingUpgradingChildDef: createMonoVertex("test-1"),
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
@@ -118,12 +121,13 @@ func Test_processUpgradingChild(t *testing.T) {
 						Name:                "test-success",
 						AssessmentResult:    apiv1.AssessmentResultUnknown,
 						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now()},
 					},
 				},
 				nil,
 			),
-			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-success"}}},
-			expectedDone:              false,
+			existingUpgradingChildDef: createMonoVertex("test-success"),
+			expectedDone:              true,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
@@ -148,17 +152,34 @@ func Test_processUpgradingChild(t *testing.T) {
 					},
 				},
 			),
-			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test-failure"}}},
+			existingUpgradingChildDef: createMonoVertex("test-failure"),
 			expectedDone:              false,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
 		{
-			name:                      "force promote",
-			rolloutObject:             forcePromoteMonoVertexRollout.DeepCopy(),
-			existingUpgradingChildDef: &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "test"}}},
-			expectedDone:              false,
+			name: "force promote a failure",
+			rolloutObject: setMonoVertexProgressiveStatus(
+				forcePromoteMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                "test-full-promote",
+						AssessmentResult:    apiv1.AssessmentResultFailure,
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					},
+				},
+				&apiv1.PromotedMonoVertexStatus{
+					PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+						PromotedChildStatus: apiv1.PromotedChildStatus{
+							Name: defaultExistingPromotedChildDef.GetName(),
+						},
+						ScaleValuesRestoredToOriginal: true,
+					},
+				},
+			),
+			existingUpgradingChildDef: createMonoVertex("test-full-promote"),
+			expectedDone:              true,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
@@ -167,8 +188,25 @@ func Test_processUpgradingChild(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+
+			// first delete MonoVertex and MonoVertexRollout in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+			monoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, monoVertexList.Items, 0)
+
+			// creating existingPromotedChild and existingUpgradingChild MonoVertices, in Kubernetes
+			_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, tc.existingUpgradingChildDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+
+			if tc.existingUpgradingChildDef.Name != defaultExistingPromotedChildDef.Name {
+				_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, defaultExistingPromotedChildDef, metav1.CreateOptions{})
+				assert.NoError(t, err)
+			}
+
 			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
-				ctx, tc.rolloutObject, fakeProgressiveController{}, defaultExistingPromotedChildDef, tc.existingUpgradingChildDef, client)
+				ctx, tc.rolloutObject, fakeProgressiveController{}, monoVertexToUnstruct(defaultExistingPromotedChildDef), monoVertexToUnstruct(tc.existingUpgradingChildDef), client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)
@@ -191,12 +229,67 @@ func setMonoVertexProgressiveStatus(mvRollout *apiv1.MonoVertexRollout, upgradin
 	return mvRollout
 }
 
+var (
+	monoVertexSpec = numaflowv1.MonoVertexSpec{
+		Replicas: ptr.To(int32(1)),
+		Source: &numaflowv1.Source{
+			UDSource: &numaflowv1.UDSource{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
+				},
+			},
+			UDTransformer: &numaflowv1.UDTransformer{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+				},
+			},
+		},
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				UDSink: &numaflowv1.UDSink{
+					Container: &numaflowv1.Container{
+						Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+					},
+				},
+			},
+		},
+	}
+)
+
+func createMonoVertex(name string) *numaflowv1.MonoVertex {
+
+	return ctlrcommon.CreateTestMonoVertexOfSpec(
+		monoVertexSpec, name,
+		numaflowv1.MonoVertexPhaseRunning,
+		numaflowv1.Status{
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+					Status:             metav1.ConditionTrue,
+					Reason:             "healthy",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+			},
+		},
+		map[string]string{
+			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+		},
+		map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "1",
+		})
+
+}
+
+func monoVertexToUnstruct(mvtx *numaflowv1.MonoVertex) *unstructured.Unstructured {
+	unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(mvtx)
+	return &unstructured.Unstructured{Object: unstructMap}
+}
+
 var defaultMonoVertexRollout = &apiv1.MonoVertexRollout{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "test",
 	},
 	Status: apiv1.MonoVertexRolloutStatus{
-
 		ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
 			UpgradingMonoVertexStatus: nil,
 			PromotedMonoVertexStatus:  nil,
@@ -210,7 +303,6 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 		Labels: map[string]string{common.LabelKeyNumaplanePromote: "true"},
 	},
 	Status: apiv1.MonoVertexRolloutStatus{
-
 		ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
 			UpgradingMonoVertexStatus: nil,
 			PromotedMonoVertexStatus:  nil,
