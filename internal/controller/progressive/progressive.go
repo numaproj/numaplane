@@ -249,10 +249,11 @@ func processUpgradingChild(
 	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
 		childStatus.ForcedSuccess = true
 		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
-		if err != nil {
+		if err != nil || done {
 			return done, false, 0, err
+		} else {
+			return done, false, assessmentSchedule.Interval, err
 		}
-		return done, false, assessmentSchedule.Interval, err
 	}
 
 	// If no AssessmentStartTime has been set already, calculate it and set it
@@ -337,10 +338,11 @@ func processUpgradingChild(
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
 			done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
-			if err != nil {
+			if err != nil || done {
 				return done, false, 0, err
+			} else {
+				return done, false, assessmentSchedule.Interval, err
 			}
-			return done, false, assessmentSchedule.Interval, err
 		} else {
 			return false, false, assessmentSchedule.Interval, nil
 		}
@@ -390,10 +392,10 @@ It patches both the existing and upgrading children, updates the child status an
 
 Parameters:
 - ctx: The context for managing request-scoped values, cancellation, and timeouts.
-- rolloutObject: The current rollout object (this could be from cache).
+- rolloutObject: The current rollout object.
 - existingPromotedChildDef: The definition of the currently promoted child resource.
 - existingUpgradingChildDef: The definition of the child resource currently being upgraded.
-- childStatus: The upgrading status of the child resource currently being upgraded.
+- childStatus: The status of the child resource currently being upgraded (from the Rollout CR)
 - c: The Kubernetes client for interacting with the cluster.
 
 Returns:
