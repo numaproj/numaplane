@@ -172,8 +172,6 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 	}
-	fmt.Printf("deletethis: PipelineRollout Get: resource version=%q\n", pipelineRollout.ResourceVersion)
-	fmt.Printf("deletethis: PipelineRollout Get: resource status: %+v\n", pipelineRollout.Status)
 
 	// save off a copy of the original before we modify it
 	pipelineRolloutOrig := pipelineRollout
@@ -342,7 +340,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
 			foreground := metav1.DeletePropagationForeground
-			fmt.Printf("deletethis: PipelineRollout before Delete: resource version=%q\n", pipelineRollout.ResourceVersion)
 			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return 0, nil, err
 			}
@@ -352,8 +349,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 			}
 			*pipelineRollout = *livePipelineRollout
-			fmt.Printf("deletethis: PipelineRollout Get after Delete: resource version=%q\n", pipelineRollout.ResourceVersion)
-			fmt.Printf("deletethis: PipelineRollout Get after Delete: resource status: %+v\n", pipelineRollout.Status)
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
@@ -819,17 +814,7 @@ func getBasePipelineMetadata(pipelineRollout *apiv1.PipelineRollout) (apiv1.Meta
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 
-	fmt.Printf("deletethis: PipelineRollout pre-update: resource version=%q\n", pipelineRollout.ResourceVersion)
-	fmt.Printf("deletethis: PipelineRollout pre-update: resource status: %+v\n", pipelineRollout.Status)
-	err := r.client.Status().Update(ctx, pipelineRollout)
-	if err == nil {
-		fmt.Printf("deletethis: PipelineRollout post-update: resource version=%q\n", pipelineRollout.ResourceVersion)
-		fmt.Printf("deletethis: PipelineRollout post-update: resource status: %+v\n", pipelineRollout.Status)
-	} else {
-		fmt.Println("deletethis: PipelineRollout post-update: can't print resource version due to error")
-
-	}
-	return err
+	return r.client.Status().Update(ctx, pipelineRollout)
 }
 
 func (r *PipelineRolloutReconciler) updatePipelineRolloutStatusToFailed(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error) error {
