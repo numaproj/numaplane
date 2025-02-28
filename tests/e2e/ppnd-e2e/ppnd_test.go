@@ -369,6 +369,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, true)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
 
 }
