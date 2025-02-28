@@ -51,10 +51,10 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	sourceVertexScaleMin = int32(5)
 	sourceVertexScaleMax = int32(9)
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	currentPipelineSpec  numaflowv1.PipelineSpec
 	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
@@ -66,7 +66,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(GetSourceVertexScaleMin())), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -88,6 +88,9 @@ var (
 
 	updatedPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
+		Lifecycle: numaflowv1.Lifecycle{
+			PauseGracePeriodSeconds: ptr.To(int64(120)),
+		},
 		Vertices: []numaflowv1.AbstractVertex{
 			{
 				Name: "in",
@@ -97,7 +100,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: ptr.To(int32(GetSourceVertexScaleMin())), Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -172,10 +175,9 @@ var (
 		},
 	}
 
-	currentMonoVertexSpec numaflowv1.MonoVertexSpec
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
-			Min: ptr.To(int32(GetSourceVertexScaleMin())),
+			Min: &sourceVertexScaleMin,
 		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -225,15 +227,9 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	// 	CreatePipelineRollout(anotherPipelineRolloutName, Namespace, initialPipelineSpec, false)
 	// })
 
-	currentPipelineSpec = initialPipelineSpec
-
 	It("Should create the MonoVertexRollout if it does not exist", func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec)
 	})
-
-	currentMonoVertexSpec = initialMonoVertexSpec
-
-	time.Sleep(2 * time.Second)
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
 
@@ -269,24 +265,18 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyPipelineRunning(Namespace, pipelineRolloutName)
 	})
 
-	time.Sleep(2 * time.Second)
-
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
 		}, true)
-
 	})
-
-	currentPipelineSpec = updatedPipelineSpec
-
-	time.Sleep(2 * time.Second)
 
 	It("Should pause the Pipeline if user requests it", func() {
 
 		By("setting desiredPhase=Paused")
+		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -296,11 +286,10 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
 
-	time.Sleep(2 * time.Second)
-
 	It("Should resume the Pipeline if user requests it", func() {
 
 		By("setting desiredPhase=Running")
+		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
@@ -311,6 +300,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should pause the MonoVertex if user requests it", func() {
 
 		By("setting desiredPhase=Paused")
+		currentMonoVertexSpec := initialMonoVertexSpec
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
@@ -320,38 +310,28 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
 
-	time.Sleep(2 * time.Second)
-
 	It("Should resume the MonoVertex if user requests it", func() {
 
 		By("setting desiredPhase=Running")
+		currentMonoVertexSpec := initialMonoVertexSpec
 		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
 		})
-
 	})
-
-	time.Sleep(2 * time.Second)
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 		UpdateNumaflowControllerRollout(initialNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
 	})
 
-	time.Sleep(2 * time.Second)
-
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
 		UpdateNumaflowControllerRollout(updatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
 	})
 
-	time.Sleep(2 * time.Second)
-
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
 		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, updatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
 	})
-
-	time.Sleep(2 * time.Second)
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
 

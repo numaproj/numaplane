@@ -84,7 +84,8 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
+// TODO: remove tmpNumaflowBugOverride once the Numaflow bug (scale config not applied to replicas field) is fixed
+func VerifyPipelineRunning(namespace string, pipelineRolloutName string, tmpNumaflowBugOverride ...bool) {
 	By("Verifying that the Pipeline is running")
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
@@ -103,11 +104,12 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	// The number of total pods is the scaled number of source vertex pods (GetSourceVertexScaleMin()) + the output vertex pod.
-	// The '-1' removes 1 from the number of pods, since the source vertex pods are all included in the GetSourceVertexScaleMin()
-	// and we should not count 1 additional from the number of total vertices.
-	numPods := len(spec.Vertices) + GetSourceVertexScaleMin() - 1
-	verifyPodsRunning(namespace, numPods, getVertexLabelSelector(pipeline.GetName()))
+	// TODO: only keep verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex) once the related Numaflow bug is fixed
+	if UpgradeStrategy == config.PPNDStrategyID && tmpNumaflowBugOverride != nil && len(tmpNumaflowBugOverride) == 1 && tmpNumaflowBugOverride[0] {
+		verifyPodsRunning(namespace, len(spec.Vertices), getVertexLabelSelector(pipeline.GetName()))
+	} else {
+		verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
+	}
 
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 }
@@ -122,7 +124,6 @@ func VerifyPipelinePaused(namespace string, pipelineRolloutName string) {
 	VerifyPipelineStatusEventually(namespace, pipelineRolloutName,
 		func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 			return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause
-
 		})
 	// this happens too fast to verify it:
 	//verifyPodsRunning(namespace, 0, getVertexLabelSelector(pipelineName))
@@ -505,6 +506,8 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelinePaused(Namespace, name)
 	case numaflowv1.PipelinePhaseFailed:
 		VerifyPipelineFailed(Namespace, name)
+	case numaflowv1.PipelinePhaseRunning:
+		VerifyPipelineRunning(Namespace, name)
 	}
 
 }

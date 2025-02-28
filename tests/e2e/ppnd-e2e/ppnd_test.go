@@ -50,9 +50,11 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	numVertices         = int32(1)
-	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	initialPipelineSpec = numaflowv1.PipelineSpec{
+	sourceVertexScaleMin = int32(5)
+	sourceVertexScaleMax = int32(9)
+	numVertices          = int32(1)
+	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
+	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -63,7 +65,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -94,7 +96,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -164,6 +166,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			createSlowPipelineRollout()
 
 			By("Updating Pipeline Topology to cause a PPND change")
+			// This modifies the vertices resulting in having only in and out vertices (basically removes cat vertex)
 			slowPipelineSpec.Vertices[1] = slowPipelineSpec.Vertices[2]
 			slowPipelineSpec.Vertices = slowPipelineSpec.Vertices[0:2]
 			slowPipelineSpec.Edges = []numaflowv1.Edge{
@@ -262,8 +265,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 	})
 
-	time.Sleep(5 * time.Second)
-
 	It("Should update an ISBService even if the Pipeline is failed", func() {
 
 		// add bad edge to automatically fail Pipeline
@@ -291,8 +292,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		DeletePipelineRollout(failedPipelineRolloutName)
 
 	})
-
-	time.Sleep(5 * time.Second)
 
 	It("Should update a NumaflowController even if the Pipeline is failed", func() {
 
@@ -372,6 +371,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPipelineRunning(Namespace, slowPipelineRolloutName, true)
 
 }

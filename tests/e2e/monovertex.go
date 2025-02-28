@@ -73,7 +73,7 @@ func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) {
+func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) error {
 
 	By("Verifying that the MonoVertex is running")
 	monoVertexName := VerifyMonoVertexStatus(namespace, monoVertexRolloutName,
@@ -81,13 +81,23 @@ func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) {
 			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
 		})
 
-	vertexLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex")
-	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex-daemon")
+	unstructMonoVertex, err := GetMonoVertex(namespace, monoVertexRolloutName)
+	if err != nil {
+		return fmt.Errorf("unable to get the MonoVertex for the MonoVertexRollout %s/%s: %w", namespace, monoVertexRolloutName, err)
+	}
+
+	monoVertexSpec, err := getMonoVertexSpec(unstructMonoVertex)
+	if err != nil {
+		return fmt.Errorf("error getting the MonoVertex spec: %w", err)
+	}
 
 	By("Verifying that the MonoVertex is ready")
-	verifyPodsRunning(namespace, GetSourceVertexScaleMin(), vertexLabelSelector)
+	verifyVerticesPodsRunning(namespace, monoVertexName, []numaflowv1.AbstractVertex{{Scale: monoVertexSpec.Scale}}, ComponentMonoVertex)
+
+	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex-daemon")
 	verifyPodsRunning(namespace, 1, daemonLabelSelector)
 
+	return nil
 }
 
 func VerifyMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, kubernetes.GenericStatus) bool) string {
@@ -276,7 +286,8 @@ func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexS
 
 	VerifyMonoVertexRolloutReady(name)
 
-	VerifyMonoVertexReady(namespace, name)
+	err = VerifyMonoVertexReady(namespace, name)
+	Expect(err).ShouldNot(HaveOccurred())
 
 }
 
@@ -360,7 +371,8 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	if expectedFinalPhase == numaflowv1.MonoVertexPhasePaused {
 		VerifyMonoVertexPaused(Namespace, name)
 	} else {
-		VerifyMonoVertexReady(Namespace, name)
+		err = VerifyMonoVertexReady(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
 	}
 
 }
