@@ -389,7 +389,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 			// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
 			// (i.e. if isbsvc or numaflow controller is requesting pause)
-			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace())
+			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), numaflowv1.PipelineGroupVersionKind.Kind)
 			if err != nil {
 				return 0, nil, err
 			}
@@ -497,7 +497,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	numaLogger := logger.FromContext(ctx)
 
 	// what is the preferred strategy for this namespace?
-	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace())
+	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), existingPipelineDef.GetKind())
 	if err != nil {
 		return 0, err
 	}
