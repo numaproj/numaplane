@@ -1,6 +1,5 @@
 logLevel: DEBUG # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
 defaultUpgradeStrategy: "progressive"
-featureFlagDisallowProgressiveForNonMonoVertex: true
 progressive:
   defaultAssessmentSchedule: 
     - kind: Pipeline
