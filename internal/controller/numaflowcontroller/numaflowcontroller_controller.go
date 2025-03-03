@@ -172,18 +172,14 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Update the Spec if needed
 	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
-		numaflowControllerStatus := numaflowController.Status
-		if err := r.client.Update(ctx, numaflowController); err != nil {
+		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
 			r.ErrorHandler(numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
-			statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err)
-			if statusUpdateErr != nil {
+			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
 				r.ErrorHandler(numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore the original status, which would've been wiped in the previous call to Update()
-		numaflowController.Status = numaflowControllerStatus
 	}
 
 	// Update the Status subresource
