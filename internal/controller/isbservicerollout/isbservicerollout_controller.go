@@ -149,18 +149,14 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the Spec if needed
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
-		isbServiceRolloutStatus := isbServiceRollout.Status
-		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
-			r.ErrorHandler(isbServiceRollout, err, "UpdateFailed", "Failed to update isb service rollout")
-			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
-			if statusUpdateErr != nil {
+		if err := r.client.Patch(ctx, isbServiceRollout, client.MergeFrom(isbServiceRolloutOrig)); err != nil {
+			r.ErrorHandler(isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
+			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore the original status, which would've been wiped in the previous call to Update()
-		isbServiceRollout.Status = isbServiceRolloutStatus
 	}
 
 	// Update the Status subresource
