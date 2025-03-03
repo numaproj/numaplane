@@ -6,4 +6,11 @@ includedResources: "group=apps,kind=Deployment;\
 group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
 group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
 defaultUpgradeStrategy: "pause-and-drain"
-childStatusAssessmentSchedule: "120,60,10"
+progressive:
+      defaultAssessmentSchedule: 
+        - kind: Pipeline
+          schedule: "60,30,10"
+        - kind: MonoVertex
+          schedule: "60,30,10"
+        - kind: InterstepBufferService
+          schedule: "0,0,10"
