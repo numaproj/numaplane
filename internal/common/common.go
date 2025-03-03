@@ -91,6 +91,9 @@ const (
 	// LabelKeyUpgradeStateReason is an optional label to provide more information on top of the LabelKeyUpgradeState
 	LabelKeyUpgradeStateReason = "numaplane.numaproj.io/upgrade-state-reason"
 
+	// LabelKeyNumaplanePromote is the label value indicating that the resource managed by a NumaRollout should be force promoted
+	LabelKeyNumaplanePromote = "numaplane.numaproj.io/promote"
+
 	// LabelValueUpgradePromoted is the label value indicating that the resource managed by a NumaRollout is promoted
 	// after an upgrade.
 	LabelValueUpgradePromoted UpgradeState = "promoted"

@@ -42,10 +42,13 @@ import (
 )
 
 var (
-	dynamicClient       dynamic.DynamicClient
-	testEnv             *envtest.Environment
-	ctx                 context.Context
-	TestTimeout         = 4 * time.Minute // Note: this timeout needs to be large enough to allow for delayed child resource healthiness assessment (current delay is 2 minutes with a 1 minute reassess window)
+	dynamicClient dynamic.DynamicClient
+	testEnv       *envtest.Environment
+	ctx           context.Context
+	// Note: this timeout needs to be large enough for:
+	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
+	//  - time for isbsvc to be created plus pipeline to become healthy afterward
+	TestTimeout         = 6 * time.Minute
 	TestPollingInterval = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface

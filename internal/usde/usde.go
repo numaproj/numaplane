@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
@@ -75,7 +76,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	dataLossFields := usdeConfig[usdeConfigMapKey].DataLoss
 	progressiveFields := usdeConfig[usdeConfigMapKey].Progressive
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, err
 	}
@@ -213,7 +214,7 @@ func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.Upgra
 func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace())
+	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -253,8 +254,8 @@ func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss
-func getDataLossUpggradeStrategy(ctx context.Context, namespace string) (apiv1.UpgradeStrategy, error) {
-	userUpgradeStrategy, err := GetUserStrategy(ctx, namespace)
+func getDataLossUpggradeStrategy(ctx context.Context, namespace, resourceKind string) (apiv1.UpgradeStrategy, error) {
+	userUpgradeStrategy, err := GetUserStrategy(ctx, namespace, resourceKind)
 	if err != nil {
 		return apiv1.UpgradeStrategyError, err
 	}
@@ -271,7 +272,7 @@ func getDataLossUpggradeStrategy(ctx context.Context, namespace string) (apiv1.U
 	}
 }
 
-func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStrategy, error) {
+func GetUserStrategy(ctx context.Context, namespace, resourceKind string) (config.USDEUserStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	namespaceConfig := config.GetConfigManagerInstance().GetNamespaceConfig(namespace)
@@ -292,5 +293,15 @@ func GetUserStrategy(ctx context.Context, namespace string) (config.USDEUserStra
 			userUpgradeStrategy = namespaceConfig.UpgradeStrategy
 		}
 	}
+
+	// TODO: remove when FeatureFlagDisallowProgressiveForNonMonoVertex no longer needed
+	if userUpgradeStrategy == config.ProgressiveStrategyID &&
+		resourceKind != numaflowv1.MonoVertexGroupVersionKind.Kind &&
+		globalConfig.FeatureFlagDisallowProgressiveForNonMonoVertex {
+
+		// Use the next most conservative strategy: PPND
+		userUpgradeStrategy = config.PPNDStrategyID
+	}
+
 	return userUpgradeStrategy, nil
 }

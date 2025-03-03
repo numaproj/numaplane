@@ -98,6 +98,10 @@ type GlobalConfig struct {
 
 	// Configuration related to the Progressive strategy
 	Progressive ProgressiveConfig `json:"progressive" mapstructure:"progressive"`
+
+	// TODO: remove when no longer needed
+	// FeatureFlagDisallowProgressiveForNonMonoVertex is a TEMPORARY feature flag to disable progressive upgrades for resources other than MonoVertex
+	FeatureFlagDisallowProgressiveForNonMonoVertex bool `json:"featureFlagDisallowProgressiveForNonMonoVertex" mapstructure:"featureFlagDisallowProgressiveForNonMonoVertex"`
 }
 
 type ProgressiveConfig struct {
