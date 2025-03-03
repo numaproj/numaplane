@@ -54,6 +54,7 @@ var (
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
+	numaflowControllerClient        planepkg.NumaflowControllerInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
 	kubeClient                      clientgo.Interface
 
@@ -391,6 +392,8 @@ func writeToFile(resource Output) error {
 		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml")
 	case "MonoVertexRollout":
 		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml")
+	case "NumaflowController":
+		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller.yaml")
 	case "NumaflowControllerRollout":
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml")
 	case "Pod":
@@ -540,6 +543,10 @@ func BeforeSuiteSetup() {
 	Expect(numaflowControllerRolloutClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
+	numaflowControllerClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().NumaflowControllers(Namespace)
+	Expect(numaflowControllerClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
 	kubeClient, err = clientgo.NewForConfig(cfg)
 	Expect(kubeClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
@@ -553,8 +560,7 @@ func BeforeSuiteSetup() {
 		wg.Add(1)
 		go watchPods()
 
-		wg.Add(1)
-		go watchNumaflowControllerRollout()
+		startNumaflowControllerRolloutWatches()
 
 		startPipelineRolloutWatches()
 
