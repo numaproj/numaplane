@@ -392,6 +392,8 @@ func writeToFile(resource Output) error {
 		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex.yaml")
 	case "MonoVertexRollout":
 		fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "monovertex_rollout.yaml")
+	case "NumaflowController":
+		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller.yaml")
 	case "NumaflowControllerRollout":
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml")
 	case "Pod":
