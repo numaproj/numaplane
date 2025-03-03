@@ -96,6 +96,16 @@ func UpdateNumaflowControllerRolloutInK8S(f func(apiv1.NumaflowControllerRollout
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
+func startNumaflowControllerRolloutWatches() {
+
+	wg.Add(1)
+	go watchNumaflowControllerRollout()
+
+	wg.Add(1)
+	go watchNumaflowController()
+
+}
+
 func watchNumaflowControllerRollout() {
 	go watchResourceType(func() (watch.Interface, error) {
 		watcher, err := numaflowControllerRolloutClient.Watch(context.Background(), metav1.ListOptions{})
@@ -109,6 +119,26 @@ func watchNumaflowControllerRollout() {
 				Metadata:   rollout.ObjectMeta,
 				Spec:       rollout.Spec,
 				Status:     rollout.Status,
+			}
+		}
+		return Output{}
+	})
+
+}
+
+func watchNumaflowController() {
+	go watchResourceType(func() (watch.Interface, error) {
+		watcher, err := numaflowControllerClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if resource, ok := o.(*apiv1.NumaflowController); ok {
+			resource.ManagedFields = nil
+			return Output{
+				APIVersion: NumaplaneAPIVersion,
+				Kind:       "NumaflowController",
+				Metadata:   resource.ObjectMeta,
+				Spec:       resource.Spec,
+				Status:     resource.Status,
 			}
 		}
 		return Output{}

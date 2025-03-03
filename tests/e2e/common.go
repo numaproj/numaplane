@@ -54,6 +54,7 @@ var (
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
+	numaflowControllerClient        planepkg.NumaflowControllerInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
 	kubeClient                      clientgo.Interface
 
@@ -540,6 +541,10 @@ func BeforeSuiteSetup() {
 	Expect(numaflowControllerRolloutClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
+	numaflowControllerClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().NumaflowControllers(Namespace)
+	Expect(numaflowControllerClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
 	kubeClient, err = clientgo.NewForConfig(cfg)
 	Expect(kubeClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
@@ -553,8 +558,7 @@ func BeforeSuiteSetup() {
 		wg.Add(1)
 		go watchPods()
 
-		wg.Add(1)
-		go watchNumaflowControllerRollout()
+		startNumaflowControllerRolloutWatches()
 
 		startPipelineRolloutWatches()
 
