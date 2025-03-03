@@ -149,18 +149,14 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// update spec if needed
 	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
-		monoVertexRolloutStatus := monoVertexRollout.Status
-		if err := r.client.Update(ctx, monoVertexRollout); err != nil {
-			r.ErrorHandler(monoVertexRollout, err, "UpdateFailed", "Failed to update MonoVertexRollout")
-			statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err)
-			if statusUpdateErr != nil {
+		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
+			r.ErrorHandler(monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
+			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore original status which is lost during last call to Update()
-		monoVertexRollout.Status = monoVertexRolloutStatus
 	}
 
 	if monoVertexRollout.DeletionTimestamp.IsZero() {

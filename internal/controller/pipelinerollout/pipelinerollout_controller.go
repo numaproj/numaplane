@@ -334,18 +334,18 @@ func (r *PipelineRolloutReconciler) reconcile(
 	// (OwnerReference will delete the underlying Pipeline through Cascading deletion)
 	if !pipelineRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting PipelineRollout")
-		// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-		foreground := metav1.DeletePropagationForeground
-		if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-			return 0, nil, err
-		}
-		// Get the PipelineRollout live resource
-		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
-		if err != nil {
-			return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
-		}
-		*pipelineRollout = *livePipelineRollout
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
+			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
+			foreground := metav1.DeletePropagationForeground
+			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+				return 0, nil, err
+			}
+			// Get the PipelineRollout live resource
+			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			if err != nil {
+				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
+			}
+			*pipelineRollout = *livePipelineRollout
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
