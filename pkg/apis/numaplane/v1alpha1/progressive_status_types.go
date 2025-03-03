@@ -75,12 +75,9 @@ type PromotedPipelineTypeStatus struct {
 	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`
 }
 
-// assessmentEndTimeInitValue is an arbitrary value in the far future to use as a maximum value for AssessmentEndTime
-var assessmentEndTimeInitValue = time.Date(2222, 2, 2, 2, 2, 2, 0, time.UTC)
-
-// IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil nor set to a maximum arbitrary value in the far future.
+// IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil.
 func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
-	return ucs != nil && ucs.AssessmentEndTime != nil && !ucs.AssessmentEndTime.Time.Equal(assessmentEndTimeInitValue)
+	return ucs != nil && ucs.AssessmentEndTime != nil
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.

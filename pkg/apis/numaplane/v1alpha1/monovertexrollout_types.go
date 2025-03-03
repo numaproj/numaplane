@@ -142,11 +142,10 @@ func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *Upgrading
 // ResetUpgradingChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingMonoVertex *unstructured.Unstructured) error {
-	assessUntil := metav1.NewTime(assessmentEndTimeInitValue)
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{
 		UpgradingChildStatus: UpgradingChildStatus{
 			Name:              upgradingMonoVertex.GetName(),
-			AssessmentEndTime: &assessUntil,
+			AssessmentEndTime: nil,
 			AssessmentResult:  AssessmentResultUnknown,
 		},
 	}
