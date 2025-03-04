@@ -125,7 +125,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Get the live MonoVertexRollout since we need latest Status for Progressive rollout case
 	// TODO: consider storing MonoVertexRollout Status in a local cache instead of this
-	monoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(req.NamespacedName.Namespace).Get(ctx, req.NamespacedName.Name, metav1.GetOptions{})
+	monoVertexRollout, err := getLiveMonovertexRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
 	}
@@ -147,20 +147,16 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// update spec if needed
+	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
-		monoVertexRolloutStatus := monoVertexRollout.Status
-		if err := r.client.Update(ctx, monoVertexRollout); err != nil {
-			r.ErrorHandler(monoVertexRollout, err, "UpdateFailed", "Failed to update MonoVertexRollout")
-			statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err)
-			if statusUpdateErr != nil {
+		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
+			r.ErrorHandler(monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
+			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore original status which is lost during last call to Update()
-		monoVertexRollout.Status = monoVertexRolloutStatus
 	}
 
 	if monoVertexRollout.DeletionTimestamp.IsZero() {
@@ -199,7 +195,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 				return ctrl.Result{}, err
 			}
 			// Get the monoVertexRollout live resource
-			liveMonoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
+			liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
 			}
@@ -669,4 +665,14 @@ func (r *MonoVertexRolloutReconciler) Recycle(ctx context.Context,
 		return false, err
 	}
 	return true, nil
+}
+
+func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*apiv1.MonoVertexRollout, error) {
+	monoVertexRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return monoVertexRollout, err
+	}
+	monoVertexRollout.SetGroupVersionKind(apiv1.MonoVertexRolloutGroupVersionKind)
+
+	return monoVertexRollout, err
 }

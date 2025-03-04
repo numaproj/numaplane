@@ -144,20 +144,16 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	// Update the Spec if needed
+	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerRolloutOrig, numaflowControllerRollout) {
-		numaflowControllerRolloutStatus := numaflowControllerRollout.Status
-		if err := r.client.Update(ctx, numaflowControllerRollout); err != nil {
+		if err := r.client.Patch(ctx, numaflowControllerRollout, client.MergeFrom(numaflowControllerRolloutOrig)); err != nil {
 			r.ErrorHandler(numaflowControllerRollout, err, "UpdateFailed", "Failed to update NumaflowControllerRollout")
-			statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err)
-			if statusUpdateErr != nil {
+			if statusUpdateErr := r.updateNumaflowControllerRolloutStatusToFailed(ctx, numaflowControllerRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(numaflowControllerRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowControllerRollout")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore the original status, which would've been wiped in the previous call to Update()
-		numaflowControllerRollout.Status = numaflowControllerRolloutStatus
 	}
 
 	// Update the Status subresource
@@ -205,7 +201,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 				return ctrl.Result{}, err
 			}
 			// Get the nfcRollout live resource
-			liveControllerRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(nfcRollout.Namespace).Get(ctx, nfcRollout.Name, metav1.GetOptions{})
+			liveControllerRollout, err := getLiveNumaflowControllerRollout(ctx, nfcRollout.Name, nfcRollout.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
 			}
@@ -605,4 +601,14 @@ func generateNewNumaflowControllerDef(nfcRollout *apiv1.NumaflowControllerRollou
 	newNumaflowControllerDef.Object["spec"] = numaflowControllerSpec
 
 	return newNumaflowControllerDef, nil
+}
+
+func getLiveNumaflowControllerRollout(ctx context.Context, name, namespace string) (*apiv1.NumaflowControllerRollout, error) {
+	numaflowControllerRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	numaflowControllerRollout.SetGroupVersionKind(apiv1.NumaflowControllerRolloutGroupVersionKind)
+
+	return numaflowControllerRollout, err
 }

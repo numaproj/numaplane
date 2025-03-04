@@ -170,20 +170,16 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// Update the Spec if needed
+	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
-		numaflowControllerStatus := numaflowController.Status
-		if err := r.client.Update(ctx, numaflowController); err != nil {
+		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
 			r.ErrorHandler(numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
-			statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err)
-			if statusUpdateErr != nil {
+			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
 				r.ErrorHandler(numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore the original status, which would've been wiped in the previous call to Update()
-		numaflowController.Status = numaflowControllerStatus
 	}
 
 	// Update the Status subresource
@@ -238,7 +234,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 				return ctrl.Result{}, err
 			}
 			// Get the controller live resource
-			liveController, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllers(controller.Namespace).Get(ctx, controller.Name, metav1.GetOptions{})
+			liveController, err := getLiveNumaflowController(ctx, controller.Name, controller.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
 			}
@@ -760,4 +756,14 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 	}
 
 	return false, fmt.Errorf("dependent resources are not deleted")
+}
+
+func getLiveNumaflowController(ctx context.Context, name, namespace string) (*apiv1.NumaflowController, error) {
+	numaflowController, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllers(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	numaflowController.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
+
+	return numaflowController, err
 }

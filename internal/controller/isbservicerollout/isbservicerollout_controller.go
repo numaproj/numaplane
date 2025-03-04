@@ -125,7 +125,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Get the live ISBServiceRollout since we need latest Status for Progressive rollout case
 	// TODO: consider storing ISBServiceRollout Status in a local cache instead of this
-	isbServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(req.NamespacedName.Namespace).Get(ctx, req.NamespacedName.Name, metav1.GetOptions{})
+	isbServiceRollout, err := getLiveISBServiceRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
 	}
@@ -147,20 +147,16 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// Update the Spec if needed
+	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
-		isbServiceRolloutStatus := isbServiceRollout.Status
-		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
-			r.ErrorHandler(isbServiceRollout, err, "UpdateFailed", "Failed to update isb service rollout")
-			statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
-			if statusUpdateErr != nil {
+		if err := r.client.Patch(ctx, isbServiceRollout, client.MergeFrom(isbServiceRolloutOrig)); err != nil {
+			r.ErrorHandler(isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
+			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
 		}
-		// restore the original status, which would've been wiped in the previous call to Update()
-		isbServiceRollout.Status = isbServiceRolloutStatus
 	}
 
 	// Update the Status subresource
@@ -204,8 +200,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err
 			}
-			// Get the nfcRollout live resource
-			liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
+			// Get the ISBServiceRollout live resource
+			liveISBServiceRollout, err := getLiveISBServiceRollout(ctx, isbServiceRollout.Name, isbServiceRollout.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
 			}
@@ -953,4 +949,14 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstr
 		return false, err
 	}
 	return true, nil
+}
+
+func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*apiv1.ISBServiceRollout, error) {
+	isbServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return isbServiceRollout, err
+	}
+	isbServiceRollout.SetGroupVersionKind(apiv1.ISBServiceRolloutGroupVersionKind)
+
+	return isbServiceRollout, err
 }
