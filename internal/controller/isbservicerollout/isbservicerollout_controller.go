@@ -200,7 +200,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 				return ctrl.Result{}, err
 			}
-			// Get the nfcRollout live resource
+			// Get the ISBServiceRollout live resource
 			liveISBServiceRollout, err := getLiveISBServiceRollout(ctx, isbServiceRollout.Name, isbServiceRollout.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
