@@ -168,7 +168,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Get the live PipelineRollout since we need latest Status for Progressive rollout case
 	// TODO: consider storing PipelineRollout Status in a local cache instead of this
-	pipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespacedName.Namespace).Get(ctx, namespacedName.Name, metav1.GetOptions{})
+	pipelineRollout, err := getLivePipelineRollout(ctx, namespacedName.Name, namespacedName.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 	}
@@ -204,7 +204,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	// Update the Spec if needed
+	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		if err := r.client.Patch(ctx, pipelineRollout, client.MergeFrom(pipelineRolloutOrig)); err != nil {
 			r.ErrorHandler(pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
@@ -341,7 +341,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 				return 0, nil, err
 			}
 			// Get the PipelineRollout live resource
-			livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
+			livePipelineRollout, err := getLivePipelineRollout(ctx, pipelineRollout.Name, pipelineRollout.Namespace)
 			if err != nil {
 				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 			}
@@ -1119,4 +1119,14 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	}
 
 	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+}
+
+func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {
+	PipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	PipelineRollout.SetGroupVersionKind(apiv1.PipelineRolloutGroupVersionKind)
+
+	return PipelineRollout, err
 }
