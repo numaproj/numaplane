@@ -245,8 +245,8 @@ func processUpgradingChild(
 	}
 	childStatus = rolloutObject.GetUpgradingChildStatus()
 
-	// check for Promote label here to force success logic
-	if rolloutObject.GetRolloutObjectMeta().Labels[common.LabelKeyNumaplanePromote] == "true" {
+	// check for Force Promote set in Progressive strategy to force success logic
+	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
 		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {

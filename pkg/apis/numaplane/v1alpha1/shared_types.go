@@ -53,4 +53,7 @@ type ProgressiveStrategy struct {
 	// optional string: comma-separated list consisting of:
 	// assessmentDelay, assessmentPeriod, assessmentInterval
 	AssessmentSchedule string `json:"assessmentSchedule,omitempty"`
+
+	// if ForcePromote is set, assessment will be skipped and Progressive upgrade will succeed
+	ForcePromote bool `json:"forcePromote,omitempty"`
 }

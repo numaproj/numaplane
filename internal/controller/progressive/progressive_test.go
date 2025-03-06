@@ -159,12 +159,12 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedError:             nil,
 		},
 		{
-			name: "force promote a failure",
+			name: "force promote a failed progressive upgrade",
 			rolloutObject: setMonoVertexProgressiveStatus(
 				forcePromoteMonoVertexRollout.DeepCopy(),
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                "test-full-promote",
+						Name:                "test-force-promote",
 						AssessmentResult:    apiv1.AssessmentResultFailure,
 						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 					},
@@ -178,7 +178,7 @@ func Test_processUpgradingChild(t *testing.T) {
 					},
 				},
 			),
-			existingUpgradingChildDef: createMonoVertex("test-full-promote"),
+			existingUpgradingChildDef: createMonoVertex("test-force-promote"),
 			expectedDone:              true,
 			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      0,
@@ -299,13 +299,21 @@ var defaultMonoVertexRollout = &apiv1.MonoVertexRollout{
 
 var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 	ObjectMeta: metav1.ObjectMeta{
-		Name:   "test",
-		Labels: map[string]string{common.LabelKeyNumaplanePromote: "true"},
+		Name: "test",
 	},
 	Status: apiv1.MonoVertexRolloutStatus{
 		ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
 			UpgradingMonoVertexStatus: nil,
 			PromotedMonoVertexStatus:  nil,
+		},
+	},
+	Spec: apiv1.MonoVertexRolloutSpec{
+		Strategy: apiv1.PipelineTypeRolloutStrategy{
+			RolloutStrategy: apiv1.RolloutStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					ForcePromote: true,
+				},
+			},
 		},
 	},
 }

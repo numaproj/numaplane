@@ -128,6 +128,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:
@@ -388,6 +392,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:
@@ -1102,6 +1110,10 @@ spec:
                           optional string: comma-separated list consisting of:
                           assessmentDelay, assessmentPeriod, assessmentInterval
                         type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:
