@@ -131,13 +131,26 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 		return err
 	}
 
-	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
+	minPtr, maxPtr, err := getScaleValuesFromMonoVertexSpec(monovertexSpec)
 	if err != nil {
 		return err
 	}
-	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
+
+	err = scaleMonoVertex(ctx, upgradingChildDef, minPtr, maxPtr, c)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*int64, *int64, error) {
+	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
+	if err != nil {
+		return nil, nil, err
+	}
+	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
+	if err != nil {
+		return nil, nil, err
 	}
 	var minPtr, maxPtr *int64
 	if foundMin {
@@ -146,14 +159,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	if foundMax {
 		maxPtr = &max
 	}
-
-	// TODO: compare these values to upgradingChildDef values to see if we really need to patch or not
-
-	err = scaleMonoVertex(ctx, upgradingChildDef, minPtr, maxPtr, c)
-	if err != nil {
-		return err
-	}
-	return nil
+	return minPtr, maxPtr, nil
 }
 
 /*

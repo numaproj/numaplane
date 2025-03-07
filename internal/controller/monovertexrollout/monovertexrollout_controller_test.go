@@ -575,3 +575,61 @@ func TestChildNeedsUpdating(t *testing.T) {
 		})
 	}
 }
+
+func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
+	one := int64(1)
+	ten := int64(10)
+	tests := []struct {
+		name        string
+		input       map[string]interface{}
+		expectedMin *int64
+		expectedMax *int64
+		expectError bool
+	}{
+		{
+			name: "BothValuesPresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{
+					"min": int64(1),
+					"max": int64(10),
+				},
+			},
+			expectedMin: &one,
+			expectedMax: &ten,
+			expectError: false,
+		},
+		{
+			name: "NoValuesPresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{},
+			},
+			expectedMin: nil,
+			expectedMax: nil,
+			expectError: false,
+		},
+		{
+			name: "ErrorAccessingValues",
+			input: map[string]interface{}{
+				"scale": "invalid_structure",
+			},
+			expectedMin: nil,
+			expectedMax: nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			min, max, err := getScaleValuesFromMonoVertexSpec(tt.input)
+			if (err != nil) != tt.expectError {
+				t.Errorf("Expected error: %v, got: %v", tt.expectError, err)
+			}
+			if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
+				t.Errorf("Expected min: %v, got: %v", tt.expectedMin, min)
+			}
+			if (max == nil && tt.expectedMax != nil) || (max != nil && tt.expectedMax == nil) || (max != nil && *max != *tt.expectedMax) {
+				t.Errorf("Expected max: %v, got: %v", tt.expectedMax, max)
+			}
+		})
+	}
+}
