@@ -103,14 +103,26 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	numaLogger.Debug("started post-failure processing of upgrading monovertex")
 
+	// scale down monovertex to 0 Pods
+	// need to check to see if it's already scaled down before we do this
+	existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(upgradingChildDef.Object)
+	if err != nil {
+		return true, err
+	}
+	if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
+		numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
+		return false, nil
+	}
+
+	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err := scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
+	err = scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
 	if err != nil {
 		return true, err
 	}
 
-	numaLogger.Debug("completed post-failure processing of upgrading monovertex")
+	numaLogger.Debug("scaled down upgrading monovertex to 0, completed post-failure processing of upgrading monovertex")
 
 	return false, nil
 }
@@ -126,6 +138,8 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	if !ok {
 		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
+	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
+	// Preferably change this to save the existing spec and use that instead
 	var monovertexSpec map[string]interface{}
 	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monovertexSpec); err != nil {
 		return err

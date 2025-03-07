@@ -340,7 +340,7 @@ func processUpgradingChild(
 			if err != nil {
 				return false, false, 0, err
 			}
-			requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, newUpgradingChildDef, c)
+			requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, existingUpgradingChildDef, c)
 			if requeue {
 				return false, false, common.DefaultRequeueDelay, nil
 			}
