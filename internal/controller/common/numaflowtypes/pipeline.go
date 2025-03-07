@@ -197,3 +197,8 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 		unstructured.RemoveNestedField(pipeline.Object, "spec", "lifecycle")
 	}
 }
+
+func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) {
+	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "min")
+	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "max")
+}

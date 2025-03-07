@@ -43,7 +43,6 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -594,16 +593,29 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 
 }
 
-// ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+// ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	// remove "replicas" field from comparison to test for equality
-	fromNew, err := numaflowtypes.MonoVertexWithoutReplicas(from)
+
+	// remove certain fields (which numaplane needs to set) from comparison to test for equality
+	removeFunc := func(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
+		var specAsMap map[string]any
+
+		if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+			return nil, err
+		}
+
+		excludedPaths := []string{"replicas", "scale.min", "scale.max"}
+		util.RemovePaths(specAsMap, excludedPaths, ".")
+		return specAsMap, nil
+	}
+
+	fromNew, err := removeFunc(from)
 	if err != nil {
 		return false, err
 	}
-	toNew, err := numaflowtypes.MonoVertexWithoutReplicas(to)
+	toNew, err := removeFunc(to)
 	if err != nil {
 		return false, err
 	}

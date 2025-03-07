@@ -935,7 +935,7 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
-// ChildNeedsUpdating() tests for essential equality, with any irrelevant fields eliminated from the comparison
+// ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
@@ -943,7 +943,9 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	toCopy := to.DeepCopy()
 	// remove lifecycle.desiredPhase field from comparison to test for equality
 	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
+	numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
 	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
+	numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",

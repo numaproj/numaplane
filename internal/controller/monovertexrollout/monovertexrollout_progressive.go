@@ -107,7 +107,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 		return true, err
 	}
 
-	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
+	numaLogger.Debug("completed post-failure processing of upgrading monovertex")
 
 	return false, nil
 }
