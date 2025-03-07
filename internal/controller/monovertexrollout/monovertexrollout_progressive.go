@@ -109,26 +109,14 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	if !ok {
 		numaLogger.Errorf(errors.New("monovertex spec invalid"), "existing upgrading monovertex spec doesn't start with root 'spec' key (or is of invalid type)?: %+v", upgradingChildDef.Object)
 	} else {
-		fmt.Printf("deletethis: 1\n")
 		existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(existingSpec)
 		if err != nil {
-			fmt.Printf("deletethis: 2\n")
-
 			return true, err
 		}
-		fmt.Printf("deletethis: 3\n")
 
 		if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
-			fmt.Printf("deletethis: 4\n")
-
 			numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
 			return false, nil
-		} else {
-			if existingScaleMin == nil || existingScaleMax == nil {
-				fmt.Printf("deletethis: existing scale values nil; upgradingChildDef.Object=%+v\n", upgradingChildDef.Object)
-			} else {
-				fmt.Printf("deletethis: existing scale values not nil; *existingScaleMin=%d, *existingScaleMax=%d, upgradingChildDef.Object=%+v\n", *existingScaleMin, *existingScaleMax, upgradingChildDef.Object)
-			}
 		}
 	}
 
@@ -430,6 +418,5 @@ func scaleMonoVertex(
 		scaleValue = fmt.Sprintf(`{"max": %d}`, *max)
 	}
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
-	fmt.Printf("deletethis: patchJson=%s\n", patchJson)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
