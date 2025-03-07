@@ -172,7 +172,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, nil
 }
 
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingChildDef *unstructured.Unstructured,

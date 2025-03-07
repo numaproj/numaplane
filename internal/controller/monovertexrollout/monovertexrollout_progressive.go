@@ -115,7 +115,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, nil
 }
 
-func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingChildDef *unstructured.Unstructured,
