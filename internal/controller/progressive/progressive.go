@@ -53,6 +53,9 @@ type progressiveController interface {
 
 	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails
 	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// ProcessPromotedChildPostFailure performs operations on the upgrading child after the upgrade fails
+	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -328,6 +331,7 @@ func processUpgradingChild(
 			if err != nil {
 				return false, false, 0, err
 			}
+			requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, newUpgradingChildDef, c)
 			if requeue {
 				return false, false, common.DefaultRequeueDelay, nil
 			}
