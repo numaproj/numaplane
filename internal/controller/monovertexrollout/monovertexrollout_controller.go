@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -397,7 +398,37 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to watch MonoVertices: %w", err)
 	}
 
+	// Watch AnalysisRuns that are owned by MonoVertex
+	if err := controller.Watch(source.Kind(mgr.GetCache(), &argorolloutsv1.Rollout{}, 
+
+
+	
+
+
 	return nil
+}
+
+func (r *ReconcilerA) SetupWithManager(mgr ctrl.Manager) error {
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&TypeA{}).
+        // Watch Type C and use a predicate to filter events
+        Watches(
+            &source.Kind{Type: &TypeC{}},
+            &handler.EnqueueRequestForOwner{
+                OwnerType: &TypeB{},
+            },
+            builder.WithPredicates(predicate.Funcs{
+                CreateFunc: func(e event.CreateEvent) bool {
+                    return checkOwnershipAndRelevance(e.Object)
+                },
+                UpdateFunc: func(e event.UpdateEvent) bool {
+                    return checkOwnershipAndRelevance(e.ObjectNew)
+                },
+                DeleteFunc: func(e event.DeleteEvent) bool {
+                    return checkOwnershipAndRelevance(e.Object)
+                },
+            }),
+        ).Complete(r)
 }
 
 func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
