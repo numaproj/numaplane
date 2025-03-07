@@ -27,6 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
@@ -196,29 +197,31 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		Expect(VerifyMonoVertexReady(Namespace, monoVertexRolloutName)).ShouldNot(HaveOccurred())
 	})
 
-	It("Should pause the Pipeline if user requests it", func() {
+	if UpgradeStrategy == config.PPNDStrategyID {
+		It("Should pause the Pipeline if user requests it", func() {
 
-		By("setting desiredPhase=Paused")
-		currentPipelineSpec := updatedPipelineSpec
-		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+			By("setting desiredPhase=Paused")
+			currentPipelineSpec := updatedPipelineSpec
+			currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
 
-		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false)
+			UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
+			}, false)
 
-		VerifyPipelineStaysPaused(pipelineRolloutName)
-	})
+			VerifyPipelineStaysPaused(pipelineRolloutName)
+		})
 
-	It("Should resume the Pipeline if user requests it", func() {
+		It("Should resume the Pipeline if user requests it", func() {
 
-		By("setting desiredPhase=Running")
-		currentPipelineSpec := updatedPipelineSpec
-		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+			By("setting desiredPhase=Running")
+			currentPipelineSpec := updatedPipelineSpec
+			currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
-		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false)
-	})
+			UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
+			}, false)
+		})
+	}
 
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
 		UpdateNumaflowControllerRollout(UpdatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
