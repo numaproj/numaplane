@@ -126,6 +126,7 @@ vet: ## Run go vet against code.
 test: codegen fmt vet envtest ## Run unit tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
 
+test-functional-nc:
 test-functional-monovertex:
 test-functional-pipeline:
 test-ppnd-e2e:
