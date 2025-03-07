@@ -92,6 +92,21 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return requeue, nil
 }
 
+/*
+ProcessUpgradingChildPostFailure handles the failure of an upgrading monovertex (anything specific to MonoVertex)
+It performs the following post-failure operations:
+- it scales down the upgrading child to 0 pods if it's not already
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingChildDef: the definition of the existing upgrading child from the beginning of reconciliation
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
 func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -133,6 +148,10 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, nil
 }
 
+/*
+ProcessUpgradingChildPreForcedPromotion handles an upgrading monovertex that's either failed or still being assessed
+It performs the following post-failure operations:
+*/
 func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -402,6 +421,20 @@ func scalePromotedMonoVertexToOriginalValues(
 	return false, nil
 }
 
+/*
+scaleMonoVertex scales a monovertex to the specified min and max if defined
+If either is not defined, it sets the scale definition based on whatever is defined, or null otherwise
+
+Parameters:
+- ctx: the context for managing request-scoped values.
+- monovertex: the existing monovertex definition
+- min: minimum value, or if null, then not defined
+- max: maximum value, or if null, then not defined
+- c: the Kubernetes client for resource operations.
+
+Returns:
+- An error if any issues occur during the scaling process.
+*/
 func scaleMonoVertex(
 	ctx context.Context,
 	monovertex *unstructured.Unstructured,
@@ -413,9 +446,9 @@ func scaleMonoVertex(
 	if min != nil && max != nil {
 		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *min, *max)
 	} else if min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d}`, *min)
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *min)
 	} else if max != nil {
-		scaleValue = fmt.Sprintf(`{"max": %d}`, *max)
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *max)
 	}
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
