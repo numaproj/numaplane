@@ -48,14 +48,17 @@ type progressiveController interface {
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
-	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
+	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails
+	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
 	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostFailure performs operations on the upgrading child after the upgrade fails
+	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -251,6 +254,7 @@ func processUpgradingChild(
 	// check for Force Promote set in Progressive strategy to force success logic
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
+
 		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
@@ -414,6 +418,8 @@ func declareSuccess(ctx context.Context,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
+
+	done, err := ProcessUpgradingChildPostSuccess
 
 	// Label the new child as promoted and then remove the label from the old one
 	numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")

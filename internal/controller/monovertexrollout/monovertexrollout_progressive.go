@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -102,13 +103,53 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	numaLogger.Debug("started post-failure processing of upgrading monovertex")
 
-	err := scaleMonoVertex(ctx, upgradingChildDef, int64(0), int64(0), c)
+	min := int64(0)
+	max := int64(0)
+	err := scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
 	if err != nil {
 		return true, err
 	}
 
 	numaLogger.Debug("completed post-failure processing of upgrading monovertex")
 
+	return false, nil
+}
+
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
+	if !ok {
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
+	}
+	var monovertexSpec map[string]interface{}
+	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monovertexSpec); err != nil {
+		return true, err
+	}
+
+	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
+	if err != nil {
+		return true, err
+	}
+	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
+	if err != nil {
+		return true, err
+	}
+	var minPtr, maxPtr *int64
+	if foundMin {
+		minPtr = &min
+	}
+	if foundMax {
+		maxPtr = &max
+	}
+	err = scaleMonoVertex(ctx, upgradingChildDef, minPtr, maxPtr, c)
+	if err != nil {
+		return true, err
+	}
 	return false, nil
 }
 
@@ -254,7 +295,7 @@ func scaleDownPromotedMonoVertex(
 		Actual:                  actualPodsCount,
 	}
 
-	if err := scaleMonoVertex(ctx, promotedChildDef, newMin, newMax, c); err != nil {
+	if err := scaleMonoVertex(ctx, promotedChildDef, &newMin, &newMax, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
 	}
 
@@ -323,10 +364,18 @@ func scalePromotedMonoVertexToOriginalValues(
 func scaleMonoVertex(
 	ctx context.Context,
 	monovertex *unstructured.Unstructured,
-	min int64,
-	max int64,
+	min *int64,
+	max *int64,
 	c client.Client) error {
 
-	patchJson := fmt.Sprintf(`{"spec": {"scale": {"min": %d, "max": %d}}}`, min, max)
+	scaleValue := "null"
+	if min != nil && max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, min, max)
+	} else if min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d}`, min)
+	} else if max != nil {
+		scaleValue = fmt.Sprintf(`{"max": %d}`, max)
+	}
+	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
