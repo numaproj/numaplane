@@ -158,20 +158,22 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*int64, *int64, error) {
-	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
+	min, foundMin, err := unstructured.NestedFloat64(monovertexSpec, "scale", "min") // note, this gives an error when using NestedInt64
 	if err != nil {
 		return nil, nil, err
 	}
-	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
+	max, foundMax, err := unstructured.NestedFloat64(monovertexSpec, "scale", "max")
 	if err != nil {
 		return nil, nil, err
 	}
 	var minPtr, maxPtr *int64
 	if foundMin {
-		minPtr = &min
+		asInt64 := int64(min)
+		minPtr = &asInt64
 	}
 	if foundMax {
-		maxPtr = &max
+		asInt64 := int64(max)
+		maxPtr = &asInt64
 	}
 	return minPtr, maxPtr, nil
 }
@@ -393,12 +395,13 @@ func scaleMonoVertex(
 
 	scaleValue := "null"
 	if min != nil && max != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, min, max)
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *min, *max)
 	} else if min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d}`, min)
+		scaleValue = fmt.Sprintf(`{"min": %d}`, *min)
 	} else if max != nil {
-		scaleValue = fmt.Sprintf(`{"max": %d}`, max)
+		scaleValue = fmt.Sprintf(`{"max": %d}`, *max)
 	}
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
+	fmt.Printf("deletethis: patchJson=%s\n", patchJson)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
