@@ -105,19 +105,37 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	// scale down monovertex to 0 Pods
 	// need to check to see if it's already scaled down before we do this
-	existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(upgradingChildDef.Object)
-	if err != nil {
-		return true, err
-	}
-	if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
-		numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
-		return false, nil
+	existingSpec, ok := upgradingChildDef.Object["spec"].(map[string]interface{})
+	if !ok {
+		numaLogger.Errorf(errors.New("monovertex spec invalid"), "existing upgrading monovertex spec doesn't start with root 'spec' key (or is of invalid type)?: %+v", upgradingChildDef.Object)
+	} else {
+		fmt.Printf("deletethis: 1\n")
+		existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(existingSpec)
+		if err != nil {
+			fmt.Printf("deletethis: 2\n")
+
+			return true, err
+		}
+		fmt.Printf("deletethis: 3\n")
+
+		if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
+			fmt.Printf("deletethis: 4\n")
+
+			numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
+			return false, nil
+		} else {
+			if existingScaleMin == nil || existingScaleMax == nil {
+				fmt.Printf("deletethis: existing scale values nil; upgradingChildDef.Object=%+v\n", upgradingChildDef.Object)
+			} else {
+				fmt.Printf("deletethis: existing scale values not nil; *existingScaleMin=%d, *existingScaleMax=%d, upgradingChildDef.Object=%+v\n", *existingScaleMin, *existingScaleMax, upgradingChildDef.Object)
+			}
+		}
 	}
 
 	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err = scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
+	err := scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
 	if err != nil {
 		return true, err
 	}
@@ -158,22 +176,32 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*int64, *int64, error) {
-	min, foundMin, err := unstructured.NestedFloat64(monovertexSpec, "scale", "min") // note, this gives an error when using NestedInt64
+	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
 	if err != nil {
-		return nil, nil, err
+		// try again using Float64
+		minFloat64, foundMin, err := unstructured.NestedFloat64(monovertexSpec, "scale", "min")
+		if err != nil {
+			return nil, nil, err
+		} else if foundMin {
+			min = int64(minFloat64)
+		}
 	}
-	max, foundMax, err := unstructured.NestedFloat64(monovertexSpec, "scale", "max")
+	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
 	if err != nil {
-		return nil, nil, err
+		// try again using Float64
+		maxFloat64, foundMax, err := unstructured.NestedFloat64(monovertexSpec, "scale", "max")
+		if err != nil {
+			return nil, nil, err
+		} else if foundMax {
+			max = int64(maxFloat64)
+		}
 	}
 	var minPtr, maxPtr *int64
 	if foundMin {
-		asInt64 := int64(min)
-		minPtr = &asInt64
+		minPtr = &min
 	}
 	if foundMax {
-		asInt64 := int64(max)
-		maxPtr = &asInt64
+		maxPtr = &max
 	}
 	return minPtr, maxPtr, nil
 }
