@@ -172,6 +172,17 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, nil
 }
 
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	// TODO
+	return nil
+}
+
 /*
 scaleDownPipelineSourceVertices scales down the source vertices pods of a pipeline to half of the current count if not already scaled down.
 It checks if all source vertices are already scaled down and skips the operation if true.

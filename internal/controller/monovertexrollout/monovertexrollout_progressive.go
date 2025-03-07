@@ -120,24 +120,24 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingChildDef *unstructured.Unstructured,
 	c client.Client,
-) (bool, error) {
+) error {
 
 	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
 	if !ok {
-		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
 	var monovertexSpec map[string]interface{}
 	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monovertexSpec); err != nil {
-		return true, err
+		return err
 	}
 
 	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
 	if err != nil {
-		return true, err
+		return err
 	}
 	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
 	if err != nil {
-		return true, err
+		return err
 	}
 	var minPtr, maxPtr *int64
 	if foundMin {
@@ -146,11 +146,14 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	if foundMax {
 		maxPtr = &max
 	}
+
+	// TODO: compare these values to upgradingChildDef values to see if we really need to patch or not
+
 	err = scaleMonoVertex(ctx, upgradingChildDef, minPtr, maxPtr, c)
 	if err != nil {
-		return true, err
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 /*
