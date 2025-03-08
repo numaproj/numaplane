@@ -120,25 +120,22 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	// scale down monovertex to 0 Pods
 	// need to check to see if it's already scaled down before we do this
-	existingSpec, ok := upgradingChildDef.Object["spec"].(map[string]interface{})
-	if !ok {
-		numaLogger.Errorf(errors.New("monovertex spec invalid"), "existing upgrading monovertex spec doesn't start with root 'spec' key (or is of invalid type)?: %+v", upgradingChildDef.Object)
-	} else {
-		existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(existingSpec)
-		if err != nil {
-			return true, err
-		}
+	existingSpec := upgradingChildDef.Object["spec"].(map[string]interface{})
 
-		if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
-			numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
-			return false, nil
-		}
+	existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(existingSpec)
+	if err != nil {
+		return true, err
+	}
+
+	if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
+		numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
+		return false, nil
 	}
 
 	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err := scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
+	err = scaleMonoVertex(ctx, upgradingChildDef, &min, &max, c)
 	if err != nil {
 		return true, err
 	}

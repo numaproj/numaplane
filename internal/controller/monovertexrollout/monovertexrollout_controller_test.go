@@ -590,8 +590,9 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 			name: "BothValuesPresent",
 			input: map[string]interface{}{
 				"scale": map[string]interface{}{
-					"min": int64(1),
-					"max": int64(10),
+					"min":        int64(1),
+					"max":        int64(10),
+					"anotherKey": "anotherValue",
 				},
 			},
 			expectedMin: &one,
@@ -604,6 +605,17 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 				"scale": map[string]interface{}{},
 			},
 			expectedMin: nil,
+			expectedMax: nil,
+			expectError: false,
+		},
+		{
+			name: "OneValuePresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{
+					"min": int64(1),
+				},
+			},
+			expectedMin: &one,
 			expectedMax: nil,
 			expectError: false,
 		},
