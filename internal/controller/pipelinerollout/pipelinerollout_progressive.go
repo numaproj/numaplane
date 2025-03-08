@@ -133,7 +133,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 
 	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("PipelineRollout")
 
-	numaLogger.Debug("started post-upgrade processing of promoted pipeline")
+	numaLogger.Debug("started post-failure processing of promoted pipeline")
 
 	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
 	if !ok {
@@ -149,9 +149,38 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 		return true, err
 	}
 
-	numaLogger.Debug("completed post-upgrade processing of promoted pipeline")
+	numaLogger.Debug("completed post-failure processing of promoted pipeline")
 
 	return requeue, nil
+}
+
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPostFailure").WithName("PipelineRollout")
+
+	numaLogger.Debug("started post-failure processing of upgrading pipeline")
+
+	// TODO
+
+	numaLogger.Debug("completed post-failure processing of upgrading pipeline")
+
+	return false, nil
+}
+
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	// TODO
+	return nil
 }
 
 /*

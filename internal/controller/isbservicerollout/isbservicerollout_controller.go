@@ -876,7 +876,7 @@ func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *u
 	return resultISBService
 }
 
-// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
+// ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface
 func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)

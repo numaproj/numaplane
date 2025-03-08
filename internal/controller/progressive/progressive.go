@@ -48,11 +48,17 @@ type progressiveController interface {
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
-	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade
+	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails
+	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
 	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// ProcessUpgradingChildPreForcedPromotion performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -248,7 +254,13 @@ func processUpgradingChild(
 	// check for Force Promote set in Progressive strategy to force success logic
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
-		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+
+		err = controller.ProcessUpgradingChildPreForcedPromotion(ctx, rolloutObject, existingUpgradingChildDef, c)
+		if err != nil {
+			return false, false, 0, err
+		}
+
+		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
 		} else {
@@ -331,13 +343,20 @@ func processUpgradingChild(
 			if requeue {
 				return false, false, common.DefaultRequeueDelay, nil
 			}
+			requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, existingUpgradingChildDef, c)
+			if err != nil {
+				return false, false, 0, err
+			}
+			if requeue {
+				return false, false, common.DefaultRequeueDelay, nil
+			}
 		}
 
 		return false, false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
-			done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+			done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 			if err != nil || done {
 				return done, false, 0, err
 			} else {
@@ -404,6 +423,7 @@ Returns:
 */
 func declareSuccess(ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	childStatus *apiv1.UpgradingChildStatus,
 	c client.Client,

@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -574,4 +575,200 @@ func TestChildNeedsUpdating(t *testing.T) {
 			numaLogger.Debugf("Test %s passed", tt.name)
 		})
 	}
+}
+
+func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
+	one := int64(1)
+	ten := int64(10)
+	tests := []struct {
+		name        string
+		input       map[string]interface{}
+		expectedMin *int64
+		expectedMax *int64
+		expectError bool
+	}{
+		{
+			name: "BothValuesPresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{
+					"min":        int64(1),
+					"max":        int64(10),
+					"anotherKey": "anotherValue",
+				},
+			},
+			expectedMin: &one,
+			expectedMax: &ten,
+			expectError: false,
+		},
+		{
+			name: "NoValuesPresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{},
+			},
+			expectedMin: nil,
+			expectedMax: nil,
+			expectError: false,
+		},
+		{
+			name: "OneValuePresent",
+			input: map[string]interface{}{
+				"scale": map[string]interface{}{
+					"min": int64(1),
+				},
+			},
+			expectedMin: &one,
+			expectedMax: nil,
+			expectError: false,
+		},
+		{
+			name: "ErrorAccessingValues",
+			input: map[string]interface{}{
+				"scale": "invalid_structure",
+			},
+			expectedMin: nil,
+			expectedMax: nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			min, max, err := getScaleValuesFromMonoVertexSpec(tt.input)
+			if (err != nil) != tt.expectError {
+				t.Errorf("Expected error: %v, got: %v", tt.expectError, err)
+			}
+			if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
+				t.Errorf("Expected min: %v, got: %v", tt.expectedMin, min)
+			}
+			if (max == nil && tt.expectedMax != nil) || (max != nil && tt.expectedMax == nil) || (max != nil && *max != *tt.expectedMax) {
+				t.Errorf("Expected max: %v, got: %v", tt.expectedMax, max)
+			}
+		})
+	}
+}
+
+func Test_scaleMonoVertex(t *testing.T) {
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	ctx := context.Background()
+	two := int32(2)
+	four := int32(4)
+	eight := int32(8)
+	tenUint := uint32(10)
+
+	tests := []struct {
+		name          string
+		originalScale numaflowv1.Scale
+		min           *int32
+		max           *int32
+		expectedScale numaflowv1.Scale
+	}{
+		{
+			name: "newMin,newMax",
+			originalScale: numaflowv1.Scale{
+				Min:             &two,
+				Max:             &four,
+				LookbackSeconds: &tenUint,
+			},
+			min: &four,
+			max: &eight,
+			expectedScale: numaflowv1.Scale{
+				Min:             &four,
+				Max:             &eight,
+				LookbackSeconds: &tenUint,
+			},
+		},
+		{
+			name: "newNullValues",
+			originalScale: numaflowv1.Scale{
+				Min:             &two,
+				Max:             &four,
+				LookbackSeconds: &tenUint,
+			},
+			min: nil,
+			max: nil,
+			expectedScale: numaflowv1.Scale{
+				Min:             nil,
+				Max:             nil,
+				LookbackSeconds: &tenUint,
+			},
+		},
+		{
+			name: "newMin,nullMax",
+			originalScale: numaflowv1.Scale{
+				Min:             &two,
+				Max:             &four,
+				LookbackSeconds: &tenUint,
+			},
+			min: &four,
+			max: nil,
+			expectedScale: numaflowv1.Scale{
+				Min:             &four,
+				Max:             nil,
+				LookbackSeconds: &tenUint,
+			},
+		},
+		{
+			name: "newMax,nullMin",
+			originalScale: numaflowv1.Scale{
+				Min:             &two,
+				Max:             &four,
+				LookbackSeconds: &tenUint,
+			},
+			min: nil,
+			max: &eight,
+			expectedScale: numaflowv1.Scale{
+				Min:             nil,
+				Max:             &eight,
+				LookbackSeconds: &tenUint,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// first delete MonoVertex in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+			_, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, createMonoVertexOfScale(tt.originalScale), metav1.CreateOptions{})
+			assert.NoError(t, err)
+
+			// get the monovertex as Unstructured type
+			mvUnstruc := &unstructured.Unstructured{}
+			mvUnstruc.SetGroupVersionKind(schema.GroupVersionKind{
+				Kind:    common.NumaflowMonoVertexKind,
+				Group:   common.NumaflowAPIGroup,
+				Version: common.NumaflowAPIVersion,
+			})
+
+			namespacedName := k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestMonoVertexName}
+			err = client.Get(ctx, namespacedName, mvUnstruc)
+			assert.NoError(t, err)
+
+			var minInt64Ptr, maxInt64Ptr *int64
+			if tt.min != nil {
+				minInt64 := int64(*tt.min)
+				minInt64Ptr = &minInt64
+			}
+			if tt.max != nil {
+				maxInt64 := int64(*tt.max)
+				maxInt64Ptr = &maxInt64
+			}
+			err = scaleMonoVertex(ctx, mvUnstruc, minInt64Ptr, maxInt64Ptr, client)
+			assert.NoError(t, err)
+
+			// Get result MonoVertex
+			resultMonoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Get(ctx, ctlrcommon.DefaultTestMonoVertexName, metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.NotNil(t, resultMonoVertex)
+			assert.Equal(t, tt.expectedScale, resultMonoVertex.Spec.Scale)
+		})
+	}
+}
+
+func createMonoVertexOfScale(scaleDefinition numaflowv1.Scale) *numaflowv1.MonoVertex {
+	mv := createMonoVertex(numaflowv1.MonoVertexPhaseRunning, numaflowv1.Status{}, map[string]string{}, map[string]string{})
+	mv.Spec.Scale = scaleDefinition
+	return mv
 }

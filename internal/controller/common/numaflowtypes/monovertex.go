@@ -38,13 +38,3 @@ func ParseMonoVertexStatus(monoVertex *unstructured.Unstructured) (MonoVertexSta
 
 	return status, nil
 }
-func MonoVertexWithoutReplicas(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
-	var specAsMap map[string]any
-	if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
-		return nil, err
-	}
-	// remove "replicas" field
-	comparisonExcludedPaths := []string{"replicas"}
-	util.RemovePaths(specAsMap, comparisonExcludedPaths, ".")
-	return specAsMap, nil
-}
