@@ -71,8 +71,8 @@ var (
 )
 
 const (
-	InitialNumaflowControllerVersion = "1.4.3-rc3"
-	UpdatedNumaflowControllerVersion = "1.4.3-rc33" // note this one is really a clone of "1.4.3-rc3"
+	InitialNumaflowControllerVersion = "1.4.3"
+	UpdatedNumaflowControllerVersion = "1.4.4-rc1" // note this one is really a clone of "1.4.3"
 
 	Namespace = "numaplane-system"
 
