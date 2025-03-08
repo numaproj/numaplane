@@ -439,13 +439,15 @@ func scaleMonoVertex(
 	max *int64,
 	c client.Client) error {
 
-	scaleValue := "null"
+	var scaleValue string
 	if min != nil && max != nil {
 		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *min, *max)
 	} else if min != nil {
 		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *min)
 	} else if max != nil {
 		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
 	}
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
