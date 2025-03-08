@@ -608,6 +608,14 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 
 		excludedPaths := []string{"replicas", "scale.min", "scale.max"}
 		util.RemovePaths(specAsMap, excludedPaths, ".")
+
+		// if "scale" is there and empty, remove it
+		// (this enables accurate comparison between one monovertex with "scale" empty and one with "scale" not present)
+		scaleMap, found := specAsMap["scale"].(map[string]interface{})
+		if found && len(scaleMap) == 0 {
+			unstructured.RemoveNestedField(specAsMap, "scale")
+		}
+
 		return specAsMap, nil
 	}
 

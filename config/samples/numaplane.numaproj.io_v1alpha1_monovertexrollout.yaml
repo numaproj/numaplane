@@ -20,6 +20,9 @@ spec:
         udsource:
           container:
             image: quay.io/numaio/numaflow-go/source-simple-source:stable
+        transformer:
+          container:
+            image: docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable
       sink:
         udsink:
           container:

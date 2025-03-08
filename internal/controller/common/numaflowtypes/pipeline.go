@@ -201,4 +201,11 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) {
 	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "min")
 	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "max")
+
+	// if "scale" is there and empty, remove it
+	spec := pipeline.Object["spec"].(map[string]interface{})
+	scaleMap, found := spec["scale"].(map[string]interface{})
+	if found && len(scaleMap) == 0 {
+		unstructured.RemoveNestedField(pipeline.Object, "spec", "scale")
+	}
 }
