@@ -35,3 +35,5 @@ config/crd/bases/_.yaml
 config/crd/external/
 
 tests/e2e/output
+
+.qodo
