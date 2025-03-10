@@ -2,7 +2,6 @@ package monovertexrollout
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -16,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -317,20 +317,9 @@ func scaleDownPromotedMonoVertex(
 		return true, nil
 	}
 
-	originalScaleDef, foundScale, err := unstructured.NestedMap(promotedChildDef.Object, "spec", "scale")
+	originalScaleMinMax, err := ctlrcommon.ExtractOriginalScaleMinMax(promotedChildDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return true, err
-	}
-
-	var originalScaleDefAsString *string
-	if foundScale {
-		jsonBytes, err := json.Marshal(originalScaleDef)
-		if err != nil {
-			return true, err
-		}
-
-		jsonString := string(jsonBytes)
-		originalScaleDefAsString = &jsonString
+		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
 
 	newMin, newMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(actualPodsCount), []string{"spec", "scale", "min"})
@@ -343,13 +332,13 @@ func scaleDownPromotedMonoVertex(
 		"actualPodsCount", actualPodsCount,
 		"newMin", newMin,
 		"newMax", newMax,
-		"originalScaleDefAsString", originalScaleDefAsString,
+		"originalScaleMinMax", originalScaleMinMax,
 	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
-		OriginalScaleDefinition: originalScaleDefAsString,
-		ScaleTo:                 newMax,
-		Actual:                  actualPodsCount,
+		OriginalScaleMinMax: originalScaleMinMax,
+		ScaleTo:             newMax,
+		Actual:              actualPodsCount,
 	}
 
 	if err := scaleMonoVertex(ctx, promotedChildDef, &newMin, &newMax, c); err != nil {
@@ -401,8 +390,8 @@ func scalePromotedMonoVertexToOriginalValues(
 	}
 
 	patchJson := `{"spec": {"scale": null}}`
-	if promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleDefinition != nil {
-		patchJson = fmt.Sprintf(`{"spec": {"scale": %s}}`, *promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleDefinition)
+	if promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleMinMax != nil {
+		patchJson = fmt.Sprintf(`{"spec": {"scale": %s}}`, *promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleMinMax)
 	}
 
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {

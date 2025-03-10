@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -270,20 +271,9 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			originalScaleDef, foundVertexScale, err := unstructured.NestedMap(vertexAsMap, "scale")
+			originalScaleMinMax, err := ctlrcommon.ExtractOriginalScaleMinMax(vertexAsMap, []string{"scale"})
 			if err != nil {
-				return true, err
-			}
-
-			var originalScaleDefAsString *string
-			if foundVertexScale {
-				jsonBytes, err := json.Marshal(originalScaleDef)
-				if err != nil {
-					return true, err
-				}
-
-				jsonString := string(jsonBytes)
-				originalScaleDefAsString = &jsonString
+				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
 
 			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"})
@@ -297,7 +287,7 @@ func scaleDownPipelineSourceVertices(
 				"actualPodsCount", actualPodsCount,
 				"newMin", newMin,
 				"newMax", newMax,
-				"originalScaleDefAsString", originalScaleDefAsString,
+				"originalScaleMinMax", originalScaleMinMax,
 			).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, newMax)
 
 			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
@@ -309,9 +299,9 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				OriginalScaleDefinition: originalScaleDefAsString,
-				ScaleTo:                 newMax,
-				Actual:                  actualPodsCount,
+				OriginalScaleMinMax: originalScaleMinMax,
+				ScaleTo:             newMax,
+				Actual:              actualPodsCount,
 			}
 		}
 	}
@@ -394,16 +384,20 @@ func scalePipelineSourceVerticesToOriginalValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleDefinition == nil {
+			if vertexScaleValues.OriginalScaleMinMax == nil {
 				unstructured.RemoveNestedField(vertexAsMap, "scale")
 			} else {
 				scaleAsMap := map[string]any{}
-				err := json.Unmarshal([]byte(*vertexScaleValues.OriginalScaleDefinition), &scaleAsMap)
+				err := json.Unmarshal([]byte(*vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
 				if err != nil {
-					return true, fmt.Errorf("failed to unmarshal OriginalScaleDefinition: %w", err)
+					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 				}
 
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap, "scale"); err != nil {
+				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
+					return true, err
+				}
+
+				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
 					return true, err
 				}
 			}
