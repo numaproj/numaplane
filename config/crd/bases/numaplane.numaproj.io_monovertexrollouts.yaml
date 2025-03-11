@@ -225,6 +225,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-

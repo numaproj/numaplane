@@ -335,7 +335,7 @@ func scaleDownPromotedMonoVertex(
 	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
-		OriginalScaleMinMax: &originalScaleMinMax,
+		OriginalScaleMinMax: originalScaleMinMax,
 		ScaleTo:             newMax,
 		Actual:              actualPodsCount,
 	}
@@ -388,10 +388,7 @@ func scalePromotedMonoVertexToOriginalValues(
 		return true, errors.New("unable to restore scale values for the promoted monovertex because the rollout does not have promotedChildStatus scaleValues set")
 	}
 
-	patchJson := `{"spec": {"scale": null}}`
-	if promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleMinMax != nil {
-		patchJson = fmt.Sprintf(`{"spec": {"scale": %s}}`, *promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleMinMax)
-	}
+	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, promotedMVStatus.ScaleValues[promotedChildDef.GetName()].OriginalScaleMinMax)
 
 	if err := kubernetes.PatchResource(ctx, c, promotedChildDef, patchJson, k8stypes.MergePatchType); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted monovertex to original values: %w", err)

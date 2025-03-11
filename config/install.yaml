@@ -539,6 +539,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-
@@ -1275,6 +1276,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-

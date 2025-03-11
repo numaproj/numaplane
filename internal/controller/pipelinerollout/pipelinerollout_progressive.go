@@ -298,7 +298,7 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				OriginalScaleMinMax: &originalScaleMinMax,
+				OriginalScaleMinMax: originalScaleMinMax,
 				ScaleTo:             newMax,
 				Actual:              actualPodsCount,
 			}
@@ -383,11 +383,11 @@ func scalePipelineSourceVerticesToOriginalValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleMinMax == nil {
+			if vertexScaleValues.OriginalScaleMinMax == "null" {
 				unstructured.RemoveNestedField(vertexAsMap, "scale")
 			} else {
 				scaleAsMap := map[string]any{}
-				err := json.Unmarshal([]byte(*vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
+				err := json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
 				if err != nil {
 					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 				}
