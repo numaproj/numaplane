@@ -20,14 +20,12 @@ import (
 	"testing"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	. "github.com/numaproj/numaplane/tests/e2e"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
 const (
@@ -73,53 +71,6 @@ var (
 		Edges: []numaflowv1.Edge{
 			{
 				From: "in",
-				To:   "out",
-			},
-		},
-	}
-
-	updatedPipelineSpec = numaflowv1.PipelineSpec{
-		InterStepBufferServiceName: isbServiceRolloutName,
-		Lifecycle: numaflowv1.Lifecycle{
-			PauseGracePeriodSeconds: ptr.To(int64(120)),
-		},
-		Vertices: []numaflowv1.AbstractVertex{
-			{
-				Name: "in",
-				Source: &numaflowv1.Source{
-					Generator: &numaflowv1.GeneratorSource{
-						RPU:      &pipelineSpecSourceRPU,
-						Duration: &pipelineSpecSourceDuration,
-					},
-				},
-				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
-			},
-			{
-				Name: "cat",
-				UDF: &numaflowv1.UDF{
-					Builtin: &numaflowv1.Function{
-						Name: "cat",
-					},
-				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
-			},
-			{
-				Name: "out",
-				Sink: &numaflowv1.Sink{
-					AbstractSink: numaflowv1.AbstractSink{
-						Log: &numaflowv1.Log{},
-					},
-				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
-			},
-		},
-		Edges: []numaflowv1.Edge{
-			{
-				From: "in",
-				To:   "cat",
-			},
-			{
-				From: "cat",
 				To:   "out",
 			},
 		},
