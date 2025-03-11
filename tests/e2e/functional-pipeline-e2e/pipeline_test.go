@@ -34,12 +34,10 @@ import (
 )
 
 const (
-	isbServiceRolloutName            = "test-isbservice-rollout"
-	pipelineRolloutName              = "test-pipeline-rollout"
-	monoVertexRolloutName            = "test-monovertex-rollout"
-	invalidNumaflowControllerVersion = "99.99.99"
-	initialJetstreamVersion          = "2.10.17"
-	updatedJetstreamVersion          = "2.10.11"
+	isbServiceRolloutName   = "test-isbservice-rollout"
+	pipelineRolloutName     = "test-pipeline-rollout"
+	initialJetstreamVersion = "2.10.17"
+	updatedJetstreamVersion = "2.10.11"
 
 	// anotherPipelineRolloutName = "another-pipeline-rollout"
 )
@@ -172,28 +170,6 @@ var (
 			},
 		},
 	}
-
-	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
-		Scale: numaflowv1.Scale{
-			Min: &sourceVertexScaleMin,
-		},
-		Source: &numaflowv1.Source{
-			UDSource: &numaflowv1.UDSource{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
-				},
-			},
-		},
-		Sink: &numaflowv1.Sink{
-			AbstractSink: numaflowv1.AbstractSink{
-				UDSink: &numaflowv1.UDSink{
-					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
-					},
-				},
-			},
-		},
-	}
 )
 
 func TestFunctionalE2E(t *testing.T) {
@@ -220,17 +196,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
 	})
 
-	// extra PipelineRollout to verify that multiple Pipelines will behave correctly during ISBService/controller updates
-	// It("Should create another PipelineRollout if it does not exist", func() {
-	// 	CreatePipelineRollout(anotherPipelineRolloutName, Namespace, initialPipelineSpec, false)
-	// })
-
-	It("Should create the MonoVertexRollout if it does not exist", func() {
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec)
-	})
-
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
-
 		By("Updating Pipeline directly")
 
 		// update child Pipeline
@@ -264,7 +230,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
-
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
@@ -272,7 +237,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should pause the Pipeline if user requests it", func() {
-
 		By("setting desiredPhase=Paused")
 		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
@@ -285,7 +249,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should resume the Pipeline if user requests it", func() {
-
 		By("setting desiredPhase=Running")
 		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
@@ -295,44 +258,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		}, false)
 	})
 
-	It("Should pause the MonoVertex if user requests it", func() {
-
-		By("setting desiredPhase=Paused")
-		currentMonoVertexSpec := initialMonoVertexSpec
-		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
-
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		})
-
-		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
-	})
-
-	It("Should resume the MonoVertex if user requests it", func() {
-
-		By("setting desiredPhase=Running")
-		currentMonoVertexSpec := initialMonoVertexSpec
-		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
-
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		})
-	})
-
-	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
-		UpdateNumaflowControllerRollout(InitialNumaflowControllerVersion, UpdatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-	})
-
-	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {
-		UpdateNumaflowControllerRollout(UpdatedNumaflowControllerVersion, invalidNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, false)
-	})
-
-	It("Should update the child NumaflowController if the NumaflowControllerRollout is restored back to previous version", func() {
-		UpdateNumaflowControllerRollout(invalidNumaflowControllerVersion, UpdatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-	})
-
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
-
 		// new ISBService spec
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
@@ -341,67 +267,26 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		}, true, false)
 
-		// UpdateISBServiceRollout(isbServiceRolloutName, []string{pipelineRolloutName, anotherPipelineRolloutName}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-		// 	return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		// }, true, false, true, false)
-
 	})
 
 	It("Should update the child ISBService updating a no-data-loss field", func() {
-
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecNoDataLossField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		}, false, false)
-
-		// UpdateISBServiceRollout(isbServiceRolloutName, []string{pipelineRolloutName, anotherPipelineRolloutName}, ISBServiceSpecNoDataLossField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-		// 	return retrievedISBServiceSpec.JetStream != nil &&
-		// 		retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
-		// 		retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
-		// 		*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		// }, false, false, false, false)
-
 	})
 
 	It("Should update the child ISBService updating a recreate field", func() {
-
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 		}, false, true)
-
-		// UpdateISBServiceRollout(isbServiceRolloutName, []string{pipelineRolloutName, anotherPipelineRolloutName}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-		// 	return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
-		// }, false, true, true, false)
-
-	})
-
-	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
-
-		// new MonoVertex spec
-		updatedMonoVertexSpec := initialMonoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource = nil
-		rpu := int64(10)
-		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
-
-		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		})
-
-		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
-		})
-
 	})
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
 		CheckEventually("verifying just 1 Pipeline", func() int {
 			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
-		}).Should(Equal(1))
-
-		CheckEventually("verifying just 1 MonoVertex", func() int {
-			return GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
 		}).Should(Equal(1))
 
 		CheckEventually("verifying just 1 InterstepBufferService", func() int {
@@ -411,11 +296,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should delete the PipelineRollouts and child Pipelines", func() {
 		DeletePipelineRollout(pipelineRolloutName)
-		// DeletePipelineRollout(anotherPipelineRolloutName)
-	})
-
-	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
-		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
 	It("Should delete the ISBServiceRollout and child ISBService", func() {

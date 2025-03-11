@@ -214,6 +214,7 @@ func DeleteNumaflowControllerRollout() {
 	}).WithTimeout(TestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 }
 
+// UpdateNumaflowControllerRollout updates the NumaflowControllerRollout and its dependent PipelineRollouts.
 // originalVersion is the original version of the current NumaflowController defined in the rollout
 // newVersion is the new version the updated NumaflowController should have if it is a valid version
 // pipelineRolloutNames is an array of PipelineRollout names we check to be sure that they are pausing during an update
