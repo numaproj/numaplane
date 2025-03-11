@@ -205,18 +205,18 @@ spec:
                         type: string
                       scaleValues:
                         additionalProperties:
-                          description: ScaleValues stores the original scale definition,
-                            scaleTo value, and actual scale value of a pipeline or
-                            monovertex vertex
+                          description: ScaleValues stores the original scale min and
+                            max values, scaleTo value, and actual scale value of a
+                            pipeline or monovertex vertex
                           properties:
                             actual:
                               description: Actual indicates how many pods are actually
                                 running for the vertex
                               format: int64
                               type: integer
-                            originalScaleDefinition:
-                              description: OriginalScaleDefinition stores the original
-                                scale definition as JSON string
+                            originalScaleMinMax:
+                              description: OriginalScaleMinMax stores the original
+                                scale min and max values as JSON string
                               type: string
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
@@ -225,6 +225,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-
