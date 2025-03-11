@@ -18,11 +18,9 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -119,32 +117,6 @@ func (store *inProgressStrategyStore) SetStrategy(namespacedName k8stypes.Namesp
 	store.mutex.Lock()
 	store.inProgressUpgradeStrategies[key] = upgradeStrategy
 	store.mutex.Unlock()
-}
-
-// ExtractOriginalScaleMinMax returns a JSON string of the scale definition
-// including only min and max fields extracted from the given unstructured object.
-func ExtractOriginalScaleMinMax(object map[string]any, pathToScale []string) (*string, error) {
-	originalScaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
-	if err != nil {
-		return nil, err
-	}
-
-	if !foundScale {
-		return nil, nil
-	}
-
-	originalScaleMinMaxOnly := map[string]any{
-		"min": originalScaleDef["min"],
-		"max": originalScaleDef["max"],
-	}
-
-	jsonBytes, err := json.Marshal(originalScaleMinMaxOnly)
-	if err != nil {
-		return nil, err
-	}
-
-	jsonString := string(jsonBytes)
-	return &jsonString, nil
 }
 
 func namespacedNameToKey(namespacedName k8stypes.NamespacedName) string {

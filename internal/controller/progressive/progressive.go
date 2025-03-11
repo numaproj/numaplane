@@ -18,6 +18,7 @@ package progressive
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -533,4 +534,30 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 	}
 
 	return newMin, newMax, nil
+}
+
+// ExtractOriginalScaleMinMaxAsJSONString returns a JSON string of the scale definition
+// including only min and max fields extracted from the given unstructured object.
+// It returns "null" if the pathToScale is not found.
+func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
+	originalScaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+	if err != nil {
+		return "", err
+	}
+
+	if !foundScale {
+		return "null", nil
+	}
+
+	originalScaleMinMaxOnly := map[string]any{
+		"min": originalScaleDef["min"],
+		"max": originalScaleDef["max"],
+	}
+
+	jsonBytes, err := json.Marshal(originalScaleMinMaxOnly)
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -271,7 +270,7 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			originalScaleMinMax, err := ctlrcommon.ExtractOriginalScaleMinMax(vertexAsMap, []string{"scale"})
+			originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
@@ -299,7 +298,7 @@ func scaleDownPipelineSourceVertices(
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				OriginalScaleMinMax: originalScaleMinMax,
+				OriginalScaleMinMax: &originalScaleMinMax,
 				ScaleTo:             newMax,
 				Actual:              actualPodsCount,
 			}

@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -317,7 +316,7 @@ func scaleDownPromotedMonoVertex(
 		return true, nil
 	}
 
-	originalScaleMinMax, err := ctlrcommon.ExtractOriginalScaleMinMax(promotedChildDef.Object, []string{"spec", "scale"})
+	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(promotedChildDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
@@ -336,7 +335,7 @@ func scaleDownPromotedMonoVertex(
 	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
-		OriginalScaleMinMax: originalScaleMinMax,
+		OriginalScaleMinMax: &originalScaleMinMax,
 		ScaleTo:             newMax,
 		Actual:              actualPodsCount,
 	}
