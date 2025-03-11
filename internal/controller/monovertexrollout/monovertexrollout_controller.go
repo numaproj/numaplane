@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,10 +39,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -392,43 +394,51 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns,
-		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
+	if err := controller.Watch(
+		source.Kind(mgr.GetCache(), monoVertexUns,
+			handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
+			predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
 		return fmt.Errorf("failed to watch MonoVertices: %w", err)
 	}
 
-	// Watch AnalysisRuns that are owned by MonoVertex
-	if err := controller.Watch(source.Kind(mgr.GetCache(), &argorolloutsv1.Rollout{}, 
+	// Watch AnalysisRuns that are owned by the MonoVertices that MonoVertexRollout owns
+	if err := controller.Watch(
+		source.Kind(mgr.GetCache(), &argorolloutsv1.AnalysisRun{},
+			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun /* obj client.Object*/) []reconcile.Request {
 
+				var reqs []reconcile.Request
 
-	
+				// Retrieve parent 'B' directly via OwnerReferences
+				for _, ref := range analysisRun.GetOwnerReferences() {
+					// Check if the owner is of Kind 'B' and is marked as "Controller"
+					if ref.Kind == "MonoVertex" && *ref.Controller {
+						monoVertex, err := kubernetes.GetResource(ctx, r.client, numaflowv1.MonoVertexGroupVersionKind,
+							k8stypes.NamespacedName{Namespace: analysisRun.GetNamespace(), Name: ref.Name})
+						if err != nil {
+							continue
+						}
 
+						// Retrieve grandparent 'A' through 'B's owner references
+						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
+							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
+								reqs = append(reqs, reconcile.Request{
+									NamespacedName: types.NamespacedName{
+										Name:      monovertexOwner.Name,
+										Namespace: analysisRun.GetNamespace(),
+									},
+								})
+							}
+						}
+					}
+				}
+				return reqs
+			}),
+			predicate.TypedResourceVersionChangedPredicate[*argorolloutsv1.AnalysisRun]{})); err != nil {
+
+		return fmt.Errorf("failed to watch AnalysisRuns: %w", err)
+	}
 
 	return nil
-}
-
-func (r *ReconcilerA) SetupWithManager(mgr ctrl.Manager) error {
-    return ctrl.NewControllerManagedBy(mgr).
-        For(&TypeA{}).
-        // Watch Type C and use a predicate to filter events
-        Watches(
-            &source.Kind{Type: &TypeC{}},
-            &handler.EnqueueRequestForOwner{
-                OwnerType: &TypeB{},
-            },
-            builder.WithPredicates(predicate.Funcs{
-                CreateFunc: func(e event.CreateEvent) bool {
-                    return checkOwnershipAndRelevance(e.Object)
-                },
-                UpdateFunc: func(e event.UpdateEvent) bool {
-                    return checkOwnershipAndRelevance(e.ObjectNew)
-                },
-                DeleteFunc: func(e event.DeleteEvent) bool {
-                    return checkOwnershipAndRelevance(e.Object)
-                },
-            }),
-        ).Complete(r)
 }
 
 func (r *MonoVertexRolloutReconciler) merge(existingMonoVertex, newMonoVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {

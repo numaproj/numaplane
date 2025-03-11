@@ -5,6 +5,7 @@ go 1.23.1
 require (
 	github.com/ahmetb/gen-crd-api-reference-docs v0.3.0
 	github.com/argoproj/argo-cd/v2 v2.12.6
+	github.com/argoproj/argo-rollouts v1.8.0
 	github.com/argoproj/gitops-engine v0.7.1-0.20241023134423-09e5225f8472
 	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -21,7 +22,7 @@ require (
 	github.com/rs/zerolog v1.29.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.18.2
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.10.0
 	golang.org/x/tools v0.26.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -50,7 +51,7 @@ require (
 	github.com/dlclark/regexp2 v1.11.2 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
-	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
+	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -139,13 +140,13 @@ require (
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/oauth2 v0.21.0 // indirect
+	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

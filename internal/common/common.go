@@ -144,6 +144,18 @@ var (
 		Resource: "pipelines",
 	}
 
+	MonoVertexGVR = schema.GroupVersionResource{
+		Group:    NumaflowAPIGroup,
+		Version:  NumaflowAPIVersion,
+		Resource: "monovertices",
+	}
+
+	ISBGVR = schema.GroupVersionResource{
+		Group:    NumaflowAPIGroup,
+		Version:  NumaflowAPIVersion,
+		Resource: "interstepbufferservices",
+	}
+
 	// DefaultRequeueDelay indicates the default requeue time (in seconds) used by Reconcilers
 	DefaultRequeueDelay = 20 * time.Second
 )
