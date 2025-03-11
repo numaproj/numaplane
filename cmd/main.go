@@ -39,6 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -67,6 +68,8 @@ func init() {
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 
 	utilruntime.Must(numaflowv1.AddToScheme(scheme))
+
+	utilruntime.Must(argorolloutsv1.AddToScheme(scheme))
 }
 
 func main() {
@@ -203,7 +206,7 @@ func main() {
 		mgr.GetEventRecorderFor(apiv1.RolloutMonoVertexName),
 	)
 
-	if err = monoVertexRolloutReconciler.SetupWithManager(mgr); err != nil {
+	if err = monoVertexRolloutReconciler.SetupWithManager(ctx, mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up MonoVertexRollout controller")
 	}
 

@@ -374,7 +374,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+
+	numaLogger := logger.FromContext(ctx)
 
 	controller, err := runtimecontroller.New(ControllerMonoVertexRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
@@ -401,26 +403,37 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to watch MonoVertices: %w", err)
 	}
 
-	// Watch AnalysisRuns that are owned by the MonoVertices that MonoVertexRollout owns
+	// Watch AnalysisRuns that are owned by the MonoVertices that MonoVertexRollout owns (this enqueues the MonoVertexRollout)
 	if err := controller.Watch(
 		source.Kind(mgr.GetCache(), &argorolloutsv1.AnalysisRun{},
 			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun) []reconcile.Request {
 
 				var reqs []reconcile.Request
 
+				fmt.Printf("deletethis: see analysisRun=%s\n", analysisRun.Name)
+
 				// Check if MonoVertex is the owner
-				for _, ref := range analysisRun.GetOwnerReferences() {
-					// Check if the owner is of Kind 'B' and is marked as "Controller"
-					if ref.Kind == "MonoVertex" && *ref.Controller {
+				for _, analysisRunOwner := range analysisRun.GetOwnerReferences() {
+					// Check if the owner is of Kind 'MonoVertex' and is marked as "Controller"
+					if analysisRunOwner.Kind == "MonoVertex" && *analysisRunOwner.Controller {
+
+						fmt.Printf("deletethis: found analysisRun Owner=%s\n", analysisRunOwner.Name)
+
+						// find the MonoVertex so we can enqueue the MonoVertexRollout which owns it (if one does)
 						monoVertex, err := kubernetes.GetResource(ctx, r.client, numaflowv1.MonoVertexGroupVersionKind,
-							k8stypes.NamespacedName{Namespace: analysisRun.GetNamespace(), Name: ref.Name})
+							k8stypes.NamespacedName{Namespace: analysisRun.GetNamespace(), Name: analysisRunOwner.Name})
 						if err != nil {
+							numaLogger.WithValues(
+								"AnalysisRun", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRun.Name),
+								"MonoVertex", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRunOwner.Name)).Warnf("Unable to get MonoVertex owner of AnalysisRun")
 							continue
 						}
 
 						// See if a MonoVertexRollout owns the MonoVertex: if so, enqueue it
 						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
 							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
+								fmt.Printf("deletethis: found MonoVertexRollout Owner=%s\n", monovertexOwner.Name)
+
 								reqs = append(reqs, reconcile.Request{
 									NamespacedName: types.NamespacedName{
 										Name:      monovertexOwner.Name,
