@@ -404,11 +404,11 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch AnalysisRuns that are owned by the MonoVertices that MonoVertexRollout owns
 	if err := controller.Watch(
 		source.Kind(mgr.GetCache(), &argorolloutsv1.AnalysisRun{},
-			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun /* obj client.Object*/) []reconcile.Request {
+			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun) []reconcile.Request {
 
 				var reqs []reconcile.Request
 
-				// Retrieve parent 'B' directly via OwnerReferences
+				// Check if MonoVertex is the owner
 				for _, ref := range analysisRun.GetOwnerReferences() {
 					// Check if the owner is of Kind 'B' and is marked as "Controller"
 					if ref.Kind == "MonoVertex" && *ref.Controller {
@@ -418,7 +418,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 							continue
 						}
 
-						// Retrieve grandparent 'A' through 'B's owner references
+						// See if a MonoVertexRollout owns the MonoVertex: if so, enqueue it
 						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
 							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
 								reqs = append(reqs, reconcile.Request{
