@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -59,8 +60,34 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 // This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
-		// TTODO: need to verify that readyReplicas >= desiredReplicas for every pipeline vertex
-		return true, nil
+		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
+			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
+			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
+		if err != nil {
+			return false, err
+		}
+
+		if verticesList == nil || len(verticesList.Items) == 0 {
+			// TTODO: decide what to return
+			return false, errors.New("there should be at least 1 vertex in a pipeline")
+			// OR
+			// return true, nil
+		}
+
+		areAllVerticesReplicasReady := true
+		for _, vertex := range verticesList.Items {
+			areVertexReplicasReady, err := progressive.AreVertexReplicasReady(&vertex)
+			if err != nil {
+				return false, err
+			}
+
+			if !areVertexReplicasReady {
+				areAllVerticesReplicasReady = false
+				break
+			}
+		}
+
+		return areAllVerticesReplicasReady, nil
 	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)

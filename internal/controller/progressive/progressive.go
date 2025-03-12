@@ -571,3 +571,38 @@ func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale [
 
 	return string(jsonBytes), nil
 }
+
+/*
+AreVertexReplicasReady checks if the number of ready replicas of a vertex matches or exceeds the desired replicas.
+
+Parameters:
+  - existingUpgradingChildDef: An unstructured object representing the vertex whose replica status is being checked.
+
+Returns:
+  - A boolean indicating whether the ready replicas are sufficient.
+  - An error if there is an issue retrieving the replica counts.
+*/
+func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
+	if err != nil {
+		return false, err
+	}
+
+	readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
+	if err != nil {
+		return false, err
+	}
+
+	/*
+		TTODO: remove after testing
+
+		desired		ready		outcome
+		0					0				T
+		>0				0				F
+		0					>0			T
+		>0(2)			>0(3)		T
+		>0(3)			>0(2)		F
+		>0(3)			>0(3)		T
+	*/
+	return readyReplicas >= desiredReplicas, nil
+}
