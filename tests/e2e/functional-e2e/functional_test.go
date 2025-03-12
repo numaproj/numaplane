@@ -180,7 +180,7 @@ var (
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
+					Image: "quay.io/numaio/numaflow-go/source-simple-source:v0.6.1",
 				},
 			},
 		},
