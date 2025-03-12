@@ -170,6 +170,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// TODO: consider storing PipelineRollout Status in a local cache instead of this
 	pipelineRollout, err := getLivePipelineRollout(ctx, namespacedName.Name, namespacedName.Namespace)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.Info("PipelineRollout not found, %v", err)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 	}
 
@@ -343,6 +347,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 			// Get the PipelineRollout live resource
 			livePipelineRollout, err := getLivePipelineRollout(ctx, pipelineRollout.Name, pipelineRollout.Namespace)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Info("PipelineRollout not found, %v", err)
+					return 0, nil, nil
+				}
 				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
 			}
 			*pipelineRollout = *livePipelineRollout
@@ -821,6 +829,10 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 		// Therefore, we know that the Status is totally current.
 		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.Info("PipelineRollout not found, %v", err)
+				return nil
+			}
 			return fmt.Errorf("error getting the live PipelineRollout after attempting to update the PipelineRollout Status: %w", err)
 		}
 		status := pipelineRollout.Status // save off the Status

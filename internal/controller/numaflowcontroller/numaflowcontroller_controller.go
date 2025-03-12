@@ -236,6 +236,10 @@ func (r *NumaflowControllerReconciler) reconcile(
 			// Get the controller live resource
 			liveController, err := getLiveNumaflowController(ctx, controller.Name, controller.Namespace)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Info("NumaflowController not found, %v", err)
+					return ctrl.Result{}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
 			}
 			*controller = *liveController

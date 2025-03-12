@@ -126,6 +126,10 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// TODO: consider storing MonoVertexRollout Status in a local cache instead of this
 	monoVertexRollout, err := getLiveMonovertexRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.Info("MonoVertxRollout not found, %v", err)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
 	}
 
@@ -196,6 +200,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			// Get the monoVertexRollout live resource
 			liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Info("MonoVertxRollout not found, %v", err)
+					return ctrl.Result{}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
 			}
 			*monoVertexRollout = *liveMonoVertexRollout
@@ -504,6 +512,10 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.
 		// Therefore, we know that the Status is totally current.
 		liveRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.Info("MonoVertxRollout not found, %v", err)
+				return nil
+			}
 			return fmt.Errorf("error getting the live MonoVertexRollout after attempting to update the MonoVertexRollout Status: %w", err)
 		}
 		status := monoVertexRollout.Status // save off the Status

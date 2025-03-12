@@ -127,6 +127,10 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// TODO: consider storing ISBServiceRollout Status in a local cache instead of this
 	isbServiceRollout, err := getLiveISBServiceRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.Info("ISBServiceRollout not found, %v", err)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
 	}
 
@@ -203,6 +207,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			// Get the ISBServiceRollout live resource
 			liveISBServiceRollout, err := getLiveISBServiceRollout(ctx, isbServiceRollout.Name, isbServiceRollout.Namespace)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Info("ISBServiceRollout not found, %v", err)
+					return ctrl.Result{}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
 			}
 			*isbServiceRollout = *liveISBServiceRollout
@@ -786,6 +794,10 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.
 		// Therefore, we know that the Status is totally current.
 		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				numaLogger.Info("ISBServiceRollout not found, %v", err)
+				return nil
+			}
 			return fmt.Errorf("error getting the live ISBServiceRollout after attempting to update the ISBServiceRollout Status: %w", err)
 		}
 		status := isbServiceRollout.Status // save off the Status
