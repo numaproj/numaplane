@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,8 +39,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -378,7 +381,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+
+	numaLogger := logger.FromContext(ctx)
 
 	controller, err := runtimecontroller.New(ControllerMonoVertexRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
@@ -398,10 +403,53 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Group:   common.NumaflowAPIGroup,
 		Version: common.NumaflowAPIVersion,
 	})
-	if err := controller.Watch(source.Kind(mgr.GetCache(), monoVertexUns,
-		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
-			&apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
+	if err := controller.Watch(
+		source.Kind(mgr.GetCache(), monoVertexUns,
+			handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.MonoVertexRollout{}, handler.OnlyControllerOwner()),
+			predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
 		return fmt.Errorf("failed to watch MonoVertices: %w", err)
+	}
+
+	// Watch AnalysisRuns that are owned by the MonoVertices that MonoVertexRollout owns (this enqueues the MonoVertexRollout)
+	if err := controller.Watch(
+		source.Kind(mgr.GetCache(), &argorolloutsv1.AnalysisRun{},
+			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun) []reconcile.Request {
+
+				var reqs []reconcile.Request
+
+				// Check if MonoVertex is the owner
+				for _, analysisRunOwner := range analysisRun.GetOwnerReferences() {
+					// Check if the owner is of Kind 'MonoVertex' and is marked as "Controller"
+					if analysisRunOwner.Kind == "MonoVertex" && *analysisRunOwner.Controller {
+
+						// find the MonoVertex so we can enqueue the MonoVertexRollout which owns it (if one does)
+						monoVertex, err := kubernetes.GetResource(ctx, r.client, numaflowv1.MonoVertexGroupVersionKind,
+							k8stypes.NamespacedName{Namespace: analysisRun.GetNamespace(), Name: analysisRunOwner.Name})
+						if err != nil {
+							numaLogger.WithValues(
+								"AnalysisRun", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRun.Name),
+								"MonoVertex", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRunOwner.Name)).Warnf("Unable to get MonoVertex owner of AnalysisRun")
+							continue
+						}
+
+						// See if a MonoVertexRollout owns the MonoVertex: if so, enqueue it
+						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
+							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
+								reqs = append(reqs, reconcile.Request{
+									NamespacedName: types.NamespacedName{
+										Name:      monovertexOwner.Name,
+										Namespace: analysisRun.GetNamespace(),
+									},
+								})
+							}
+						}
+					}
+				}
+				return reqs
+			}),
+			predicate.TypedResourceVersionChangedPredicate[*argorolloutsv1.AnalysisRun]{})); err != nil {
+
+		return fmt.Errorf("failed to watch AnalysisRuns: %w", err)
 	}
 
 	return nil
