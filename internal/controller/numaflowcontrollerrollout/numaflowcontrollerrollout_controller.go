@@ -203,6 +203,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			// Get the nfcRollout live resource
 			liveControllerRollout, err := getLiveNumaflowControllerRollout(ctx, nfcRollout.Name, nfcRollout.Namespace)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					numaLogger.Info("NumaflowControllerRollout not found, %v", err)
+					return ctrl.Result{}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
 			}
 			*nfcRollout = *liveControllerRollout
