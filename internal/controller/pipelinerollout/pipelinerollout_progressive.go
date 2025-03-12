@@ -58,9 +58,9 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) bool {
+	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 		// TTODO: need to verify that readyReplicas >= desiredReplicas for every pipeline vertex
-		return true
+		return true, nil
 	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)

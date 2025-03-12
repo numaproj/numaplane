@@ -384,7 +384,7 @@ func processUpgradingChild(
 func AssessUpgradingPipelineType(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) bool,
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
 ) (apiv1.AssessmentResult, error) {
 
 	numaLogger := logger.FromContext(ctx)
@@ -396,7 +396,10 @@ func AssessUpgradingPipelineType(
 
 	healthyConditions := checkChildConditions(&upgradingObjectStatus)
 
-	healthyReplicas := verifyReplicasFunc(existingUpgradingChildDef)
+	healthyReplicas, err := verifyReplicasFunc(existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, err
+	}
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).

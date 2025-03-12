@@ -40,17 +40,15 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) bool {
+	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 		desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
 		if err != nil {
-			// TTODO: log or return error msg
-			return false
+			return false, err
 		}
 
 		readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
 		if err != nil {
-			// TTODO: log or return error msg
-			return false
+			return false, err
 		}
 
 		/*
@@ -63,7 +61,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 			>0(3)			>0(2)		F
 			>0(3)			>0(3)		T
 		*/
-		return readyReplicas >= desiredReplicas
+		return readyReplicas >= desiredReplicas, nil
 	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
