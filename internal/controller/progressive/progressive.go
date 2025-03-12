@@ -593,16 +593,5 @@ func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured
 		return false, err
 	}
 
-	/*
-		TTODO: remove after testing
-
-		desired		ready		outcome
-		0					0				T
-		>0				0				F
-		0					>0			T
-		>0(2)			>0(3)		T
-		>0(3)			>0(2)		F
-		>0(3)			>0(3)		T
-	*/
 	return readyReplicas >= desiredReplicas, nil
 }
