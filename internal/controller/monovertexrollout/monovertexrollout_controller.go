@@ -428,7 +428,6 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr 
 						// See if a MonoVertexRollout owns the MonoVertex: if so, enqueue it
 						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
 							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
-
 								reqs = append(reqs, reconcile.Request{
 									NamespacedName: types.NamespacedName{
 										Name:      monovertexOwner.Name,

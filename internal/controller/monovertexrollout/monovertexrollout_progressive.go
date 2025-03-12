@@ -40,6 +40,40 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+	// For reference for later: this seems to work:
+	/*analysisRun := &argorolloutsv1.AnalysisRun{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+		if apierrors.IsNotFound(err) {
+			analysisRun := &argorolloutsv1.AnalysisRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      existingUpgradingChildDef.GetName(),
+					Namespace: existingUpgradingChildDef.GetNamespace(),
+					OwnerReferences: []metav1.OwnerReference{
+						*metav1.NewControllerRef(existingUpgradingChildDef, numaflowv1.MonoVertexGroupVersionKind),
+					},
+				},
+				Spec: argorolloutsv1.AnalysisRunSpec{
+					Metrics: []argorolloutsv1.Metric{
+						{
+							Name: "my-metric",
+							Provider: argorolloutsv1.MetricProvider{
+								Prometheus: &argorolloutsv1.PrometheusMetric{
+									Address: "http://prometheus.addon-metricset-ns.svc.cluster.local:9090",
+									Query:   "vector(1) == vector(2)",
+								},
+							},
+						},
+					},
+				},
+			}
+			if err = r.client.Create(ctx, analysisRun); err != nil {
+				return apiv1.AssessmentResultUnknown, err
+			}
+		} else {
+			return apiv1.AssessmentResultUnknown, err
+		}
+	}*/
+
 	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef)
 }
 

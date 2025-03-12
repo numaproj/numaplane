@@ -150,7 +150,7 @@ var (
 		Resource: "monovertices",
 	}
 
-	ISBGVR = schema.GroupVersionResource{
+	ISBServiceGVR = schema.GroupVersionResource{
 		Group:    NumaflowAPIGroup,
 		Version:  NumaflowAPIVersion,
 		Resource: "interstepbufferservices",
