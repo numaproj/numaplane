@@ -470,3 +470,63 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 		})
 	}
 }
+
+func Test_ExtractOriginalScaleMinMaxAsJSONString(t *testing.T) {
+	testCases := []struct {
+		name               string
+		object             map[string]any
+		pathToScale        []string
+		expectedJSONString string
+		expectedError      error
+	}{
+		{
+			name:               "scale unset",
+			object:             map[string]any{"spec": map[string]any{"somefield": int64(2)}},
+			pathToScale:        []string{"spec", "scale"},
+			expectedJSONString: "null",
+			expectedError:      nil,
+		},
+		{
+			name:               "min set",
+			object:             map[string]any{"scale": map[string]any{"min": int64(1)}},
+			pathToScale:        []string{"scale"},
+			expectedJSONString: "{\"max\":null,\"min\":1}",
+			expectedError:      nil,
+		},
+		{
+			name:               "max set",
+			object:             map[string]any{"scale": map[string]any{"max": int64(5)}},
+			pathToScale:        []string{"scale"},
+			expectedJSONString: "{\"max\":5,\"min\":null}",
+			expectedError:      nil,
+		},
+		{
+			name:               "both min and max set",
+			object:             map[string]any{"scale": map[string]any{"min": int64(3), "max": int64(7)}},
+			pathToScale:        []string{"scale"},
+			expectedJSONString: "{\"max\":7,\"min\":3}",
+			expectedError:      nil,
+		},
+		{
+			name:               "both min and max set and also another field",
+			object:             map[string]any{"scale": map[string]any{"min": int64(3), "max": int64(7), "zeroReplicaSleepSeconds": int64(123)}},
+			pathToScale:        []string{"scale"},
+			expectedJSONString: "{\"max\":7,\"min\":3}",
+			expectedError:      nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actualJSONString, actualErr := ExtractOriginalScaleMinMaxAsJSONString(tc.object, tc.pathToScale)
+
+			if tc.expectedError != nil {
+				assert.Error(t, actualErr)
+				assert.Equal(t, "", actualJSONString)
+			} else {
+				assert.Nil(t, actualErr)
+				assert.Equal(t, tc.expectedJSONString, actualJSONString)
+			}
+		})
+	}
+}

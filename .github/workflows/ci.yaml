@@ -105,7 +105,7 @@ jobs:
 
       - name: Verify docker image
         run: make image
-  
+
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -115,10 +115,10 @@ jobs:
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional"]
+        case: ["functional-pipeline", "functional-monovertex", "functional-nc"]
         include:
-        - strategy: "pause-and-drain"
-          case: "ppnd"
+          - strategy: "pause-and-drain"
+            case: "ppnd"
 
     steps:
       - name: Checkout code
@@ -129,7 +129,7 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: ${{ runner.os }}-go-build-v1-${{ hashFiles('**/go.mod') }}
-      
+
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
