@@ -67,11 +67,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ex
 			return false, err
 		}
 
-		if verticesList == nil || len(verticesList.Items) == 0 {
-			// TTODO: decide what to return
-			return false, errors.New("there should be at least 1 vertex in a pipeline")
-			// OR
-			// return true, nil
+		if verticesList == nil {
+			return false, errors.New("the pipeline vertices list is nil, this should not occur")
 		}
 
 		areAllVerticesReplicasReady := true
