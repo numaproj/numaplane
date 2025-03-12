@@ -40,7 +40,8 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	// For reference for later: this seems to work:
+	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
+	// The following code can serve as a template for what should work:
 	/*analysisRun := &argorolloutsv1.AnalysisRun{}
 	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 		if apierrors.IsNotFound(err) {
