@@ -213,6 +213,55 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 }
 
 /*
+ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading pipeline.
+It performs the following pre-upgrade operations:
+- it uses the promoted rollout status scale values to calculate the upgrading pipeline scale min and max for each vertex.
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the PipelineRollout instance
+  - upgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPreUpgrade").WithName("PipelineRollout")
+
+	numaLogger.Debug("started pre-upgrade processing of upgrading pipeline")
+	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
+	if !ok {
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-upgrade", rolloutObject)
+	}
+
+	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
+		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+	}
+
+	// TODO: create and implement scalePipelineVertex func
+	// for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
+	// 	upgradingChildVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+
+	// 	err := scalePipelineVertex(ctx, upgradingChildDef, vertexName, &upgradingChildVertexScaleTo, &upgradingChildVertexScaleTo, c)
+	// 	if err != nil {
+	// 		return true, err
+	// 	}
+	// }
+
+	numaLogger.Debug("completed pre-upgrade processing of upgrading pipeline")
+
+	return false, nil
+}
+
+/*
 scaleDownPipelineSourceVertices scales down the source vertices pods of a pipeline to half of the current count if not already scaled down.
 It checks if all source vertices are already scaled down and skips the operation if true.
 The function updates the scale values in the rollout status and adjusts the scale configuration
@@ -290,6 +339,15 @@ func scaleDownPipelineSourceVertices(
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.
 			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist {
+
+				// If OriginalScaleMinMax is empty, it means this is the first time the upgrading process
+				// has been executed and we can initialize status values.
+				// In this case, we set the Initial value to the original running pods count.
+				// We only want to set this value one time at the beginning of the upgrade process.
+				if vertexScaleValues.OriginalScaleMinMax == "" {
+					vertexScaleValues.Initial = actualPodsCount
+				}
+
 				vertexScaleValues.Actual = actualPodsCount
 				scaleValuesMap[vertexName] = vertexScaleValues
 

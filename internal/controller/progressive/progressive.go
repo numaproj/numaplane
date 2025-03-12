@@ -60,6 +60,9 @@ type progressiveController interface {
 
 	// ProcessUpgradingChildPreForcedPromotion performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child prior to the upgrade (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -490,6 +493,14 @@ func startUpgradeProcess(
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 	if err != nil {
 		return newUpgradingChildDef, false, err
+	}
+
+	requeue, err = controller.ProcessUpgradingChildPreUpgrade(ctx, rolloutObject, newUpgradingChildDef, c)
+	if err != nil {
+		return nil, false, err
+	}
+	if requeue {
+		return nil, true, nil
 	}
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())

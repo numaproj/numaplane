@@ -67,6 +67,10 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPreForcedPromotion(ctx
 	return nil
 }
 
+func (fpc fakeProgressiveController) ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

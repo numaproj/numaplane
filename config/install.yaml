@@ -528,6 +528,12 @@ spec:
                                 running for the vertex
                               format: int64
                               type: integer
+                            initial:
+                              description: Initial indicates how many pods were actually
+                                running for the vertex at the beginning of the upgrade
+                                process
+                              format: int64
+                              type: integer
                             originalScaleMinMax:
                               description: OriginalScaleMinMax stores the original
                                 scale min and max values as JSON string
@@ -539,6 +545,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - initial
                           - originalScaleMinMax
                           - scaleTo
                           type: object
@@ -1265,6 +1272,12 @@ spec:
                                 running for the vertex
                               format: int64
                               type: integer
+                            initial:
+                              description: Initial indicates how many pods were actually
+                                running for the vertex at the beginning of the upgrade
+                                process
+                              format: int64
+                              type: integer
                             originalScaleMinMax:
                               description: OriginalScaleMinMax stores the original
                                 scale min and max values as JSON string
@@ -1276,6 +1289,7 @@ spec:
                               type: integer
                           required:
                           - actual
+                          - initial
                           - originalScaleMinMax
                           - scaleTo
                           type: object

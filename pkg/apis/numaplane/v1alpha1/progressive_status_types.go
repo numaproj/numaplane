@@ -52,6 +52,8 @@ type ScaleValues struct {
 	ScaleTo int64 `json:"scaleTo"`
 	// Actual indicates how many pods are actually running for the vertex
 	Actual int64 `json:"actual"`
+	// Initial indicates how many pods were actually running for the vertex at the beginning of the upgrade process
+	Initial int64 `json:"initial"`
 }
 
 // PromotedChildStatus describes the status of the promoted child
