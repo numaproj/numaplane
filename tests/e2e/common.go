@@ -234,9 +234,12 @@ func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 	for {
 		select {
 		case event := <-watcher.ResultChan():
-			if event.Type == watch.Added {
+			if event.Type == watch.Added || event.Type == watch.Modified {
 				pod := event.Object.(*corev1.Pod)
 				for _, container := range pod.Spec.Containers {
+					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
+				}
+				for _, container := range pod.Spec.InitContainers {
 					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
 				}
 			}
