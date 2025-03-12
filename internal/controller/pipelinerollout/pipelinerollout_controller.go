@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -41,8 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -757,8 +760,9 @@ func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PipelineRolloutReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 
+	numaLogger := logger.FromContext(ctx)
 	controller, err := runtimecontroller.New(ControllerPipelineRollout, mgr, runtimecontroller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -781,6 +785,49 @@ func (r *PipelineRolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		handler.TypedEnqueueRequestForOwner[*unstructured.Unstructured](mgr.GetScheme(), mgr.GetRESTMapper(),
 			&apiv1.PipelineRollout{}, handler.OnlyControllerOwner()), predicate.TypedResourceVersionChangedPredicate[*unstructured.Unstructured]{})); err != nil {
 		return fmt.Errorf("failed to watch Pipelines: %v", err)
+	}
+
+	// Watch AnalysisRuns that are owned by the Pipelines that PipelineRollout owns (this enqueues the PipelineRollout)
+	if err := controller.Watch(
+		source.Kind(mgr.GetCache(), &argorolloutsv1.AnalysisRun{},
+			handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, analysisRun *argorolloutsv1.AnalysisRun) []reconcile.Request {
+
+				var reqs []reconcile.Request
+
+				// Check if Pipeline is the owner
+				for _, analysisRunOwner := range analysisRun.GetOwnerReferences() {
+					// Check if the owner is of Kind 'Pipeline' and is marked as "Controller"
+					if analysisRunOwner.Kind == "Pipeline" && *analysisRunOwner.Controller {
+
+						// find the pipeline so we can enqueue the PipelineRollout which owns it (if one does)
+						pipeline, err := kubernetes.GetResource(ctx, r.client, numaflowv1.PipelineGroupVersionKind,
+							k8stypes.NamespacedName{Namespace: analysisRun.GetNamespace(), Name: analysisRunOwner.Name})
+						if err != nil {
+							numaLogger.WithValues(
+								"AnalysisRun", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRun.Name),
+								"Pipeline", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRunOwner.Name)).Warnf("Unable to get Pipeline owner of AnalysisRun")
+							continue
+						}
+
+						// See if a PipelineRollout owns the Pipeline: if so, enqueue it
+						for _, pipelineOwner := range pipeline.GetOwnerReferences() {
+							if pipelineOwner.Kind == "PipelineRollout" && *pipelineOwner.Controller {
+
+								reqs = append(reqs, reconcile.Request{
+									NamespacedName: types.NamespacedName{
+										Name:      pipelineOwner.Name,
+										Namespace: analysisRun.GetNamespace(),
+									},
+								})
+							}
+						}
+					}
+				}
+				return reqs
+			}),
+			predicate.TypedResourceVersionChangedPredicate[*argorolloutsv1.AnalysisRun]{})); err != nil {
+
+		return fmt.Errorf("failed to watch AnalysisRuns: %w", err)
 	}
 
 	return nil

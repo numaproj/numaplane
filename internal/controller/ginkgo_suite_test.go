@@ -17,16 +17,18 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -134,7 +136,7 @@ var _ = BeforeSuite(func() {
 	Expect(kubernetes.SetClientSets(k8sManager.GetConfig())).To(Succeed())
 
 	err = pipelinerollout.NewPipelineRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
-		k8sManager.GetEventRecorderFor(apiv1.RolloutPipelineName)).SetupWithManager(k8sManager)
+		k8sManager.GetEventRecorderFor(apiv1.RolloutPipelineName)).SetupWithManager(context.Background(), k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	err = isbservicerollout.NewISBServiceRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
@@ -142,7 +144,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = monovertexrollout.NewMonoVertexRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(), ctlrcommon.TestCustomMetrics,
-		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertexName)).SetupWithManager(k8sManager)
+		k8sManager.GetEventRecorderFor(apiv1.RolloutMonoVertexName)).SetupWithManager(context.Background(), k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	err = numaflowcontrollerrollout.NewNumaflowControllerRolloutReconciler(k8sManager.GetClient(), k8sManager.GetScheme(),

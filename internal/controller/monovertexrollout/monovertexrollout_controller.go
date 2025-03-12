@@ -410,14 +410,10 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr 
 
 				var reqs []reconcile.Request
 
-				fmt.Printf("deletethis: see analysisRun=%s\n", analysisRun.Name)
-
 				// Check if MonoVertex is the owner
 				for _, analysisRunOwner := range analysisRun.GetOwnerReferences() {
 					// Check if the owner is of Kind 'MonoVertex' and is marked as "Controller"
 					if analysisRunOwner.Kind == "MonoVertex" && *analysisRunOwner.Controller {
-
-						fmt.Printf("deletethis: found analysisRun Owner=%s\n", analysisRunOwner.Name)
 
 						// find the MonoVertex so we can enqueue the MonoVertexRollout which owns it (if one does)
 						monoVertex, err := kubernetes.GetResource(ctx, r.client, numaflowv1.MonoVertexGroupVersionKind,
@@ -432,7 +428,6 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr 
 						// See if a MonoVertexRollout owns the MonoVertex: if so, enqueue it
 						for _, monovertexOwner := range monoVertex.GetOwnerReferences() {
 							if monovertexOwner.Kind == "MonoVertexRollout" && *monovertexOwner.Controller {
-								fmt.Printf("deletethis: found MonoVertexRollout Owner=%s\n", monovertexOwner.Name)
 
 								reqs = append(reqs, reconcile.Request{
 									NamespacedName: types.NamespacedName{

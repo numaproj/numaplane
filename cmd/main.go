@@ -171,7 +171,7 @@ func main() {
 	)
 	pipelinerollout.PipelineROReconciler = pipelineRolloutReconciler
 
-	if err = pipelineRolloutReconciler.SetupWithManager(mgr); err != nil {
+	if err = pipelineRolloutReconciler.SetupWithManager(ctx, mgr); err != nil {
 		numaLogger.Fatal(err, "Unable to set up PipelineRollout controller")
 	}
 	defer pipelineRolloutReconciler.Shutdown(ctx)
