@@ -40,42 +40,33 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
-	// The following code can serve as a template for what should work:
-	/*analysisRun := &argorolloutsv1.AnalysisRun{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-		if apierrors.IsNotFound(err) {
-			analysisRun := &argorolloutsv1.AnalysisRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      existingUpgradingChildDef.GetName(),
-					Namespace: existingUpgradingChildDef.GetNamespace(),
-					OwnerReferences: []metav1.OwnerReference{
-						*metav1.NewControllerRef(existingUpgradingChildDef, numaflowv1.MonoVertexGroupVersionKind),
-					},
-				},
-				Spec: argorolloutsv1.AnalysisRunSpec{
-					Metrics: []argorolloutsv1.Metric{
-						{
-							Name: "my-metric",
-							Provider: argorolloutsv1.MetricProvider{
-								Prometheus: &argorolloutsv1.PrometheusMetric{
-									Address: "http://prometheus.addon-metricset-ns.svc.cluster.local:9090",
-									Query:   "vector(1) == vector(2)",
-								},
-							},
-						},
-					},
-				},
-			}
-			if err = r.client.Create(ctx, analysisRun); err != nil {
-				return apiv1.AssessmentResultUnknown, err
-			}
-		} else {
-			return apiv1.AssessmentResultUnknown, err
+	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) bool {
+		desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
+		if err != nil {
+			// TTODO: log or return error msg
+			return false
 		}
-	}*/
 
-	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef)
+		readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
+		if err != nil {
+			// TTODO: log or return error msg
+			return false
+		}
+
+		/*
+			// TTODO: remove after testing
+			desired		ready		outcome
+			0					0				T
+			>0				0				F
+			0					>0			T
+			>0(2)			>0(3)		T
+			>0(3)			>0(2)		F
+			>0(3)			>0(3)		T
+		*/
+		return readyReplicas >= desiredReplicas
+	}
+
+	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 }
 
 /*

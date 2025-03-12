@@ -381,7 +381,12 @@ func processUpgradingChild(
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
 // Unknown: neither of the above if met
-func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func AssessUpgradingPipelineType(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) bool,
+) (apiv1.AssessmentResult, error) {
+
 	numaLogger := logger.FromContext(ctx)
 
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
@@ -391,15 +396,17 @@ func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef 
 
 	healthyConditions := checkChildConditions(&upgradingObjectStatus)
 
+	healthyReplicas := verifyReplicasFunc(existingUpgradingChildDef)
+
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t", upgradingObjectStatus.Phase, healthyConditions)
 
-	if upgradingObjectStatus.Phase == "Running" && healthyConditions {
+	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil
 	}
 
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions {
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
 		return apiv1.AssessmentResultFailure, nil
 	}
 
