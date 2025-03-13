@@ -98,7 +98,7 @@ It performs the following pre-upgrade operations:
 Parameters:
   - ctx: the context for managing request-scoped values.
   - pipelineRollout: the pipelineRollout
-  - promotedPipelineDef: the definition of the promoted child as an unstructured object.
+  - promotedPipelineDef: the definition of the promoted pipeline as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -112,7 +112,8 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPreUpgrade").WithName("PipelineRollout").
+		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	numaLogger.Debug("started pre-upgrade processing of promoted pipeline")
 	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
@@ -139,14 +140,14 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 }
 
 /*
-ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" child has failed.
+ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" pipeline has failed.
 It performs the following post-upgrade operations:
 - it restores the promoted pipeline source vertices scale values to the original values retrieved from the rollout status.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
   - pipelineRollout: the PipelineRollout instance
-  - promotedPipelineDef: the definition of the promoted child as an unstructured object.
+  - promotedPipelineDef: the definition of the promoted pipeline as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -160,7 +161,8 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostFailure").WithName("PipelineRollout").
+		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	numaLogger.Debug("started post-failure processing of promoted pipeline")
 
@@ -186,11 +188,12 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingChildDef *unstructured.Unstructured,
+	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPostFailure").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPostFailure").WithName("PipelineRollout").
+		WithValues("upgradingPipelineNamespace", upgradingPipelineDef.GetNamespace(), "upgradingPipelineName", upgradingPipelineDef.GetName())
 
 	numaLogger.Debug("started post-failure processing of upgrading pipeline")
 
@@ -204,7 +207,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingChildDef *unstructured.Unstructured,
+	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
 
@@ -220,7 +223,7 @@ It performs the following pre-upgrade operations:
 Parameters:
   - ctx: the context for managing request-scoped values.
   - rolloutObject: the PipelineRollout instance
-  - upgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - upgradingPipelineDef: the definition of the upgrading pipeline as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -230,11 +233,12 @@ Returns:
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingChildDef *unstructured.Unstructured,
+	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPreUpgrade").WithName("PipelineRollout")
+	numaLogger := logger.FromContext(ctx).WithName("ProcessUpgradingChildPreUpgrade").WithName("PipelineRollout").
+		WithValues("upgradingPipelineNamespace", upgradingPipelineDef.GetNamespace(), "upgradingPipelineName", upgradingPipelineDef.GetName())
 
 	numaLogger.Debug("started pre-upgrade processing of upgrading pipeline")
 	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
@@ -246,14 +250,14 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// TODO: create and implement scalePipelineVertex func
+	// TODO: create and implement updatePipelineVertexDefScale func
 	// CONSIDERATIONS:
 	// - how to scale vertices based on their type (source, sink, UDF)?
 	// - decide if min and max should be set to the same value or different values
 	// for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
-	// 	upgradingChildVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+	// 	upgradingPipelineVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 
-	// 	err := scalePipelineVertex(ctx, upgradingChildDef, vertexName, &upgradingChildVertexScaleTo, &upgradingChildVertexScaleTo, c)
+	// 	err := updatePipelineVertexDefScale(ctx, upgradingPipelineDef, vertexName, &upgradingPipelineVertexScaleTo, &upgradingPipelineVertexScaleTo)
 	// 	if err != nil {
 	// 		return true, err
 	// 	}
@@ -268,12 +272,12 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 scaleDownPipelineSourceVertices scales down the source vertices pods of a pipeline to half of the current count if not already scaled down.
 It checks if all source vertices are already scaled down and skips the operation if true.
 The function updates the scale values in the rollout status and adjusts the scale configuration
-of the promoted child definition. It ensures that the scale.min does not exceed the new scale.max.
+of the promoted pipeline definition. It ensures that the scale.min does not exceed the new scale.max.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
-- promotedPipelineStatus: the status of the promoted child in the rollout.
-- promotedPipelineDef: the unstructured object representing the promoted child definition.
+- promotedPipelineStatus: the status of the promoted pipeline in the rollout.
+- promotedPipelineDef: the unstructured object representing the promoted pipeline definition.
 - c: the Kubernetes client for resource operations.
 
 Returns:
@@ -287,7 +291,8 @@ func scaleDownPipelineSourceVertices(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineSourceVertices")
+	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineSourceVertices").
+		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	// If the pipeline source vertices have been scaled down already, do not perform scaling down operations
 	if promotedPipelineStatus.AreAllSourceVerticesScaledDown(promotedPipelineDef.GetName()) {
@@ -407,12 +412,12 @@ func scaleDownPipelineSourceVertices(
 /*
 scalePipelineSourceVerticesToOriginalValues scales the source vertices of a pipeline to their original values based on the rollout status.
 This function checks if the pipeline source vertices have already been scaled to the original values. If not, it restores the scale values
-from the rollout's promoted child status and updates the Kubernetes resource accordingly.
+from the rollout's promoted pipeline status and updates the Kubernetes resource accordingly.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
-- promotedPipelineStatus: the status of the promoted child in the rollout, containing scale values.
-- promotedPipelineDef: the unstructured definition of the promoted child resource.
+- promotedPipelineStatus: the status of the promoted pipeline in the rollout, containing scale values.
+- promotedPipelineDef: the unstructured definition of the promoted pipeline resource.
 - c: the Kubernetes client for resource operations.
 
 Returns:
@@ -426,7 +431,8 @@ func scalePipelineSourceVerticesToOriginalValues(
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToOriginalValues")
+	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToOriginalValues").
+		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	// If all the pipeline source vertices have been scaled back to the original values already, do not restore scaling values again
 	if promotedPipelineStatus.AreScaleValuesRestoredToOriginal(promotedPipelineDef.GetName()) {
