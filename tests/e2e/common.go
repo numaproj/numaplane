@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,12 +265,13 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 				return true, nil
 			}
 
-			fmt.Printf("Got error %v, retrying.\n", err)
 			return false, nil
 		})
 
 		if err != nil {
-			log.Fatalf("Failed to stream pod %q logs: %v", podName, err)
+			// TODO: log this as an error using a logger library
+			fmt.Printf("Failed to stream pod %q logs: %v", podName, err)
+			return
 		}
 		defer func() { _ = stream.Close() }()
 
