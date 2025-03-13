@@ -384,22 +384,13 @@ func scaleDownPromotedMonoVertex(
 		return true, err
 	}
 
-	actualPodsCount := int64(len(podsList.Items))
+	currentPodsCount := int64(len(podsList.Items))
 
-	// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
+	// If for the vertex we already set a ScaleTo value, we only need to update the current pods count
 	// to later verify that the pods were actually scaled down.
 	// We want to skip scaling down again.
 	if vertexScaleValues, exist := scaleValuesMap[promotedChildDef.GetName()]; exist {
-
-		// If OriginalScaleMinMax is empty, it means this is the first time the upgrading process
-		// has been executed and we can initialize status values.
-		// In this case, we set the Initial value to the original running pods count.
-		// We only want to set this value one time at the beginning of the upgrade process.
-		if vertexScaleValues.OriginalScaleMinMax == "" {
-			vertexScaleValues.Initial = actualPodsCount
-		}
-
-		vertexScaleValues.Actual = actualPodsCount
+		vertexScaleValues.Current = currentPodsCount
 		scaleValuesMap[promotedChildDef.GetName()] = vertexScaleValues
 
 		promotedMVStatus.ScaleValues = scaleValuesMap
@@ -414,23 +405,24 @@ func scaleDownPromotedMonoVertex(
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
 
-	newMin, newMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(actualPodsCount), []string{"spec", "scale", "min"})
+	newMin, newMax, err := progressive.CalculateScaleMinMaxValues(promotedChildDef.Object, int(currentPodsCount), []string{"spec", "scale", "min"})
 	if err != nil {
 		return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
 	}
 
 	numaLogger.WithValues(
 		"promotedChildName", promotedChildDef.GetName(),
-		"actualPodsCount", actualPodsCount,
+		"currentPodsCount", currentPodsCount,
 		"newMin", newMin,
 		"newMax", newMax,
 		"originalScaleMinMax", originalScaleMinMax,
-	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", actualPodsCount, newMax)
+	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", currentPodsCount, newMax)
 
 	scaleValuesMap[promotedChildDef.GetName()] = apiv1.ScaleValues{
 		OriginalScaleMinMax: originalScaleMinMax,
 		ScaleTo:             newMax,
-		Actual:              actualPodsCount,
+		Current:             currentPodsCount,
+		Initial:             currentPodsCount,
 	}
 
 	if err := scaleMonoVertex(ctx, promotedChildDef, &newMin, &newMax, c); err != nil {

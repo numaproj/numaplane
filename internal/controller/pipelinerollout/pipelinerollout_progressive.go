@@ -331,24 +331,15 @@ func scaleDownPipelineSourceVertices(
 				return true, err
 			}
 
-			actualPodsCount := int64(len(podsList.Items))
+			currentPodsCount := int64(len(podsList.Items))
 
-			numaLogger.WithValues("vertexName", vertexName, "actualPodsCount", actualPodsCount).Debugf("found pods for the source vertex")
+			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the source vertex")
 
-			// If for the vertex we already set a Scaled scale value, we only need to update the actual pods count
+			// If for the vertex we already set a ScaleTo value, we only need to update the current pods count
 			// to later verify that the pods were actually scaled down.
 			// We want to skip scaling down again.
 			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist {
-
-				// If OriginalScaleMinMax is empty, it means this is the first time the upgrading process
-				// has been executed and we can initialize status values.
-				// In this case, we set the Initial value to the original running pods count.
-				// We only want to set this value one time at the beginning of the upgrade process.
-				if vertexScaleValues.OriginalScaleMinMax == "" {
-					vertexScaleValues.Initial = actualPodsCount
-				}
-
-				vertexScaleValues.Actual = actualPodsCount
+				vertexScaleValues.Current = currentPodsCount
 				scaleValuesMap[vertexName] = vertexScaleValues
 
 				numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debugf("updated scaleValues map for vertex '%s' with running pods count, skipping scaling down for this vertex since it has already been done", vertexName)
@@ -362,7 +353,7 @@ func scaleDownPipelineSourceVertices(
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
 
-			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(actualPodsCount), []string{"scale", "min"})
+			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(currentPodsCount), []string{"scale", "min"})
 			if err != nil {
 				return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
 			}
@@ -370,11 +361,11 @@ func scaleDownPipelineSourceVertices(
 			numaLogger.WithValues(
 				"promotedChildName", promotedPipelineDef.GetName(),
 				"vertexName", vertexName,
-				"actualPodsCount", actualPodsCount,
+				"currentPodsCount", currentPodsCount,
 				"newMin", newMin,
 				"newMax", newMax,
 				"originalScaleMinMax", originalScaleMinMax,
-			).Debugf("found %d pod(s) for the source vertex, scaling down to %d", actualPodsCount, newMax)
+			).Debugf("found %d pod(s) for the source vertex, scaling down to %d", currentPodsCount, newMax)
 
 			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
 				return true, err
@@ -387,7 +378,8 @@ func scaleDownPipelineSourceVertices(
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
 				OriginalScaleMinMax: originalScaleMinMax,
 				ScaleTo:             newMax,
-				Actual:              actualPodsCount,
+				Current:             currentPodsCount,
+				Initial:             currentPodsCount,
 			}
 		}
 	}

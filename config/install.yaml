@@ -523,13 +523,13 @@ spec:
                             max values, scaleTo value, and actual scale value of a
                             pipeline or monovertex vertex
                           properties:
-                            actual:
-                              description: Actual indicates how many pods are actually
+                            current:
+                              description: Current indicates how many pods are currently
                                 running for the vertex
                               format: int64
                               type: integer
                             initial:
-                              description: Initial indicates how many pods were actually
+                              description: Initial indicates how many pods were initially
                                 running for the vertex at the beginning of the upgrade
                                 process
                               format: int64
@@ -544,7 +544,7 @@ spec:
                               format: int64
                               type: integer
                           required:
-                          - actual
+                          - current
                           - initial
                           - originalScaleMinMax
                           - scaleTo
@@ -1267,13 +1267,13 @@ spec:
                             max values, scaleTo value, and actual scale value of a
                             pipeline or monovertex vertex
                           properties:
-                            actual:
-                              description: Actual indicates how many pods are actually
+                            current:
+                              description: Current indicates how many pods are currently
                                 running for the vertex
                               format: int64
                               type: integer
                             initial:
-                              description: Initial indicates how many pods were actually
+                              description: Initial indicates how many pods were initially
                                 running for the vertex at the beginning of the upgrade
                                 process
                               format: int64
@@ -1288,7 +1288,7 @@ spec:
                               format: int64
                               type: integer
                           required:
-                          - actual
+                          - current
                           - initial
                           - originalScaleMinMax
                           - scaleTo
