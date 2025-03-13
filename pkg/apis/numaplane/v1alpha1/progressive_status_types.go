@@ -50,8 +50,10 @@ type ScaleValues struct {
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
-	// Actual indicates how many pods are actually running for the vertex
-	Actual int64 `json:"actual"`
+	// Current indicates how many pods are currently running for the vertex
+	Current int64 `json:"current"`
+	// Initial indicates how many pods were initially running for the vertex at the beginning of the upgrade process
+	Initial int64 `json:"initial"`
 }
 
 // PromotedChildStatus describes the status of the promoted child
@@ -124,7 +126,7 @@ func (pcs *PromotedPipelineTypeStatus) MarkAllSourceVerticesScaledDown() {
 
 	allScaledDown := true
 	for _, sv := range pcs.ScaleValues {
-		if sv.Actual > sv.ScaleTo {
+		if sv.Current > sv.ScaleTo {
 			allScaledDown = false
 			break
 		}
