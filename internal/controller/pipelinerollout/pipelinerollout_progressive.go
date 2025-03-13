@@ -247,6 +247,9 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	// TODO: create and implement scalePipelineVertex func
+	// CONSIDERATIONS:
+	// - how to scale vertices based on their type (source, sink, UDF)?
+	// - decide if min and max should be set to the same value or different values
 	// for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
 	// 	upgradingChildVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 

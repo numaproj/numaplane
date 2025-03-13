@@ -406,7 +406,7 @@ func AssessUpgradingPipelineType(
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s, conditions healthy=%t", upgradingObjectStatus.Phase, healthyConditions)
+		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil
