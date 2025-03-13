@@ -215,6 +215,17 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	return nil
 }
 
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	// TODO
+	return nil
+}
+
 /*
 ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading pipeline.
 It performs the following pre-upgrade operations:

@@ -182,8 +182,30 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 }
 
 /*
-ProcessUpgradingChildPreForcedPromotion handles an upgrading monovertex that's either failed or still being assessed
-It performs the following post-failure operations:
+ProcessUpgradingChildPostSuccess handles an upgrading monovertex that has been deemed successful to be promoted.
+It performs the following post-success operations:
+- it scales the monovertex to the scale.min and scale.max defined in the rollout object.
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingMonoVertexDef: the definition of the existing upgrading monovertex from the beginning of reconciliation
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - An error if any issues occur during processing.
+*/
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return scaleMonoVertexAsPerRolloutSpec(ctx, rolloutObject, upgradingMonoVertexDef, c)
+}
+
+/*
+ProcessUpgradingChildPreForcedPromotion handles an upgrading monovertex that's either failed or still being assessed.
 */
 func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	ctx context.Context,
@@ -191,28 +213,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
 	upgradingMonoVertexDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
-
-	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
-	}
-	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
-	// Preferably change this to save the existing spec and use that instead
-	var monovertexSpec map[string]interface{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monovertexSpec); err != nil {
-		return err
-	}
-
-	minPtr, maxPtr, err := getScaleValuesFromMonoVertexSpec(monovertexSpec)
-	if err != nil {
-		return err
-	}
-
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, minPtr, maxPtr, c)
-	if err != nil {
-		return err
-	}
-	return nil
+	return scaleMonoVertexAsPerRolloutSpec(ctx, rolloutObject, upgradingMonoVertexDef, c)
 }
 
 /*
@@ -538,4 +539,48 @@ func scaleMonoVertex(
 	}
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
+}
+
+/*
+scaleMonoVertexAsPerRolloutSpec scales a MonoVertex according to the specified rollout scale min ad max.
+
+Parameters:
+  - ctx: The context for managing request-scoped values, cancellation, and timeouts.
+  - rolloutObject: The ProgressiveRolloutObject containing the rollout details.
+  - upgradingMonoVertexDef: The unstructured definition of the MonoVertex to be scaled.
+  - c: The Kubernetes client for interacting with the cluster.
+
+Returns:
+  - error: An error if the scaling operation fails or if the rollout object type is unexpected.
+*/
+func scaleMonoVertexAsPerRolloutSpec(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	monovertex *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
+	if !ok {
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't scale monovertex as per rollout spec", rolloutObject)
+	}
+
+	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
+	// Preferably change this to save the existing spec and use that instead
+	monoVertexSpec := map[string]any{}
+	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
+		return err
+	}
+
+	desiredMinPtr, desiredMaxPtr, err := getScaleValuesFromMonoVertexSpec(monoVertexSpec)
+	if err != nil {
+		return err
+	}
+
+	err = scaleMonoVertex(ctx, monovertex, desiredMinPtr, desiredMaxPtr, c)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
