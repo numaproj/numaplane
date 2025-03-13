@@ -255,9 +255,9 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		// Set the upgrading MonoVertex scale.min and scale.max to the number of Pods that were removed
 		// from the promoted MonoVertex.
 		// This ensures:
-		// 1. that the total number of running pods does not change during the upgrade process, which is
-		// necessary when performing the health check for "ready replicas >= desired replicas"
-		// 2. that the number of Pods before and during upgrade remains the same
+		// 1. that the total number of running pods on the "upgrading" monovertex does not change during the upgrade process,
+		// which is necessary when performing the health check for "ready replicas >= desired replicas"
+		// 2. that the total number of Pods (between the 2 monovertices) before and during upgrade remains the same
 		upgradingChildScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
