@@ -269,6 +269,7 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 		})
 
 		if err != nil {
+			// TODO: log this as an error using a logger library
 			fmt.Printf("Failed to stream pod %q logs: %v", podName, err)
 			return
 		}
