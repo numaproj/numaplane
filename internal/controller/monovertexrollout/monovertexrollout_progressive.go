@@ -252,6 +252,10 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
+		// Calculate the upgrading MonoVertex scale value by subtracting the promoted MonoVertex target
+		// scale value from the promoted MonoVertex number of running pods before the upgrade started.
+		// Then, set both min and max to this value. All this ensures that the total number of running
+		// pods does not change during the upgrade process.
 		upgradingChildScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
