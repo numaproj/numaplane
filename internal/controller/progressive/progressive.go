@@ -58,8 +58,8 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessUpgradingChildPreForcedPromotion performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
-	ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
 	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
@@ -259,12 +259,7 @@ func processUpgradingChild(
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
 
-		err = controller.ProcessUpgradingChildPreForcedPromotion(ctx, rolloutObject, existingUpgradingChildDef, c)
-		if err != nil {
-			return false, false, 0, err
-		}
-
-		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
 		} else {
@@ -360,7 +355,7 @@ func processUpgradingChild(
 
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
-			done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+			done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 			if err != nil || done {
 				return done, false, 0, err
 			} else {
@@ -438,6 +433,7 @@ Returns:
 func declareSuccess(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	childStatus *apiv1.UpgradingChildStatus,
 	c client.Client,
@@ -445,10 +441,15 @@ func declareSuccess(
 
 	numaLogger := logger.FromContext(ctx)
 
+	err := controller.ProcessUpgradingChildPostSuccess(ctx, rolloutObject, existingUpgradingChildDef, c)
+	if err != nil {
+		return false, err
+	}
+
 	// Label the new child as promoted and then remove the label from the old one
 	numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
 	reasonSuccess := common.LabelValueProgressiveSuccess
-	err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
@@ -464,8 +465,7 @@ func declareSuccess(
 	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 	// we're done
-	return true, err
-
+	return true, nil
 }
 
 // return:
