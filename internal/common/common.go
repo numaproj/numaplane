@@ -155,7 +155,13 @@ var (
 		Version:  NumaflowAPIVersion,
 		Resource: "interstepbufferservices",
 	}
+)
 
+const (
 	// DefaultRequeueDelay indicates the default requeue time (in seconds) used by Reconcilers
 	DefaultRequeueDelay = 20 * time.Second
+
+	// MaxNameCount represents the maximum index value used as a suffix for a given child Numaflow resource
+	// (after reaching this value, we roll over back to 0)
+	MaxNameCount int32 = 9999
 )
