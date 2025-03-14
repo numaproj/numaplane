@@ -61,9 +61,6 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
-	// ProcessUpgradingChildPreForcedPromotion performs operations on the upgrading child after the upgrade succeeds due to a "forced promotion" (just the operations which are unique to this Kind)
-	ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
-
 	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
@@ -261,11 +258,6 @@ func processUpgradingChild(
 	// check for Force Promote set in Progressive strategy to force success logic
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
-
-		err = controller.ProcessUpgradingChildPreForcedPromotion(ctx, rolloutObject, existingUpgradingChildDef, c)
-		if err != nil {
-			return false, false, 0, err
-		}
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {

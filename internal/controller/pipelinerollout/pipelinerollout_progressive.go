@@ -204,17 +204,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	return false, nil
 }
 
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-
-	// TODO
-	return nil
-}
-
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
