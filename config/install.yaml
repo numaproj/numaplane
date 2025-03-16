@@ -382,20 +382,26 @@ spec:
                 - spec
                 type: object
               strategy:
-                description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
+                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
                 properties:
                   progressive:
+                    description: RolloutStrategy `json:",inline"`
                     properties:
-                      assessmentSchedule:
-                        description: |-
-                          optional string: comma-separated list consisting of:
-                          assessmentDelay, assessmentPeriod, assessmentInterval
-                        type: string
-                      forcePromote:
-                        description: if ForcePromote is set, assessment will be skipped
-                          and Progressive upgrade will succeed
-                        type: boolean
+                      analysis:
+                        type: object
+                      progressive:
+                        properties:
+                          assessmentSchedule:
+                            description: |-
+                              optional string: comma-separated list consisting of:
+                              assessmentDelay, assessmentPeriod, assessmentInterval
+                            type: string
+                          forcePromote:
+                            description: if ForcePromote is set, assessment will be
+                              skipped and Progressive upgrade will succeed
+                            type: boolean
+                        type: object
                     type: object
                 type: object
             required:
@@ -1108,20 +1114,26 @@ spec:
                 - spec
                 type: object
               strategy:
-                description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
+                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
                 properties:
                   progressive:
+                    description: RolloutStrategy `json:",inline"`
                     properties:
-                      assessmentSchedule:
-                        description: |-
-                          optional string: comma-separated list consisting of:
-                          assessmentDelay, assessmentPeriod, assessmentInterval
-                        type: string
-                      forcePromote:
-                        description: if ForcePromote is set, assessment will be skipped
-                          and Progressive upgrade will succeed
-                        type: boolean
+                      analysis:
+                        type: object
+                      progressive:
+                        properties:
+                          assessmentSchedule:
+                            description: |-
+                              optional string: comma-separated list consisting of:
+                              assessmentDelay, assessmentPeriod, assessmentInterval
+                            type: string
+                          forcePromote:
+                            description: if ForcePromote is set, assessment will be
+                              skipped and Progressive upgrade will succeed
+                            type: boolean
+                        type: object
                     type: object
                 type: object
             required:

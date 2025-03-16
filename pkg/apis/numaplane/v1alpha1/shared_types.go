@@ -40,13 +40,19 @@ const (
 	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
 
-type RolloutStrategy struct {
-	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
+// PipelineTypeRolloutStrategy specifies the Rollout Strategy for fields shared by Pipeline and MonoVertex
+type PipelineTypeRolloutStrategy struct {
+	//RolloutStrategy `json:",inline"`
+	PipelineTypeProgressiveStrategy `json:"progressive,omitempty"`
 }
 
-// PipelineTypeRolloutStrategy specifies the RolloutStrategy for fields shared by Pipeline and MonoVertex
-type PipelineTypeRolloutStrategy struct {
-	RolloutStrategy `json:",inline"`
+type PipelineTypeProgressiveStrategy struct {
+	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
+
+	Analysis Analysis `json:"analysis,omitempty"`
+}
+
+type Analysis struct {
 }
 
 type ProgressiveStrategy struct {
@@ -57,3 +63,9 @@ type ProgressiveStrategy struct {
 	// if ForcePromote is set, assessment will be skipped and Progressive upgrade will succeed
 	ForcePromote bool `json:"forcePromote,omitempty"`
 }
+
+/*
+
+
+
+ */

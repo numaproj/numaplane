@@ -321,7 +321,7 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 	},
 	Spec: apiv1.MonoVertexRolloutSpec{
 		Strategy: apiv1.PipelineTypeRolloutStrategy{
-			RolloutStrategy: apiv1.RolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
 					ForcePromote: true,
 				},
@@ -455,7 +455,7 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 						// not needed for test
 					},
 					Strategy: apiv1.PipelineTypeRolloutStrategy{
-						RolloutStrategy: apiv1.RolloutStrategy{
+						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 							Progressive: apiv1.ProgressiveStrategy{
 								AssessmentSchedule: tc.rolloutSchedule,
 							},
