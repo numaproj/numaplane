@@ -73,9 +73,3 @@ type ProgressiveStrategy struct {
 	// if ForcePromote is set, assessment will be skipped and Progressive upgrade will succeed
 	ForcePromote bool `json:"forcePromote,omitempty"`
 }
-
-/*
-
-
-
- */

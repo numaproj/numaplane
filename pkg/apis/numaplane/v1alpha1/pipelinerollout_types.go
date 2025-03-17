@@ -66,8 +66,8 @@ type PipelineProgressiveStatus struct {
 
 // UpgradingPipelineStatus describes the status of an upgrading child
 type UpgradingPipelineStatus struct {
-	UpgradingChildStatus       `json:",inline"`
-	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
+	UpgradingPipelineTypeStatus `json:",inline"`
+	InterStepBufferServiceName  string `json:"interStepBufferServiceName,omitempty"`
 }
 
 // PromotedPipelineStatus describes the status of the promoted child
@@ -165,10 +165,12 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 	}
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{
 		InterStepBufferServiceName: isbsvcName,
-		UpgradingChildStatus: UpgradingChildStatus{
-			Name:              upgradingPipeline.GetName(),
-			AssessmentEndTime: nil,
-			AssessmentResult:  AssessmentResultUnknown,
+		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
+			UpgradingChildStatus: UpgradingChildStatus{
+				Name:              upgradingPipeline.GetName(),
+				AssessmentEndTime: nil,
+				AssessmentResult:  AssessmentResultUnknown,
+			},
 		},
 	}
 

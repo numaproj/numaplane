@@ -311,6 +311,18 @@ spec:
                     description: UpgradingMonoVertexStatus represents either the current
                       or otherwise the most recent "upgrading" MonoVertex
                     properties:
+                      analysis:
+                        properties:
+                          analysisRunName:
+                            description: AnalysisRunName is the name of the AnalysisRun,
+                              set after it's generated
+                            type: string
+                          startTime:
+                            description: StartTime is the time that the AnalysisRun
+                              is created
+                            format: date-time
+                            type: string
+                        type: object
                       assessmentEndTime:
                         description: AssessmentEndTime indicates the time after which
                           no more assessments will be performed

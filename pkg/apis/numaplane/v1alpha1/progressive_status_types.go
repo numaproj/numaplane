@@ -44,6 +44,19 @@ type UpgradingChildStatus struct {
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 }
 
+type UpgradingPipelineTypeStatus struct {
+	UpgradingChildStatus `json:",inline"`
+
+	Analysis AnalysisStatus `json:"analysis,omitempty"`
+}
+
+type AnalysisStatus struct {
+	// AnalysisRunName is the name of the AnalysisRun, set after it's generated
+	AnalysisRunName string `json:"analysisRunName,omitempty"`
+	// StartTime is the time that the AnalysisRun is created
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+}
+
 // ScaleValues stores the original scale min and max values, scaleTo value, and actual scale value of a pipeline or monovertex vertex
 type ScaleValues struct {
 	// OriginalScaleMinMax stores the original scale min and max values as JSON string

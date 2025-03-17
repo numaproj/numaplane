@@ -62,7 +62,7 @@ type MonoVertexProgressiveStatus struct {
 
 // UpgradingMonoVertexStatus describes the status of an upgrading child
 type UpgradingMonoVertexStatus struct {
-	UpgradingChildStatus `json:",inline"`
+	UpgradingPipelineTypeStatus `json:",inline"`
 }
 
 // PromotedMonoVertexStatus describes the status of the promoted child
@@ -143,10 +143,12 @@ func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *Upgrading
 // note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingMonoVertex *unstructured.Unstructured) error {
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{
-		UpgradingChildStatus: UpgradingChildStatus{
-			Name:              upgradingMonoVertex.GetName(),
-			AssessmentEndTime: nil,
-			AssessmentResult:  AssessmentResultUnknown,
+		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
+			UpgradingChildStatus: UpgradingChildStatus{
+				Name:              upgradingMonoVertex.GetName(),
+				AssessmentEndTime: nil,
+				AssessmentResult:  AssessmentResultUnknown,
+			},
 		},
 	}
 	return nil
