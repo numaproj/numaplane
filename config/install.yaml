@@ -1492,6 +1492,8 @@ spec:
                           forced to complete
                         type: boolean
                       interStepBufferServiceName:
+                        description: InterStepBufferServiceName is the name of the
+                          InterstepBufferService that this Pipeline is using
                         type: string
                       name:
                         description: Name of the upgrading child
