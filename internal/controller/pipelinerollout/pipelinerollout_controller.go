@@ -703,19 +703,25 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		// if BeginTime hasn't been set yet, we must have just started pausing - set it
 		if pipelineRollout.Status.PauseStatus.LastPauseBeginTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseBeginTime.After(pipelineRollout.Status.PauseStatus.LastPauseEndTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseBeginTime = metav1.NewTime(time.Now())
-			r.updatePauseMetric(pipelineRollout, pipelinePhase)
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
+		// if TransitionTime is still before or equal to BeginTime, keep updating Pausing metric
+		if !pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			r.updatePauseMetric(pipelineRollout, pipelinePhase)
+		}
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else if pipelinePhase == numaflowv1.PipelinePhasePaused {
 		// if LastPauseTransitionTime hasn't been set yet, we are just starting to enter paused phase - set it to denote end of pausing
 		if pipelineRollout.Status.PauseStatus.LastPauseTransitionTime == metav1.NewTime(initTime) || !pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseTransitionTime = metav1.NewTime(time.Now())
-			r.updatePauseMetric(pipelineRollout, pipelinePhase)
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
+		// if EndTime is still before or equal to Begintime, keep updating Paused metric
+		if !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
+			r.updatePauseMetric(pipelineRollout, pipelinePhase)
+		}
 		pipelineRollout.Status.MarkPipelinePausingOrPaused(reason, msg, pipelineRollout.Generation)
 	} else {
 		// only set EndTime if BeginTime has been previously set AND EndTime is before/equal to BeginTime
@@ -723,6 +729,7 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		if (pipelineRollout.Status.PauseStatus.LastPauseBeginTime != metav1.NewTime(initTime)) && !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			pipelineRollout.Status.PauseStatus.LastPauseEndTime = metav1.NewTime(time.Now())
 		}
+		// if phase is not Paused or Pausing, we always reset the metrics to 0 without fail
 		r.updatePauseMetric(pipelineRollout, pipelinePhase)
 		pipelineRollout.Status.MarkPipelineUnpaused(pipelineRollout.Generation)
 	}
