@@ -66,8 +66,10 @@ type PipelineProgressiveStatus struct {
 
 // UpgradingPipelineStatus describes the status of an upgrading child
 type UpgradingPipelineStatus struct {
+	// UpgradingPipelineTypeStatus describes the Status for an upgrading child that's particular to "Pipeline types", i.e. Pipeline and MonoVertex
 	UpgradingPipelineTypeStatus `json:",inline"`
-	InterStepBufferServiceName  string `json:"interStepBufferServiceName,omitempty"`
+	// InterStepBufferServiceName is the name of the InterstepBufferService that this Pipeline is using
+	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
 }
 
 // PromotedPipelineStatus describes the status of the promoted child

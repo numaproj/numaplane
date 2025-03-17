@@ -62,6 +62,7 @@ type MonoVertexProgressiveStatus struct {
 
 // UpgradingMonoVertexStatus describes the status of an upgrading child
 type UpgradingMonoVertexStatus struct {
+	// UpgradingPipelineTypeStatus describes the Status for an upgrading child that's particular to "Pipeline types", i.e. Pipeline and MonoVertex
 	UpgradingPipelineTypeStatus `json:",inline"`
 }
 
