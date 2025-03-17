@@ -58,8 +58,11 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
-	// ProcessUpgradingChildPreForcedPromotion performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
-	ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child prior to the upgrade (just the operations which are unique to this Kind)
+	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -256,12 +259,7 @@ func processUpgradingChild(
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
 		childStatus.ForcedSuccess = true
 
-		err = controller.ProcessUpgradingChildPreForcedPromotion(ctx, rolloutObject, existingUpgradingChildDef, c)
-		if err != nil {
-			return false, false, 0, err
-		}
-
-		done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, false, 0, err
 		} else {
@@ -357,7 +355,7 @@ func processUpgradingChild(
 
 	case apiv1.AssessmentResultSuccess:
 		if childStatus.CanDeclareSuccess() {
-			done, err := declareSuccess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+			done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 			if err != nil || done {
 				return done, false, 0, err
 			} else {
@@ -381,7 +379,12 @@ func processUpgradingChild(
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
 // Unknown: neither of the above if met
-func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func AssessUpgradingPipelineType(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
+) (apiv1.AssessmentResult, error) {
+
 	numaLogger := logger.FromContext(ctx)
 
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
@@ -391,15 +394,20 @@ func AssessUpgradingPipelineType(ctx context.Context, existingUpgradingChildDef 
 
 	healthyConditions := checkChildConditions(&upgradingObjectStatus)
 
+	healthyReplicas, err := verifyReplicasFunc(existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, err
+	}
+
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s, conditions healthy=%t", upgradingObjectStatus.Phase, healthyConditions)
+		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
-	if upgradingObjectStatus.Phase == "Running" && healthyConditions {
+	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil
 	}
 
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions {
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
 		return apiv1.AssessmentResultFailure, nil
 	}
 
@@ -425,6 +433,7 @@ Returns:
 func declareSuccess(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	childStatus *apiv1.UpgradingChildStatus,
 	c client.Client,
@@ -432,10 +441,15 @@ func declareSuccess(
 
 	numaLogger := logger.FromContext(ctx)
 
+	err := controller.ProcessUpgradingChildPostSuccess(ctx, rolloutObject, existingUpgradingChildDef, c)
+	if err != nil {
+		return false, err
+	}
+
 	// Label the new child as promoted and then remove the label from the old one
 	numaLogger.WithValues("old child", existingPromotedChildDef.GetName(), "new child", existingUpgradingChildDef.GetName()).Debug("replacing 'promoted' child")
 	reasonSuccess := common.LabelValueProgressiveSuccess
-	err := ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
+	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradePromoted, &reasonSuccess, existingUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
@@ -451,8 +465,7 @@ func declareSuccess(
 	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
 
 	// we're done
-	return true, err
-
+	return true, nil
 }
 
 // return:
@@ -480,6 +493,14 @@ func startUpgradeProcess(
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
 	if err != nil {
 		return newUpgradingChildDef, false, err
+	}
+
+	requeue, err = controller.ProcessUpgradingChildPreUpgrade(ctx, rolloutObject, newUpgradingChildDef, c)
+	if err != nil {
+		return nil, false, err
+	}
+	if requeue {
+		return nil, true, nil
 	}
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
@@ -560,4 +581,28 @@ func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale [
 	}
 
 	return string(jsonBytes), nil
+}
+
+/*
+AreVertexReplicasReady checks if the number of ready replicas of a vertex matches or exceeds the desired replicas.
+
+Parameters:
+  - existingUpgradingChildDef: An unstructured object representing the vertex whose replica status is being checked.
+
+Returns:
+  - A boolean indicating whether the ready replicas are sufficient.
+  - An error if there is an issue retrieving the replica counts.
+*/
+func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
+	if err != nil {
+		return false, err
+	}
+
+	readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
+	if err != nil {
+		return false, err
+	}
+
+	return readyReplicas >= desiredReplicas, nil
 }
