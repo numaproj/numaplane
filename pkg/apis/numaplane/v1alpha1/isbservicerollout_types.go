@@ -29,8 +29,12 @@ import (
 
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
-	InterStepBufferService InterStepBufferService `json:"interStepBufferService"`
-	Strategy               RolloutStrategy        `json:"strategy,omitempty"`
+	InterStepBufferService InterStepBufferService    `json:"interStepBufferService"`
+	Strategy               ISBServiceRolloutStrategy `json:"strategy,omitempty"`
+}
+
+type ISBServiceRolloutStrategy struct {
+	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
 }
 
 // InterStepBufferService includes the spec of InterStepBufferService in Numaflow

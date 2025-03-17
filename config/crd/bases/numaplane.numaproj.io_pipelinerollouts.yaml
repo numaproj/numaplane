@@ -73,11 +73,71 @@ spec:
                 - spec
                 type: object
               strategy:
-                description: PipelineTypeRolloutStrategy specifies the RolloutStrategy
+                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
                 properties:
                   progressive:
+                    description: PipelineTypeProgressiveStrategy specifies the Progressive
+                      Rollout Strategy for fields shared by Pipeline and MonoVertex
                     properties:
+                      analysis:
+                        description: Analysis defines how to perform analysis of health,
+                          outside of basic resource checking
+                        properties:
+                          args:
+                            description: Arguments can be passed to templates to evaluate
+                              any parameterization
+                            items:
+                              description: AnalysisRunArgument argument to add to
+                                analysisRun
+                              properties:
+                                name:
+                                  description: Name argument name
+                                  type: string
+                                value:
+                                  description: Value a hardcoded value for the argument.
+                                    This field is a one of field with valueFrom
+                                  type: string
+                                valueFrom:
+                                  description: ValueFrom A reference to where the
+                                    value is stored. This field is a one of field
+                                    with valueFrom
+                                  properties:
+                                    fieldRef:
+                                      description: FieldRef
+                                      properties:
+                                        fieldPath:
+                                          description: 'Required: Path of the field
+                                            to select in the specified API version'
+                                          type: string
+                                      required:
+                                      - fieldPath
+                                      type: object
+                                    podTemplateHashValue:
+                                      description: PodTemplateHashValue gets the value
+                                        from one of the children ReplicaSet's Pod
+                                        Template Hash
+                                      type: string
+                                  type: object
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          templates:
+                            description: Templates are used to analyze the AnalysisRun
+                            items:
+                              properties:
+                                clusterScope:
+                                  description: Whether to look for the templateName
+                                    at cluster scope or namespace scope
+                                  type: boolean
+                                templateName:
+                                  description: TemplateName name of template to use
+                                    in AnalysisRun
+                                  type: string
+                              type: object
+                            type: array
+                        type: object
                       assessmentSchedule:
                         description: |-
                           optional string: comma-separated list consisting of:
@@ -274,6 +334,28 @@ spec:
                     description: UpgradingPipelineStatus represents either the current
                       or otherwise the most recent "upgrading" pipeline
                     properties:
+                      analysis:
+                        properties:
+                          analysisRunName:
+                            description: AnalysisRunName is the name of the AnalysisRun,
+                              set after it's generated
+                            type: string
+                          endTime:
+                            description: EndTime is the time that it completed
+                            format: date-time
+                            type: string
+                          phase:
+                            description: Phase is the phase of the AnalysisRun when
+                              completed
+                            type: string
+                          startTime:
+                            description: StartTime is the time that the AnalysisRun
+                              is created
+                            format: date-time
+                            type: string
+                        required:
+                        - phase
+                        type: object
                       assessmentEndTime:
                         description: AssessmentEndTime indicates the time after which
                           no more assessments will be performed
@@ -293,6 +375,8 @@ spec:
                           forced to complete
                         type: boolean
                       interStepBufferServiceName:
+                        description: InterStepBufferServiceName is the name of the
+                          InterstepBufferService that this Pipeline is using
                         type: string
                       name:
                         description: Name of the upgrading child

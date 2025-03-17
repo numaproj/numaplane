@@ -18,6 +18,10 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+)
+
 // ControllerDefinitions stores the Numaflow controller definitions
 // for different versions.
 type ControllerDefinitions struct {
@@ -40,13 +44,25 @@ const (
 	UpgradeStrategyProgressive UpgradeStrategy = "Progressive"
 )
 
-type RolloutStrategy struct {
-	Progressive ProgressiveStrategy `json:"progressive,omitempty"`
+// PipelineTypeRolloutStrategy specifies the Rollout Strategy for fields shared by Pipeline and MonoVertex
+type PipelineTypeRolloutStrategy struct {
+	PipelineTypeProgressiveStrategy `json:"progressive,omitempty"`
 }
 
-// PipelineTypeRolloutStrategy specifies the RolloutStrategy for fields shared by Pipeline and MonoVertex
-type PipelineTypeRolloutStrategy struct {
-	RolloutStrategy `json:",inline"`
+// PipelineTypeProgressiveStrategy specifies the Progressive Rollout Strategy for fields shared by Pipeline and MonoVertex
+type PipelineTypeProgressiveStrategy struct {
+	Progressive ProgressiveStrategy `json:",inline"`
+
+	Analysis Analysis `json:"analysis,omitempty"`
+}
+
+// Analysis defines how to perform analysis of health, outside of basic resource checking
+type Analysis struct {
+	// Arguments can be passed to templates to evaluate any parameterization
+	Args []argorolloutsv1.AnalysisRunArgument `json:"args,omitempty"`
+
+	// Templates are used to analyze the AnalysisRun
+	Templates []argorolloutsv1.AnalysisTemplateRef `json:"templates,omitempty"`
 }
 
 type ProgressiveStrategy struct {

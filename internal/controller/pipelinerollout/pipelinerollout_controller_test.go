@@ -907,11 +907,13 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultSuccess,
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:    apiv1.AssessmentResultSuccess,
+					},
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
@@ -966,11 +968,13 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultFailure,
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:    apiv1.AssessmentResultFailure,
+					},
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
@@ -1026,11 +1030,13 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:   2,
 			initialInProgressStrategy: &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultFailure,
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:    apiv1.AssessmentResultFailure,
+					},
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{

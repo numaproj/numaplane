@@ -464,9 +464,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
 						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingChildStatus: apiv1.UpgradingChildStatus{
-								Name:             defaultUpgradingPipelineName,
-								AssessmentResult: apiv1.AssessmentResultSuccess,
+							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+								UpgradingChildStatus: apiv1.UpgradingChildStatus{
+									Name:             defaultUpgradingPipelineName,
+									AssessmentResult: apiv1.AssessmentResultSuccess,
+								},
 							},
 						},
 					},
@@ -513,9 +515,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
 						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingChildStatus: apiv1.UpgradingChildStatus{
-								Name:             defaultUpgradingPipelineName,
-								AssessmentResult: apiv1.AssessmentResultFailure,
+							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+								UpgradingChildStatus: apiv1.UpgradingChildStatus{
+									Name:             defaultUpgradingPipelineName,
+									AssessmentResult: apiv1.AssessmentResultFailure,
+								},
 							},
 						},
 					},
@@ -555,9 +559,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
 						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingChildStatus: apiv1.UpgradingChildStatus{
-								Name:             defaultUpgradingPipelineName,
-								AssessmentResult: apiv1.AssessmentResultFailure,
+							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+								UpgradingChildStatus: apiv1.UpgradingChildStatus{
+									Name:             defaultUpgradingPipelineName,
+									AssessmentResult: apiv1.AssessmentResultFailure,
+								},
 							},
 						},
 					},
