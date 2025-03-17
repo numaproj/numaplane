@@ -108,11 +108,21 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostFailure(
 ) (bool, error) {
 	return false, nil
 }
-func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreForcedPromotion(
+
+func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingChildDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
 	return nil
+}
+
+func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
 }

@@ -1057,7 +1057,14 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 		}
 	}
 
-	err := r.updateCurrentChildCount(ctx, rolloutObject, currentNameCount+1)
+	// For readability of the pipeline name, keep the count from getting too high by rolling around back to 0
+	// TODO: consider handling the extremely rare case that user still has a "promoted" child of index 0 running
+	nextNameCount := currentNameCount + 1
+	if nextNameCount > common.MaxNameCount {
+		nextNameCount = 0
+	}
+
+	err := r.updateCurrentChildCount(ctx, rolloutObject, nextNameCount)
 	if err != nil {
 		return int32(0), err
 	}

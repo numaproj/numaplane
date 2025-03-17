@@ -59,12 +59,16 @@ func (fpc fakeProgressiveController) ProcessPromotedChildPostFailure(ctx context
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+func (fpc fakeProgressiveController) ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) ProcessUpgradingChildPreForcedPromotion(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+func (fpc fakeProgressiveController) ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error {
 	return nil
+}
+
+func (fpc fakeProgressiveController) ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
 }
 
 func Test_processUpgradingChild(t *testing.T) {
@@ -527,6 +531,105 @@ func Test_ExtractOriginalScaleMinMaxAsJSONString(t *testing.T) {
 				assert.Nil(t, actualErr)
 				assert.Equal(t, tc.expectedJSONString, actualJSONString)
 			}
+		})
+	}
+}
+
+func Test_AreVertexReplicasReady(t *testing.T) {
+	testCases := []struct {
+		name            string
+		desiredReplicas *int64
+		readyReplicas   *int64
+		expectedResult  bool
+	}{
+		{
+			name:            "desired = 0, ready = 0",
+			desiredReplicas: ptr.To(int64(0)),
+			readyReplicas:   ptr.To(int64(0)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired > 0, ready = 0",
+			desiredReplicas: ptr.To(int64(3)),
+			readyReplicas:   ptr.To(int64(0)),
+			expectedResult:  false,
+		},
+		{
+			name:            "desired = 0, ready > 0",
+			desiredReplicas: ptr.To(int64(0)),
+			readyReplicas:   ptr.To(int64(3)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired > 0, ready > 0, desired < ready",
+			desiredReplicas: ptr.To(int64(2)),
+			readyReplicas:   ptr.To(int64(3)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired > 0, ready > 0, desired > ready",
+			desiredReplicas: ptr.To(int64(3)),
+			readyReplicas:   ptr.To(int64(2)),
+			expectedResult:  false,
+		},
+		{
+			name:            "desired > 0, ready > 0, desired = ready",
+			desiredReplicas: ptr.To(int64(3)),
+			readyReplicas:   ptr.To(int64(3)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired = nil, ready = nil",
+			desiredReplicas: nil,
+			readyReplicas:   nil,
+			expectedResult:  true,
+		},
+		{
+			name:            "desired = nil, ready = 0",
+			desiredReplicas: nil,
+			readyReplicas:   ptr.To(int64(0)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired = 0, ready = nil",
+			desiredReplicas: ptr.To(int64(0)),
+			readyReplicas:   nil,
+			expectedResult:  true,
+		},
+		{
+			name:            "desired = nil, ready > 0",
+			desiredReplicas: nil,
+			readyReplicas:   ptr.To(int64(3)),
+			expectedResult:  true,
+		},
+		{
+			name:            "desired > 0, ready = nil",
+			desiredReplicas: ptr.To(int64(3)),
+			readyReplicas:   nil,
+			expectedResult:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			unstr := &unstructured.Unstructured{
+				Object: map[string]any{
+					"status": map[string]any{},
+				},
+			}
+
+			if tc.desiredReplicas != nil {
+				_ = unstructured.SetNestedField(unstr.Object, *tc.desiredReplicas, "status", "desiredReplicas")
+			}
+
+			if tc.readyReplicas != nil {
+				_ = unstructured.SetNestedField(unstr.Object, *tc.readyReplicas, "status", "readyReplicas")
+			}
+
+			actualResult, actualErr := AreVertexReplicasReady(unstr)
+
+			assert.Nil(t, actualErr)
+			assert.Equal(t, tc.expectedResult, actualResult)
 		})
 	}
 }
