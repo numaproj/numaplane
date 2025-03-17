@@ -72,22 +72,76 @@ spec:
                   for fields shared by Pipeline and MonoVertex
                 properties:
                   progressive:
-                    description: RolloutStrategy `json:",inline"`
+                    description: PipelineTypeProgressiveStrategy specifies the Progressive
+                      Rollout Strategy for fields shared by Pipeline and MonoVertex
                     properties:
                       analysis:
-                        type: object
-                      progressive:
+                        description: Analysis defines how to perform analysis of health,
+                          outside of basic resource checking
                         properties:
-                          assessmentSchedule:
-                            description: |-
-                              optional string: comma-separated list consisting of:
-                              assessmentDelay, assessmentPeriod, assessmentInterval
-                            type: string
-                          forcePromote:
-                            description: if ForcePromote is set, assessment will be
-                              skipped and Progressive upgrade will succeed
-                            type: boolean
+                          args:
+                            description: Arguments can be passed to templates to evaluate
+                              any parameterization
+                            items:
+                              description: AnalysisRunArgument argument to add to
+                                analysisRun
+                              properties:
+                                name:
+                                  description: Name argument name
+                                  type: string
+                                value:
+                                  description: Value a hardcoded value for the argument.
+                                    This field is a one of field with valueFrom
+                                  type: string
+                                valueFrom:
+                                  description: ValueFrom A reference to where the
+                                    value is stored. This field is a one of field
+                                    with valueFrom
+                                  properties:
+                                    fieldRef:
+                                      description: FieldRef
+                                      properties:
+                                        fieldPath:
+                                          description: 'Required: Path of the field
+                                            to select in the specified API version'
+                                          type: string
+                                      required:
+                                      - fieldPath
+                                      type: object
+                                    podTemplateHashValue:
+                                      description: PodTemplateHashValue gets the value
+                                        from one of the children ReplicaSet's Pod
+                                        Template Hash
+                                      type: string
+                                  type: object
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          templates:
+                            description: Templates are used to analyze the AnalysisRun
+                            items:
+                              properties:
+                                clusterScope:
+                                  description: Whether to look for the templateName
+                                    at cluster scope or namespace scope
+                                  type: boolean
+                                templateName:
+                                  description: TemplateName name of template to use
+                                    in AnalysisRun
+                                  type: string
+                              type: object
+                            type: array
                         type: object
+                      assessmentSchedule:
+                        description: |-
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
+                        type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
                     type: object
                 type: object
             required:

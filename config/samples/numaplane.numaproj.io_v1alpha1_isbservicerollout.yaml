@@ -4,6 +4,9 @@ metadata:
   name: my-isbsvc
   namespace: example-namespace
 spec:
+  strategy:
+    progressive:
+      assessmentSchedule: "0,60,10"
   interStepBufferService:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:

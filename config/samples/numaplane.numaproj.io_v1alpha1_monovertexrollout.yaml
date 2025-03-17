@@ -7,6 +7,9 @@ spec:
   strategy:
     progressive:
       assessmentSchedule: "60,60,10"
+      analysis:
+        args:
+        templates:
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:

@@ -4,6 +4,12 @@ metadata:
   name: my-pipeline
   namespace: example-namespace
 spec:
+  strategy:
+    progressive:
+      assessmentSchedule: "60,60,10"
+      analysis:
+        args:
+        templates:
   pipeline:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
