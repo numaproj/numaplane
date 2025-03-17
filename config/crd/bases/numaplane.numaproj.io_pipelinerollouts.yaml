@@ -340,11 +340,21 @@ spec:
                             description: AnalysisRunName is the name of the AnalysisRun,
                               set after it's generated
                             type: string
+                          endTime:
+                            description: EndTime is the time that it completed
+                            format: date-time
+                            type: string
+                          phase:
+                            description: Phase is the phase of the AnalysisRun when
+                              completed
+                            type: string
                           startTime:
                             description: StartTime is the time that the AnalysisRun
                               is created
                             format: date-time
                             type: string
+                        required:
+                        - phase
                         type: object
                       assessmentEndTime:
                         description: AssessmentEndTime indicates the time after which

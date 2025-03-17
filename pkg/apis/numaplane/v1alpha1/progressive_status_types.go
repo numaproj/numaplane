@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"time"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -55,6 +56,10 @@ type AnalysisStatus struct {
 	AnalysisRunName string `json:"analysisRunName,omitempty"`
 	// StartTime is the time that the AnalysisRun is created
 	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// EndTime is the time that it completed
+	EndTime *metav1.Time `json:"endTime,omitempty"`
+	// Phase is the phase of the AnalysisRun when completed
+	Phase argorolloutsv1.AnalysisPhase `json:"phase"`
 }
 
 // ScaleValues stores the original scale min and max values, scaleTo value, and actual scale value of a pipeline or monovertex vertex
