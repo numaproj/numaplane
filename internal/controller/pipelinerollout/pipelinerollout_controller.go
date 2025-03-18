@@ -706,7 +706,8 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
-		// if TransitionTime is still before or equal to BeginTime, keep updating Pausing metric
+		// if TransitionTime is before or equal to BeginTime, update Pausing metric
+		// if it's not, then something is wrong and we don't want to make a bad calculation
 		if !pipelineRollout.Status.PauseStatus.LastPauseTransitionTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			r.updatePauseMetric(pipelineRollout, pipelinePhase)
 		}
@@ -718,7 +719,8 @@ func (r *PipelineRolloutReconciler) setChildResourcesPauseCondition(pipelineRoll
 		}
 		reason := fmt.Sprintf("Pipeline%s", string(pipelinePhase))
 		msg := fmt.Sprintf("Pipeline %s", strings.ToLower(string(pipelinePhase)))
-		// if EndTime is still before or equal to Begintime, keep updating Paused metric
+		// if EndTime is before or equal to BeginTime, update Paused metric
+		// if it's not, then something is wrong, and we don't want to make a bad calculation
 		if !pipelineRollout.Status.PauseStatus.LastPauseEndTime.After(pipelineRollout.Status.PauseStatus.LastPauseBeginTime.Time) {
 			r.updatePauseMetric(pipelineRollout, pipelinePhase)
 		}
