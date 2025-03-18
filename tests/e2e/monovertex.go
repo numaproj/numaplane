@@ -418,3 +418,35 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 		)
 	}).Should(BeTrue())
 }
+
+// TODO: share some of this code with Pipeline if needed (similar to VerifyMonoVertexRolloutProgressiveStatus)
+func VerifyMonoVertexRolloutScaledDownForProgressive(
+	monoVertexRolloutName string,
+	expectedPromotedIndex int,
+	expectedCurrent int64,
+	expectedInitial int64,
+	expectedOriginalScaleMinMaxAsJSONString string,
+	expectedScaleTo int64,
+) {
+	CheckEventually("verifying that the MonoVertexRollout scaled down for Progressive upgrade", func() bool {
+		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+
+		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
+			return false
+		}
+
+		mvtxNameWithIdx := fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex)
+
+		if _, exists := mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx]; !exists {
+			return false
+		}
+
+		return mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.AllSourceVerticesScaledDown &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.Name == mvtxNameWithIdx &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].Current == expectedCurrent &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].Initial == expectedInitial &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].ScaleTo == expectedScaleTo
+	}).Should(BeTrue())
+}

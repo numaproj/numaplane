@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,9 @@ var (
 	monoVertexScaleMin  = int32(5)
 	monoVertexScaleMax  = int32(9)
 	zeroReplicaSleepSec = uint32(15)
+
+	monoVertexScaleTo               = int64(2)
+	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		RolloutStrategy: apiv1.RolloutStrategy{
@@ -88,23 +92,20 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// TODO: add ISBSvc when adding pipeline tests
 	})
 
-	It("Should create the initial MonoVertex", func() {
-		By("Creating a monovertex rollout")
-
+	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
+		By("Creating a MonoVertexRollout")
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec, &defaultStrategy)
 
-		By("Verifying that the monovertex was created")
+		By("Verifying that the MonoVertex was created")
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return *retrievedMonoVertexSpec.Scale.Min == *initialMonoVertexSpec.Scale.Min &&
 				retrievedMonoVertexSpec.Source.UDSource.Container.Image == initialMonoVertexSpec.Source.UDSource.Container.Image
 		})
 		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		// TODO: verify status, etc.
-
 		time.Sleep(5 * time.Second)
 
-		By("Updating MonoVertex Topology to cause a Failing Progressive change")
+		By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
 		updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
@@ -116,16 +117,16 @@ var _ = Describe("Progressive E2E", Serial, func() {
 			return mvr, nil
 		})
 
-		// TODO: verify status, etc.
-
-		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
 
-		// TODO: verify progressive status changes here
+		// TODO: verify progressive status changes here (ex: scale values)
+		// - check that the upgrading monovertex is scaled to zero after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
+		// - check that the promoted monovertex is scaled to original after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
 
 		time.Sleep(5 * time.Second)
 
-		By("Updating MonoVertex Topology to cause a Successful Progressive change")
+		By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
 		updatedMonoVertexSpec = initialMonoVertexSpec.DeepCopy()
 		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
@@ -137,12 +138,13 @@ var _ = Describe("Progressive E2E", Serial, func() {
 			return mvr, nil
 		})
 
-		// TODO: verify status, etc.
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 
-		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
 
-		// TODO: verify progressive status changes here
+		// TODO: verify progressive status changes here (ex: scale values)
+		// - check that the upgrading monovertex is scaled to zero after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
+		// - check that the promoted monovertex is scaled to original after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
 
 		time.Sleep(5 * time.Second)
 

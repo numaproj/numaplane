@@ -669,10 +669,6 @@ func VerifyRolloutProgressiveStatus(
 	expectedPromotedScaleValuesRestoredToOriginal bool,
 	expectedUpgradingAssessmentResult apiv1.AssessmentResult,
 ) bool {
-	// TODO: remove
-	// fmt.Printf("\n\n%+v\n%+v\nexpectedPromotedName=%s\nexpectedPromotedScaleValuesRestoredToOriginal=%t\nexpectedUpgradingName=%s\nexpectedUpgradingAssessmentResult=%s\n\n",
-	// 	promotedStatus, upgradingStatus, expectedPromotedName, expectedPromotedScaleValuesRestoredToOriginal, expectedUpgradingName, expectedUpgradingAssessmentResult)
-
 	return promotedStatus.Name == expectedPromotedName &&
 		promotedStatus.ScaleValuesRestoredToOriginal == expectedPromotedScaleValuesRestoredToOriginal &&
 		upgradingStatus.Name == expectedUpgradingName &&
