@@ -120,9 +120,10 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
 
-		// TODO: verify progressive status changes here (ex: scale values)
-		// - check that the upgrading monovertex is scaled to zero after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
-		// - check that the promoted monovertex is scaled to original after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
+		// TODO:
+		// 1. check that the upgrading monovertex is scaled to zero after upgrade failure
+		// 2. check that the promoted monovertex is scaled to original after upgrade failure
+		// Can do the 2 checks above by looking at monovertex spec scale and replicas and/or also at actual running pods count
 
 		time.Sleep(5 * time.Second)
 
@@ -142,9 +143,10 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
 
-		// TODO: verify progressive status changes here (ex: scale values)
-		// - check that the upgrading monovertex is scaled to zero after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
-		// - check that the promoted monovertex is scaled to original after upgrade failure: look at monovertex spec scale and replicas and also at actual running pods count
+		// TODO:
+		// 1. check that the upgrading monovertex is scaled to desired min/max after upgrade succeeded
+		// 2. check that the promoted monovertex was deleted
+		// Can do the 2 checks above by looking at monovertex spec scale and replicas (for #1 only) and/or also at actual running pods count
 
 		time.Sleep(5 * time.Second)
 
