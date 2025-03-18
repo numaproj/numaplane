@@ -44,7 +44,7 @@ var (
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
-		RolloutStrategy: apiv1.RolloutStrategy{
+		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{
 				AssessmentSchedule: "30,30,10",
 			},
