@@ -153,6 +153,55 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
+	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion", func() {
+		By("Creating a MonoVertexRollout with ForcePromote enabled")
+		strategy := defaultStrategy.DeepCopy()
+		strategy.Progressive.ForcePromote = true
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec, strategy)
+
+		By("Verifying that the MonoVertex was created")
+		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+			return *retrievedMonoVertexSpec.Scale.Min == *initialMonoVertexSpec.Scale.Min &&
+				retrievedMonoVertexSpec.Source.UDSource.Container.Image == initialMonoVertexSpec.Source.UDSource.Container.Image
+		})
+		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		time.Sleep(5 * time.Second)
+
+		By("Updating the MonoVertex Topology to cause a Progressive change - Force promoted failure into success")
+		updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
+		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
+		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
+
+		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+			return mvr, nil
+		})
+
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+		// TODO:
+		// VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, false, apiv1.AssessmentResultSuccess)
+		/*
+					progressiveStatus:
+			    upgradingMonoVertexStatus:
+			      assessmentResult: Success
+			      forcedSuccess: true
+			      name: monovertex-rollout-1
+		*/
+
+		// TODO: test these (WIP)
+		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
+		// 	[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
+		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
+		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
+
+		time.Sleep(5 * time.Second)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+	})
+
 	// TODO: tests for pipeline
 
 	It("Should delete all remaining rollout objects", func() {
