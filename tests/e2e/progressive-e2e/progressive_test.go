@@ -39,6 +39,14 @@ var (
 	monoVertexScaleMax  = int32(9)
 	zeroReplicaSleepSec = uint32(15)
 
+	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
+		RolloutStrategy: apiv1.RolloutStrategy{
+			Progressive: apiv1.ProgressiveStrategy{
+				AssessmentSchedule: "30,30,10",
+			},
+		},
+	}
+
 	udTransformer = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
 	// validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
 	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
@@ -83,7 +91,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 	It("Should create the initial MonoVertex", func() {
 		By("Creating a monovertex rollout")
 
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec, &defaultStrategy)
 
 		By("Verifying that the monovertex was created")
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {

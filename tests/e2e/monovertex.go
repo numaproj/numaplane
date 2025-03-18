@@ -268,9 +268,9 @@ func startMonoVertexRolloutWatches() {
 // shared functions
 
 // creates MonoVertexRollout of a given spec/name and makes sure it's running
-func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexSpec) {
+func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) {
 
-	monoVertexRolloutSpec := createMonoVertexRolloutSpec(name, namespace, spec)
+	monoVertexRolloutSpec := createMonoVertexRolloutSpec(name, namespace, spec, strategy)
 	_, err := monoVertexRolloutClient.Create(ctx, monoVertexRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -291,7 +291,7 @@ func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexS
 
 }
 
-func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVertexSpec) *apiv1.MonoVertexRollout {
+func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) *apiv1.MonoVertexRollout {
 
 	rawSpec, err := json.Marshal(spec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -306,6 +306,7 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 			Namespace: namespace,
 		},
 		Spec: apiv1.MonoVertexRolloutSpec{
+			Strategy: *strategy,
 			MonoVertex: apiv1.MonoVertex{
 				Spec: runtime.RawExtension{
 					Raw: rawSpec,
