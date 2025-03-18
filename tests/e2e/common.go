@@ -152,7 +152,7 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 		msg = "for the MonoVertex"
 	}
 
-	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s", msg), func() bool {
+	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s (%s)", msg, rolloutChildName), func() bool {
 		for _, vtx := range specVertices {
 			vtxLabelSelector := ""
 			switch component {
