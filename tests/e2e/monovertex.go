@@ -394,9 +394,27 @@ func VerifyMonoVertexStaysPaused(name string) {
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(name))
 }
 
-func VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName string, f func(mvrProgressiveStatus apiv1.MonoVertexProgressiveStatus) bool) {
+func VerifyMonoVertexRolloutProgressiveStatus(
+	monoVertexRolloutName string,
+	expectedPromotedIndex int,
+	expectedUpgradingIndex int,
+	expectedScaleValuesRestoredToOriginal bool,
+	expectedAssessmentResult apiv1.AssessmentResult,
+) {
 	CheckEventually("verifying the MonoVertexRollout Progressive Status", func() bool {
 		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return f(mvr.Status.ProgressiveStatus)
+
+		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+			return false
+		}
+
+		return VerifyRolloutProgressiveStatus(
+			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedPipelineTypeStatus,
+			mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus,
+			fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex),
+			fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex),
+			expectedScaleValuesRestoredToOriginal,
+			expectedAssessmentResult,
+		)
 	}).Should(BeTrue())
 }

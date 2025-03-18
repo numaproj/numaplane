@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -47,8 +46,8 @@ var (
 		},
 	}
 
-	udTransformer = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	// validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	udTransformer             = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
+	validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
 	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
 	initialMonoVertexSpec = &numaflowv1.MonoVertexSpec{
@@ -86,6 +85,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
 		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		// TODO: add ISBSvc when adding pipeline tests
 	})
 
 	It("Should create the initial MonoVertex", func() {
@@ -109,9 +109,6 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 
-		// UpdateMonoVertexRollout(monoVertexRolloutName, *updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseFailed, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-		// 	return true
-		// })
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
@@ -122,33 +119,33 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// TODO: verify status, etc.
 
 		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, func(mvrProgressiveStatus apiv1.MonoVertexProgressiveStatus) bool {
-			return mvrProgressiveStatus.UpgradingMonoVertexStatus != nil && mvrProgressiveStatus.PromotedMonoVertexStatus != nil &&
-				mvrProgressiveStatus.UpgradingMonoVertexStatus.AssessmentResult == apiv1.AssessmentResultFailure &&
-				mvrProgressiveStatus.UpgradingMonoVertexStatus.AssessmentEndTime != nil &&
-				mvrProgressiveStatus.UpgradingMonoVertexStatus.Name == fmt.Sprintf("%s-1", monoVertexRolloutName) &&
-				mvrProgressiveStatus.PromotedMonoVertexStatus.Name == fmt.Sprintf("%s-0", monoVertexRolloutName) &&
-				mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValuesRestoredToOriginal
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
+
+		time.Sleep(5 * time.Second)
+
+		By("Updating MonoVertex Topology to cause a Successful Progressive change")
+		updatedMonoVertexSpec = initialMonoVertexSpec.DeepCopy()
+		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
+		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
+
+		rawSpec, err = json.Marshal(updatedMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+			return mvr, nil
 		})
+
+		// TODO: verify status, etc.
+
+		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
 
 		time.Sleep(5 * time.Second)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	// It("Should update the initial MonoVertex - Success", func() {
-	//	time.Sleep(5 * time.Second)
-	// 	By("Updating MonoVertex Topology to cause a Successful Progressive change")
-	// 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-	// 	updatedMonoVertexSpec.Source.UDTransformer = udTransformer
-	// 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
-
-	// 	UpdateMonoVertexRollout(monoVertexRolloutName, *updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-	// 		return retrievedMonoVertexSpec.Source.UDTransformer.Container.Image == validUDTransformerImage
-	// 	})
-
-	// 	// TODO: verify status, etc.
-	// })
+	// TODO: tests for pipeline
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteNumaflowControllerRollout()
