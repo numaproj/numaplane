@@ -17,7 +17,10 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -90,22 +93,43 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		// TODO: verify status, etc.
-	})
 
-	It("Should update the initial MonoVertex - Failure", func() {
+		time.Sleep(5 * time.Second)
+
 		By("Updating MonoVertex Topology to cause a Failing Progressive change")
 		updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, *updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseFailed, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return true
+		// UpdateMonoVertexRollout(monoVertexRolloutName, *updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseFailed, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		// 	return true
+		// })
+		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+			return mvr, nil
 		})
 
 		// TODO: verify status, etc.
+
+		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, func(mvrProgressiveStatus apiv1.MonoVertexProgressiveStatus) bool {
+			return mvrProgressiveStatus.UpgradingMonoVertexStatus != nil && mvrProgressiveStatus.PromotedMonoVertexStatus != nil &&
+				mvrProgressiveStatus.UpgradingMonoVertexStatus.AssessmentResult == apiv1.AssessmentResultFailure &&
+				mvrProgressiveStatus.UpgradingMonoVertexStatus.AssessmentEndTime != nil &&
+				mvrProgressiveStatus.UpgradingMonoVertexStatus.Name == fmt.Sprintf("%s-1", monoVertexRolloutName) &&
+				mvrProgressiveStatus.PromotedMonoVertexStatus.Name == fmt.Sprintf("%s-0", monoVertexRolloutName) &&
+				mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValuesRestoredToOriginal
+		})
+
+		time.Sleep(5 * time.Second)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
 	// It("Should update the initial MonoVertex - Success", func() {
+	//	time.Sleep(5 * time.Second)
 	// 	By("Updating MonoVertex Topology to cause a Successful Progressive change")
 	// 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	// 	updatedMonoVertexSpec.Source.UDTransformer = udTransformer

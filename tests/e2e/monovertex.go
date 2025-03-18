@@ -392,3 +392,10 @@ func VerifyMonoVertexStaysPaused(name string) {
 
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(name))
 }
+
+func VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName string, f func(mvrProgressiveStatus apiv1.MonoVertexProgressiveStatus) bool) {
+	CheckEventually("verifying the MonoVertexRollout Progressive Status", func() bool {
+		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return f(mvr.Status.ProgressiveStatus)
+	}).Should(BeTrue())
+}
