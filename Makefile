@@ -51,6 +51,9 @@ ifeq ($(STRATEGY), progressive)
 TEST_MANIFEST_DIR := $(TEST_PROGRESSIVE_MANIFEST_DIR)
 endif
 
+
+ARGO_ROLLOUTS_PATH ?= https://github.com/argoproj/argo-rollouts/manifests/cluster-install?ref=stable
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -202,7 +205,7 @@ start: image
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
 	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/rollouts-ns.yaml
-	$(KUBECTL) kustomize https://github.com/argoproj/argo-rollouts/manifests/cluster-install?ref=stable | $(KUBECTL) apply -n argo-rollouts -f -
+	$(KUBECTL) kustomize $(ARGO_ROLLOUTS_PATH) | $(KUBECTL) apply -n argo-rollouts -f -
 
 ##@ Build Dependencies
 
