@@ -136,7 +136,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 }
 
-func verifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices []numaflowv1.AbstractVertex, component ComponentType) {
+func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices []numaflowv1.AbstractVertex, component ComponentType) {
 	baseLabelSelector := fmt.Sprintf("%s=%s,%s=%s",
 		numaflowv1.KeyPartOf, "numaflow",
 		numaflowv1.KeyComponent, component,

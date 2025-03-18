@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -120,10 +121,10 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
 
-		// TODO:
-		// 1. check that the upgrading monovertex is scaled to zero after upgrade failure
-		// 2. check that the promoted monovertex is scaled to original after upgrade failure
-		// Can do the 2 checks above by looking at monovertex spec scale and replicas and/or also at actual running pods count
+		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
+			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
+		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
+			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
 		time.Sleep(5 * time.Second)
 
@@ -140,13 +141,12 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
 
-		// TODO:
-		// 1. check that the upgrading monovertex is scaled to desired min/max after upgrade succeeded
-		// 2. check that the promoted monovertex was deleted
-		// Can do the 2 checks above by looking at monovertex spec scale and replicas (for #1 only) and/or also at actual running pods count
+		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 2),
+			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
+		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
+			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
 		time.Sleep(5 * time.Second)
 

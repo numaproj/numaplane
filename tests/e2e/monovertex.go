@@ -92,7 +92,7 @@ func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) error {
 	}
 
 	By("Verifying that the MonoVertex is ready")
-	verifyVerticesPodsRunning(namespace, monoVertexName, []numaflowv1.AbstractVertex{{Scale: monoVertexSpec.Scale}}, ComponentMonoVertex)
+	VerifyVerticesPodsRunning(namespace, monoVertexName, []numaflowv1.AbstractVertex{{Scale: monoVertexSpec.Scale}}, ComponentMonoVertex)
 
 	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex-daemon")
 	verifyPodsRunning(namespace, 1, daemonLabelSelector)
