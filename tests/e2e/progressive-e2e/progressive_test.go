@@ -47,15 +47,15 @@ var (
 	}
 
 	udTransformer             = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
-	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
+	validUDTransformerImage   = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable"
+	invalidUDTransformerImage = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
 	initialMonoVertexSpec = &numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/simple-source:stable",
+					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
 				},
 			},
 		},
@@ -63,7 +63,7 @@ var (
 			AbstractSink: numaflowv1.AbstractSink{
 				UDSink: &numaflowv1.UDSink{
 					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-rs/sink-log:stable",
+						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
 					},
 				},
 			},
@@ -121,6 +121,8 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
 
+		// TODO: verify progressive status changes here
+
 		time.Sleep(5 * time.Second)
 
 		By("Updating MonoVertex Topology to cause a Successful Progressive change")
@@ -139,6 +141,8 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 		// TODO: create more generic functions to check failures, successes, unknown (tmp state), etc.
 		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
+
+		// TODO: verify progressive status changes here
 
 		time.Sleep(5 * time.Second)
 
