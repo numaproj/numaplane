@@ -314,6 +314,8 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 		},
 	}
 
+	// Done this way because if the strategy is not necessary for some tests, it can be passed as nil.
+	// However, we cannot set Strategy as nil in the spec.
 	if strategy != nil {
 		monoVertexRollout.Spec.Strategy = *strategy
 	}
