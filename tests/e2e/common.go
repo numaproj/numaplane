@@ -660,18 +660,3 @@ func CheckConsistently(testData string, actualOrCtx interface{}) AsyncAssertion 
 	By(testData)
 	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
 }
-
-func VerifyRolloutProgressiveStatus(
-	promotedStatus apiv1.PromotedPipelineTypeStatus,
-	upgradingStatus apiv1.UpgradingChildStatus,
-	expectedPromotedName string,
-	expectedUpgradingName string,
-	expectedPromotedScaleValuesRestoredToOriginal bool,
-	expectedUpgradingAssessmentResult apiv1.AssessmentResult,
-) bool {
-	return promotedStatus.Name == expectedPromotedName &&
-		promotedStatus.ScaleValuesRestoredToOriginal == expectedPromotedScaleValuesRestoredToOriginal &&
-		upgradingStatus.Name == expectedUpgradingName &&
-		upgradingStatus.AssessmentResult == expectedUpgradingAssessmentResult &&
-		upgradingStatus.AssessmentEndTime != nil
-}

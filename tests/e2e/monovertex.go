@@ -306,16 +306,13 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 			Namespace: namespace,
 		},
 		Spec: apiv1.MonoVertexRolloutSpec{
+			Strategy: *strategy,
 			MonoVertex: apiv1.MonoVertex{
 				Spec: runtime.RawExtension{
 					Raw: rawSpec,
 				},
 			},
 		},
-	}
-
-	if strategy != nil {
-		monoVertexRollout.Spec.Strategy = *strategy
 	}
 
 	return monoVertexRollout
@@ -403,26 +400,38 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 	expectedUpgradingIndex int,
 	expectedScaleValuesRestoredToOriginal bool,
 	expectedAssessmentResult apiv1.AssessmentResult,
+	forcedPromotion bool,
 ) {
 	CheckEventually("verifying the MonoVertexRollout Progressive Status", func() bool {
 		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+
+		if forcedPromotion {
+			if mvr == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+				return false
+			}
+
+			upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+
+			return upgradingStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex) &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+				upgradingStatus.ForcedSuccess
+		}
 
 		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
 			return false
 		}
 
-		return VerifyRolloutProgressiveStatus(
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedPipelineTypeStatus,
-			mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus,
-			fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex),
-			fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex),
-			expectedScaleValuesRestoredToOriginal,
-			expectedAssessmentResult,
-		)
+		promotedStatus := mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus
+		upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+
+		return promotedStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex) &&
+			promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
+			upgradingStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex) &&
+			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+			upgradingStatus.AssessmentEndTime != nil
 	}).Should(BeTrue())
 }
 
-// TODO: share some of this code with Pipeline if needed (similar to VerifyMonoVertexRolloutProgressiveStatus)
 func VerifyMonoVertexRolloutScaledDownForProgressive(
 	monoVertexRolloutName string,
 	expectedPromotedIndex int,

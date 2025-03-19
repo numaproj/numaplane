@@ -46,16 +46,16 @@ var (
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "120,60,10", // TODO: revisit these values
+				AssessmentSchedule: "60,30,10", // TODO: revisit these values, try: 150,60,10
 			},
 		},
 	}
 
-	udTransformer             = &numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
+	udTransformer             = numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
 	validUDTransformerImage   = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable"
 	invalidUDTransformerImage = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
-	initialMonoVertexSpec = &numaflowv1.MonoVertexSpec{
+	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -95,7 +95,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
 		By("Creating a MonoVertexRollout")
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec, &defaultStrategy)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &defaultStrategy)
 
 		By("Verifying that the MonoVertex was created")
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
@@ -104,11 +104,12 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
+		// TODO: instead of waiting 5 seconds (very arbitrary), verify that the monovertex is ready and in healthy state
 		time.Sleep(5 * time.Second)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
 		updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
+		updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
@@ -119,18 +120,19 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure)
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
 
 		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
+		// TODO: try to remove this
 		time.Sleep(5 * time.Second)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
 		updatedMonoVertexSpec = initialMonoVertexSpec.DeepCopy()
-		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
+		updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
 
 		rawSpec, err = json.Marshal(updatedMonoVertexSpec)
@@ -141,13 +143,14 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess)
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
 		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 2),
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
+		// TODO: try to remove this
 		time.Sleep(5 * time.Second)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
@@ -157,7 +160,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		By("Creating a MonoVertexRollout with ForcePromote enabled")
 		strategy := defaultStrategy.DeepCopy()
 		strategy.Progressive.ForcePromote = true
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, *initialMonoVertexSpec, strategy)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy)
 
 		By("Verifying that the MonoVertex was created")
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
@@ -166,11 +169,12 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
+		// TODO: instead of waiting 5 seconds (very arbitrary), verify that the monovertex is ready and in healthy state
 		time.Sleep(5 * time.Second)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Force promoted failure into success")
 		updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-		updatedMonoVertexSpec.Source.UDTransformer = udTransformer
+		updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 		updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
 
 		rawSpec, err := json.Marshal(updatedMonoVertexSpec)
@@ -181,15 +185,8 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		// TODO:
-		// VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, false, apiv1.AssessmentResultSuccess)
-		/*
-					progressiveStatus:
-			    upgradingMonoVertexStatus:
-			      assessmentResult: Success
-			      forcedSuccess: true
-			      name: monovertex-rollout-1
-		*/
+		// TODO: verify this works now
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, false, apiv1.AssessmentResultSuccess, strategy.Progressive.ForcePromote)
 
 		// TODO: test these (WIP)
 		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
@@ -197,6 +194,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
 		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
+		// TODO: try to remove this
 		time.Sleep(5 * time.Second)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
