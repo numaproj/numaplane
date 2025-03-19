@@ -306,13 +306,16 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 			Namespace: namespace,
 		},
 		Spec: apiv1.MonoVertexRolloutSpec{
-			Strategy: *strategy,
 			MonoVertex: apiv1.MonoVertex{
 				Spec: runtime.RawExtension{
 					Raw: rawSpec,
 				},
 			},
 		},
+	}
+
+	if strategy != nil {
+		monoVertexRollout.Spec.Strategy = *strategy
 	}
 
 	return monoVertexRollout
