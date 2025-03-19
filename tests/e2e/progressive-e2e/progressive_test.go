@@ -46,7 +46,7 @@ var (
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "120,60,10", // TODO: revisit as needed
+				AssessmentSchedule: "240,120,10", // TODO: revisit as needed
 			},
 		},
 	}
@@ -154,6 +154,9 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		By("Creating a MonoVertexRollout with ForcePromote enabled")
 		strategy := defaultStrategy.DeepCopy()
 		strategy.Progressive.ForcePromote = true
+		// TODO: create a more realistic case in which the upgrading monovertex is actually healthy but marked failed because started assessment too soon.
+		// Ideally, create a separate test case for this.
+		// strategy.Progressive.AssessmentSchedule = "0,120,5"
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy)
 
 		By("Verifying that the MonoVertex was created")
