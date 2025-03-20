@@ -46,21 +46,21 @@ var (
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "60,30,10", // TODO: revisit if necessary
+				AssessmentSchedule: "60,30,10",
 			},
 		},
 	}
 
 	udTransformer             = numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	validUDTransformerImage   = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable"
-	invalidUDTransformerImage = "docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
+	validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
+					Image: "quay.io/numaio/numaflow-rs/simple-source:stable",
 				},
 			},
 		},
