@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -659,4 +660,19 @@ func CheckEventually(testData string, actualOrCtx interface{}) AsyncAssertion {
 func CheckConsistently(testData string, actualOrCtx interface{}) AsyncAssertion {
 	By(testData)
 	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
+}
+
+func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expectedVertexScaleMap map[string]numaflowv1.Scale) bool {
+	for expectedVertexName, expectedVertexScale := range expectedVertexScaleMap {
+		actualVertexScale, exists := actualVertexScaleMap[expectedVertexName]
+		if !exists {
+			return false
+		}
+
+		if !reflect.DeepEqual(actualVertexScale, expectedVertexScale) {
+			return false
+		}
+	}
+
+	return true
 }

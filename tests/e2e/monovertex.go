@@ -57,17 +57,17 @@ func VerifyMonoVertexSpec(namespace, monoVertexRolloutName string, f func(numafl
 }
 
 func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
-	CheckEventually("verifying that the MonoVertexRollout is ready", func() bool {
+	CheckEventually("verifying that the MonoVertexRollout is ready (PhaseDeployed)", func() bool {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return rollout.Status.Phase == apiv1.PhaseDeployed
 	}).Should(BeTrue())
 
-	CheckEventually("verifying that the MonoVertexRollout is ready", func() metav1.ConditionStatus {
+	CheckEventually("verifying that the MonoVertexRollout is ready (ConditionChildResourceDeployed)", func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}).Should(Equal(metav1.ConditionTrue))
 
-	CheckEventually("verifying that the MonoVertexRollout is ready", func() metav1.ConditionStatus {
+	CheckEventually("verifying that the MonoVertexRollout is ready (ConditionChildResourceHealthy)", func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}).Should(Equal(metav1.ConditionTrue))
@@ -91,7 +91,6 @@ func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) error {
 		return fmt.Errorf("error getting the MonoVertex spec: %w", err)
 	}
 
-	By("Verifying that the MonoVertex is ready")
 	VerifyVerticesPodsRunning(namespace, monoVertexName, []numaflowv1.AbstractVertex{{Scale: monoVertexSpec.Scale}}, ComponentMonoVertex)
 
 	daemonLabelSelector := fmt.Sprintf("%s=%s,%s=%s", numaflowv1.KeyMonoVertexName, monoVertexName, numaflowv1.KeyComponent, "mono-vertex-daemon")
@@ -461,4 +460,20 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].ScaleTo == expectedScaleTo
 	}).Should(BeTrue())
+}
+
+func VerifyPromotedMonoVertexScale(namespace, monoVertexRolloutName string, expectedMonoVertexScaleMap map[string]numaflowv1.Scale) {
+	CheckEventually("verifying that the scale values are as expected for the Promoted MonoVertex", func() bool {
+		unstructMonoVertex, err := GetMonoVertex(namespace, monoVertexRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		monoVertexSpec, err := getMonoVertexSpec(unstructMonoVertex)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		actualMonoVertexScaleMap := map[string]numaflowv1.Scale{
+			unstructMonoVertex.GetName(): monoVertexSpec.Scale,
+		}
+
+		return VerifyVerticesScale(actualMonoVertexScaleMap, expectedMonoVertexScaleMap)
+	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
