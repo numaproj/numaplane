@@ -19,6 +19,7 @@ GIT_TREE_STATE=$(shell if [[ -z "`git status --porcelain`" ]]; then echo "clean"
 
 NUMAFLOW_CRDS=$(shell kubectl get crd | grep -c 'numaflow.numaproj.io')
 
+
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
@@ -53,6 +54,10 @@ endif
 
 
 ARGO_ROLLOUTS_PATH ?= https://github.com/argoproj/argo-rollouts/manifests/cluster-install?ref=stable
+
+PROMETHEUS_REQUIRED ?= true
+ROLLOUTS_REQUIRED ?= true
+PROMETHEUS_CHART ?= oci://registry-1.docker.io/bitnamicharts/kube-prometheus
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -197,16 +202,28 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx rm project-v3-builder
 	rm Dockerfile.cross
 
+.PHONY: rollouts
+rollouts:
+ifeq ($(ROLLOUTS_REQUIRED), true)
+	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/rollouts-ns.yaml
+	$(KUBECTL) kustomize $(ARGO_ROLLOUTS_PATH) | $(KUBECTL) apply -n argo-rollouts -f -
+endif
+
+.PHONY: prometheus
+prometheus:
+ifeq ($(PROMETHEUS_REQUIRED), true)
+	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/prometheus-ns.yaml
+	helm upgrade --install prometheus $(PROMETHEUS_CHART) -n prometheus --set prometheus.resourcesPreset=small --set prometheus.logLevel=debug --hide-notes
+endif
+
 ##@ Deployment
 
-
 .PHONY: start
-start: image
+start: image prometheus rollouts
 	./hack/numaflow-controller-def-generator/numaflow-controller-def-generator.sh
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
 	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
-	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/rollouts-ns.yaml
-	$(KUBECTL) kustomize $(ARGO_ROLLOUTS_PATH) | $(KUBECTL) apply -n argo-rollouts -f -
+
 
 ##@ Build Dependencies
 
