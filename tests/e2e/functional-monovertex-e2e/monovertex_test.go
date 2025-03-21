@@ -46,11 +46,7 @@ var (
 		},
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
-				UDSink: &numaflowv1.UDSink{
-					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
-					},
-				},
+				Blackhole: &numaflowv1.Blackhole{},
 			},
 		},
 	}
