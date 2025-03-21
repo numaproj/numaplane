@@ -347,17 +347,13 @@ func DeleteMonoVertexRollout(name string) {
 }
 
 func VerifyMonoVertexDeletion(name string) {
-	CheckEventually("Verifying MonoVertex deletion", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying that the MonoVertex was deleted (%s)", name), func() bool {
 		monovertex, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			return false
+			return errors.IsNotFound(err)
 		}
 
-		if monovertex == nil {
-			return true
-		}
-
-		return false
+		return monovertex == nil
 	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The MonoVertex %s/%s should have been deleted but it was found.", Namespace, name))
 }
 
