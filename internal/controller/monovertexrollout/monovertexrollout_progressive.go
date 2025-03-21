@@ -212,11 +212,18 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	}
 
 	// Scale the Upgrading MonoVertex back to its original min and max values
-	originalScaleMinMax := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax
-	if originalScaleMinMax == "" {
-		numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default to null")
-		originalScaleMinMax = "null"
+	originalScaleMinMax := "null"
+	upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+	if upgradingMonoVertexStatus == nil {
+		numaLogger.Error(errors.New("UpgradingMonoVertexStatus field nil"), "UpgradingMonoVertexStatus is nil; will default scale to null")
+	} else {
+		originalScaleMinMax = upgradingMonoVertexStatus.OriginalScaleMinMax
+		if originalScaleMinMax == "" {
+			numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default scale to null")
+			originalScaleMinMax = "null"
+		}
 	}
+
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, originalScaleMinMax)
 	if err := kubernetes.PatchResource(ctx, c, upgradingMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
 		return fmt.Errorf("error scaling the existing upgrading monovertex to original values: %w", err)
