@@ -21,6 +21,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -30,6 +31,8 @@ import (
 
 func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorolloutsv1.AnalysisTemplateRef, namespace string, c client.Client) ([]*argorolloutsv1.AnalysisTemplate, []*argorolloutsv1.ClusterAnalysisTemplate, error) {
 
+	numaLogger := logger.FromContext(ctx)
+
 	templates := make([]*argorolloutsv1.AnalysisTemplate, 0)
 	clusterTemplates := make([]*argorolloutsv1.ClusterAnalysisTemplate, 0)
 	for _, templateRef := range *templateRefs {
@@ -38,7 +41,7 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					// c.log.Warnf("ClusterAnalysisTemplate '%s' not found", templateRef.TemplateName)
+					numaLogger.Warnf("ClusterAnalysisTemplate '%s' not found", templateRef.TemplateName)
 				}
 				return nil, nil, err
 			}
@@ -57,7 +60,7 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					// c.log.Warnf("AnalysisTemplate '%s' not found", templateRef.TemplateName)
+					numaLogger.Warnf("AnalysisTemplate '%s' not found", templateRef.TemplateName)
 				}
 				return nil, nil, err
 			}
