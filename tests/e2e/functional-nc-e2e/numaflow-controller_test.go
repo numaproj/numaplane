@@ -100,11 +100,7 @@ var (
 		},
 		Sink: &numaflowv1.Sink{
 			AbstractSink: numaflowv1.AbstractSink{
-				UDSink: &numaflowv1.UDSink{
-					Container: &numaflowv1.Container{
-						Image: "quay.io/numaio/numaflow-go/sink-log:stable",
-					},
-				},
+				Blackhole: &numaflowv1.Blackhole{},
 			},
 		},
 	}
@@ -135,7 +131,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the MonoVertexRollout if it does not exist", func() {
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
