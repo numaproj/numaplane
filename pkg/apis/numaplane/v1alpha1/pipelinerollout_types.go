@@ -138,12 +138,30 @@ func (pipelineRollout *PipelineRollout) GetProgressiveStrategy() ProgressiveStra
 	return pipelineRollout.Spec.Strategy.Progressive
 }
 
+func (pipelineRollout *PipelineRollout) GetAnalysis() Analysis {
+	return pipelineRollout.Spec.Strategy.Analysis
+}
+
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject
 func (pipelineRollout *PipelineRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
 	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
 		return nil
 	}
 	return &pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus
+}
+
+func (pipelineRollout *PipelineRollout) GetAnalysisStatus() *AnalysisStatus {
+	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+		return nil
+	}
+	return &pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Analysis
+}
+
+func (pipelineRollout *PipelineRollout) SetAnalysisStatus(status *AnalysisStatus) {
+	if pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+		pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{}
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Analysis = *status.DeepCopy()
 }
 
 // GetPromotedChildStatus is a function of the progressiveRolloutObject
@@ -172,6 +190,10 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 				Name:              upgradingPipeline.GetName(),
 				AssessmentEndTime: nil,
 				AssessmentResult:  AssessmentResultUnknown,
+			},
+			Analysis: AnalysisStatus{
+				AnalysisRunName: upgradingPipeline.GetName(),
+				EndTime:         nil,
 			},
 		},
 	}

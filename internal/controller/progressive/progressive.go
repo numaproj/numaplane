@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -75,6 +76,8 @@ type ProgressiveRolloutObject interface {
 
 	GetPromotedChildStatus() *apiv1.PromotedChildStatus
 
+	GetAnalysisStatus() *apiv1.AnalysisStatus
+
 	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
 	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
@@ -84,6 +87,11 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+
+	SetAnalysisStatus(*apiv1.AnalysisStatus)
+
+	// TODO: not necessary if we reset AnalysisStatus in ResetUpgradingChildStatus
+	// ResetAnalysisStatus() error
 }
 
 // return:
@@ -381,6 +389,7 @@ func processUpgradingChild(
 // Unknown: neither of the above if met
 func AssessUpgradingPipelineType(
 	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
 ) (apiv1.AssessmentResult, error) {
@@ -403,7 +412,8 @@ func AssessUpgradingPipelineType(
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
-	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
+	// TODO: check that AnalysisRun is also successful
+	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && rolloutObject.GetAnalysisStatus().Phase == argorolloutsv1.AnalysisPhaseSuccessful {
 		return apiv1.AssessmentResultSuccess, nil
 	}
 

@@ -142,6 +142,21 @@ func (isbServiceRollout *ISBServiceRollout) GetUpgradingChildStatus() *Upgrading
 	return &isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus
 }
 
+func (isbServiceRollout *ISBServiceRollout) GetAnalysisStatus() *AnalysisStatus {
+	// if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
+	// 	return nil
+	// }
+	// return &isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.Analysis
+	return nil
+}
+
+func (isbServiceRollout *ISBServiceRollout) SetAnalysisStatus(status *AnalysisStatus) {
+	// if isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus == nil {
+	// 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{}
+	// }
+	// isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.Analysis = *status.DeepCopy()
+}
+
 // GetPromotedChildStatus is a function of the progressiveRolloutObject
 func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedChildStatus {
 	if isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus == nil {

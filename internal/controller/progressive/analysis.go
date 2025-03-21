@@ -21,9 +21,11 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorolloutsv1.AnalysisTemplateRef, namespace string, c client.Client) ([]*argorolloutsv1.AnalysisTemplate, []*argorolloutsv1.ClusterAnalysisTemplate, error) {
@@ -34,7 +36,6 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 		if templateRef.ClusterScope {
 			template := &argorolloutsv1.ClusterAnalysisTemplate{}
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
-			// template, err := c.clusterAnalysisTemplateLister.Get(templateRef.TemplateName)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					// c.log.Warnf("ClusterAnalysisTemplate '%s' not found", templateRef.TemplateName)
@@ -53,7 +54,6 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 			}
 		} else {
 			template := &argorolloutsv1.AnalysisTemplate{}
-			// template, err := c.analysisTemplateLister.AnalysisTemplates(namespace).Get(templateRef.TemplateName)
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
 			if err != nil {
 				if errors.IsNotFound(err) {
@@ -76,4 +76,39 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 	}
 	uniqueTemplates, uniqueClusterTemplates := analysisutil.FilterUniqueTemplates(templates, clusterTemplates)
 	return uniqueTemplates, uniqueClusterTemplates, nil
+}
+
+func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, client client.Client) error {
+
+	// find all specified templates to merge into single AnalysisRun
+	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
+	if err != nil {
+		return err
+	}
+
+	// set special arguments for child name and namespace
+	childName := existingUpgradingChildDef.GetName()
+	childNamespace := existingUpgradingChildDef.GetNamespace()
+
+	switch existingUpgradingChildDef.GetKind() {
+	case "MonoVertex":
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "monovertex-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "monovertex-namespace", Value: &childNamespace})
+	case "Pipeline":
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-namespace", Value: &childNamespace})
+	}
+
+	// create new AnalysisRun in the child namespace from combination of all templates and args
+	analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, analysis.Args, nil, nil,
+		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, childName, "", childNamespace)
+	if err != nil {
+		return err
+	}
+
+	if err = client.Create(ctx, analysisRun); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
@@ -11,6 +12,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,7 +20,6 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
-	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -45,48 +46,38 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
-
-	// The following code can serve as a template for what should work:
 	analysisRun := &argorolloutsv1.AnalysisRun{}
 	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 		if apierrors.IsNotFound(err) {
-			// special keys: monovertex-name and monovertex-namespace
-			numaLogger := logger.FromContext(ctx)
 			mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 			analysis := mvtxRollout.GetAnalysis()
-			analysisTemplates, clusterAnalysisTemplates, err := progressive.GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), r.client)
+			err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
 			if err != nil {
-				return "", err
-			}
-			// check if empty
-			args := analysis.Args
-			if len(args) == 0 {
-				args = make([]argorolloutsv1.Argument, 0)
-			}
-
-			mvtxName := existingUpgradingChildDef.GetName()
-			mvtxNamespace := existingUpgradingChildDef.GetNamespace()
-			args = append(args, argorolloutsv1.Argument{Name: "monovertex-name", Value: &mvtxName})
-			args = append(args, argorolloutsv1.Argument{Name: "monovertex-namespace", Value: &mvtxNamespace})
-			numaLogger.Infof("ARGUMENT LIST: %v", args)
-
-			analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, args, nil, nil,
-				map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, mvtxName, "", mvtxNamespace)
-			if err != nil {
-				return "", err
-			}
-
-			numaLogger.Infof("ARGUMENT LIST IN RUN: %v", analysisRun.Spec.Args)
-
-			if err = r.client.Create(ctx, analysisRun); err != nil {
 				return apiv1.AssessmentResultUnknown, err
 			}
+			// analysisRun is created for the first time
+			analysisStatus := rolloutObject.GetAnalysisStatus()
+			timeNow := metav1.NewTime(time.Now())
+			analysisStatus.StartTime = &timeNow
+			rolloutObject.SetAnalysisStatus(analysisStatus)
 		} else {
 			return apiv1.AssessmentResultUnknown, err
 		}
 	}
 
-	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+	// assess analysisRun status and set endTime and phase if completed
+	analysisStatus := rolloutObject.GetAnalysisStatus()
+	if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+		analysisStatus.EndTime = analysisRun.Status.CompletedAt
+		analysisStatus.Phase = analysisRun.Status.Phase
+		rolloutObject.SetAnalysisStatus(analysisStatus)
+	} else {
+		analysisStatus.Phase = analysisRun.Status.Phase
+		rolloutObject.SetAnalysisStatus(analysisStatus)
+	}
+
+	return progressive.AssessUpgradingPipelineType(ctx, rolloutObject, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+
 }
 
 /*
