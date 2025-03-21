@@ -1495,13 +1495,8 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
-                      originalScaleMinMax:
-                        description: OriginalScaleMinMax stores the original scale
-                          min and max values as JSON string
-                        type: string
                     required:
                     - name
-                    - originalScaleMinMax
                     type: object
                 type: object
               upgradeInProgress:
