@@ -1,3 +1,4 @@
+# These are used by the Prometheus Operator so it can query Numaflow Pipeline and MonoVertex Pods for metrics
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
