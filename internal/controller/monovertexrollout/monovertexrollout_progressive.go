@@ -183,7 +183,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 /*
 ProcessUpgradingChildPostSuccess handles an upgrading monovertex that has been deemed successful to be promoted.
 It performs the following post-success operations:
-- it scales the monovertex to the scale.min and scale.max defined in the rollout object.
+- it scales up the monovertex back to the original scale.min and scale.max
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -211,6 +211,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
 
+	// Scale the Upgrading MonoVertex back to its original min and max values
 	originalScaleMinMax := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax
 	if originalScaleMinMax == "" {
 		numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default to null")
