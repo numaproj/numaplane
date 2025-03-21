@@ -103,7 +103,7 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	verifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
+	VerifyVerticesPodsRunning(namespace, pipeline.GetName(), spec.Vertices, ComponentVertex)
 	verifyPodsRunning(namespace, 1, getDaemonLabelSelector(pipeline.GetName()))
 }
 

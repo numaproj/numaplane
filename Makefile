@@ -138,6 +138,7 @@ test-functional-nc:
 test-functional-monovertex:
 test-functional-pipeline:
 test-ppnd-e2e:
+test-progressive-e2e:
 test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
 	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$*
 
