@@ -48,6 +48,9 @@ type UpgradingChildStatus struct {
 type UpgradingPipelineTypeStatus struct {
 	UpgradingChildStatus `json:",inline"`
 
+	// OriginalScaleMinMax stores the original scale min and max values as JSON string
+	OriginalScaleMinMax string `json:"originalScaleMinMax"`
+
 	Analysis AnalysisStatus `json:"analysis,omitempty"`
 }
 
