@@ -119,6 +119,8 @@ jobs:
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
+          - strategy: "progressive"
+            case: "progressive"
 
     steps:
       - name: Checkout code
