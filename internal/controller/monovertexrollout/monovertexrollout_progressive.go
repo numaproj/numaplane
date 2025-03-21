@@ -211,18 +211,6 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
 
-	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
-	// Preferably change this to save the existing spec and use that instead
-	/*monoVertexSpec := map[string]any{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
-		return err
-	}
-
-	desiredMinPtr, desiredMaxPtr, err := getScaleValuesFromMonoVertexSpec(monoVertexSpec)
-	if err != nil {
-		return err
-	}*/
-
 	originalScaleMinMax := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax
 	if originalScaleMinMax == "" {
 		numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default to null")
