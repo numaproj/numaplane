@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -136,7 +137,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 
 }
 
-func verifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices []numaflowv1.AbstractVertex, component ComponentType) {
+func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices []numaflowv1.AbstractVertex, component ComponentType) {
 	baseLabelSelector := fmt.Sprintf("%s=%s,%s=%s",
 		numaflowv1.KeyPartOf, "numaflow",
 		numaflowv1.KeyComponent, component,
@@ -152,7 +153,7 @@ func verifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 		msg = "for the MonoVertex"
 	}
 
-	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s", msg), func() bool {
+	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s (%s)", msg, rolloutChildName), func() bool {
 		for _, vtx := range specVertices {
 			vtxLabelSelector := ""
 			switch component {
@@ -659,4 +660,19 @@ func CheckEventually(testData string, actualOrCtx interface{}) AsyncAssertion {
 func CheckConsistently(testData string, actualOrCtx interface{}) AsyncAssertion {
 	By(testData)
 	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
+}
+
+func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expectedVertexScaleMap map[string]numaflowv1.Scale) bool {
+	for expectedVertexName, expectedVertexScale := range expectedVertexScaleMap {
+		actualVertexScale, exists := actualVertexScaleMap[expectedVertexName]
+		if !exists {
+			return false
+		}
+
+		if !reflect.DeepEqual(actualVertexScale, expectedVertexScale) {
+			return false
+		}
+	}
+
+	return true
 }
