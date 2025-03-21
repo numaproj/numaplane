@@ -29,8 +29,8 @@ import (
 
 // ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
 type ISBServiceRolloutSpec struct {
-	InterStepBufferService InterStepBufferService    `json:"interStepBufferService"`
-	Strategy               ISBServiceRolloutStrategy `json:"strategy,omitempty"`
+	InterStepBufferService InterStepBufferService     `json:"interStepBufferService"`
+	Strategy               *ISBServiceRolloutStrategy `json:"strategy,omitempty"`
 }
 
 type ISBServiceRolloutStrategy struct {
@@ -131,6 +131,11 @@ func (isbServiceRollout *ISBServiceRollout) GetRolloutStatus() *Status {
 
 // GetProgressiveStrategy is a function of the progressiveRolloutObject
 func (isbServiceRollout *ISBServiceRollout) GetProgressiveStrategy() ProgressiveStrategy {
+	// if the Strategy is not set, return an empty ProgressiveStrategy
+	if isbServiceRollout.Spec.Strategy == nil {
+		return ProgressiveStrategy{}
+	}
+
 	return isbServiceRollout.Spec.Strategy.Progressive
 }
 
