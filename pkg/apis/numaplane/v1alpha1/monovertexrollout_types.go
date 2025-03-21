@@ -64,6 +64,9 @@ type MonoVertexProgressiveStatus struct {
 type UpgradingMonoVertexStatus struct {
 	// UpgradingPipelineTypeStatus describes the Status for an upgrading child that's particular to "Pipeline types", i.e. Pipeline and MonoVertex
 	UpgradingPipelineTypeStatus `json:",inline"`
+
+	// OriginalScaleMinMax stores the original scale min and max values as JSON string
+	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 }
 
 // PromotedMonoVertexStatus describes the status of the promoted child
