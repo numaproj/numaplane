@@ -1,0 +1,57 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/part-of: numaflow
+  name: numaflow-pipeline-metrics
+spec:
+  namespaceSelector:
+    any: true
+  endpoints:
+    - scheme: https
+      port: metrics
+      targetPort: 2469
+      tlsConfig:
+        insecureSkipVerify: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: vertex
+      app.kubernetes.io/managed-by: vertex-controller
+      app.kubernetes.io/part-of: numaflow
+    matchExpressions:
+      - key: numaflow.numaproj.io/pipeline-name
+        operator: Exists
+      - key: numaflow.numaproj.io/vertex-name
+        operator: Exists
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    app.kubernetes.io/part-of: numaflow
+  name: numaflow-mono-vertex-metrics
+spec:
+  namespaceSelector:
+    any: true
+  podMetricsEndpoints:
+    - scheme: https
+      path: /metrics
+      port: metrics
+      tlsConfig:
+        insecureSkipVerify: true
+  selector:
+    matchExpressions:
+    - key: app.kubernetes.io/part-of
+      operator: In
+      values:
+      - numaflow
+    - key: app.kubernetes.io/component
+      operator: In
+      values:
+      - mono-vertex
+    - key: app.kubernetes.io/managed-by
+      operator: In
+      values:
+      - mono-vertex-controller
+    - key: numaflow.numaproj.io/mono-vertex-name
+      operator: Exists
