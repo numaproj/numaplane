@@ -17,8 +17,8 @@ spec:
     #    numaflow.numaproj.io/instance: "0"
     spec:
       scale:
-        #min: 2
-        #max: 3
+        min: 2
+        max: 3
       source:
         udsource:
           container:
