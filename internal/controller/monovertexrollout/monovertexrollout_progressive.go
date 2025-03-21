@@ -10,11 +10,15 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -39,41 +43,48 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
+
 	// The following code can serve as a template for what should work:
-	/*analysisRun := &argorolloutsv1.AnalysisRun{}
+	analysisRun := &argorolloutsv1.AnalysisRun{}
 	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 		if apierrors.IsNotFound(err) {
-			analysisRun := &argorolloutsv1.AnalysisRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      existingUpgradingChildDef.GetName(),
-					Namespace: existingUpgradingChildDef.GetNamespace(),
-					OwnerReferences: []metav1.OwnerReference{
-						*metav1.NewControllerRef(existingUpgradingChildDef, numaflowv1.MonoVertexGroupVersionKind),
-					},
-				},
-				Spec: argorolloutsv1.AnalysisRunSpec{
-					Metrics: []argorolloutsv1.Metric{
-						{
-							Name: "my-metric",
-							Provider: argorolloutsv1.MetricProvider{
-								Prometheus: &argorolloutsv1.PrometheusMetric{
-									Address: "http://prometheus.addon-metricset-ns.svc.cluster.local:9090",
-									Query:   "vector(1) == vector(2)",
-								},
-							},
-						},
-					},
-				},
+			// special keys: monovertex-name and monovertex-namespace
+			numaLogger := logger.FromContext(ctx)
+			mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+			analysis := mvtxRollout.GetAnalysis()
+			analysisTemplates, clusterAnalysisTemplates, err := progressive.GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), r.client)
+			if err != nil {
+				return "", err
 			}
+			// check if empty
+			args := analysis.Args
+			if len(args) == 0 {
+				args = make([]argorolloutsv1.Argument, 0)
+			}
+
+			mvtxName := existingUpgradingChildDef.GetName()
+			mvtxNamespace := existingUpgradingChildDef.GetNamespace()
+			args = append(args, argorolloutsv1.Argument{Name: "monovertex-name", Value: &mvtxName})
+			args = append(args, argorolloutsv1.Argument{Name: "monovertex-namespace", Value: &mvtxNamespace})
+			numaLogger.Infof("ARGUMENT LIST: %v", args)
+
+			analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, args, nil, nil,
+				map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, mvtxName, "", mvtxNamespace)
+			if err != nil {
+				return "", err
+			}
+
+			numaLogger.Infof("ARGUMENT LIST IN RUN: %v", analysisRun.Spec.Args)
+
 			if err = r.client.Create(ctx, analysisRun); err != nil {
 				return apiv1.AssessmentResultUnknown, err
 			}
 		} else {
 			return apiv1.AssessmentResultUnknown, err
 		}
-	}*/
+	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
 }

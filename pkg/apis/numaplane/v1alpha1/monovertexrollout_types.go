@@ -132,6 +132,10 @@ func (monoVertexRollout *MonoVertexRollout) GetProgressiveStrategy() Progressive
 	return monoVertexRollout.Spec.Strategy.Progressive
 }
 
+func (monoVertexRollout *MonoVertexRollout) GetAnalysis() Analysis {
+	return monoVertexRollout.Spec.Strategy.Analysis
+}
+
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject
 func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
 	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {

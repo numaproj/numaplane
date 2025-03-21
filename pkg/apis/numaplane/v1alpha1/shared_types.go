@@ -59,7 +59,7 @@ type PipelineTypeProgressiveStrategy struct {
 // Analysis defines how to perform analysis of health, outside of basic resource checking
 type Analysis struct {
 	// Arguments can be passed to templates to evaluate any parameterization
-	Args []argorolloutsv1.AnalysisRunArgument `json:"args,omitempty"`
+	Args []argorolloutsv1.Argument `json:"args,omitempty"`
 
 	// Templates are used to analyze the AnalysisRun
 	Templates []argorolloutsv1.AnalysisTemplateRef `json:"templates,omitempty"`

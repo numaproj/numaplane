@@ -47,7 +47,7 @@ type progressiveController interface {
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
-	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
+	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
@@ -279,7 +279,7 @@ func processUpgradingChild(
 	// Otherwise, assess the previous child status.
 	assessment := childStatus.AssessmentResult
 	if childStatus.CanAssess() {
-		assessment, err = controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
+		assessment, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
