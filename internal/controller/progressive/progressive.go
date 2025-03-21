@@ -412,8 +412,14 @@ func AssessUpgradingPipelineType(
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
-	// TODO: check that AnalysisRun is also successful
-	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && rolloutObject.GetAnalysisStatus().Phase == argorolloutsv1.AnalysisPhaseSuccessful {
+	// TODO: check that AnalysisRun is successful only if AnalysisStatus is set
+	if rolloutObject.GetAnalysisStatus() != nil {
+		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && rolloutObject.GetAnalysisStatus().Phase == argorolloutsv1.AnalysisPhaseSuccessful {
+			return apiv1.AssessmentResultSuccess, nil
+		}
+	}
+
+	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil
 	}
 

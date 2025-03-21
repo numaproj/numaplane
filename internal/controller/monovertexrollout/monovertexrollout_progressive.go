@@ -46,34 +46,39 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 // This implements a function of the progressiveController interface
 func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
-	analysisRun := &argorolloutsv1.AnalysisRun{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-		if apierrors.IsNotFound(err) {
-			mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-			analysis := mvtxRollout.GetAnalysis()
-			err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
-			if err != nil {
+
+	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	analysis := mvtxRollout.GetAnalysis()
+	if len(analysis.Templates) > 0 {
+		analysisRun := &argorolloutsv1.AnalysisRun{}
+		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+			if apierrors.IsNotFound(err) {
+				// mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+				// analysis := mvtxRollout.GetAnalysis()
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				if err != nil {
+					return apiv1.AssessmentResultUnknown, err
+				}
+				// analysisRun is created for the first time
+				analysisStatus := rolloutObject.GetAnalysisStatus()
+				timeNow := metav1.NewTime(time.Now())
+				analysisStatus.StartTime = &timeNow
+				rolloutObject.SetAnalysisStatus(analysisStatus)
+			} else {
 				return apiv1.AssessmentResultUnknown, err
 			}
-			// analysisRun is created for the first time
-			analysisStatus := rolloutObject.GetAnalysisStatus()
-			timeNow := metav1.NewTime(time.Now())
-			analysisStatus.StartTime = &timeNow
+		}
+
+		// assess analysisRun status and set endTime and phase if completed
+		analysisStatus := rolloutObject.GetAnalysisStatus()
+		if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+			analysisStatus.EndTime = analysisRun.Status.CompletedAt
+			analysisStatus.Phase = analysisRun.Status.Phase
 			rolloutObject.SetAnalysisStatus(analysisStatus)
 		} else {
-			return apiv1.AssessmentResultUnknown, err
+			analysisStatus.Phase = analysisRun.Status.Phase
+			rolloutObject.SetAnalysisStatus(analysisStatus)
 		}
-	}
-
-	// assess analysisRun status and set endTime and phase if completed
-	analysisStatus := rolloutObject.GetAnalysisStatus()
-	if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
-		analysisStatus.EndTime = analysisRun.Status.CompletedAt
-		analysisStatus.Phase = analysisRun.Status.Phase
-		rolloutObject.SetAnalysisStatus(analysisStatus)
-	} else {
-		analysisStatus.Phase = analysisRun.Status.Phase
-		rolloutObject.SetAnalysisStatus(analysisStatus)
 	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, rolloutObject, existingUpgradingChildDef, progressive.AreVertexReplicasReady)

@@ -183,7 +183,8 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 	if !found {
 		isbsvcName = "default" // if not set, the default value is "default"
 	}
-	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = &UpgradingPipelineStatus{
+
+	upgradingPipelineStatus := &UpgradingPipelineStatus{
 		InterStepBufferServiceName: isbsvcName,
 		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: UpgradingChildStatus{
@@ -191,13 +192,18 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 				AssessmentEndTime: nil,
 				AssessmentResult:  AssessmentResultUnknown,
 			},
-			Analysis: AnalysisStatus{
-				AnalysisRunName: upgradingPipeline.GetName(),
-				EndTime:         nil,
-			},
 		},
 	}
 
+	// only set analysisStatus if Analysis is set
+	if len(pipelineRollout.GetAnalysis().Templates) > 0 {
+		upgradingPipelineStatus.Analysis = AnalysisStatus{
+			AnalysisRunName: upgradingPipeline.GetName(),
+			EndTime:         nil,
+		}
+	}
+
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = upgradingPipelineStatus
 	return nil
 }
 

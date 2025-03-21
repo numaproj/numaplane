@@ -161,19 +161,25 @@ func (monoVertexRollout *MonoVertexRollout) SetAnalysisStatus(status *AnalysisSt
 // ResetUpgradingChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingMonoVertex *unstructured.Unstructured) error {
-	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{
+	upgradingMonoVertexStatus := &UpgradingMonoVertexStatus{
 		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: UpgradingChildStatus{
 				Name:              upgradingMonoVertex.GetName(),
 				AssessmentEndTime: nil,
 				AssessmentResult:  AssessmentResultUnknown,
 			},
-			Analysis: AnalysisStatus{
-				AnalysisRunName: upgradingMonoVertex.GetName(),
-				EndTime:         nil,
-			},
 		},
 	}
+
+	// only set analysisStatus if Analysis is set
+	if len(monoVertexRollout.GetAnalysis().Templates) > 0 {
+		upgradingMonoVertexStatus.Analysis = AnalysisStatus{
+			AnalysisRunName: upgradingMonoVertex.GetName(),
+			EndTime:         nil,
+		}
+	}
+
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = upgradingMonoVertexStatus
 	return nil
 }
 
