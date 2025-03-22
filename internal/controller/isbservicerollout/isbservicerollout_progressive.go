@@ -34,7 +34,7 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 
 	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself

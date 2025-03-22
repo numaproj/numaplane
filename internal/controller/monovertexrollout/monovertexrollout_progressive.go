@@ -4,17 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -39,43 +44,45 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
-	// The following code can serve as a template for what should work:
-	/*analysisRun := &argorolloutsv1.AnalysisRun{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-		if apierrors.IsNotFound(err) {
-			analysisRun := &argorolloutsv1.AnalysisRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      existingUpgradingChildDef.GetName(),
-					Namespace: existingUpgradingChildDef.GetNamespace(),
-					OwnerReferences: []metav1.OwnerReference{
-						*metav1.NewControllerRef(existingUpgradingChildDef, numaflowv1.MonoVertexGroupVersionKind),
-					},
-				},
-				Spec: argorolloutsv1.AnalysisRunSpec{
-					Metrics: []argorolloutsv1.Metric{
-						{
-							Name: "my-metric",
-							Provider: argorolloutsv1.MetricProvider{
-								Prometheus: &argorolloutsv1.PrometheusMetric{
-									Address: "http://prometheus.addon-metricset-ns.svc.cluster.local:9090",
-									Query:   "vector(1) == vector(2)",
-								},
-							},
-						},
-					},
-				},
-			}
-			if err = r.client.Create(ctx, analysisRun); err != nil {
+
+	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	analysis := mvtxRollout.GetAnalysis()
+	if len(analysis.Templates) > 0 {
+		analysisRun := &argorolloutsv1.AnalysisRun{}
+		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+			if apierrors.IsNotFound(err) {
+				// mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+				// analysis := mvtxRollout.GetAnalysis()
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				if err != nil {
+					return apiv1.AssessmentResultUnknown, err
+				}
+				// analysisRun is created for the first time
+				analysisStatus := rolloutObject.GetAnalysisStatus()
+				timeNow := metav1.NewTime(time.Now())
+				analysisStatus.StartTime = &timeNow
+				rolloutObject.SetAnalysisStatus(analysisStatus)
+			} else {
 				return apiv1.AssessmentResultUnknown, err
 			}
-		} else {
-			return apiv1.AssessmentResultUnknown, err
 		}
-	}*/
 
-	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+		// assess analysisRun status and set endTime and phase if completed
+		analysisStatus := rolloutObject.GetAnalysisStatus()
+		if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+			analysisStatus.EndTime = analysisRun.Status.CompletedAt
+			analysisStatus.Phase = analysisRun.Status.Phase
+			rolloutObject.SetAnalysisStatus(analysisStatus)
+		} else {
+			analysisStatus.Phase = analysisRun.Status.Phase
+			rolloutObject.SetAnalysisStatus(analysisStatus)
+		}
+	}
+
+	return progressive.AssessUpgradingPipelineType(ctx, rolloutObject, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+
 }
 
 /*

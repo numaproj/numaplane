@@ -137,6 +137,13 @@ func (monoVertexRollout *MonoVertexRollout) GetProgressiveStrategy() Progressive
 	return monoVertexRollout.Spec.Strategy.Progressive
 }
 
+func (monoVertexRollout *MonoVertexRollout) GetAnalysis() Analysis {
+	if monoVertexRollout.Spec.Strategy == nil {
+		return Analysis{}
+	}
+	return monoVertexRollout.Spec.Strategy.Analysis
+}
+
 // GetUpgradingChildStatus is a function of the progressiveRolloutObject
 func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *UpgradingChildStatus {
 	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
@@ -145,10 +152,24 @@ func (monoVertexRollout *MonoVertexRollout) GetUpgradingChildStatus() *Upgrading
 	return &monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus
 }
 
+func (monoVertexRollout *MonoVertexRollout) GetAnalysisStatus() *AnalysisStatus {
+	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+		return nil
+	}
+	return &monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Analysis
+}
+
+func (monoVertexRollout *MonoVertexRollout) SetAnalysisStatus(status *AnalysisStatus) {
+	if monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+		monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{}
+	}
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Analysis = *status.DeepCopy()
+}
+
 // ResetUpgradingChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingMonoVertex *unstructured.Unstructured) error {
-	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = &UpgradingMonoVertexStatus{
+	upgradingMonoVertexStatus := &UpgradingMonoVertexStatus{
 		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: UpgradingChildStatus{
 				Name:              upgradingMonoVertex.GetName(),
@@ -157,6 +178,16 @@ func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingM
 			},
 		},
 	}
+
+	// only set analysisStatus if Analysis is set
+	if len(monoVertexRollout.GetAnalysis().Templates) > 0 {
+		upgradingMonoVertexStatus.Analysis = AnalysisStatus{
+			AnalysisRunName: upgradingMonoVertex.GetName(),
+			EndTime:         nil,
+		}
+	}
+
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = upgradingMonoVertexStatus
 	return nil
 }
 

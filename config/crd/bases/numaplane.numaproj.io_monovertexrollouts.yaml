@@ -79,21 +79,22 @@ spec:
                         description: Arguments can be passed to templates to evaluate
                           any parameterization
                         items:
-                          description: AnalysisRunArgument argument to add to analysisRun
+                          description: Argument is an argument to an AnalysisRun
                           properties:
                             name:
-                              description: Name argument name
+                              description: Name is the name of the argument
                               type: string
                             value:
-                              description: Value a hardcoded value for the argument.
-                                This field is a one of field with valueFrom
+                              description: Value is the value of the argument
                               type: string
                             valueFrom:
-                              description: ValueFrom A reference to where the value
-                                is stored. This field is a one of field with valueFrom
+                              description: ValueFrom is a reference to where a secret
+                                is stored. This field is one of the fields with valueFrom
                               properties:
                                 fieldRef:
-                                  description: FieldRef
+                                  description: |-
+                                    FieldRef is a reference to the fields in metadata which we are referencing. This field is one of the fields with
+                                    valueFrom
                                   properties:
                                     fieldPath:
                                       description: 'Required: Path of the field to
@@ -102,11 +103,22 @@ spec:
                                   required:
                                   - fieldPath
                                   type: object
-                                podTemplateHashValue:
-                                  description: PodTemplateHashValue gets the value
-                                    from one of the children ReplicaSet's Pod Template
-                                    Hash
-                                  type: string
+                                secretKeyRef:
+                                  description: Secret is a reference to where a secret
+                                    is stored. This field is one of the fields with
+                                    valueFrom
+                                  properties:
+                                    key:
+                                      description: Key is the key of the secret to
+                                        select from.
+                                      type: string
+                                    name:
+                                      description: Name is the name of the secret
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
                               type: object
                           required:
                           - name

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -47,7 +48,7 @@ type progressiveController interface {
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
-	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
+	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
@@ -75,6 +76,8 @@ type ProgressiveRolloutObject interface {
 
 	GetPromotedChildStatus() *apiv1.PromotedChildStatus
 
+	GetAnalysisStatus() *apiv1.AnalysisStatus
+
 	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
 	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
@@ -84,6 +87,11 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+
+	SetAnalysisStatus(*apiv1.AnalysisStatus)
+
+	// TODO: not necessary if we reset AnalysisStatus in ResetUpgradingChildStatus
+	// ResetAnalysisStatus() error
 }
 
 // return:
@@ -279,7 +287,7 @@ func processUpgradingChild(
 	// Otherwise, assess the previous child status.
 	assessment := childStatus.AssessmentResult
 	if childStatus.CanAssess() {
-		assessment, err = controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
+		assessment, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -381,6 +389,7 @@ func processUpgradingChild(
 // Unknown: neither of the above if met
 func AssessUpgradingPipelineType(
 	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
 ) (apiv1.AssessmentResult, error) {
@@ -402,6 +411,13 @@ func AssessUpgradingPipelineType(
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
+
+	// TODO: check that AnalysisRun is successful only if AnalysisStatus is set
+	if rolloutObject.GetAnalysisStatus() != nil {
+		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && rolloutObject.GetAnalysisStatus().Phase == argorolloutsv1.AnalysisPhaseSuccessful {
+			return apiv1.AssessmentResultSuccess, nil
+		}
+	}
 
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		return apiv1.AssessmentResultSuccess, nil

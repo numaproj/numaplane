@@ -31,7 +31,7 @@ func (in *Analysis) DeepCopyInto(out *Analysis) {
 	*out = *in
 	if in.Args != nil {
 		in, out := &in.Args, &out.Args
-		*out = make([]rolloutsv1alpha1.AnalysisRunArgument, len(*in))
+		*out = make([]rolloutsv1alpha1.Argument, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
