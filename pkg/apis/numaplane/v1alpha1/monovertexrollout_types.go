@@ -138,6 +138,9 @@ func (monoVertexRollout *MonoVertexRollout) GetProgressiveStrategy() Progressive
 }
 
 func (monoVertexRollout *MonoVertexRollout) GetAnalysis() Analysis {
+	if monoVertexRollout.Spec.Strategy == nil {
+		return Analysis{}
+	}
 	return monoVertexRollout.Spec.Strategy.Analysis
 }
 

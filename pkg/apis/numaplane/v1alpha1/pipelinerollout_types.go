@@ -144,6 +144,9 @@ func (pipelineRollout *PipelineRollout) GetProgressiveStrategy() ProgressiveStra
 }
 
 func (pipelineRollout *PipelineRollout) GetAnalysis() Analysis {
+	if pipelineRollout.Spec.Strategy == nil {
+		return Analysis{}
+	}
 	return pipelineRollout.Spec.Strategy.Analysis
 }
 
