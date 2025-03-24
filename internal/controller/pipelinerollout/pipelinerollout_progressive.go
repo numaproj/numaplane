@@ -98,35 +98,34 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 		analysisRun := &argorolloutsv1.AnalysisRun{}
 		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 			if apierrors.IsNotFound(err) {
-				// pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-				// analysis := pipelineRollout.GetAnalysis()
 				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, err
 				}
 				// analysisRun is created for the first time
-				analysisStatus := rolloutObject.GetAnalysisStatus()
+				analysisStatus := pipelineRollout.GetAnalysisStatus()
+				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 				timeNow := metav1.NewTime(time.Now())
 				analysisStatus.StartTime = &timeNow
-				rolloutObject.SetAnalysisStatus(analysisStatus)
+				pipelineRollout.SetAnalysisStatus(analysisStatus)
 			} else {
 				return apiv1.AssessmentResultUnknown, err
 			}
 		}
 
 		// assess analysisRun status and set endTime and phase if completed
-		analysisStatus := rolloutObject.GetAnalysisStatus()
+		analysisStatus := pipelineRollout.GetAnalysisStatus()
 		if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
 			analysisStatus.EndTime = analysisRun.Status.CompletedAt
 			analysisStatus.Phase = analysisRun.Status.Phase
-			rolloutObject.SetAnalysisStatus(analysisStatus)
+			pipelineRollout.SetAnalysisStatus(analysisStatus)
 		} else {
 			analysisStatus.Phase = analysisRun.Status.Phase
-			rolloutObject.SetAnalysisStatus(analysisStatus)
+			pipelineRollout.SetAnalysisStatus(analysisStatus)
 		}
 	}
 
-	return progressive.AssessUpgradingPipelineType(ctx, rolloutObject, existingUpgradingChildDef, verifyReplicasFunc)
+	return progressive.AssessUpgradingPipelineType(ctx, pipelineRollout.GetAnalysisStatus(), existingUpgradingChildDef, verifyReplicasFunc)
 }
 
 /*

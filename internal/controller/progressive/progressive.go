@@ -76,8 +76,6 @@ type ProgressiveRolloutObject interface {
 
 	GetPromotedChildStatus() *apiv1.PromotedChildStatus
 
-	GetAnalysisStatus() *apiv1.AnalysisStatus
-
 	SetUpgradingChildStatus(*apiv1.UpgradingChildStatus)
 
 	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
@@ -87,11 +85,6 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
-
-	SetAnalysisStatus(*apiv1.AnalysisStatus)
-
-	// TODO: not necessary if we reset AnalysisStatus in ResetUpgradingChildStatus
-	// ResetAnalysisStatus() error
 }
 
 // return:
@@ -389,7 +382,7 @@ func processUpgradingChild(
 // Unknown: neither of the above if met
 func AssessUpgradingPipelineType(
 	ctx context.Context,
-	rolloutObject ProgressiveRolloutObject,
+	analysisStatus *apiv1.AnalysisStatus,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
 ) (apiv1.AssessmentResult, error) {
@@ -413,8 +406,8 @@ func AssessUpgradingPipelineType(
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
 	// TODO: check that AnalysisRun is successful only if AnalysisStatus is set
-	if rolloutObject.GetAnalysisStatus() != nil {
-		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && rolloutObject.GetAnalysisStatus().Phase == argorolloutsv1.AnalysisPhaseSuccessful {
+	if analysisStatus != nil {
+		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && analysisStatus.Phase == argorolloutsv1.AnalysisPhaseSuccessful {
 			return apiv1.AssessmentResultSuccess, nil
 		}
 	}
