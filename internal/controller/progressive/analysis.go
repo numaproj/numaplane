@@ -38,7 +38,7 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 	for _, templateRef := range *templateRefs {
 		if templateRef.ClusterScope {
 			template := &argorolloutsv1.ClusterAnalysisTemplate{}
-			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
+			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: "default"}, template)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					numaLogger.Warnf("ClusterAnalysisTemplate '%s' not found", templateRef.TemplateName)
