@@ -176,13 +176,14 @@ func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingM
 				AssessmentEndTime: nil,
 				AssessmentResult:  AssessmentResultUnknown,
 			},
+			Analysis: AnalysisStatus{},
 		},
 	}
 
 	// only set analysisStatus if Analysis is set
-	if len(monoVertexRollout.GetAnalysis().Templates) > 0 {
-		upgradingMonoVertexStatus.Analysis = AnalysisStatus{}
-	}
+	// if len(monoVertexRollout.GetAnalysis().Templates) > 0 {
+	// 	upgradingMonoVertexStatus.Analysis = AnalysisStatus{}
+	// }
 
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus = upgradingMonoVertexStatus
 	return nil

@@ -104,6 +104,9 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 				}
 				// analysisRun is created for the first time
 				analysisStatus := pipelineRollout.GetAnalysisStatus()
+				if analysisStatus == nil {
+					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
+				}
 				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 				timeNow := metav1.NewTime(time.Now())
 				analysisStatus.StartTime = &timeNow
@@ -113,16 +116,16 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 			}
 		}
 
-		// assess analysisRun status and set endTime and phase if completed
+		// assess analysisRun status and set endTime if completed
 		analysisStatus := pipelineRollout.GetAnalysisStatus()
-		if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+		// prevents us from continually setting the endTime each time the child is assessed after the analysis run completes
+		if analysisStatus != nil && analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
 			analysisStatus.EndTime = analysisRun.Status.CompletedAt
-			analysisStatus.Phase = analysisRun.Status.Phase
-			pipelineRollout.SetAnalysisStatus(analysisStatus)
-		} else {
-			analysisStatus.Phase = analysisRun.Status.Phase
-			pipelineRollout.SetAnalysisStatus(analysisStatus)
 		}
+		analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+		analysisStatus.Phase = analysisRun.Status.Phase
+		pipelineRollout.SetAnalysisStatus(analysisStatus)
+
 	}
 
 	return progressive.AssessUpgradingPipelineType(ctx, pipelineRollout.GetAnalysisStatus(), existingUpgradingChildDef, verifyReplicasFunc)
