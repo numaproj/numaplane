@@ -94,19 +94,23 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	analysis := pipelineRollout.GetAnalysis()
+	// only check for and create AnalysisRuns if templates are specified
 	if len(analysis.Templates) > 0 {
 		analysisRun := &argorolloutsv1.AnalysisRun{}
+		// check if analysisRun has already been created
 		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 			if apierrors.IsNotFound(err) {
+				// analysisRun is created the first time the upgrading child is assessed
 				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, err
 				}
-				// analysisRun is created for the first time
 				analysisStatus := pipelineRollout.GetAnalysisStatus()
 				if analysisStatus == nil {
 					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
 				}
+				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
+				// and start time for it's assessment
 				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 				timeNow := metav1.NewTime(time.Now())
 				analysisStatus.StartTime = &timeNow

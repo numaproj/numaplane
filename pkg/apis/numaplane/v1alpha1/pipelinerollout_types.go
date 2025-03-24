@@ -204,11 +204,6 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 		},
 	}
 
-	// only set analysisStatus if Analysis is set
-	// if len(pipelineRollout.GetAnalysis().Templates) > 0 {
-	// 	upgradingPipelineStatus.Analysis = AnalysisStatus{}
-	// }
-
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus = upgradingPipelineStatus
 	return nil
 }

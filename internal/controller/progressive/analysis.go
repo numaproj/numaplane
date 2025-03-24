@@ -29,10 +29,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// This function is repurposed from the Argo Rollout codebase here:
+// https://github.com/argoproj/argo-rollouts/blob/f4f7eabd6bfa8c068abe1a7b62579aafeda25a0e/rollout/analysis.go#L469-L514
 func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorolloutsv1.AnalysisTemplateRef, namespace string, c client.Client) ([]*argorolloutsv1.AnalysisTemplate, []*argorolloutsv1.ClusterAnalysisTemplate, error) {
 
 	numaLogger := logger.FromContext(ctx)
-
 	templates := make([]*argorolloutsv1.AnalysisTemplate, 0)
 	clusterTemplates := make([]*argorolloutsv1.ClusterAnalysisTemplate, 0)
 	for _, templateRef := range *templateRefs {
@@ -81,6 +82,19 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 	return uniqueTemplates, uniqueClusterTemplates, nil
 }
 
+/*
+CreateAnalysisRun finds all templates specified in the Analysis field in the spec of a rollout and creates the resulting AnalysisRun in k8s.
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - analysis: struct which contains templateRefs to AnalysisTemplates and ClusterAnalysisTemplates and arguments that can be passed
+    and override values already specified in the templates
+  - existingUpgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - client: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - An error if any issues occur during processing.
+*/
 func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, client client.Client) error {
 
 	// find all specified templates to merge into single AnalysisRun
