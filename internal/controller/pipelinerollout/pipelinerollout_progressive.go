@@ -122,13 +122,15 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 
 		// assess analysisRun status and set endTime if completed
 		analysisStatus := pipelineRollout.GetAnalysisStatus()
-		// prevents us from continually setting the endTime each time the child is assessed after the analysis run completes
-		if analysisStatus != nil && analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
-			analysisStatus.EndTime = analysisRun.Status.CompletedAt
+		if analysisStatus != nil {
+			// assess analysisRun status and set endTime if completed
+			if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+				analysisStatus.EndTime = analysisRun.Status.CompletedAt
+			}
+			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+			analysisStatus.Phase = analysisRun.Status.Phase
+			pipelineRollout.SetAnalysisStatus(analysisStatus)
 		}
-		analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
-		analysisStatus.Phase = analysisRun.Status.Phase
-		pipelineRollout.SetAnalysisStatus(analysisStatus)
 
 	}
 
