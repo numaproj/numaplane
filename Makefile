@@ -132,7 +132,12 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: codegen fmt vet envtest ## Run unit tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -covermode=atomic -coverprofile=coverage.out -coverpkg=./... -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e | grep -v /pkg/client/ | grep -v /vendor/)
+
+test-with-coverage: test
+	grep -v "github.com/numaproj/numaplane/pkg/client" coverage.out | grep -v "github.com/numaproj/numaplane/tests/" | grep -v "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1/zz_generated.deepcopy.go" | grep -v "github.com/numaproj/numaplane/internal/controller/common/test_common.go" > filtered_coverage.out
+	go tool cover -func=filtered_coverage.out
+	go tool cover -html=filtered_coverage.out -o coverage.html
 
 test-functional-nc:
 test-functional-monovertex:
