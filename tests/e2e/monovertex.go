@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -359,7 +360,9 @@ func VerifyMonoVertexDeletion(name string) {
 }
 
 // TTODO
-func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool, progressiveChecks bool, expectedProgressiveStatus *ExpectedProgressiveStatus) {
+func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
+	progressiveChecks bool, expectedProgressiveStatusInProgress *ExpectedProgressiveStatus, expectedProgressiveStatusOnDone *ExpectedProgressiveStatus,
+) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -372,23 +375,50 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 
 	// TTODO
 	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveChecks {
+		// Check Progressive status while the assessment is in progress
+
 		VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyProgressive)
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedProgressiveStatus.Promoted.Name,
-			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].Current,
-			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].Initial,
-			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].OriginalScaleMinMax,
-			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].ScaleTo)
+		// Verify that the MonoVertex is set to scale down
+		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedProgressiveStatusInProgress.Promoted.Name,
+			expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].Current,
+			expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].Initial,
+			expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].OriginalScaleMinMax,
+			expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].ScaleTo)
 
-		VerifyMonoVertexRolloutProgressiveStatus(name, expectedProgressiveStatus.Promoted.Name, expectedProgressiveStatus.Upgrading.Name,
-			expectedProgressiveStatus.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatus.Upgrading.AssessmentResult, false)
+		VerifyMonoVertexRolloutProgressiveStatus(name, expectedProgressiveStatusInProgress.Promoted.Name, expectedProgressiveStatusInProgress.Upgrading.Name,
+			expectedProgressiveStatusInProgress.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatusInProgress.Upgrading.AssessmentResult, false)
 
-		// TTODO: Do these here and after post upgrade (after spec validation) (see progressive_test.go)
-		// // Verify that when the "upgrading" MonoVertex fails, it scales down to 0 Pods, and the "promoted" MonoVertex scales back up
-		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", name, 0),
-		// 	[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
-		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", name, 1),
-		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
+		// Verify that the expected number of promoted MonoVertex pods is running
+		// NOTE: min is set same as max if the original min if greater than scaleTo
+		scaleTo := expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].ScaleTo
+		min := expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].Initial
+		if min > scaleTo {
+			min = scaleTo
+		}
+		promotedScale := numaflowv1.Scale{Min: ptr.To(int32(min)), Max: ptr.To(int32(scaleTo))}
+		VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusInProgress.Promoted.Name,
+			[]numaflowv1.AbstractVertex{{Scale: promotedScale}}, ComponentMonoVertex)
+
+		// Verify that the expected number of upgrading MonoVertex pods is running
+		// Min and max are set to the same value which is the remaining number of pods from the scale down operation on the promoted monovertex: initial - scaleTo
+		diffMinMax := int32(expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.Promoted.Name].Initial - scaleTo)
+		VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusInProgress.Upgrading.Name,
+			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: &diffMinMax, Max: &diffMinMax}}}, ComponentMonoVertex)
+
+		// Check Progressive status post-assessment
+
+		VerifyMonoVertexRolloutProgressiveStatus(name, expectedProgressiveStatusOnDone.Promoted.Name, expectedProgressiveStatusOnDone.Upgrading.Name,
+			expectedProgressiveStatusOnDone.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatusOnDone.Upgrading.AssessmentResult, false)
+
+		// Verify that the upgrading monovertex was promoted by checking that the expected number of pods are running with the correct monovertex name
+		VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusOnDone.Upgrading.Name,
+			[]numaflowv1.AbstractVertex{{Scale: newSpec.Scale}}, ComponentMonoVertex)
+
+		// Verify that the previously promoted monovertex was deleted
+		VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusOnDone.Promoted.Name,
+			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
+		VerifyMonoVertexDeletion(expectedProgressiveStatusOnDone.Promoted.Name)
 	}
 
 	By("Verifying MonoVertex spec got updated")
@@ -408,10 +438,6 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	} else {
 		err = VerifyMonoVertexReady(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
-	}
-
-	// TTODO
-	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveChecks {
 	}
 
 }

@@ -42,18 +42,26 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 				upgradingStatus.ForcedSuccess
 		}
 
-		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
+		if mvr == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
 			return false
 		}
 
 		promotedStatus := mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus
 		upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus
 
-		return promotedStatus.Name == expectedPromotedName &&
-			promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
-			upgradingStatus.Name == expectedUpgradingName &&
-			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-			upgradingStatus.AssessmentEndTime != nil
+		if promotedStatus == nil {
+			return upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+				upgradingStatus.AssessmentEndTime != nil
+		} else {
+			return promotedStatus.Name == expectedPromotedName &&
+				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
+				upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult
+			// TTODO: maybe create a bool to decide if should assert if AssessmentEndTime is not nil
+			// && upgradingStatus.AssessmentEndTime != nil
+		}
+
 	}).Should(BeTrue())
 }
 

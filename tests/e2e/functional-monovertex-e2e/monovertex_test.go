@@ -33,13 +33,14 @@ const (
 )
 
 var (
-	sourceVertexScaleMin = int32(4)
-	sourceVertexScaleMax = int32(5)
+	monoVertexScaleMin = int32(4)
+	monoVertexScaleMax = int32(5)
+	monoVertexScaleTo  = int64(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
-			Min: &sourceVertexScaleMin,
-			Max: &sourceVertexScaleMax,
+			Min: &monoVertexScaleMin,
+			Max: &monoVertexScaleMax,
 		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -84,7 +85,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		}, false, nil)
+		}, false, nil, nil)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -97,7 +98,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		}, false, nil)
+		}, false, nil, nil)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -108,22 +109,22 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		// TTODO: calculate values from constants
-		expectedProgressiveStatus := ExpectedProgressiveStatus{
+		// TTODO: may want to modify the struct to include certain values to check during progressive upgrade and some status values for post-upgrade
+		// OR use 2 separate vars (and func args) using the same struct ExpectedProgressiveStatus
+		expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
 			Promoted: apiv1.PromotedPipelineTypeStatus{
 				PromotedChildStatus: apiv1.PromotedChildStatus{
 					Name: GetInstanceName(monoVertexRolloutName, 0),
 				},
 				ScaleValues: map[string]apiv1.ScaleValues{
 					GetInstanceName(monoVertexRolloutName, 0): {
-						Current:             2,
-						Initial:             4,
-						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", 5, 4),
-						ScaleTo:             2,
+						Current:             monoVertexScaleTo,
+						Initial:             int64(monoVertexScaleMin),
+						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
+						ScaleTo:             monoVertexScaleTo,
 					},
 				},
 				ScaleValuesRestoredToOriginal: false,
-				AllSourceVerticesScaledDown:   true,
 			},
 			Upgrading: apiv1.UpgradingChildStatus{
 				Name:             GetInstanceName(monoVertexRolloutName, 1),
@@ -131,9 +132,22 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			},
 		}
 
+		expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{
+			Promoted: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{
+					Name: GetInstanceName(monoVertexRolloutName, 0),
+				},
+				ScaleValuesRestoredToOriginal: false,
+			},
+			Upgrading: apiv1.UpgradingChildStatus{
+				Name:             GetInstanceName(monoVertexRolloutName, 1),
+				AssessmentResult: apiv1.AssessmentResultSuccess,
+			},
+		}
+
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, true, &expectedProgressiveStatus)
+		}, true, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
