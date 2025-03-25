@@ -340,7 +340,7 @@ func createSlowPipelineRollout() {
 	})
 
 	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
-	VerifyInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
 

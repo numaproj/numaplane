@@ -97,7 +97,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return reflect.DeepEqual(retrievedMonoVertexSpec, initialMonoVertexSpec)
 		})
-		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
@@ -157,7 +157,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return reflect.DeepEqual(retrievedMonoVertexSpec, initialMonoVertexSpec)
 		})
-		VerifyInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Force promoted failure into success")

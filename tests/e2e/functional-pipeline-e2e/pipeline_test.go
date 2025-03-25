@@ -224,7 +224,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyPipelineRolloutDeployed(pipelineRolloutName)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		VerifyPipelineRunning(Namespace, pipelineRolloutName)
 	})

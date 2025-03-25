@@ -309,6 +309,7 @@ func DeleteISBServiceRollout(name string) {
 	}).WithTimeout(TestTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
 }
 
+// TTODO
 // pipelineRolloutNames is an array of pipelinerollout names that are checked to see if it is pausing or not after update
 // newSpec is the updated spec of the ISBService defined in the rollout
 // verifySpecFunc is passed to the verifyISBServiceSpec func which verifies the ISBService spec defined in the updated rollout
@@ -379,7 +380,7 @@ func UpdateISBServiceRollout(
 			// if we expect the pipeline to be healthy after update
 			for _, rolloutInfo := range pipelineRollouts {
 				if !rolloutInfo.PipelineIsFailed {
-					VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
+					VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
 					VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
 				}
 			}
@@ -397,7 +398,7 @@ func UpdateISBServiceRollout(
 	VerifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	for _, rolloutInfo := range pipelineRollouts {
-		VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		// check that pipeline will be failed if we expect it to be
 		if rolloutInfo.PipelineIsFailed {
 			VerifyPipelineFailed(Namespace, rolloutInfo.PipelineRolloutName)

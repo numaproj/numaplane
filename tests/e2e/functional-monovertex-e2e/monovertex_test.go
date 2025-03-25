@@ -31,11 +31,13 @@ const (
 )
 
 var (
-	sourceVertexScaleMin = int32(5)
+	sourceVertexScaleMin = int32(4)
+	sourceVertexScaleMax = int32(5)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &sourceVertexScaleMin,
+			Max: &sourceVertexScaleMax,
 		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -80,7 +82,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		})
+		}, false)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -93,7 +95,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		})
+		}, false)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -106,7 +108,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		})
+		}, true)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
