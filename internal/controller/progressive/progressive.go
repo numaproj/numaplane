@@ -87,6 +87,11 @@ type ProgressiveRolloutObject interface {
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
 }
 
+type ScaleDefinition struct {
+	Min *int64
+	Max *int64
+}
+
 // return:
 // - whether we're done
 // - duration indicating the requeue delay for the controller to use for next reconciliation
@@ -568,11 +573,11 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 	return newMin, newMax, nil
 }
 
-// ExtractOriginalScaleMinMaxAsJSONString returns a JSON string of the scale definition
+// ExtractScaleMinMaxAsJSONString returns a JSON string of the scale definition
 // including only min and max fields extracted from the given unstructured object.
 // It returns "null" if the pathToScale is not found.
-func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
-	originalScaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
 		return "", err
 	}
@@ -581,17 +586,51 @@ func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale [
 		return "null", nil
 	}
 
-	originalScaleMinMaxOnly := map[string]any{
-		"min": originalScaleDef["min"],
-		"max": originalScaleDef["max"],
+	scaleMinMax := map[string]any{
+		"min": scaleDef["min"],
+		"max": scaleDef["max"],
 	}
 
-	jsonBytes, err := json.Marshal(originalScaleMinMaxOnly)
+	jsonBytes, err := json.Marshal(scaleMinMax)
 	if err != nil {
 		return "", err
 	}
 
 	return string(jsonBytes), nil
+}
+func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
+
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !foundScale {
+		return nil, nil
+	}
+
+	scaleMinMax := ScaleDefinition{
+		Min: scaleDef["min"].(*int64),
+		Max: scaleDef["max"].(*int64),
+	}
+
+	return &scaleMinMax, nil
+}
+
+func ScaleDefinitionToPatchString(scaleDefinition *ScaleDefinition) string {
+	var scaleValue string
+	if scaleDefinition == nil {
+		scaleValue = "null"
+	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
+	} else if scaleDefinition.Min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
+	} else if scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
+	}
+	return scaleValue
 }
 
 /*

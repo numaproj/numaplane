@@ -70,6 +70,9 @@ type UpgradingPipelineStatus struct {
 	UpgradingPipelineTypeStatus `json:",inline"`
 	// InterStepBufferServiceName is the name of the InterstepBufferService that this Pipeline is using
 	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
+
+	// OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
+	OriginalScaleMinMax map[string]string `json:"originalScaleMinMax"`
 }
 
 // PromotedPipelineStatus describes the status of the promoted child

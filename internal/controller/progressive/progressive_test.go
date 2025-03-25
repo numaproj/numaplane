@@ -523,7 +523,7 @@ func Test_ExtractOriginalScaleMinMaxAsJSONString(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actualJSONString, actualErr := ExtractOriginalScaleMinMaxAsJSONString(tc.object, tc.pathToScale)
+			actualJSONString, actualErr := ExtractScaleMinMaxAsJSONString(tc.object, tc.pathToScale)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)

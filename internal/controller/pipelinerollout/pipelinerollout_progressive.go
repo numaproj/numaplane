@@ -244,7 +244,8 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	numaLogger.Debug("started post-failure processing of upgrading pipeline")
 
-	// TODO
+	// scale down every Vertex to 0 Pods
+	// for each Vertex: first check to see if it's already scaled down
 
 	numaLogger.Debug("completed post-failure processing of upgrading pipeline")
 
@@ -403,7 +404,7 @@ func scaleDownPipelineSourceVertices(
 
 			promotedChildNeedsUpdate = true
 
-			originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
+			originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
@@ -568,4 +569,55 @@ func patchPipelineVertices(ctx context.Context, promotedPipelineDef *unstructure
 	}
 
 	return nil
+}
+
+// for each Vertex, get the definition of the Scale
+// return map of Vertex name to scale definition
+func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
+	map[string]*progressive.ScaleDefinition, error) {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
+	}
+
+	numaLogger.WithValues("vertices", vertices).Debugf("found vertices for the pipeline: %d", len(vertices))
+
+	scaleDefinitions := map[string]*progressive.ScaleDefinition{}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return nil, err
+			}
+			if !foundVertexName {
+				return nil, errors.New("a vertex must have a name")
+			}
+
+			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return nil, err
+			}
+			scaleDefinitions[vertexName] = vertexScaleDef
+		}
+	}
+	return scaleDefinitions, nil
+}
+
+func getScalePatchStringsFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
+	map[string]string, error) {
+
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
+	if err != nil {
+		return nil, err
+	}
+	scalePatchStrings := map[string]string{}
+	for vertex, scaleDef := range scaleDefinitions {
+		scalePatchStrings[vertex] = progressive.ScaleDefinitionToPatchString(scaleDef)
+	}
+	return scalePatchStrings, nil
 }
