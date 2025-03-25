@@ -40,7 +40,7 @@ func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, exi
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	switch existingUpgradingChildDef.GetName() {
 	case "test-success":
 		return apiv1.AssessmentResultSuccess, nil
@@ -98,7 +98,6 @@ func Test_processUpgradingChild(t *testing.T) {
 		rolloutObject             ProgressiveRolloutObject
 		existingUpgradingChildDef *numaflowv1.MonoVertex
 		expectedDone              bool
-		expectedNewChildCreated   bool
 		expectedRequeueDelay      time.Duration
 		expectedError             error
 	}{
@@ -107,7 +106,6 @@ func Test_processUpgradingChild(t *testing.T) {
 			rolloutObject:             defaultMonoVertexRollout.DeepCopy(),
 			existingUpgradingChildDef: createMonoVertex("test"),
 			expectedDone:              false,
-			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
 		},
@@ -123,7 +121,6 @@ func Test_processUpgradingChild(t *testing.T) {
 			//setRolloutObjectChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.UpgradingChildStatus{Name: "test"}, &apiv1.PromotedChildStatus{}),
 			existingUpgradingChildDef: createMonoVertex("test-1"),
 			expectedDone:              false,
-			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      assessmentSchedule.Interval,
 			expectedError:             nil,
 		},
@@ -145,7 +142,6 @@ func Test_processUpgradingChild(t *testing.T) {
 			),
 			existingUpgradingChildDef: createMonoVertex("test-success"),
 			expectedDone:              true,
-			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -173,7 +169,6 @@ func Test_processUpgradingChild(t *testing.T) {
 			),
 			existingUpgradingChildDef: createMonoVertex("test-failure"),
 			expectedDone:              false,
-			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -201,7 +196,6 @@ func Test_processUpgradingChild(t *testing.T) {
 			),
 			existingUpgradingChildDef: createMonoVertex("test-force-promote"),
 			expectedDone:              true,
-			expectedNewChildCreated:   false,
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
@@ -226,18 +220,16 @@ func Test_processUpgradingChild(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			actualDone, actualNewChildCreated, actualRequeueDelay, actualErr := processUpgradingChild(
+			actualDone, actualRequeueDelay, actualErr := processUpgradingChild(
 				ctx, tc.rolloutObject, fakeProgressiveController{}, monoVertexToUnstruct(defaultExistingPromotedChildDef), monoVertexToUnstruct(tc.existingUpgradingChildDef), client)
 
 			if tc.expectedError != nil {
 				assert.Error(t, actualErr)
 				assert.False(t, actualDone)
-				assert.False(t, actualNewChildCreated)
 				assert.Zero(t, actualRequeueDelay)
 			} else {
 				assert.Nil(t, actualErr)
 				assert.Equal(t, tc.expectedDone, actualDone)
-				assert.Equal(t, tc.expectedNewChildCreated, actualNewChildCreated)
 				assert.Equal(t, tc.expectedRequeueDelay, actualRequeueDelay)
 			}
 		})

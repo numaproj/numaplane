@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -39,43 +43,50 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	// TODO: Create AnalysisRun for assessing the upgrading child if user creates an AnalysisTemplate and references it in their MonoVertexRollout
-	// The following code can serve as a template for what should work:
-	/*analysisRun := &argorolloutsv1.AnalysisRun{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-		if apierrors.IsNotFound(err) {
-			analysisRun := &argorolloutsv1.AnalysisRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      existingUpgradingChildDef.GetName(),
-					Namespace: existingUpgradingChildDef.GetNamespace(),
-					OwnerReferences: []metav1.OwnerReference{
-						*metav1.NewControllerRef(existingUpgradingChildDef, numaflowv1.MonoVertexGroupVersionKind),
-					},
-				},
-				Spec: argorolloutsv1.AnalysisRunSpec{
-					Metrics: []argorolloutsv1.Metric{
-						{
-							Name: "my-metric",
-							Provider: argorolloutsv1.MetricProvider{
-								Prometheus: &argorolloutsv1.PrometheusMetric{
-									Address: "http://prometheus.addon-metricset-ns.svc.cluster.local:9090",
-									Query:   "vector(1) == vector(2)",
-								},
-							},
-						},
-					},
-				},
-			}
-			if err = r.client.Create(ctx, analysisRun); err != nil {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	analysis := mvtxRollout.GetAnalysis()
+	// only check for and create AnalysisRuns if templates are specified
+	if len(analysis.Templates) > 0 {
+		analysisRun := &argorolloutsv1.AnalysisRun{}
+		// check if analysisRun has already been created
+		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+			if apierrors.IsNotFound(err) {
+				// analysisRun is created the first time the upgrading child is assessed
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				if err != nil {
+					return apiv1.AssessmentResultUnknown, err
+				}
+				analysisStatus := mvtxRollout.GetAnalysisStatus()
+				if analysisStatus == nil {
+					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
+				}
+				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
+				// and start time for it's assessment
+				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+				timeNow := metav1.NewTime(time.Now())
+				analysisStatus.StartTime = &timeNow
+				mvtxRollout.SetAnalysisStatus(analysisStatus)
+			} else {
 				return apiv1.AssessmentResultUnknown, err
 			}
-		} else {
-			return apiv1.AssessmentResultUnknown, err
 		}
-	}*/
 
-	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+		analysisStatus := mvtxRollout.GetAnalysisStatus()
+		if analysisStatus != nil {
+			// assess analysisRun status and set endTime if completed
+			if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+				analysisStatus.EndTime = analysisRun.Status.CompletedAt
+			}
+			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+			analysisStatus.Phase = analysisRun.Status.Phase
+			mvtxRollout.SetAnalysisStatus(analysisStatus)
+		}
+
+	}
+
+	return progressive.AssessUpgradingPipelineType(ctx, mvtxRollout.GetAnalysisStatus(), existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+
 }
 
 /*
@@ -184,7 +195,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 /*
 ProcessUpgradingChildPostSuccess handles an upgrading monovertex that has been deemed successful to be promoted.
 It performs the following post-success operations:
-- it scales the monovertex to the scale.min and scale.max defined in the rollout object.
+- it scales up the monovertex back to the original scale.min and scale.max
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -212,24 +223,25 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
 
-	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
-	// Preferably change this to save the existing spec and use that instead
-	monoVertexSpec := map[string]any{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
-		return err
+	// Scale the Upgrading MonoVertex back to its original min and max values
+	originalScaleMinMax := "null"
+	upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+	if upgradingMonoVertexStatus == nil {
+		numaLogger.Error(errors.New("UpgradingMonoVertexStatus field nil"), "UpgradingMonoVertexStatus is nil; will default scale to null")
+	} else {
+		originalScaleMinMax = upgradingMonoVertexStatus.OriginalScaleMinMax
+		if originalScaleMinMax == "" {
+			numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default scale to null")
+			originalScaleMinMax = "null"
+		}
 	}
 
-	desiredMinPtr, desiredMaxPtr, err := getScaleValuesFromMonoVertexSpec(monoVertexSpec)
-	if err != nil {
-		return err
+	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, originalScaleMinMax)
+	if err := kubernetes.PatchResource(ctx, c, upgradingMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
+		return fmt.Errorf("error scaling the existing upgrading monovertex to original values: %w", err)
 	}
 
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, desiredMinPtr, desiredMaxPtr, c)
-	if err != nil {
-		return err
-	}
-
-	numaLogger.Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
+	numaLogger.WithValues("originalScaleMinMax", originalScaleMinMax).Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
 
 	return nil
 }
@@ -264,6 +276,13 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	if !ok {
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
 	}
+
+	// Update the scale values of the Upgrading Child, but first save the original scale values
+	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	if err != nil {
+		return true, fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+	}
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMax
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
