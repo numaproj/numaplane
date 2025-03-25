@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -196,7 +195,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 /*
 ProcessUpgradingChildPostSuccess handles an upgrading monovertex that has been deemed successful to be promoted.
 It performs the following post-success operations:
-- it scales the monovertex to the scale.min and scale.max defined in the rollout object.
+- it scales up the monovertex back to the original scale.min and scale.max
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -224,24 +223,25 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex post-success", rolloutObject)
 	}
 
-	// TODO: for now use the existing MonoVertexRollout spec to get the scale we want
-	// Preferably change this to save the existing spec and use that instead
-	monoVertexSpec := map[string]any{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
-		return err
+	// Scale the Upgrading MonoVertex back to its original min and max values
+	originalScaleMinMax := "null"
+	upgradingMonoVertexStatus := monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus
+	if upgradingMonoVertexStatus == nil {
+		numaLogger.Error(errors.New("UpgradingMonoVertexStatus field nil"), "UpgradingMonoVertexStatus is nil; will default scale to null")
+	} else {
+		originalScaleMinMax = upgradingMonoVertexStatus.OriginalScaleMinMax
+		if originalScaleMinMax == "" {
+			numaLogger.Error(errors.New("OriginalScaleMinMax unset"), "OriginalScaleMinMax is not set; will default scale to null")
+			originalScaleMinMax = "null"
+		}
 	}
 
-	desiredMinPtr, desiredMaxPtr, err := getScaleValuesFromMonoVertexSpec(monoVertexSpec)
-	if err != nil {
-		return err
+	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, originalScaleMinMax)
+	if err := kubernetes.PatchResource(ctx, c, upgradingMonoVertexDef, patchJson, k8stypes.MergePatchType); err != nil {
+		return fmt.Errorf("error scaling the existing upgrading monovertex to original values: %w", err)
 	}
 
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, desiredMinPtr, desiredMaxPtr, c)
-	if err != nil {
-		return err
-	}
-
-	numaLogger.Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
+	numaLogger.WithValues("originalScaleMinMax", originalScaleMinMax).Debug("updated scale values for upgrading monovertex to desired scale values, completed post-success processing of upgrading monovertex")
 
 	return nil
 }
@@ -276,6 +276,13 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	if !ok {
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
 	}
+
+	// Update the scale values of the Upgrading Child, but first save the original scale values
+	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	if err != nil {
+		return true, fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+	}
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMax
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
