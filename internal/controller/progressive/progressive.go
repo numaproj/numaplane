@@ -405,13 +405,17 @@ func AssessUpgradingPipelineType(
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
-	if analysisStatus != nil {
-		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && analysisStatus.Phase == argorolloutsv1.AnalysisPhaseSuccessful {
-			return apiv1.AssessmentResultSuccess, nil
-		}
-	}
-
+	// conduct standard health assessment first
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
+		// if analysisStatus is set, we must also check if it is in a Completed phase to declare success
+		if analysisStatus != nil && analysisStatus.Phase.Completed() {
+			switch analysisStatus.Phase {
+			case argorolloutsv1.AnalysisPhaseSuccessful:
+				return apiv1.AssessmentResultSuccess, nil
+			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
+				return apiv1.AssessmentResultFailure, nil
+			}
+		}
 		return apiv1.AssessmentResultSuccess, nil
 	}
 
