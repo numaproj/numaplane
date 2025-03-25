@@ -36,6 +36,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -585,11 +586,10 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 	one := int64(1)
 	ten := int64(10)
 	tests := []struct {
-		name        string
-		input       map[string]interface{}
-		expectedMin *int64
-		expectedMax *int64
-		expectError bool
+		name                    string
+		input                   map[string]interface{}
+		expectedScaleDefinition *progressive.ScaleDefinition
+		expectError             bool
 	}{
 		{
 			name: "BothValuesPresent",
@@ -600,18 +600,22 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"anotherKey": "anotherValue",
 				},
 			},
-			expectedMin: &one,
-			expectedMax: &ten,
-			expectError: false,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: &ten},
+			expectError:             false,
+		},
+		{
+			name:                    "NoScalePresent",
+			input:                   map[string]interface{}{},
+			expectedScaleDefinition: nil,
+			expectError:             false,
 		},
 		{
 			name: "NoValuesPresent",
 			input: map[string]interface{}{
 				"scale": map[string]interface{}{},
 			},
-			expectedMin: nil,
-			expectedMax: nil,
-			expectError: false,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: nil, Max: nil},
+			expectError:             false,
 		},
 		{
 			name: "OneValuePresent",
@@ -620,33 +624,32 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"min": int64(1),
 				},
 			},
-			expectedMin: &one,
-			expectedMax: nil,
-			expectError: false,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: nil},
+			expectError:             false,
 		},
 		{
 			name: "ErrorAccessingValues",
 			input: map[string]interface{}{
 				"scale": "invalid_structure",
 			},
-			expectedMin: nil,
-			expectedMax: nil,
-			expectError: true,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: nil, Max: nil},
+			expectError:             true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			min, max, err := getScaleValuesFromMonoVertexSpec(tt.input)
+			scaleDefinition, err := getScaleValuesFromMonoVertexSpec(tt.input)
 			if (err != nil) != tt.expectError {
 				t.Errorf("Expected error: %v, got: %v", tt.expectError, err)
 			}
-			if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
+			assert.Equal(t, tt.expectedScaleDefinition, scaleDefinition)
+			/*if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
 				t.Errorf("Expected min: %v, got: %v", tt.expectedMin, min)
 			}
 			if (max == nil && tt.expectedMax != nil) || (max != nil && tt.expectedMax == nil) || (max != nil && *max != *tt.expectedMax) {
 				t.Errorf("Expected max: %v, got: %v", tt.expectedMax, max)
-			}
+			}*/
 		})
 	}
 }
@@ -750,6 +753,8 @@ func Test_scaleMonoVertex(t *testing.T) {
 			err = client.Get(ctx, namespacedName, mvUnstruc)
 			assert.NoError(t, err)
 
+			// TODO: maybe this function can test ScaleDefinition as null
+			// TODO: maybe we don't need int64 and float64 anymore?
 			var minInt64Ptr, maxInt64Ptr *int64
 			if tt.min != nil {
 				minInt64 := int64(*tt.min)
@@ -759,7 +764,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 				maxInt64 := int64(*tt.max)
 				maxInt64Ptr = &maxInt64
 			}
-			err = scaleMonoVertex(ctx, mvUnstruc, minInt64Ptr, maxInt64Ptr, client)
+			err = scaleMonoVertex(ctx, mvUnstruc, &progressive.ScaleDefinition{Min: minInt64Ptr, Max: maxInt64Ptr}, client)
 			assert.NoError(t, err)
 
 			// Get result MonoVertex

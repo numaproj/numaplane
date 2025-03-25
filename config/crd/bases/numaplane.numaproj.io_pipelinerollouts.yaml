@@ -389,8 +389,15 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleMinMax:
+                        additionalProperties:
+                          type: string
+                        description: OriginalScaleMinMax stores for each vertex, the
+                          original scale min and max values as JSON string
+                        type: object
                     required:
                     - name
+                    - originalScaleMinMax
                     type: object
                 type: object
               upgradeInProgress:

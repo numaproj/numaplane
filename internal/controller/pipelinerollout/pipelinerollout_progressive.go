@@ -294,6 +294,13 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-upgrade", rolloutObject)
 	}
 
+	// save the current scale definitions from the upgrading Pipeline to our Status
+	scalePatchStrings, err := getScalePatchStringsFromPipelineSpec(ctx, upgradingPipelineDef)
+	if err != nil {
+		return true, err
+	}
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
+
 	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
