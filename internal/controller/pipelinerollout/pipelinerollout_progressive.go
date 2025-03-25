@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -12,9 +13,13 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" pipeline
@@ -58,7 +63,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
@@ -87,7 +92,49 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ex
 		return areAllVerticesReplicasReady, nil
 	}
 
-	return progressive.AssessUpgradingPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	analysis := pipelineRollout.GetAnalysis()
+	// only check for and create AnalysisRuns if templates are specified
+	if len(analysis.Templates) > 0 {
+		analysisRun := &argorolloutsv1.AnalysisRun{}
+		// check if analysisRun has already been created
+		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+			if apierrors.IsNotFound(err) {
+				// analysisRun is created the first time the upgrading child is assessed
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				if err != nil {
+					return apiv1.AssessmentResultUnknown, err
+				}
+				analysisStatus := pipelineRollout.GetAnalysisStatus()
+				if analysisStatus == nil {
+					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
+				}
+				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
+				// and start time for its assessment
+				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+				timeNow := metav1.NewTime(time.Now())
+				analysisStatus.StartTime = &timeNow
+				pipelineRollout.SetAnalysisStatus(analysisStatus)
+			} else {
+				return apiv1.AssessmentResultUnknown, err
+			}
+		}
+
+		// assess analysisRun status and set endTime if completed
+		analysisStatus := pipelineRollout.GetAnalysisStatus()
+		if analysisStatus != nil {
+			// assess analysisRun status and set endTime if completed
+			if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+				analysisStatus.EndTime = analysisRun.Status.CompletedAt
+			}
+			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+			analysisStatus.Phase = analysisRun.Status.Phase
+			pipelineRollout.SetAnalysisStatus(analysisStatus)
+		}
+
+	}
+
+	return progressive.AssessUpgradingPipelineType(ctx, pipelineRollout.GetAnalysisStatus(), existingUpgradingChildDef, verifyReplicasFunc)
 }
 
 /*
