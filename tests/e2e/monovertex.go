@@ -359,7 +359,7 @@ func VerifyMonoVertexDeletion(name string) {
 }
 
 // TTODO
-func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool, progressiveChecks bool) {
+func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool, progressiveChecks bool, expectedProgressiveStatus *ExpectedProgressiveStatus) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -374,47 +374,14 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveChecks {
 		VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyProgressive)
 
-		// TTODO: pass this as arg to this func and create the struct in common or somewhere
-		expectedProgressiveValues := struct {
-			promoted struct {
-				index                           int
-				current                         int64
-				initial                         int64
-				originalScaleMinMaxAsJSONString string
-				scaleTo                         int64
-				scaleValuesRestoredToOriginal   bool
-			}
-			upgrading struct {
-				index            int
-				assessmentResult apiv1.AssessmentResult
-			}
-		}{
-			promoted: struct {
-				index                           int
-				current                         int64
-				initial                         int64
-				originalScaleMinMaxAsJSONString string
-				scaleTo                         int64
-				scaleValuesRestoredToOriginal   bool
-			}{
-				index:                           0,
-				current:                         2,
-				initial:                         4,
-				originalScaleMinMaxAsJSONString: fmt.Sprintf("{\"max\":%d,\"min\":%d}", 5, 4),
-				scaleTo:                         2,
-				scaleValuesRestoredToOriginal:   false,
-			},
-			upgrading: struct {
-				index            int
-				assessmentResult apiv1.AssessmentResult
-			}{
-				index:            1,
-				assessmentResult: apiv1.AssessmentResultUnknown,
-			},
-		}
+		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedProgressiveStatus.Promoted.Name,
+			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].Current,
+			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].Initial,
+			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].OriginalScaleMinMax,
+			expectedProgressiveStatus.Promoted.ScaleValues[expectedProgressiveStatus.Promoted.Name].ScaleTo)
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedProgressiveValues.promoted.index, expectedProgressiveValues.promoted.current, expectedProgressiveValues.promoted.initial, expectedProgressiveValues.promoted.originalScaleMinMaxAsJSONString, expectedProgressiveValues.promoted.scaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(name, expectedProgressiveValues.promoted.index, expectedProgressiveValues.upgrading.index, expectedProgressiveValues.promoted.scaleValuesRestoredToOriginal, expectedProgressiveValues.upgrading.assessmentResult, false)
+		VerifyMonoVertexRolloutProgressiveStatus(name, expectedProgressiveStatus.Promoted.Name, expectedProgressiveStatus.Upgrading.Name,
+			expectedProgressiveStatus.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatus.Upgrading.AssessmentResult, false)
 
 		// TTODO: Do these here and after post upgrade (after spec validation) (see progressive_test.go)
 		// // Verify that when the "upgrading" MonoVertex fails, it scales down to 0 Pods, and the "promoted" MonoVertex scales back up
@@ -422,7 +389,6 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		// 	[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 		// VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", name, 1),
 		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
-
 	}
 
 	By("Verifying MonoVertex spec got updated")
@@ -464,91 +430,6 @@ func VerifyMonoVertexStaysPaused(name string) {
 	VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(name))
-}
-
-func VerifyMonoVertexRolloutProgressiveStatus(
-	monoVertexRolloutName string,
-	expectedPromotedIndex int,
-	expectedUpgradingIndex int,
-	expectedScaleValuesRestoredToOriginal bool,
-	expectedAssessmentResult apiv1.AssessmentResult,
-	forcedPromotion bool,
-) {
-	CheckEventually("verifying the MonoVertexRollout Progressive Status", func() bool {
-		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-
-		if forcedPromotion {
-			if mvr == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
-				return false
-			}
-
-			upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus
-
-			return upgradingStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex) &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.ForcedSuccess
-		}
-
-		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil || mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus == nil {
-			return false
-		}
-
-		promotedStatus := mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus
-		upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingMonoVertexStatus
-
-		return promotedStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex) &&
-			promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
-			upgradingStatus.Name == fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedUpgradingIndex) &&
-			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-			upgradingStatus.AssessmentEndTime != nil
-	}).Should(BeTrue())
-}
-
-func VerifyMonoVertexRolloutScaledDownForProgressive(
-	monoVertexRolloutName string,
-	expectedPromotedIndex int,
-	expectedCurrent int64,
-	expectedInitial int64,
-	expectedOriginalScaleMinMaxAsJSONString string,
-	expectedScaleTo int64,
-) {
-	CheckEventually("verifying that the MonoVertexRollout scaled down for Progressive upgrade", func() bool {
-		mvr, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-
-		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-			return false
-		}
-
-		mvtxNameWithIdx := fmt.Sprintf("%s-%d", monoVertexRolloutName, expectedPromotedIndex)
-
-		if _, exists := mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx]; !exists {
-			return false
-		}
-
-		return mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.AllSourceVerticesScaledDown &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.Name == mvtxNameWithIdx &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].Current == expectedCurrent &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].Initial == expectedInitial &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
-			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].ScaleTo == expectedScaleTo
-	}).Should(BeTrue())
-}
-
-func VerifyPromotedMonoVertexScale(namespace, monoVertexRolloutName string, expectedMonoVertexScaleMap map[string]numaflowv1.Scale) {
-	CheckEventually("verifying that the scale values are as expected for the Promoted MonoVertex", func() bool {
-		unstructMonoVertex, err := GetMonoVertex(namespace, monoVertexRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		monoVertexSpec, err := getMonoVertexSpec(unstructMonoVertex)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		actualMonoVertexScaleMap := map[string]numaflowv1.Scale{
-			unstructMonoVertex.GetName(): monoVertexSpec.Scale,
-		}
-
-		return VerifyVerticesScale(actualMonoVertexScaleMap, expectedMonoVertexScaleMap)
-	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
 
 func VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {

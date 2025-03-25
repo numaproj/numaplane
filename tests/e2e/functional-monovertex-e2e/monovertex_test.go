@@ -17,12 +17,14 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
@@ -82,7 +84,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		}, false)
+		}, false, nil)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -95,7 +97,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		}, false)
+		}, false, nil)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -106,9 +108,32 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
+		// TTODO: calculate values from constants
+		expectedProgressiveStatus := ExpectedProgressiveStatus{
+			Promoted: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{
+					Name: GetInstanceName(monoVertexRolloutName, 0),
+				},
+				ScaleValues: map[string]apiv1.ScaleValues{
+					GetInstanceName(monoVertexRolloutName, 0): {
+						Current:             2,
+						Initial:             4,
+						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", 5, 4),
+						ScaleTo:             2,
+					},
+				},
+				ScaleValuesRestoredToOriginal: false,
+				AllSourceVerticesScaledDown:   true,
+			},
+			Upgrading: apiv1.UpgradingChildStatus{
+				Name:             GetInstanceName(monoVertexRolloutName, 1),
+				AssessmentResult: apiv1.AssessmentResultUnknown,
+			},
+		}
+
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, true)
+		}, true, &expectedProgressiveStatus)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil

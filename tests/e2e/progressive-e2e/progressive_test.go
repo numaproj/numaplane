@@ -112,13 +112,13 @@ var _ = Describe("Progressive E2E", Serial, func() {
 			return mvr, nil
 		})
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
 
 		// Verify that when the "upgrading" MonoVertex fails, it scales down to 0 Pods, and the "promoted" MonoVertex scales back up
-		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 0),
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
-		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
@@ -133,16 +133,16 @@ var _ = Describe("Progressive E2E", Serial, func() {
 			return mvr, nil
 		})
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 2, false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
-		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 2),
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 2),
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 
 		// Verify the previously promoted monovertex was deleted
-		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 1),
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
-		VerifyMonoVertexDeletion(fmt.Sprintf("%s-%d", monoVertexRolloutName, 1))
+		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 1))
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
@@ -172,19 +172,19 @@ var _ = Describe("Progressive E2E", Serial, func() {
 			return mvr, nil
 		})
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, 0, monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, 0, 1, false, apiv1.AssessmentResultSuccess, strategy.Progressive.ForcePromote)
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), false, apiv1.AssessmentResultSuccess, strategy.Progressive.ForcePromote)
 
 		// Verify monovertex is scaled back up
 		// Won't check running pods in this case since Numaflow does not create new pods if the previous batch is not ready
-		VerifyPromotedMonoVertexScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
-			fmt.Sprintf("%s-%d", monoVertexRolloutName, 1): initialMonoVertexSpec.Scale,
+		VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
+			GetInstanceName(monoVertexRolloutName, 1): initialMonoVertexSpec.Scale,
 		})
 
 		// Verify the previously promoted monovertex was deleted
-		VerifyVerticesPodsRunning(Namespace, fmt.Sprintf("%s-%d", monoVertexRolloutName, 0),
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 0),
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
-		VerifyMonoVertexDeletion(fmt.Sprintf("%s-%d", monoVertexRolloutName, 0))
+		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
