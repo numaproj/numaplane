@@ -198,7 +198,7 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	}
 }
 
-func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) {
+func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 	// for each Vertex, remove the scale min and max:
 	vertices, _, _ := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
 
@@ -219,6 +219,9 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) {
 		}
 	}
 
-	unstructured.SetNestedSlice(pipeline.Object, modifiedVertices, "spec", "vertices")
-
+	err := unstructured.SetNestedSlice(pipeline.Object, modifiedVertices, "spec", "vertices")
+	if err != nil {
+		return err
+	}
+	return nil
 }

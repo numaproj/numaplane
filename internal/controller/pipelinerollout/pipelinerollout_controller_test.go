@@ -502,7 +502,7 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 		expectedNeedsUpdating bool
 		expectedError         bool
 	}{
-		/*{
+		{
 			name:                  "Not Equal",
 			specYaml1:             yamlHasDesiredPhase,
 			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
@@ -529,7 +529,7 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 			specYaml2:             yamlNoLifecycle,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
-		},*/
+		},
 		{
 			name:                  "Equal - just scale different",
 			specYaml1:             yamlNoScale,
