@@ -24,7 +24,6 @@ import (
 )
 
 type AssessmentResult string
-type AssessmentFailureReason string
 
 const (
 	AssessmentResultSuccess = "Success"
@@ -45,7 +44,7 @@ type UpgradingChildStatus struct {
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 	// FailureReason indicates the reason for the failure
-	FailureReason AssessmentFailureReason `json:"failureReason,omitempty"`
+	FailureReason string `json:"failureReason,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {

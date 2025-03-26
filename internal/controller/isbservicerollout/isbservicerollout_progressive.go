@@ -34,7 +34,7 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, apiv1.AssessmentFailureReason, error) {
+func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 
 	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
@@ -69,7 +69,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
-			return apiv1.AssessmentResultFailure, apiv1.AssessmentFailureReason(fmt.Sprintf("Pipeline %s failed while upgrading", upgradingPipelineStatus.Name)), nil
+			return apiv1.AssessmentResultFailure, fmt.Sprintf("Pipeline %s failed while upgrading", upgradingPipelineStatus.Name), nil
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, "", nil

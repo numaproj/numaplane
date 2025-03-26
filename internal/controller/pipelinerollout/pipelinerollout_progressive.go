@@ -63,7 +63,7 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, apiv1.AssessmentFailureReason, error) {
+func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
@@ -90,11 +90,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 				break
 			}
 		}
-		if !areAllVerticesReplicasReady {
-			return areAllVerticesReplicasReady, replicasFailureReason, nil
-		}
 
-		return areAllVerticesReplicasReady, "", nil
+		return areAllVerticesReplicasReady, replicasFailureReason, nil
 	}
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)

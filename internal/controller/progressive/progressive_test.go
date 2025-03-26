@@ -40,7 +40,7 @@ func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, exi
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, apiv1.AssessmentFailureReason, error) {
+func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	switch existingUpgradingChildDef.GetName() {
 	case "test-success":
 		return apiv1.AssessmentResultSuccess, "", nil

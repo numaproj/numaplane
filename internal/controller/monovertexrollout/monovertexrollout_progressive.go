@@ -43,7 +43,7 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, apiv1.AssessmentFailureReason, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	analysis := mvtxRollout.GetAnalysis()
 	// only check for and create AnalysisRuns if templates are specified
