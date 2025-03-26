@@ -199,13 +199,26 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 }
 
 func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) {
-	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "min")
-	unstructured.RemoveNestedField(pipeline.Object, "spec", "scale", "max")
+	// for each Vertex, remove the scale min and max:
+	vertices, _, _ := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
 
-	// if "scale" is there and empty, remove it
-	spec := pipeline.Object["spec"].(map[string]interface{})
-	scaleMap, found := spec["scale"].(map[string]interface{})
-	if found && len(scaleMap) == 0 {
-		unstructured.RemoveNestedField(pipeline.Object, "spec", "scale")
+	modifiedVertices := make([]interface{}, 0)
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+			unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+
+			// if "scale" is there and empty, remove it
+			scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
+			if found && len(scaleMap) == 0 {
+				unstructured.RemoveNestedField(vertexAsMap, "scale")
+			}
+
+			modifiedVertices = append(modifiedVertices, vertexAsMap)
+		}
 	}
+
+	unstructured.SetNestedSlice(pipeline.Object, modifiedVertices, "spec", "vertices")
+
 }

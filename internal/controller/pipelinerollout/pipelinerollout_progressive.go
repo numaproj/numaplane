@@ -246,6 +246,42 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 
 	// scale down every Vertex to 0 Pods
 	// for each Vertex: first check to see if it's already scaled down
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, upgradingPipelineDef)
+	if err != nil {
+		return false, err
+	}
+	allVerticesScaledDown := true
+	for _, scaleDef := range scaleDefinitions {
+		scaledDown := scaleDef != nil && scaleDef.Min != nil && *scaleDef.Min == 0 && scaleDef.Max != nil && *scaleDef.Max == 0
+
+		if !scaledDown {
+			allVerticesScaledDown = false
+		}
+	}
+	if !allVerticesScaledDown {
+
+		vertices, _, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
+		if err != nil {
+			return false, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
+		}
+		for _, vertex := range vertices {
+			if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+				if err := unstructured.SetNestedField(vertexAsMap, int64(0), "scale", "min"); err != nil {
+					return false, err
+				}
+
+				if err := unstructured.SetNestedField(vertexAsMap, int64(0), "scale", "max"); err != nil {
+					return false, err
+				}
+			}
+		}
+
+		numaLogger.Debug("Scaling down all vertices to 0 Pods")
+		if err := patchPipelineVertices(ctx, upgradingPipelineDef, vertices, c); err != nil {
+			return false, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
+		}
+	}
 
 	numaLogger.Debug("completed post-failure processing of upgrading pipeline")
 
