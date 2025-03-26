@@ -11,8 +11,8 @@ data:
     progressive:
       defaultAssessmentSchedule:
         - kind: Pipeline
-          schedule: "120,60,10"
+          schedule: "180,60,10"
         - kind: MonoVertex
-          schedule: "120,60,10"
+          schedule: "180,60,10"
         - kind: InterstepBufferService
           schedule: "0,0,10"
