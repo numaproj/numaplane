@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -398,63 +397,15 @@ func UpdateISBServiceRollout(
 	if UpgradeStrategy == config.ProgressiveStrategyID && expectedProgressiveStatusInProgress != nil && expectedProgressiveStatusOnDone != nil {
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyProgressive)
 
-		// Check progressive status for all pipelines associated to the ISBService
+		// Perform Progressive checks for all pipelines associated to the ISBService
 		for _, pipelineRollout := range pipelineRollouts {
 			pipeline, err := GetPipeline(Namespace, pipelineRollout.PipelineRolloutName)
 			Expect(err).ShouldNot(HaveOccurred())
 			pipelineSpec, err := GetPipelineSpec(pipeline)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// TTODO: if the logic below works for ISBSvc, make a shared func to be called here and in pipeline updates
-
-			// Check Progressive status while the assessment is in progress
-
-			VerifyPipelineRolloutInProgressStrategy(pipelineRollout.PipelineRolloutName, apiv1.UpgradeStrategyProgressive)
-
-			// Verify that the Pipeline is set to scale down
-			VerifyPipelineRolloutScaledDownForProgressive(pipelineRollout.PipelineRolloutName, expectedProgressiveStatusInProgress.Promoted.Name, expectedProgressiveStatusInProgress.PipelineSourceVertexName,
-				expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].Current,
-				expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].Initial,
-				expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].OriginalScaleMinMax,
-				expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].ScaleTo)
-
-			VerifyPipelineRolloutProgressiveStatus(pipelineRollout.PipelineRolloutName, expectedProgressiveStatusInProgress.Promoted.Name, expectedProgressiveStatusInProgress.Upgrading.Name,
-				expectedProgressiveStatusInProgress.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatusInProgress.Upgrading.AssessmentResult, false)
-
-			// Verify that the expected number of promoted Pipeline pods is running (only for source vertex)
-			// NOTE: min is set same as max if the original min if greater than scaleTo
-			scaleTo := expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].ScaleTo
-			min := expectedProgressiveStatusInProgress.Promoted.ScaleValues[expectedProgressiveStatusInProgress.PipelineSourceVertexName].Initial
-			if min > scaleTo {
-				min = scaleTo
-			}
-			promotedScale := numaflowv1.Scale{Min: ptr.To(int32(min)), Max: ptr.To(int32(scaleTo))}
-			VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusInProgress.Promoted.Name,
-				[]numaflowv1.AbstractVertex{{Name: expectedProgressiveStatusInProgress.PipelineSourceVertexName, Scale: promotedScale}}, ComponentVertex)
-
-			// Verify that the expected number of upgrading Pipeline pods is running (only for source vertex)
-			// Min and max are set to the same value which is the scale.min of the pipeline.
-			// TODO: when progressive scaling for pipeline is implemented similarly to monovertex, set this value to initial - scaleTo
-			minMax := pipelineSpec.Vertices[0].Scale.Min
-			VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusInProgress.Upgrading.Name,
-				[]numaflowv1.AbstractVertex{{Name: expectedProgressiveStatusInProgress.PipelineSourceVertexName, Scale: numaflowv1.Scale{Min: minMax, Max: minMax}}}, ComponentVertex)
-
-			// Check Progressive status post-assessment
-
-			VerifyPipelineRolloutProgressiveStatus(pipelineRollout.PipelineRolloutName, expectedProgressiveStatusOnDone.Promoted.Name, expectedProgressiveStatusOnDone.Upgrading.Name,
-				expectedProgressiveStatusOnDone.Promoted.ScaleValuesRestoredToOriginal, expectedProgressiveStatusOnDone.Upgrading.AssessmentResult, false)
-
-			// Verify that the upgrading pipeline was promoted by checking that the expected number of pods are running with the correct pipeline name (only for source vertex)
-			VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusOnDone.Upgrading.Name,
-				[]numaflowv1.AbstractVertex{{Name: expectedProgressiveStatusInProgress.PipelineSourceVertexName, Scale: pipelineSpec.Vertices[0].Scale}}, ComponentVertex)
-
-			// Verify that the previously promoted pipeline was deleted
-			// NOTE: checking no pods are running for the source vertex only
-			VerifyVerticesPodsRunning(Namespace, expectedProgressiveStatusOnDone.Promoted.Name,
-				[]numaflowv1.AbstractVertex{{Name: expectedProgressiveStatusInProgress.PipelineSourceVertexName, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
-			VerifyPipelineDeletion(expectedProgressiveStatusOnDone.Promoted.Name)
+			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone)
 		}
-
 	}
 
 	VerifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
