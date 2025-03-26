@@ -237,6 +237,9 @@ spec:
                           which the assessment result will be computed
                         format: date-time
                         type: string
+                      failureReason:
+                        description: FailureReason indicates the reason for the failure
+                        type: string
                       forcedSuccess:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
