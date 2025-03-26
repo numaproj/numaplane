@@ -283,7 +283,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update would normally cause data loss
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true, false)
+		}, true, false, nil, nil)
 
 		time.Sleep(5 * time.Second)
 

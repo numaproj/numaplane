@@ -235,40 +235,13 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 
-		expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
-			Promoted: apiv1.PromotedPipelineTypeStatus{
-				PromotedChildStatus: apiv1.PromotedChildStatus{
-					Name: GetInstanceName(pipelineRolloutName, 0),
-				},
-				ScaleValues: map[string]apiv1.ScaleValues{
-					sourceVertexName: {
-						Current:             sourceVertexScaleTo,
-						Initial:             int64(sourceVertexScaleMin),
-						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
-						ScaleTo:             sourceVertexScaleTo,
-					},
-				},
-				ScaleValuesRestoredToOriginal: false,
-			},
-			Upgrading: apiv1.UpgradingChildStatus{
-				Name:             GetInstanceName(pipelineRolloutName, 1),
-				AssessmentResult: apiv1.AssessmentResultUnknown,
-			},
-			PipelineSourceVertexName: sourceVertexName,
-		}
-
-		expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{
-			Promoted: apiv1.PromotedPipelineTypeStatus{
-				PromotedChildStatus: apiv1.PromotedChildStatus{
-					Name: GetInstanceName(pipelineRolloutName, 0),
-				},
-				ScaleValuesRestoredToOriginal: false,
-			},
-			Upgrading: apiv1.UpgradingChildStatus{
-				Name:             GetInstanceName(pipelineRolloutName, 1),
-				AssessmentResult: apiv1.AssessmentResultSuccess,
-			},
-		}
+		// TTODO: revisit values if needed
+		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
+			GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), sourceVertexName,
+			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
 
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
@@ -302,9 +275,17 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 
+		// TTODO: revisit values if needed
+		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
+			GetInstanceName(pipelineRolloutName, 1), GetInstanceName(pipelineRolloutName, 2), sourceVertexName,
+			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
+
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		}, true, false)
+		}, true, false, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
 
 	})
 
@@ -314,13 +295,21 @@ var _ = Describe("Functional e2e:", Serial, func() {
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
-		}, false, false)
+		}, false, false, nil, nil)
 	})
 
 	It("Should update the child ISBService updating a recreate field", func() {
+		// TTODO: revisit values if needed
+		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
+			GetInstanceName(pipelineRolloutName, 2), GetInstanceName(pipelineRolloutName, 3), sourceVertexName,
+			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
+
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
-		}, false, true)
+		}, false, true, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
 	})
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted

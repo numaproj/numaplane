@@ -185,3 +185,44 @@ func VerifyMonoVertexPromotedScale(namespace, monoVertexRolloutName string, expe
 		return VerifyVerticesScale(actualMonoVertexScaleMap, expectedMonoVertexScaleMap)
 	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
+
+func MakeExpectedProgressiveStatus(
+	promotedName, upgradingName, sourceVertexName string,
+	current, initial, scaleTo int64,
+	originalScaleMinMax string,
+	assessmentResultInProgress, assessmentResultOnDone apiv1.AssessmentResult,
+) (ExpectedProgressiveStatus, ExpectedProgressiveStatus) {
+	expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
+		Promoted: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: promotedName,
+			},
+			ScaleValues: map[string]apiv1.ScaleValues{
+				sourceVertexName: {
+					Current:             current,
+					Initial:             initial,
+					OriginalScaleMinMax: originalScaleMinMax,
+					ScaleTo:             scaleTo,
+				},
+			},
+		},
+		Upgrading: apiv1.UpgradingChildStatus{
+			Name:             upgradingName,
+			AssessmentResult: assessmentResultInProgress,
+		},
+	}
+
+	expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{
+		Promoted: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: promotedName,
+			},
+		},
+		Upgrading: apiv1.UpgradingChildStatus{
+			Name:             upgradingName,
+			AssessmentResult: assessmentResultOnDone,
+		},
+	}
+
+	return expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone
+}

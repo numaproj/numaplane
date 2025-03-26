@@ -109,39 +109,12 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
-			Promoted: apiv1.PromotedPipelineTypeStatus{
-				PromotedChildStatus: apiv1.PromotedChildStatus{
-					Name: GetInstanceName(monoVertexRolloutName, 0),
-				},
-				ScaleValues: map[string]apiv1.ScaleValues{
-					GetInstanceName(monoVertexRolloutName, 0): {
-						Current:             monoVertexScaleTo,
-						Initial:             int64(monoVertexScaleMin),
-						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
-						ScaleTo:             monoVertexScaleTo,
-					},
-				},
-				ScaleValuesRestoredToOriginal: false,
-			},
-			Upgrading: apiv1.UpgradingChildStatus{
-				Name:             GetInstanceName(monoVertexRolloutName, 1),
-				AssessmentResult: apiv1.AssessmentResultUnknown,
-			},
-		}
-
-		expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{
-			Promoted: apiv1.PromotedPipelineTypeStatus{
-				PromotedChildStatus: apiv1.PromotedChildStatus{
-					Name: GetInstanceName(monoVertexRolloutName, 0),
-				},
-				ScaleValuesRestoredToOriginal: false,
-			},
-			Upgrading: apiv1.UpgradingChildStatus{
-				Name:             GetInstanceName(monoVertexRolloutName, 1),
-				AssessmentResult: apiv1.AssessmentResultSuccess,
-			},
-		}
+		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
+			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
+			monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleTo,
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
