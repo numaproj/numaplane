@@ -2,6 +2,7 @@ package progressive
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -633,4 +634,100 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})
 	}
+}
+
+func Test_ExtractScaleMinMax(t *testing.T) {
+	two := int64(2)
+	three := int64(3)
+	testCases := []struct {
+		name                    string
+		objAsJson               string
+		path                    []string
+		expectedScaleDefinition *ScaleDefinition
+		expectedErr             bool
+	}{
+		{
+			name: "min and max present",
+			objAsJson: `
+			{
+				"something": 
+				{
+					"name": "my-source",
+					"scale": 
+					{
+						"min": 2,
+						"max": 3
+					}
+				}
+			}
+			`,
+			path:                    []string{"something", "scale"},
+			expectedScaleDefinition: &ScaleDefinition{Min: &two, Max: &three},
+			expectedErr:             false,
+		},
+		{
+			name: "scale not present",
+			objAsJson: `
+			{
+				"something": 
+				{
+					"name": "my-source"
+				}
+			}
+			`,
+			path:                    []string{"something", "scale"},
+			expectedScaleDefinition: nil,
+			expectedErr:             false,
+		},
+		{
+			name: "min and max not present",
+			objAsJson: `
+			{
+				"something": 
+				{
+					"name": "my-source",
+					"scale": 
+					{
+					}
+				}
+			}
+			`,
+			path:                    []string{"something", "scale"},
+			expectedScaleDefinition: &ScaleDefinition{Min: nil, Max: nil},
+			expectedErr:             false,
+		},
+		{
+			name: "invalid type",
+			objAsJson: `
+			{
+				"something": 
+				{
+					"name": "my-source",
+					"scale": 
+					{
+						"min": "wrongtype"
+					}
+				}
+			}
+			`,
+			path:        []string{"something", "scale"},
+			expectedErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj := map[string]interface{}{}
+			err := json.Unmarshal([]byte(tc.objAsJson), &obj)
+			assert.NoError(t, err)
+			scaleDefinition, err := ExtractScaleMinMax(obj, tc.path)
+			if !tc.expectedErr {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedScaleDefinition, scaleDefinition)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+
 }

@@ -174,7 +174,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 		return true, err
 	}
 
-	if existingScale.Min != nil && *existingScale.Min == 0 && existingScale.Max != nil && *existingScale.Max == 0 {
+	if existingScale != nil && existingScale.Min != nil && *existingScale.Min == 0 && existingScale.Max != nil && *existingScale.Max == 0 {
 		numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
 		return false, nil
 	}
@@ -315,34 +315,6 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*progressive.ScaleDefinition, error) {
-	/*min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
-	if err != nil {
-		// try again using Float64
-		minFloat64, foundMin, err := unstructured.NestedFloat64(monovertexSpec, "scale", "min")
-		if err != nil {
-			return undefinedScaleDef, err
-		} else if foundMin {
-			min = int64(minFloat64)
-		}
-	}
-	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
-	if err != nil {
-		// try again using Float64
-		maxFloat64, foundMax, err := unstructured.NestedFloat64(monovertexSpec, "scale", "max")
-		if err != nil {
-			return undefinedScaleDef, err
-		} else if foundMax {
-			max = int64(maxFloat64)
-		}
-	}
-	var minPtr, maxPtr *int64
-	if foundMin {
-		minPtr = &min
-	}
-	if foundMax {
-		maxPtr = &max
-	}
-	return progressive.ScaleDefinition{Min: minPtr, Max: maxPtr}, nil*/
 	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 

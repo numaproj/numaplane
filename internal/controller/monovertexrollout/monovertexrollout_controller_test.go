@@ -636,12 +636,6 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 				t.Errorf("Expected error: %v, got: %v", tt.expectError, err)
 			}
 			assert.Equal(t, tt.expectedScaleDefinition, scaleDefinition)
-			/*if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
-				t.Errorf("Expected min: %v, got: %v", tt.expectedMin, min)
-			}
-			if (max == nil && tt.expectedMax != nil) || (max != nil && tt.expectedMax == nil) || (max != nil && *max != *tt.expectedMax) {
-				t.Errorf("Expected max: %v, got: %v", tt.expectedMax, max)
-			}*/
 		})
 	}
 }

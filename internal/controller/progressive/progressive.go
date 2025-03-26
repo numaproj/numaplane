@@ -600,7 +600,6 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	return string(jsonBytes), nil
 }
 
-// TODO: add test
 func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
 
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
