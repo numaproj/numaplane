@@ -43,7 +43,7 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, apiv1.AssessmentFailureReason, error) {
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	analysis := mvtxRollout.GetAnalysis()
 	// only check for and create AnalysisRuns if templates are specified
@@ -55,11 +55,11 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 				// analysisRun is created the first time the upgrading child is assessed
 				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
 				if err != nil {
-					return apiv1.AssessmentResultUnknown, err
+					return apiv1.AssessmentResultUnknown, "", err
 				}
 				analysisStatus := mvtxRollout.GetAnalysisStatus()
 				if analysisStatus == nil {
-					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
+					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
 				}
 				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
 				// and start time for it's assessment
@@ -68,7 +68,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 				analysisStatus.StartTime = &timeNow
 				mvtxRollout.SetAnalysisStatus(analysisStatus)
 			} else {
-				return apiv1.AssessmentResultUnknown, err
+				return apiv1.AssessmentResultUnknown, "", err
 			}
 		}
 

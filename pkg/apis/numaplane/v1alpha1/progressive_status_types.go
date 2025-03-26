@@ -24,6 +24,7 @@ import (
 )
 
 type AssessmentResult string
+type AssessmentFailureReason string
 
 const (
 	AssessmentResultSuccess = "Success"
@@ -43,6 +44,8 @@ type UpgradingChildStatus struct {
 	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
+	// FailureReason indicates the reason for the failure
+	FailureReason AssessmentFailureReason `json:"failureReason,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {
