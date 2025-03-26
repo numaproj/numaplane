@@ -584,7 +584,7 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	}
 
 	if !foundScale {
-		return "null", nil
+		return "null", nil // todo: verify we shouldn't be patching this as "{}"
 	}
 
 	scaleMinMax := map[string]any{
@@ -604,6 +604,7 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
+		fmt.Printf("deletethis: calling NestedMap returned error %s\n", err.Error())
 		return nil, err
 	}
 

@@ -605,6 +605,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 				return nil, errors.New("a vertex must have a name")
 			}
 
+			fmt.Printf("deletethis: calling ExtractScaleMinMax() for vertexAsMap: %+v\n", vertexAsMap)
 			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return nil, err

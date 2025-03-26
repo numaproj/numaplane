@@ -127,6 +127,7 @@ func init() {
 	runningPipelineSpecWithTopologyChange = withInterstepBufferService(pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestISBSvcName)
 }
 
+// TODO: these are json, not yaml, fix the names
 var yamlHasDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
@@ -1203,6 +1204,83 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				resultUpgradeState, found := pipeline.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
+			}
+		})
+	}
+}
+
+func TestGetScalePatchStringsFromPipelineSpec(t *testing.T) {
+	tests := []struct {
+		name           string
+		pipelineDef    string
+		expectedResult map[string]string
+		expectError    bool
+	}{
+		{
+			name: "Valid pipeline spec with various scale definitions",
+			pipelineDef: `
+{
+	  "vertices": [
+		{
+		  "name": "in",
+		  "scale": {
+			"min": 1,
+			"max": 5
+		  },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "scale": {
+		  },
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ]
+	
+}
+			`,
+			expectedResult: map[string]string{
+				"in":  `{"min": 1, "max": 5}`,
+				"cat": `{"min": null, "max": null}`,
+				"out": `null`, // TODO: need to verify that this should be patched as null and not as "{}"
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var spec map[string]interface{}
+			err := json.Unmarshal([]byte(tt.pipelineDef), &spec)
+			assert.NoError(t, err)
+
+			obj.Object["spec"] = spec
+
+			result, err := getScalePatchStringsFromPipelineSpec(ctx, obj)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
 			}
 		})
 	}
