@@ -31,6 +31,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -598,6 +599,8 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 
 	return string(jsonBytes), nil
 }
+
+// TODO: add test
 func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
 
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
@@ -612,11 +615,17 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 	minInterface := scaleDef["min"]
 	maxInterface := scaleDef["max"]
 	if minInterface != nil {
-		min := minInterface.(int64)
+		min, valid := util.ToInt64(minInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale min %+v of unexpected type", minInterface)
+		}
 		scaleMinMax.Min = &min
 	}
 	if maxInterface != nil {
-		max := maxInterface.(int64)
+		max, valid := util.ToInt64(maxInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale max %+v of unexpected type", maxInterface)
+		}
 		scaleMinMax.Max = &max
 	}
 
