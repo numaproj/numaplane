@@ -395,7 +395,6 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	// TTODO
 	if UpgradeStrategy == config.ProgressiveStrategyID && expectedProgressiveStatusInProgress != nil && expectedProgressiveStatusOnDone != nil {
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyProgressive)
 
@@ -410,7 +409,6 @@ func UpdateISBServiceRollout(
 
 			// Check Progressive status while the assessment is in progress
 
-			// TTODO: not sure this should be here, maybe remove it
 			VerifyPipelineRolloutInProgressStrategy(pipelineRollout.PipelineRolloutName, apiv1.UpgradeStrategyProgressive)
 
 			// Verify that the Pipeline is set to scale down

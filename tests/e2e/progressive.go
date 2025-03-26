@@ -210,6 +210,7 @@ func MakeExpectedProgressiveStatus(
 			Name:             upgradingName,
 			AssessmentResult: assessmentResultInProgress,
 		},
+		PipelineSourceVertexName: sourceVertexName,
 	}
 
 	expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{

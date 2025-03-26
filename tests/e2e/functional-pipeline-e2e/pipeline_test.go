@@ -235,7 +235,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 
-		// TTODO: revisit values if needed
 		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), sourceVertexName,
 			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
@@ -275,7 +274,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 
-		// TTODO: revisit values if needed
 		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 1), GetInstanceName(pipelineRolloutName, 2), sourceVertexName,
 			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
@@ -299,7 +297,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should update the child ISBService updating a recreate field", func() {
-		// TTODO: revisit values if needed
 		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 2), GetInstanceName(pipelineRolloutName, 3), sourceVertexName,
 			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
