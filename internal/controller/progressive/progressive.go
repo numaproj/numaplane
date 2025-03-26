@@ -409,7 +409,7 @@ func AssessUpgradingPipelineType(
 		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
 		if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
 			numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-				Debugf("AnalysisRun is in phase %s", analysisStatus.AnalysisRunName)
+				Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
 			switch analysisStatus.Phase {
 			case argorolloutsv1.AnalysisPhaseSuccessful:
 				return apiv1.AssessmentResultSuccess, "", nil
