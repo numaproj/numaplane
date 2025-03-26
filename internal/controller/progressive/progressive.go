@@ -405,8 +405,8 @@ func AssessUpgradingPipelineType(
 
 	// conduct standard health assessment first
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
-		// if analysisStatus is set, we must also check if it is in a Completed phase to declare success
-		if analysisStatus != nil {
+		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
+		if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
 			switch analysisStatus.Phase {
 			case argorolloutsv1.AnalysisPhaseSuccessful:
 				return apiv1.AssessmentResultSuccess, nil
