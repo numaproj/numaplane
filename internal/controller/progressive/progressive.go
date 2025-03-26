@@ -414,6 +414,8 @@ func AssessUpgradingPipelineType(
 			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
 				return apiv1.AssessmentResultFailure, "", nil
 			default:
+				numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+					Debugf("AnalysisRun is in phase %s", analysisStatus.AnalysisRunName)
 				return apiv1.AssessmentResultUnknown, "", nil
 			}
 		}
