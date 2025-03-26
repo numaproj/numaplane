@@ -608,10 +608,16 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 	if !foundScale {
 		return nil, nil
 	}
-
-	scaleMinMax := ScaleDefinition{
-		Min: scaleDef["min"].(*int64),
-		Max: scaleDef["max"].(*int64),
+	scaleMinMax := ScaleDefinition{}
+	minInterface := scaleDef["min"]
+	maxInterface := scaleDef["max"]
+	if minInterface != nil {
+		min := minInterface.(int64)
+		scaleMinMax.Min = &min
+	}
+	if maxInterface != nil {
+		max := maxInterface.(int64)
+		scaleMinMax.Max = &max
 	}
 
 	return &scaleMinMax, nil
