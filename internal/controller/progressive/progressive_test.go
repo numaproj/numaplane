@@ -40,14 +40,14 @@ func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, exi
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
+func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	switch existingUpgradingChildDef.GetName() {
 	case "test-success":
-		return apiv1.AssessmentResultSuccess, nil
+		return apiv1.AssessmentResultSuccess, "", nil
 	case "test-failure":
-		return apiv1.AssessmentResultFailure, nil
+		return apiv1.AssessmentResultFailure, "test-fail-reason", nil
 	default:
-		return apiv1.AssessmentResultUnknown, nil
+		return apiv1.AssessmentResultUnknown, "", nil
 	}
 }
 
@@ -550,6 +550,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 		desiredReplicas *int64
 		readyReplicas   *int64
 		expectedResult  bool
+		failureReason   string
 	}{
 		{
 			name:            "desired = 0, ready = 0",
@@ -562,6 +563,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   ptr.To(int64(0)),
 			expectedResult:  false,
+			failureReason:   "readyReplicas=0 is less than desiredReplicas=3",
 		},
 		{
 			name:            "desired = 0, ready > 0",
@@ -580,6 +582,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   ptr.To(int64(2)),
 			expectedResult:  false,
+			failureReason:   "readyReplicas=2 is less than desiredReplicas=3",
 		},
 		{
 			name:            "desired > 0, ready > 0, desired = ready",
@@ -616,6 +619,7 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 			desiredReplicas: ptr.To(int64(3)),
 			readyReplicas:   nil,
 			expectedResult:  false,
+			failureReason:   "readyReplicas=0 is less than desiredReplicas=3",
 		},
 	}
 
@@ -635,8 +639,9 @@ func Test_AreVertexReplicasReady(t *testing.T) {
 				_ = unstructured.SetNestedField(unstr.Object, *tc.readyReplicas, "status", "readyReplicas")
 			}
 
-			actualResult, actualErr := AreVertexReplicasReady(unstr)
+			actualResult, failureReason, actualErr := AreVertexReplicasReady(unstr)
 
+			assert.Equal(t, tc.failureReason, failureReason)
 			assert.Nil(t, actualErr)
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})

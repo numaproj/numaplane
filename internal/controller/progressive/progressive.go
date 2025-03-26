@@ -47,7 +47,7 @@ type progressiveController interface {
 	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
-	AssessUpgradingChild(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error)
+	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
@@ -278,8 +278,9 @@ func processUpgradingChild(
 	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
 	// Otherwise, assess the previous child status.
 	assessment := childStatus.AssessmentResult
+	failureReason := childStatus.FailureReason
 	if childStatus.CanAssess() {
-		assessment, err = controller.AssessUpgradingChild(ctx, existingUpgradingChildDef)
+		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
 		if err != nil {
 			return false, false, 0, err
 		}
@@ -303,6 +304,7 @@ func processUpgradingChild(
 
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
+		childStatus.FailureReason = failureReason
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
@@ -317,7 +319,6 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-
 			newUpgradingChildDef, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
 				return false, false, 0, err
@@ -382,36 +383,54 @@ func processUpgradingChild(
 func AssessUpgradingPipelineType(
 	ctx context.Context,
 	existingUpgradingChildDef *unstructured.Unstructured,
-	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error),
-) (apiv1.AssessmentResult, error) {
+	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
+) (apiv1.AssessmentResult, string, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, err
+		return apiv1.AssessmentResultUnknown, "", err
 	}
 
-	healthyConditions := checkChildConditions(&upgradingObjectStatus)
+	healthyConditions, failedCondition := checkChildConditions(&upgradingObjectStatus)
 
-	healthyReplicas, err := verifyReplicasFunc(existingUpgradingChildDef)
+	healthyReplicas, replicasFailureReason, err := verifyReplicasFunc(existingUpgradingChildDef)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, err
+		return apiv1.AssessmentResultUnknown, replicasFailureReason, err
 	}
 
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
+	if analysisStatus != nil {
+		if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas && analysisStatus.Phase == argorolloutsv1.AnalysisPhaseSuccessful {
+			return apiv1.AssessmentResultSuccess, "", nil
+		}
+	}
+
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
-		return apiv1.AssessmentResultSuccess, nil
+		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
 	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
-		return apiv1.AssessmentResultFailure, nil
+		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
+		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
 
-	return apiv1.AssessmentResultUnknown, nil
+	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// CalculateFailureReason issues a reason for failure; if there are multiple reasons, it returns one of them
+func CalculateFailureReason(replicasFailureReason, phase string, failedCondition *metav1.Condition) string {
+	if phase == "Failed" {
+		return "child phase is in Failed state"
+	} else if failedCondition != nil {
+		return fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason)
+	} else {
+		return replicasFailureReason
+	}
 }
 
 /*
@@ -509,16 +528,16 @@ func startUpgradeProcess(
 }
 
 // return true if all Conditions are true
-func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) bool {
+func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool, *metav1.Condition) {
 	if len(upgradingObjectStatus.Conditions) == 0 {
-		return false
+		return false, nil
 	}
 	for _, c := range upgradingObjectStatus.Conditions {
 		if c.Status != metav1.ConditionTrue {
-			return false
+			return false, &c
 		}
 	}
-	return true
+	return true, nil
 }
 
 /*
@@ -591,18 +610,22 @@ Parameters:
 
 Returns:
   - A boolean indicating whether the ready replicas are sufficient.
-  - An error if there is an issue retrieving the replica counts.
+  - In the case that ready replicas aren't sufficient, a message providing more information
 */
-func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 	desiredReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "desiredReplicas")
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	readyReplicas, _, err := unstructured.NestedInt64(existingUpgradingChildDef.Object, "status", "readyReplicas")
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	return readyReplicas >= desiredReplicas, nil
+	if readyReplicas >= desiredReplicas {
+		return true, "", nil
+	}
+
+	return false, fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas), nil
 }
