@@ -43,6 +43,8 @@ type UpgradingChildStatus struct {
 	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
+	// FailureReason indicates the reason for the failure
+	FailureReason string `json:"failureReason,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {
