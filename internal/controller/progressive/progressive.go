@@ -427,7 +427,7 @@ func CalculateFailureReason(replicasFailureReason, phase string, failedCondition
 	if phase == "Failed" {
 		return "child phase is in Failed state"
 	} else if failedCondition != nil {
-		return fmt.Sprintf("condition %s is %s", failedCondition.Type, failedCondition.Reason)
+		return fmt.Sprintf("condition %s is False for Reason: %s", failedCondition.Type, failedCondition.Reason)
 	} else {
 		return replicasFailureReason
 	}
