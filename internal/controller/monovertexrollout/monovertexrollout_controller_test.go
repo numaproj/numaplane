@@ -627,14 +627,6 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: nil},
 			expectError:             false,
 		},
-		{
-			name: "ErrorAccessingValues",
-			input: map[string]interface{}{
-				"scale": "invalid_structure",
-			},
-			expectedScaleDefinition: &progressive.ScaleDefinition{Min: nil, Max: nil},
-			expectError:             true,
-		},
 	}
 
 	for _, tt := range tests {

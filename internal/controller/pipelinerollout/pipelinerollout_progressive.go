@@ -299,7 +299,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	if err != nil {
 		return true, err
 	}
-	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = &scalePatchStrings
 
 	if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")

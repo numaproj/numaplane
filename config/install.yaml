@@ -1527,7 +1527,6 @@ spec:
                         type: object
                     required:
                     - name
-                    - originalScaleMinMax
                     type: object
                 type: object
               upgradeInProgress:
