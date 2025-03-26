@@ -359,9 +359,8 @@ func VerifyMonoVertexDeletion(name string) {
 	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The MonoVertex %s/%s should have been deleted but it was found.", Namespace, name))
 }
 
-// TTODO
 func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
-	progressiveChecks bool, expectedProgressiveStatusInProgress *ExpectedProgressiveStatus, expectedProgressiveStatusOnDone *ExpectedProgressiveStatus,
+	expectedProgressiveStatusInProgress *ExpectedProgressiveStatus, expectedProgressiveStatusOnDone *ExpectedProgressiveStatus,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -373,8 +372,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		return rollout, nil
 	})
 
-	// TTODO
-	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveChecks {
+	if UpgradeStrategy == config.ProgressiveStrategyID && expectedProgressiveStatusInProgress != nil && expectedProgressiveStatusOnDone != nil {
 		// Check Progressive status while the assessment is in progress
 
 		VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyProgressive)
@@ -439,7 +437,6 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		err = VerifyMonoVertexReady(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
 	}
-
 }
 
 func VerifyMonoVertexStaysPaused(name string) {

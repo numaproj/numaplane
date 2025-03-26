@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -47,15 +48,17 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	sourceVertexScaleMin = int32(5)
-	sourceVertexScaleMax = int32(9)
+	sourceVertexName     = "in"
+	sourceVertexScaleMin = int32(4)
+	sourceVertexScaleMax = int32(5)
+	sourceVertexScaleTo  = int64(2)
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec  = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: sourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -76,7 +79,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: sourceVertexName,
 				To:   "out",
 			},
 		},
@@ -89,7 +92,7 @@ var (
 		},
 		Vertices: []numaflowv1.AbstractVertex{
 			{
-				Name: "in",
+				Name: sourceVertexName,
 				Source: &numaflowv1.Source{
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
@@ -119,7 +122,7 @@ var (
 		},
 		Edges: []numaflowv1.Edge{
 			{
-				From: "in",
+				From: sourceVertexName,
 				To:   "cat",
 			},
 			{
@@ -231,9 +234,45 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
+
+		expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
+			Promoted: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{
+					Name: GetInstanceName(pipelineRolloutName, 0),
+				},
+				ScaleValues: map[string]apiv1.ScaleValues{
+					sourceVertexName: {
+						Current:             sourceVertexScaleTo,
+						Initial:             int64(sourceVertexScaleMin),
+						OriginalScaleMinMax: fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
+						ScaleTo:             sourceVertexScaleTo,
+					},
+				},
+				ScaleValuesRestoredToOriginal: false,
+			},
+			Upgrading: apiv1.UpgradingChildStatus{
+				Name:             GetInstanceName(pipelineRolloutName, 1),
+				AssessmentResult: apiv1.AssessmentResultUnknown,
+			},
+			PipelineSourceVertexName: sourceVertexName,
+		}
+
+		expectedProgressiveStatusOnDone := ExpectedProgressiveStatus{
+			Promoted: apiv1.PromotedPipelineTypeStatus{
+				PromotedChildStatus: apiv1.PromotedChildStatus{
+					Name: GetInstanceName(pipelineRolloutName, 0),
+				},
+				ScaleValuesRestoredToOriginal: false,
+			},
+			Upgrading: apiv1.UpgradingChildStatus{
+				Name:             GetInstanceName(pipelineRolloutName, 1),
+				AssessmentResult: apiv1.AssessmentResultSuccess,
+			},
+		}
+
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true)
+		}, true, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
 	})
 
 	It("Should pause the Pipeline if user requests it", func() {
@@ -243,7 +282,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false)
+		}, false, nil, nil)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
@@ -255,7 +294,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false)
+		}, false, nil, nil)
 	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {

@@ -86,7 +86,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
 		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
-		// TODO: add ISBSvc when adding pipeline tests
+		// TTODO: add ISBSvc when adding pipeline tests
 	})
 
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
@@ -189,7 +189,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	// TODO: tests for pipeline
+	// TTODO: tests for pipeline
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteNumaflowControllerRollout()

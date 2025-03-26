@@ -11,8 +11,9 @@ import (
 )
 
 type ExpectedProgressiveStatus struct {
-	Promoted  apiv1.PromotedPipelineTypeStatus
-	Upgrading apiv1.UpgradingChildStatus
+	Promoted                 apiv1.PromotedPipelineTypeStatus
+	Upgrading                apiv1.UpgradingChildStatus
+	PipelineSourceVertexName string
 }
 
 func GetInstanceName(rolloutName string, idx int) string {
@@ -58,8 +59,50 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
 				upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult
-			// TTODO: maybe create a bool to decide if should assert if AssessmentEndTime is not nil
-			// && upgradingStatus.AssessmentEndTime != nil
+		}
+
+	}).Should(BeTrue())
+}
+
+func VerifyPipelineRolloutProgressiveStatus(
+	pipelineRolloutName string,
+	expectedPromotedName string,
+	expectedUpgradingName string,
+	expectedScaleValuesRestoredToOriginal bool,
+	expectedAssessmentResult apiv1.AssessmentResult,
+	forcedPromotion bool,
+) {
+	CheckEventually("verifying the PipelineRollout Progressive Status", func() bool {
+		mvr, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+
+		if forcedPromotion {
+			if mvr == nil || mvr.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+				return false
+			}
+
+			upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingPipelineStatus
+
+			return upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+				upgradingStatus.ForcedSuccess
+		}
+
+		if mvr == nil || mvr.Status.ProgressiveStatus.UpgradingPipelineStatus == nil {
+			return false
+		}
+
+		promotedStatus := mvr.Status.ProgressiveStatus.PromotedPipelineStatus
+		upgradingStatus := mvr.Status.ProgressiveStatus.UpgradingPipelineStatus
+
+		if promotedStatus == nil {
+			return upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+				upgradingStatus.AssessmentEndTime != nil
+		} else {
+			return promotedStatus.Name == expectedPromotedName &&
+				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
+				upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult
 		}
 
 	}).Should(BeTrue())
@@ -91,6 +134,39 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].Initial == expectedInitial &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].ScaleTo == expectedScaleTo
+	}).Should(BeTrue())
+}
+
+// NOTE: this function assumes that the pipeline only has one source vertex.
+// This function should be modified if the E2E tests will be changed
+// to have more than one source vertex.
+func VerifyPipelineRolloutScaledDownForProgressive(
+	pipelineRolloutName string,
+	expectedPromotedName string,
+	sourceVertexName string,
+	expectedCurrent int64,
+	expectedInitial int64,
+	expectedOriginalScaleMinMaxAsJSONString string,
+	expectedScaleTo int64,
+) {
+	CheckEventually("verifying that the PipelineRollout scaled down for Progressive upgrade", func() bool {
+		mvr, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+
+		if mvr == nil || mvr.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
+			return false
+		}
+
+		if _, exists := mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName]; !exists {
+			return false
+		}
+
+		return mvr.Status.ProgressiveStatus.PromotedPipelineStatus.AllSourceVerticesScaledDown &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedName &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues != nil &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].Current == expectedCurrent &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].Initial == expectedInitial &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
+			mvr.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].ScaleTo == expectedScaleTo
 	}).Should(BeTrue())
 }
 

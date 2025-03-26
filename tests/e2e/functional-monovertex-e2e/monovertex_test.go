@@ -85,7 +85,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		}, false, nil, nil)
+		}, nil, nil)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -98,7 +98,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		}, false, nil, nil)
+		}, nil, nil)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -109,8 +109,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		// TTODO: may want to modify the struct to include certain values to check during progressive upgrade and some status values for post-upgrade
-		// OR use 2 separate vars (and func args) using the same struct ExpectedProgressiveStatus
 		expectedProgressiveStatusInProgress := ExpectedProgressiveStatus{
 			Promoted: apiv1.PromotedPipelineTypeStatus{
 				PromotedChildStatus: apiv1.PromotedChildStatus{
@@ -147,7 +145,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, true, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
+		}, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
