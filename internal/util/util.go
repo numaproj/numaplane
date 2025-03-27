@@ -73,7 +73,6 @@ func ToFloat64(value any) (float64, bool) {
 	}
 }
 
-// TODO: add unit test
 func ToInt64(value any) (int64, bool) {
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
