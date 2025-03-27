@@ -291,11 +291,75 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingMonoVertexDef *unstructured.Unstructured,
+	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
-	// TODO
+	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
+	if !ok {
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline post-success", rolloutObject)
+	}
+
+	// For each Pipeline vertex, patch to the original scale definition
+	// Note this is not expected to be executed repeatedly, so we don't need to worry about first verifying it's not already set that way
+
+	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+	if upgradingPipelineStatus == nil {
+		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
+	}
+
+	originalScaleMinMax := upgradingPipelineStatus.OriginalScaleMinMax
+	if originalScaleMinMax == nil {
+		return fmt.Errorf("can't process upgrading pipeline post-success; missing OriginalScaleMinMax which should contain scale values")
+	}
+	vertexScaleDefinitions := *originalScaleMinMax
+
+	vertices, _, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error while getting vertices of upgrading pipeline: %w", err)
+	}
+	verticesPatch := "["
+
+	for index, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("vertex has no name: %+v", vertices)
+			}
+			// find name in our stored vertex->scale definition map
+			scaleMinMax, found := vertexScaleDefinitions[vertexName]
+			if !found {
+				// TODO
+			}
+			//vertexPatch := fmt.Sprintf(`{"scale": %s},`, scaleMinMax)
+			vertexPatch := fmt.Sprintf(`
+{
+    "op": "replace",
+    "path": "/spec/vertices/%d/scale",
+    "value": %s
+},`, index, scaleMinMax)
+			verticesPatch = verticesPatch + vertexPatch
+
+		}
+	}
+
+	// remove terminating comma
+	if verticesPatch[len(verticesPatch)-1] == ',' {
+		verticesPatch = verticesPatch[0 : len(verticesPatch)-1]
+	}
+	verticesPatch = verticesPatch + "]"
+	//specPatch := fmt.Sprintf(`{"spec": {"vertices": %s}}`, verticesPatch)
+
+	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices for success")
+
+	if err := kubernetes.PatchResource(ctx, c, upgradingPipelineDef, verticesPatch, k8stypes.JSONPatchType); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -595,7 +659,7 @@ func scalePipelineSourceVerticesToOriginalValues(
 	return false, nil
 }
 
-func patchPipelineVertices(ctx context.Context, promotedPipelineDef *unstructured.Unstructured, vertices []any, c client.Client) error {
+func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstructured, vertices []any, c client.Client) error {
 	patch := &unstructured.Unstructured{Object: make(map[string]any)}
 	err := unstructured.SetNestedSlice(patch.Object, vertices, "spec", "vertices")
 	if err != nil {
@@ -607,7 +671,7 @@ func patchPipelineVertices(ctx context.Context, promotedPipelineDef *unstructure
 		return err
 	}
 
-	if err := kubernetes.PatchResource(ctx, c, promotedPipelineDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
+	if err := kubernetes.PatchResource(ctx, c, pipelineDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
 		return err
 	}
 
