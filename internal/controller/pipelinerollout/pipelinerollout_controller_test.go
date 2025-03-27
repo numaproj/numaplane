@@ -1354,11 +1354,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 	}
 }
 
-func TestGetScalePatchStringsFromPipelineSpec(t *testing.T) {
+func TestGetScalePatchesFromPipelineSpec(t *testing.T) {
 	tests := []struct {
 		name           string
 		pipelineDef    string
-		expectedResult map[string]string
+		expectedResult []apiv1.VertexScale
 		expectError    bool
 	}{
 		{
@@ -1399,10 +1399,19 @@ func TestGetScalePatchStringsFromPipelineSpec(t *testing.T) {
 	
 }
 			`,
-			expectedResult: map[string]string{
-				"in":  `{"min": 1, "max": 5}`,
-				"cat": `{"min": null, "max": null}`,
-				"out": `null`, // TODO: need to verify that this should be patched as null and not as "{}"
+			expectedResult: []apiv1.VertexScale{
+				{
+					VertexName:  "in",
+					ScaleMinMax: `{"min": 1, "max": 5}`,
+				},
+				{
+					VertexName:  "cat",
+					ScaleMinMax: `{"min": null, "max": null}`,
+				},
+				{
+					VertexName:  "out",
+					ScaleMinMax: `null`, // TODO: need to verify that this should be patched as null and not as "{}"
+				},
 			},
 			expectError: false,
 		},
@@ -1419,7 +1428,7 @@ func TestGetScalePatchStringsFromPipelineSpec(t *testing.T) {
 
 			obj.Object["spec"] = spec
 
-			result, err := getScalePatchStringsFromPipelineSpec(ctx, obj)
+			result, err := getScalePatchesFromPipelineSpec(ctx, obj)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)

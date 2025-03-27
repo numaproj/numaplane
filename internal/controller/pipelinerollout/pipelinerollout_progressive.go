@@ -318,7 +318,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
 	}
 
-	return applyScalePatches(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
+	return applyScalePatchesToPipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
 
 	/*originalScaleMinMax := upgradingPipelineStatus.OriginalScaleMinMax
 		if originalScaleMinMax == nil {
@@ -406,7 +406,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	// save the current scale definitions from the upgrading Pipeline to our Status
-	scalePatchStrings, err := getScalePatchStringsFromPipelineSpec(ctx, upgradingPipelineDef)
+	scalePatchStrings, err := getScalePatchesFromPipelineSpec(ctx, upgradingPipelineDef)
 	if err != nil {
 		return true, err
 	}
@@ -690,11 +690,11 @@ func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstru
 }
 
 // TODO: add this
-/*func patchPipelineScale(ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition) error {
+/*func applyScaleValuesToPipeline(ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition) error {
 
 }*/
 
-func applyScalePatches(
+func applyScalePatchesToPipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScale, c client.Client) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
@@ -763,7 +763,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 	return scaleDefinitions, nil
 }
 
-func getScalePatchStringsFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
+func getScalePatchesFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
 	[]apiv1.VertexScale, error) {
 
 	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
