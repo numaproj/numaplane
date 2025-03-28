@@ -19,7 +19,11 @@ spec:
       interStepBufferServiceName: my-isbsvc
       vertices:
         - name: in
-          scale: {}
+          scale: 
+            min: 3
+            max: 5
+            loopbackSeconds: 180
+          
           source:
             # A self data generating source
             generator:
