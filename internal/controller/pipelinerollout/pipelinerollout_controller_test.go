@@ -1409,7 +1409,7 @@ func TestGetScalePatchesFromPipelineSpec(t *testing.T) {
 				},
 				{
 					VertexName:  "out",
-					ScaleMinMax: `{}`, // TODO: need to verify that this should be patched as null and not as "{}"
+					ScaleMinMax: "null",
 				},
 			},
 			expectError: false,

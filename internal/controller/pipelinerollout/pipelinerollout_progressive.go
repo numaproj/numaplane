@@ -585,23 +585,23 @@ func scalePipelineSourceVerticesToOriginalValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			/*if vertexScaleValues.OriginalScaleMinMax == "{}" {
+			if vertexScaleValues.OriginalScaleMinMax == "null" {
 				unstructured.RemoveNestedField(vertexAsMap, "scale")
-			} else {*/
-			scaleAsMap := map[string]any{}
-			err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
-			if err != nil {
-				return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
-			}
+			} else {
+				scaleAsMap := map[string]any{}
+				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
+				if err != nil {
+					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
+				}
 
-			if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
-				return true, err
-			}
+				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
+					return true, err
+				}
 
-			if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
-				return true, err
+				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
+					return true, err
+				}
 			}
-			//}
 		}
 	}
 

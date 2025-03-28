@@ -489,7 +489,7 @@ func Test_ExtractOriginalScaleMinMaxAsJSONString(t *testing.T) {
 			name:               "scale unset",
 			object:             map[string]any{"spec": map[string]any{"somefield": int64(2)}},
 			pathToScale:        []string{"spec", "scale"},
-			expectedJSONString: "{}",
+			expectedJSONString: "null",
 			expectedError:      nil,
 		},
 		{

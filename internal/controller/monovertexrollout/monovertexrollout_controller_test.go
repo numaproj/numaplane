@@ -646,42 +646,47 @@ func Test_scaleMonoVertex(t *testing.T) {
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	ctx := context.Background()
-	two := int32(2)
-	four := int32(4)
-	eight := int32(8)
+	two32 := int32(2)
+	four32 := int32(4)
+	eight32 := int32(8)
+	four64 := int64(4)
+	eight64 := int64(8)
 	tenUint := uint32(10)
 
 	tests := []struct {
-		name          string
-		originalScale numaflowv1.Scale
-		min           *int32
-		max           *int32
-		expectedScale numaflowv1.Scale
+		name               string
+		originalScale      numaflowv1.Scale
+		newScaleDefinition *progressive.ScaleDefinition
+		expectedScale      numaflowv1.Scale
 	}{
 		{
 			name: "newMin,newMax",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: &four,
-			max: &eight,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: &four64,
+				Max: &eight64,
+			},
 			expectedScale: numaflowv1.Scale{
-				Min:             &four,
-				Max:             &eight,
+				Min:             &four32,
+				Max:             &eight32,
 				LookbackSeconds: &tenUint,
 			},
 		},
 		{
 			name: "newNullValues",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: nil,
-			max: nil,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: nil,
+				Max: nil,
+			},
 			expectedScale: numaflowv1.Scale{
 				Min:             nil,
 				Max:             nil,
@@ -691,14 +696,16 @@ func Test_scaleMonoVertex(t *testing.T) {
 		{
 			name: "newMin,nullMax",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: &four,
-			max: nil,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: &four64,
+				Max: nil,
+			},
 			expectedScale: numaflowv1.Scale{
-				Min:             &four,
+				Min:             &four32,
 				Max:             nil,
 				LookbackSeconds: &tenUint,
 			},
@@ -706,16 +713,33 @@ func Test_scaleMonoVertex(t *testing.T) {
 		{
 			name: "newMax,nullMin",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: nil,
-			max: &eight,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: nil,
+				Max: &eight64,
+			},
 			expectedScale: numaflowv1.Scale{
 				Min:             nil,
-				Max:             &eight,
+				Max:             &eight32,
 				LookbackSeconds: &tenUint,
+			},
+		},
+		{
+			name: "nullScale",
+			originalScale: numaflowv1.Scale{
+				Min:             &two32,
+				Max:             &four32,
+				LookbackSeconds: &tenUint,
+			},
+			newScaleDefinition: nil,
+
+			expectedScale: numaflowv1.Scale{
+				Min:             nil,
+				Max:             nil,
+				LookbackSeconds: nil,
 			},
 		},
 	}
@@ -739,18 +763,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 			err = client.Get(ctx, namespacedName, mvUnstruc)
 			assert.NoError(t, err)
 
-			// TODO: maybe this function can test ScaleDefinition as null
-			// TODO: maybe we don't need int64 and float64 anymore?
-			var minInt64Ptr, maxInt64Ptr *int64
-			if tt.min != nil {
-				minInt64 := int64(*tt.min)
-				minInt64Ptr = &minInt64
-			}
-			if tt.max != nil {
-				maxInt64 := int64(*tt.max)
-				maxInt64Ptr = &maxInt64
-			}
-			err = scaleMonoVertex(ctx, mvUnstruc, &progressive.ScaleDefinition{Min: minInt64Ptr, Max: maxInt64Ptr}, client)
+			err = scaleMonoVertex(ctx, mvUnstruc, tt.newScaleDefinition, client)
 			assert.NoError(t, err)
 
 			// Get result MonoVertex
