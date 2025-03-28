@@ -365,14 +365,15 @@ func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (
 // GetAnalysisRunTimeout parses the GlobalConfig for the analysisRunTimeout string to convert into a time.Duration
 func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) {
 
-	analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
-	if err != nil {
-		return 0, fmt.Errorf("invalid analysisRunTimeout value: %w", err)
-	}
-
 	// default timeout is 20 minutes
-	if analysisRunTimeout == 0 {
-		analysisRunTimeout = 1200
+	analysisRunTimeout := 1200
+
+	if config.AnalysisRunTimeout != "" {
+		analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
+		if err != nil {
+			return 0, fmt.Errorf("invalid analysisRunTimeout value: %w", err)
+		}
+		return time.Duration(analysisRunTimeout) * time.Second, nil
 	}
 
 	return time.Duration(analysisRunTimeout) * time.Second, nil
