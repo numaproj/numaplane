@@ -178,6 +178,21 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	return upgradingChild, nil
 }
 
+func getAnalysisRunTimeout(ctx context.Context) (time.Duration, error) {
+
+	numaLogger := logger.FromContext(ctx)
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return 0, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+	}
+	timeout, err := globalConfig.Progressive.GetAnalysisRunTimeout()
+	if err != nil {
+		numaLogger.Errorf(err, "error getting AnalysisRun timeout from global config")
+		return timeout, nil
+	}
+	return timeout, nil
+}
+
 func getChildStatusAssessmentSchedule(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
@@ -414,6 +429,16 @@ func AssessUpgradingPipelineType(
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
+		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
+		return apiv1.AssessmentResultFailure, failureReason, nil
+	}
+
+	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+
 	// conduct standard health assessment first
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
@@ -426,15 +451,14 @@ func AssessUpgradingPipelineType(
 			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
 				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
 			default:
+				// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
+				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
+					return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+				}
 				return apiv1.AssessmentResultUnknown, "", nil
 			}
 		}
 		return apiv1.AssessmentResultSuccess, "", nil
-	}
-
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
-		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
-		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil

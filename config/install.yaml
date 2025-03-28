@@ -2254,6 +2254,7 @@ data:
           schedule: "120,60,10"
         - kind: InterstepBufferService
           schedule: "0,0,10"
+      analysisRunTimeout: 1200
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config
