@@ -322,7 +322,11 @@ func UpdateISBServiceRollout(
 	newSpec numaflowv1.InterStepBufferServiceSpec,
 	verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool,
 	dataLossFieldChanged bool,
-	recreateFieldChanged bool) {
+	recreateFieldChanged bool,
+	progressiveFieldChanged bool,
+	expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus,
+	expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
+) {
 
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -379,7 +383,7 @@ func UpdateISBServiceRollout(
 			// if we expect the pipeline to be healthy after update
 			for _, rolloutInfo := range pipelineRollouts {
 				if !rolloutInfo.PipelineIsFailed {
-					VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
+					VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
 					VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
 				}
 			}
@@ -391,13 +395,27 @@ func UpdateISBServiceRollout(
 		}
 	}
 
+	if UpgradeStrategy == config.ProgressiveStrategyID && (dataLossRisk || recreateFieldChanged || progressiveFieldChanged) {
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyProgressive)
+
+		// Perform Progressive checks for all pipelines associated to the ISBService
+		for _, pipelineRollout := range pipelineRollouts {
+			pipeline, err := GetPipeline(Namespace, pipelineRollout.PipelineRolloutName)
+			Expect(err).ShouldNot(HaveOccurred())
+			pipelineSpec, err := GetPipelineSpec(pipeline)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
+		}
+	}
+
 	VerifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
 
 	VerifyISBSvcRolloutReady(isbServiceRolloutName)
 	VerifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	for _, rolloutInfo := range pipelineRollouts {
-		VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		// check that pipeline will be failed if we expect it to be
 		if rolloutInfo.PipelineIsFailed {
 			VerifyPipelineFailed(Namespace, rolloutInfo.PipelineRolloutName)
@@ -432,4 +450,11 @@ func UpdateISBServiceRollout(
 
 	}
 
+}
+
+func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	CheckEventually("Verifying InProgressStrategy", func() bool {
+		isbServiceRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+		return isbServiceRollout.Status.UpgradeInProgress == inProgressStrategy
+	}).Should(BeTrue())
 }
