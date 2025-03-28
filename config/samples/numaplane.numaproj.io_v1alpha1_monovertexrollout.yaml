@@ -19,6 +19,7 @@ spec:
       scale:
         min: 2
         max: 3
+        lookbackSeconds: 60
       source:
         udsource:
           container:

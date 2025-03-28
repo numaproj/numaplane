@@ -31,6 +31,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -85,6 +86,11 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+}
+
+type ScaleDefinition struct {
+	Min *int64
+	Max *int64
 }
 
 // return:
@@ -615,11 +621,11 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 	return newMin, newMax, nil
 }
 
-// ExtractOriginalScaleMinMaxAsJSONString returns a JSON string of the scale definition
+// ExtractScaleMinMaxAsJSONString returns a JSON string of the scale definition
 // including only min and max fields extracted from the given unstructured object.
 // It returns "null" if the pathToScale is not found.
-func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
-	originalScaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
 		return "", err
 	}
@@ -628,17 +634,64 @@ func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale [
 		return "null", nil
 	}
 
-	originalScaleMinMaxOnly := map[string]any{
-		"min": originalScaleDef["min"],
-		"max": originalScaleDef["max"],
+	scaleMinMax := map[string]any{
+		"min": scaleDef["min"],
+		"max": scaleDef["max"],
 	}
 
-	jsonBytes, err := json.Marshal(originalScaleMinMaxOnly)
+	jsonBytes, err := json.Marshal(scaleMinMax)
 	if err != nil {
 		return "", err
 	}
 
 	return string(jsonBytes), nil
+}
+
+func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
+
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !foundScale {
+		return nil, nil
+	}
+	scaleMinMax := ScaleDefinition{}
+	minInterface := scaleDef["min"]
+	maxInterface := scaleDef["max"]
+	if minInterface != nil {
+		min, valid := util.ToInt64(minInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale min %+v of unexpected type", minInterface)
+		}
+		scaleMinMax.Min = &min
+	}
+	if maxInterface != nil {
+		max, valid := util.ToInt64(maxInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale max %+v of unexpected type", maxInterface)
+		}
+		scaleMinMax.Max = &max
+	}
+
+	return &scaleMinMax, nil
+}
+
+func ScaleDefinitionToPatchString(scaleDefinition *ScaleDefinition) string {
+	var scaleValue string
+	if scaleDefinition == nil {
+		scaleValue = "null"
+	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
+	} else if scaleDefinition.Min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
+	} else if scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
+	}
+	return scaleValue
 }
 
 /*

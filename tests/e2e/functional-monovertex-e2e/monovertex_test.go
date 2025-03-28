@@ -17,12 +17,14 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
@@ -31,11 +33,14 @@ const (
 )
 
 var (
-	sourceVertexScaleMin = int32(5)
+	monoVertexScaleMin = int32(4)
+	monoVertexScaleMax = int32(5)
+	monoVertexScaleTo  = int64(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
-			Min: &sourceVertexScaleMin,
+			Min: &monoVertexScaleMin,
+			Max: &monoVertexScaleMax,
 		},
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -80,7 +85,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		})
+		}, false, nil, nil)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -93,7 +98,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		})
+		}, false, nil, nil)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -104,9 +109,16 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
+		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
+			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
+			monoVertexScaleTo, monoVertexScaleTo,
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
+
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		})
+		}, true, &expectedPipelineTypeProgressiveStatusInProgress, &expectedPipelineTypeProgressiveStatusOnDone)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
