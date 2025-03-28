@@ -423,14 +423,14 @@ func AssessUpgradingPipelineType(
 		return apiv1.AssessmentResultUnknown, replicasFailureReason, err
 	}
 
+	numaLogger.
+		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
+
 	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
 		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
 		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
-
-	numaLogger.
-		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
 	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
 	if err != nil {
