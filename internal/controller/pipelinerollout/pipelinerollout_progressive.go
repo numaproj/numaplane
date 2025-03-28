@@ -303,7 +303,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
-	//numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
 	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
 	if !ok {
@@ -319,59 +318,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 	}
 
 	return applyScalePatchesToPipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
-
-	/*originalScaleMinMax := upgradingPipelineStatus.OriginalScaleMinMax
-		if originalScaleMinMax == nil {
-			return fmt.Errorf("can't process upgrading pipeline post-success; missing OriginalScaleMinMax which should contain scale values")
-		}
-		vertexScaleDefinitions := *originalScaleMinMax
-
-		vertices, _, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
-		if err != nil {
-			return fmt.Errorf("error while getting vertices of upgrading pipeline: %w", err)
-		}
-		verticesPatch := "["
-
-		for index, vertex := range vertices {
-			if vertexAsMap, ok := vertex.(map[string]any); ok {
-				vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
-				if err != nil {
-					return err
-				}
-				if !found {
-					return fmt.Errorf("vertex has no name: %+v", vertices)
-				}
-				// find name in our stored vertex->scale definition map
-				scaleMinMax, found := vertexScaleDefinitions[vertexName]
-				if !found {
-					// TODO
-				}
-				//vertexPatch := fmt.Sprintf(`{"scale": %s},`, scaleMinMax)
-				vertexPatch := fmt.Sprintf(`
-	{
-	    "op": "replace",
-	    "path": "/spec/vertices/%d/scale",
-	    "value": %s
-	},`, index, scaleMinMax)
-				verticesPatch = verticesPatch + vertexPatch
-
-			}
-		}
-
-		// remove terminating comma
-		if verticesPatch[len(verticesPatch)-1] == ',' {
-			verticesPatch = verticesPatch[0 : len(verticesPatch)-1]
-		}
-		verticesPatch = verticesPatch + "]"
-		//specPatch := fmt.Sprintf(`{"spec": {"vertices": %s}}`, verticesPatch)
-
-		numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices for success")
-
-		if err := kubernetes.PatchResource(ctx, c, upgradingPipelineDef, verticesPatch, k8stypes.JSONPatchType); err != nil {
-			return err
-		}
-
-		return nil*/
 }
 
 /*
@@ -637,23 +583,23 @@ func scalePipelineSourceVerticesToOriginalValues(
 				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleMinMax == "null" {
+			/*if vertexScaleValues.OriginalScaleMinMax == "{}" {
 				unstructured.RemoveNestedField(vertexAsMap, "scale")
-			} else {
-				scaleAsMap := map[string]any{}
-				err := json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
-				if err != nil {
-					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
-				}
-
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
-					return true, err
-				}
-
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
-					return true, err
-				}
+			} else {*/
+			scaleAsMap := map[string]any{}
+			err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
+			if err != nil {
+				return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 			}
+
+			if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
+				return true, err
+			}
+
+			if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
+				return true, err
+			}
+			//}
 		}
 	}
 

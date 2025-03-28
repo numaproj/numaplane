@@ -127,8 +127,7 @@ func init() {
 	runningPipelineSpecWithTopologyChange = withInterstepBufferService(pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestISBSvcName)
 }
 
-// TODO: these are json, not yaml, fix the names
-var yamlHasDesiredPhase = `
+var specHasDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -173,7 +172,7 @@ var yamlHasDesiredPhase = `
 }
 `
 
-var yamlHasDesiredPhaseDifferentUDF = `
+var specHasDesiredPhaseDifferentUDF = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -218,7 +217,7 @@ var yamlHasDesiredPhaseDifferentUDF = `
 }
 `
 
-var yamlHasDesiredPhaseAndOtherLifecycleField = `
+var specHasDesiredPhaseAndOtherLifecycleField = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -264,7 +263,7 @@ var yamlHasDesiredPhaseAndOtherLifecycleField = `
 }
 `
 
-var yamlNoLifecycle = `
+var specNoLifecycle = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -306,7 +305,7 @@ var yamlNoLifecycle = `
 }
 `
 
-var yamlNoDesiredPhase = `
+var specNoDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -350,7 +349,7 @@ var yamlNoDesiredPhase = `
 }
 `
 
-var yamlNoScale = `
+var specNoScale = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -392,7 +391,7 @@ var yamlNoScale = `
 }
 `
 
-var yamlWithEmptyScale = `
+var specWithEmptyScale = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -435,7 +434,7 @@ var yamlWithEmptyScale = `
 }
 `
 
-var yamlWithNonEmptyScale = `
+var specWithNonEmptyScale = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -497,50 +496,50 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		specYaml1             string
-		specYaml2             string
+		spec1                 string
+		spec2                 string
 		expectedNeedsUpdating bool
 		expectedError         bool
 	}{
 		{
 			name:                  "Not Equal",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhaseDifferentUDF,
 			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 		{
 			name:                  "Not Equal - another lifecycle field",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlHasDesiredPhaseAndOtherLifecycleField,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhaseAndOtherLifecycleField,
 			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just desiredPhase different",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlNoDesiredPhase,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specNoDesiredPhase,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just lifecycle different",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlNoLifecycle,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specNoLifecycle,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just scale different",
-			specYaml1:             yamlNoScale,
-			specYaml2:             yamlWithEmptyScale,
+			spec1:                 specNoScale,
+			spec2:                 specWithEmptyScale,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just scale min/max different",
-			specYaml1:             yamlWithEmptyScale,
-			specYaml2:             yamlWithNonEmptyScale,
+			spec1:                 specWithEmptyScale,
+			spec2:                 specWithNonEmptyScale,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
@@ -550,13 +549,13 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			obj1 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml1Spec map[string]interface{}
-			err := json.Unmarshal([]byte(tc.specYaml1), &yaml1Spec)
+			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
 			assert.NoError(t, err)
 			obj1.Object["spec"] = yaml1Spec
 
 			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml2Spec map[string]interface{}
-			err = json.Unmarshal([]byte(tc.specYaml2), &yaml2Spec)
+			err = json.Unmarshal([]byte(tc.spec2), &yaml2Spec)
 			assert.NoError(t, err)
 			obj2.Object["spec"] = yaml2Spec
 

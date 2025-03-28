@@ -576,7 +576,7 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 
 // ExtractScaleMinMaxAsJSONString returns a JSON string of the scale definition
 // including only min and max fields extracted from the given unstructured object.
-// It returns "null" if the pathToScale is not found.
+// It returns "{}" if the pathToScale is not found.
 func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
@@ -584,7 +584,7 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	}
 
 	if !foundScale {
-		return "null", nil // todo: verify we shouldn't be patching this as "{}"
+		return "{}", nil
 	}
 
 	scaleMinMax := map[string]any{
@@ -604,7 +604,6 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
-		fmt.Printf("deletethis: calling NestedMap returned error %s\n", err.Error())
 		return nil, err
 	}
 
@@ -635,7 +634,7 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 func ScaleDefinitionToPatchString(scaleDefinition *ScaleDefinition) string {
 	var scaleValue string
 	if scaleDefinition == nil {
-		scaleValue = "null"
+		scaleValue = "{}"
 	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
 		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
 	} else if scaleDefinition.Min != nil {
