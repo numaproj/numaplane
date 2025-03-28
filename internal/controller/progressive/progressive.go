@@ -417,6 +417,11 @@ func AssessUpgradingPipelineType(
 		return apiv1.AssessmentResultUnknown, replicasFailureReason, err
 	}
 
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
+		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
+		return apiv1.AssessmentResultFailure, failureReason, nil
+	}
+
 	numaLogger.
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
@@ -438,19 +443,14 @@ func AssessUpgradingPipelineType(
 			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
 				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
 			default:
-				// if analysisRun is a non Completed phase yet, we check if it has exceeded the analysisRunTimeout
+				// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
 				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
-					return apiv1.AssessmentResultFailure, "", nil
+					return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
 				}
 				return apiv1.AssessmentResultUnknown, "", nil
 			}
 		}
 		return apiv1.AssessmentResultSuccess, "", nil
-	}
-
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
-		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
-		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
