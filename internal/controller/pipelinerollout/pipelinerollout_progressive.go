@@ -63,33 +63,35 @@ func (r *PipelineRolloutReconciler) CreateUpgradingChildDefinition(ctx context.C
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, error) {
-	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
 			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 
 		if verticesList == nil {
-			return false, errors.New("the pipeline vertices list is nil, this should not occur")
+			return false, "", errors.New("the pipeline vertices list is nil, this should not occur")
 		}
 
 		areAllVerticesReplicasReady := true
+		var replicasFailureReason string
 		for _, vertex := range verticesList.Items {
-			areVertexReplicasReady, err := progressive.AreVertexReplicasReady(&vertex)
+			areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
 			if err != nil {
-				return false, err
+				return false, "", err
 			}
 
 			if !areVertexReplicasReady {
 				areAllVerticesReplicasReady = false
+				replicasFailureReason = failureReason
 				break
 			}
 		}
 
-		return areAllVerticesReplicasReady, nil
+		return areAllVerticesReplicasReady, replicasFailureReason, nil
 	}
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
@@ -103,11 +105,11 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 				// analysisRun is created the first time the upgrading child is assessed
 				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
 				if err != nil {
-					return apiv1.AssessmentResultUnknown, err
+					return apiv1.AssessmentResultUnknown, "", err
 				}
 				analysisStatus := pipelineRollout.GetAnalysisStatus()
 				if analysisStatus == nil {
-					return apiv1.AssessmentResultUnknown, errors.New("analysisStatus not set")
+					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
 				}
 				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
 				// and start time for its assessment
@@ -116,7 +118,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 				analysisStatus.StartTime = &timeNow
 				pipelineRollout.SetAnalysisStatus(analysisStatus)
 			} else {
-				return apiv1.AssessmentResultUnknown, err
+				return apiv1.AssessmentResultUnknown, "", err
 			}
 		}
 
