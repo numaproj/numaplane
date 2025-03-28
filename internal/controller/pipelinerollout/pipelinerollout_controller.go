@@ -1011,9 +1011,15 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	toCopy := to.DeepCopy()
 	// remove lifecycle.desiredPhase field from comparison to test for equality
 	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
-	numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
+	err := numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
+	if err != nil {
+		return false, err
+	}
 	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
-	numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
+	err = numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
+	if err != nil {
+		return false, err
+	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",

@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
@@ -28,21 +29,21 @@ func StructToStruct(src any, dst any) error {
 // (e.g., int, float32, float64) and treating them as equal if their values are equal.
 func CompareStructNumTypeAgnostic(src, dst any) bool {
 	numberComparer := cmp.Comparer(func(x, y any) bool {
-		vx, _ := toFloat64(x)
-		vy, _ := toFloat64(y)
+		vx, _ := ToFloat64(x)
+		vy, _ := ToFloat64(y)
 		return vx == vy
 	})
 
 	// Apply this custom comparison only to pairs of values where both are numbers
 	filterNumber := cmp.FilterValues(func(x, y any) bool {
-		return isNumber(x) && isNumber(y)
+		return IsNumber(x) && IsNumber(y)
 	}, numberComparer)
 
 	equal := cmp.Equal(src, dst, filterNumber)
 	return equal
 }
 
-func isNumber(value any) bool {
+func IsNumber(value any) bool {
 	v := reflect.TypeOf(value)
 	if v == nil {
 		return false
@@ -58,7 +59,7 @@ func isNumber(value any) bool {
 	}
 }
 
-func toFloat64(value any) (float64, bool) {
+func ToFloat64(value any) (float64, bool) {
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -70,6 +71,24 @@ func toFloat64(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// ToInt64 returns the int64 value, assuming that it can be cast as one
+// Returns boolean for whether it can be cast as one
+func ToInt64(value any) (int64, bool) {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(rv.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		floor := math.Floor(rv.Float())
+		if floor == rv.Float() {
+			return int64(floor), true
+		}
+	}
+	return 0, false
 }
 
 // RemovePaths removes all of the excludedPaths passed in from m, where each excludedPath is a string

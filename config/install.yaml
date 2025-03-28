@@ -1543,6 +1543,19 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleMinMax:
+                        description: OriginalScaleMinMax stores for each vertex, the
+                          original scale min and max values as JSON string
+                        items:
+                          description: VertexScale stores the scale definition for
+                            a given vertex
+                          properties:
+                            scaleMinMax:
+                              type: string
+                            vertexName:
+                              type: string
+                          type: object
+                        type: array
                     required:
                     - name
                     type: object
