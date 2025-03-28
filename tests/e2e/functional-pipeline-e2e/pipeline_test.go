@@ -237,7 +237,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), sourceVertexName,
-			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			sourceVertexScaleTo, sourceVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
 		)
@@ -276,7 +276,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 1), GetInstanceName(pipelineRolloutName, 2), sourceVertexName,
-			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			sourceVertexScaleTo, sourceVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
 		)
@@ -299,7 +299,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should update the child ISBService updating a recreate field", func() {
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 2), GetInstanceName(pipelineRolloutName, 3), sourceVertexName,
-			sourceVertexScaleTo, int64(sourceVertexScaleMin), sourceVertexScaleTo,
+			sourceVertexScaleTo, sourceVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
 		)

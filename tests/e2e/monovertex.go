@@ -373,6 +373,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	})
 
 	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveFieldChanged {
+
 		// Check Progressive status while the assessment is in progress
 
 		VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyProgressive)
@@ -380,17 +381,20 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		// Verify that the MonoVertex is set to scale down
 		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Current,
-			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Initial,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].OriginalScaleMinMax,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].ScaleTo)
 
 		VerifyMonoVertexRolloutProgressiveStatus(name, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.Name,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValuesRestoredToOriginal, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.AssessmentResult, false)
 
+		// Get mvrProgressiveStatus.PromotedMonoVertexStatus to get the Initial value from rollout status
+		mvrProgressiveStatus := GetMonoVertexRolloutProgressiveStatus(name)
+		Expect(mvrProgressiveStatus.PromotedMonoVertexStatus).NotTo(BeNil())
+
 		// Verify that the expected number of promoted MonoVertex pods is running
 		// NOTE: min is set same as max if the original min if greater than scaleTo
 		scaleTo := expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].ScaleTo
-		min := expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Initial
+		min := mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Initial
 		if min > scaleTo {
 			min = scaleTo
 		}
@@ -400,7 +404,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 
 		// Verify that the expected number of upgrading MonoVertex pods is running
 		// Min and max are set to the same value which is the remaining number of pods from the scale down operation on the promoted monovertex: initial - scaleTo
-		diffMinMax := int32(expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Initial - scaleTo)
+		diffMinMax := int32(mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Initial - scaleTo)
 		VerifyVerticesPodsRunning(Namespace, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.Name,
 			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: &diffMinMax, Max: &diffMinMax}}}, ComponentMonoVertex)
 
