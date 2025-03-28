@@ -20,8 +20,8 @@ spec:
       vertices:
         - name: in
           scale: 
-            min: 3
-            max: 5
+            #min: 3
+            #max: 5
             loopbackSeconds: 180
           
           source:

@@ -284,14 +284,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 		if err := patchPipelineVertices(ctx, upgradingPipelineDef, vertices, c); err != nil {
 			return false, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
 		}
-		numaLogger.Debug("Scaling down all vertices to 0 Pods")
-
-		/*TODO: consider replacing the above with new functions:
-		vertices, _, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
-		if err != nil {
-			return false, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
-		}
-		patchPipelineScale(ctx, upgradingPipelineDef, )*/
 	}
 
 	numaLogger.Debug("completed post-failure processing of upgrading pipeline")
@@ -663,7 +655,7 @@ func applyScalePatchesToPipeline(
 		verticesPatch = verticesPatch[0 : len(verticesPatch)-1]
 	}
 	verticesPatch = verticesPatch + "]"
-	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices for success")
+	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices")
 
 	return kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
 }

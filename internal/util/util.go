@@ -73,6 +73,8 @@ func ToFloat64(value any) (float64, bool) {
 	}
 }
 
+// ToInt64 returns the int64 value, assuming that it can be cast as one
+// Returns boolean for whether it can be cast as one
 func ToInt64(value any) (int64, bool) {
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {

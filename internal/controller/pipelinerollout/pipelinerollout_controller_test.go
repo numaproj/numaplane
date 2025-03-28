@@ -481,7 +481,7 @@ var specWithNonEmptyScale = `
 `
 
 // TODO: update to account for Labels/Annotations differences
-func Test_pipelineSpecNeedsUpdating(t *testing.T) {
+func Test_ChildNeedsUpdating(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
