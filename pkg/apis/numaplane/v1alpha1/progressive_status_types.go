@@ -21,6 +21,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type AssessmentResult string
@@ -45,6 +46,8 @@ type UpgradingChildStatus struct {
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 	// FailureReason indicates the reason for the failure
 	FailureReason string `json:"failureReason,omitempty"`
+	// ChildStatus is the full dump of child status object
+	ChildStatus runtime.RawExtension `json:"childStatus,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {
