@@ -445,7 +445,7 @@ func DeletePipelineRollout(name string) {
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
 func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
-	expectedProgressiveStatusInProgress *ExpectedProgressiveStatus, expectedProgressiveStatusOnDone *ExpectedProgressiveStatus,
+	progressiveFieldChanged bool, expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus, expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
 ) {
 
 	By("Updating Pipeline spec in PipelineRollout")
@@ -473,8 +473,9 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	}
 
-	if UpgradeStrategy == config.ProgressiveStrategyID && expectedProgressiveStatusInProgress != nil && expectedProgressiveStatusOnDone != nil {
-		PipelineProgressiveChecks(name, newSpec, expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone)
+	doProgressive := dataLoss || progressiveFieldChanged
+	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
+		PipelineProgressiveChecks(name, newSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
 	}
 
 	// wait for update to reconcile

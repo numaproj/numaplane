@@ -323,8 +323,9 @@ func UpdateISBServiceRollout(
 	verifySpecFunc func(numaflowv1.InterStepBufferServiceSpec) bool,
 	dataLossFieldChanged bool,
 	recreateFieldChanged bool,
-	expectedProgressiveStatusInProgress *ExpectedProgressiveStatus,
-	expectedProgressiveStatusOnDone *ExpectedProgressiveStatus,
+	progressiveFieldChanged bool,
+	expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus,
+	expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -394,7 +395,7 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	if UpgradeStrategy == config.ProgressiveStrategyID && expectedProgressiveStatusInProgress != nil && expectedProgressiveStatusOnDone != nil {
+	if UpgradeStrategy == config.ProgressiveStrategyID && (dataLossRisk || recreateFieldChanged || progressiveFieldChanged) {
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyProgressive)
 
 		// Perform Progressive checks for all pipelines associated to the ISBService
@@ -404,7 +405,7 @@ func UpdateISBServiceRollout(
 			pipelineSpec, err := GetPipelineSpec(pipeline)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone)
+			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
 		}
 	}
 

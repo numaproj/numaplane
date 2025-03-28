@@ -85,7 +85,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		}, nil, nil)
+		}, false, nil, nil)
 
 		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
 	})
@@ -98,7 +98,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		}, nil, nil)
+		}, false, nil, nil)
 	})
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
@@ -109,7 +109,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
-		expectedProgressiveStatusInProgress, expectedProgressiveStatusOnDone := MakeExpectedProgressiveStatus(
+		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
 			monoVertexScaleTo, int64(monoVertexScaleMin), monoVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
@@ -118,7 +118,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, &expectedProgressiveStatusInProgress, &expectedProgressiveStatusOnDone)
+		}, true, &expectedPipelineTypeProgressiveStatusInProgress, &expectedPipelineTypeProgressiveStatusOnDone)
 
 		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
