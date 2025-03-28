@@ -243,7 +243,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 		for _, rolloutInfo := range pipelineRollouts {
 			if !rolloutInfo.PipelineIsFailed {
 				By("Verify that in-progress-strategy gets set to PPND")
-				VerifyInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
+				VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
 				VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
 			}
 		}
@@ -286,7 +286,7 @@ func UpdateNumaflowControllerRollout(originalVersion, newVersion string, pipelin
 	for _, rolloutInfo := range pipelineRollouts {
 		rolloutName := rolloutInfo.PipelineRolloutName
 
-		VerifyInProgressStrategy(rolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(rolloutName, apiv1.UpgradeStrategyNoOp)
 		// don't check that pipeline is running if we expect failed
 		if rolloutInfo.PipelineIsFailed {
 			VerifyPipelineFailed(Namespace, rolloutName)
