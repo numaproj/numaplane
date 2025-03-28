@@ -366,14 +366,11 @@ func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (
 func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) {
 
 	// default timeout is 20 minutes
-	analysisRunTimeout := 1200
+	defaultAnalysisRunTimeout := 1200
 
-	if config.AnalysisRunTimeout != "" {
-		analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
-		if err != nil {
-			return 0, fmt.Errorf("invalid analysisRunTimeout value: %w", err)
-		}
-		return time.Duration(analysisRunTimeout) * time.Second, nil
+	analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
+	if err != nil {
+		return time.Duration(defaultAnalysisRunTimeout), fmt.Errorf("invalid analysisRunTimeout value: %w", err)
 	}
 
 	return time.Duration(analysisRunTimeout) * time.Second, nil

@@ -179,13 +179,16 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 }
 
 func getAnalysisRunTimeout(ctx context.Context) (time.Duration, error) {
+
+	numaLogger := logger.FromContext(ctx)
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
 		return 0, fmt.Errorf("error getting the global config for assessment processing: %w", err)
 	}
 	timeout, err := globalConfig.Progressive.GetAnalysisRunTimeout()
 	if err != nil {
-		return 0, fmt.Errorf("error getting AnalysisRun timeout from global config: %w", err)
+		numaLogger.Errorf(err, "error getting AnalysisRun timeout from global config")
+		return timeout, nil
 	}
 	return timeout, nil
 }
