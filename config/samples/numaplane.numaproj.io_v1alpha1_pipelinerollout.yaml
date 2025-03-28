@@ -19,12 +19,20 @@ spec:
       interStepBufferServiceName: my-isbsvc
       vertices:
         - name: in
+          scale: 
+            #min: 3
+            #max: 5
+            loopbackSeconds: 180
+          
           source:
             # A self data generating source
             generator:
               rpu: 500
               duration: 1s
         - name: cat
+          scale: 
+            min: 3
+            max: 5
           udf:
             builtin:
               name: cat # A built-in UDF which simply cats the message

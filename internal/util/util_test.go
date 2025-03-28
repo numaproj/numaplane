@@ -226,3 +226,93 @@ func TestOptionalString(t *testing.T) {
 	result = OptionalString(10)
 	assert.Equal(t, "", result)
 }
+
+func Test_ToFloat64(t *testing.T) {
+	testCases := []struct {
+		name              string
+		val               any
+		expectedResultVal float64
+		isNumber          bool
+	}{
+		{
+			name:              "integer",
+			val:               int32(5),
+			expectedResultVal: 5,
+			isNumber:          true,
+		},
+		{
+			name:              "float",
+			val:               5.6,
+			expectedResultVal: 5.6,
+			isNumber:          true,
+		},
+		{
+			name:              "string",
+			val:               "5.6",
+			expectedResultVal: 0,
+			isNumber:          false,
+		},
+		{
+			name:              "nil",
+			val:               nil,
+			expectedResultVal: 0,
+			isNumber:          false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, isNum := ToFloat64(tc.val)
+			assert.Equal(t, tc.expectedResultVal, result)
+			assert.Equal(t, tc.isNumber, isNum)
+		})
+	}
+}
+
+func Test_ToInt64(t *testing.T) {
+	testCases := []struct {
+		name              string
+		val               any
+		expectedResultVal int64
+		isInt             bool
+	}{
+		{
+			name:              "integer",
+			val:               int32(5),
+			expectedResultVal: 5,
+			isInt:             true,
+		},
+		{
+			name:              "float - not castable",
+			val:               float64(5.6),
+			expectedResultVal: 0,
+			isInt:             false,
+		},
+		{
+			name:              "float - castable",
+			val:               float64(5.0),
+			expectedResultVal: 5,
+			isInt:             true,
+		},
+		{
+			name:              "string",
+			val:               "5",
+			expectedResultVal: 0,
+			isInt:             false,
+		},
+		{
+			name:              "nil",
+			val:               nil,
+			expectedResultVal: 0,
+			isInt:             false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, isInt := ToInt64(tc.val)
+			assert.Equal(t, tc.expectedResultVal, result)
+			assert.Equal(t, tc.isInt, isInt)
+		})
+	}
+}

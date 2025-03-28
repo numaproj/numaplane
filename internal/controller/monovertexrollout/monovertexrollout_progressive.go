@@ -169,12 +169,12 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	// need to check to see if it's already scaled down before we do this
 	existingSpec := upgradingMonoVertexDef.Object["spec"].(map[string]interface{})
 
-	existingScaleMin, existingScaleMax, err := getScaleValuesFromMonoVertexSpec(existingSpec)
+	existingScale, err := getScaleValuesFromMonoVertexSpec(existingSpec)
 	if err != nil {
 		return true, err
 	}
 
-	if existingScaleMin != nil && *existingScaleMin == 0 && existingScaleMax != nil && *existingScaleMax == 0 {
+	if existingScale != nil && existingScale.Min != nil && *existingScale.Min == 0 && existingScale.Max != nil && *existingScale.Max == 0 {
 		numaLogger.Debug("already scaled down upgrading monovertex to 0, so no need to repeat")
 		return false, nil
 	}
@@ -182,7 +182,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &min, &max, c)
+	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &progressive.ScaleDefinition{Min: &min, Max: &max}, c)
 	if err != nil {
 		return true, err
 	}
@@ -278,7 +278,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	// Update the scale values of the Upgrading Child, but first save the original scale values
-	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return true, fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
@@ -314,35 +314,8 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	return false, nil
 }
 
-func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*int64, *int64, error) {
-	min, foundMin, err := unstructured.NestedInt64(monovertexSpec, "scale", "min")
-	if err != nil {
-		// try again using Float64
-		minFloat64, foundMin, err := unstructured.NestedFloat64(monovertexSpec, "scale", "min")
-		if err != nil {
-			return nil, nil, err
-		} else if foundMin {
-			min = int64(minFloat64)
-		}
-	}
-	max, foundMax, err := unstructured.NestedInt64(monovertexSpec, "scale", "max")
-	if err != nil {
-		// try again using Float64
-		maxFloat64, foundMax, err := unstructured.NestedFloat64(monovertexSpec, "scale", "max")
-		if err != nil {
-			return nil, nil, err
-		} else if foundMax {
-			max = int64(maxFloat64)
-		}
-	}
-	var minPtr, maxPtr *int64
-	if foundMin {
-		minPtr = &min
-	}
-	if foundMax {
-		maxPtr = &max
-	}
-	return minPtr, maxPtr, nil
+func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*progressive.ScaleDefinition, error) {
+	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 
 /*
@@ -454,7 +427,7 @@ func scaleDownPromotedMonoVertex(
 		return true, nil
 	}
 
-	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(promotedMonoVertexDef.Object, []string{"spec", "scale"})
+	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(promotedMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
@@ -479,7 +452,7 @@ func scaleDownPromotedMonoVertex(
 		Initial:             currentPodsCount,
 	}
 
-	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &newMin, &newMax, c); err != nil {
+	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &progressive.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
 	}
 
@@ -560,20 +533,10 @@ Returns:
 func scaleMonoVertex(
 	ctx context.Context,
 	monovertex *unstructured.Unstructured,
-	min *int64,
-	max *int64,
+	scaleDefinition *progressive.ScaleDefinition,
 	c client.Client) error {
 
-	var scaleValue string
-	if min != nil && max != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *min, *max)
-	} else if min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *min)
-	} else if max != nil {
-		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *max)
-	} else {
-		scaleValue = `{"min": null, "max": null}`
-	}
+	scaleValue := progressive.ScaleDefinitionToPatchString(scaleDefinition)
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
