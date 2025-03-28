@@ -313,10 +313,14 @@ func processUpgradingChild(
 
 	switch assessment {
 	case apiv1.AssessmentResultFailure:
-
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
 		childStatus.FailureReason = failureReason
+		rawChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+		if err != nil {
+			return false, 0, err
+		}
+		childStatus.ChildStatus.Raw = rawChildStatus
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
@@ -432,7 +436,7 @@ func AssessUpgradingPipelineType(
 			case argorolloutsv1.AnalysisPhaseSuccessful:
 				return apiv1.AssessmentResultSuccess, "", nil
 			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
-				return apiv1.AssessmentResultFailure, "", nil
+				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
 			default:
 				// if analysisRun is a non Completed phase yet, we check if it has exceeded the analysisRunTimeout
 				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
