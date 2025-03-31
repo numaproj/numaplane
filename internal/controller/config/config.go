@@ -368,6 +368,10 @@ func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) 
 	// default timeout is 20 minutes
 	defaultAnalysisRunTimeout := 1200
 
+	if config.AnalysisRunTimeout == "" {
+		return time.Duration(defaultAnalysisRunTimeout), nil
+	}
+
 	analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
 	if err != nil {
 		return time.Duration(defaultAnalysisRunTimeout), fmt.Errorf("invalid analysisRunTimeout value: %w", err)
