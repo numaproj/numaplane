@@ -397,6 +397,49 @@ func Test_CalculateScaleMinMaxValues(t *testing.T) {
 	}
 }
 
+func Test_getAnalysisRunTimeout(t *testing.T) {
+
+	testCases := []struct {
+		name            string
+		configToTest    string
+		expectedTimeout time.Duration
+		expectedErr     bool
+	}{
+		{
+			name:            "default timeout",
+			configToTest:    "testconfig",
+			expectedTimeout: time.Duration(1200) * time.Second,
+			expectedErr:     false,
+		},
+		{
+			name:            "custom timeout",
+			configToTest:    "testconfig2",
+			expectedTimeout: time.Duration(600) * time.Second,
+			expectedErr:     false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			getwd, err := os.Getwd()
+			assert.Nil(t, err, "Failed to get working directory")
+			configPath := filepath.Join(getwd, "../../../", "tests", "config")
+			configManager := config.GetConfigManagerInstance()
+			err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName(tc.configToTest))
+			assert.NoError(t, err)
+
+			analysisRunTimeout, err := getAnalysisRunTimeout(context.Background())
+			if tc.expectedErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedTimeout, analysisRunTimeout)
+			}
+		})
+	}
+
+}
+
 func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 
 	getwd, err := os.Getwd()
