@@ -369,7 +369,7 @@ func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) 
 	defaultAnalysisRunTimeout := 1200
 
 	if config.AnalysisRunTimeout == "" {
-		return time.Duration(defaultAnalysisRunTimeout), nil
+		return time.Duration(defaultAnalysisRunTimeout) * time.Second, nil
 	}
 
 	analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
