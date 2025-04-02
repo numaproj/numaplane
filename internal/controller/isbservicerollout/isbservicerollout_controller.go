@@ -293,8 +293,8 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
 		}
-		if err = r.applyPodDisruptionBudget(ctx, newISBServiceDef); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", newISBServiceDef.GetName(), err)
+		if err = r.applyPodDisruptionBudget(ctx, existingISBServiceDef); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, UID=%s, err: %v", existingISBServiceDef.GetName(), existingISBServiceDef.GetUID(), err)
 		}
 
 		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
@@ -630,7 +630,7 @@ func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.
 // Apply pod disruption budget for the ISBService
 func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, isbService *unstructured.Unstructured) error {
 	pdb := kubernetes.NewPodDisruptionBudget(isbService.GetName(), isbService.GetNamespace(), 1,
-		[]metav1.OwnerReference{*metav1.NewControllerRef(&metav1.ObjectMeta{Name: isbService.GetName(), Namespace: isbService.GetNamespace()},
+		[]metav1.OwnerReference{*metav1.NewControllerRef(&metav1.ObjectMeta{Name: isbService.GetName(), Namespace: isbService.GetNamespace(), UID: isbService.GetUID()},
 			numaflowv1.ISBGroupVersionKind)},
 	)
 
