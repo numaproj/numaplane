@@ -277,15 +277,31 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
 	}
 
+	err := scaleDownUpgradingMonoVertex(monoVertexRollout, upgradingMonoVertexDef)
+	if err != nil {
+		return true, err
+	}
+
+	numaLogger.Debug("completed pre-upgrade processing of upgrading monovertex")
+
+	return false, nil
+}
+
+// scaleDownUpgradingMonoVertex sets the upgrading MonoVertex's scale definition to the number of Pods
+// that were removed from the promoted MonoVertex
+func scaleDownUpgradingMonoVertex(
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+) error {
 	// Update the scale values of the Upgrading Child, but first save the original scale values
 	originalScaleMinMax, err := progressive.ExtractOriginalScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return true, fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMax
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+		return errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
@@ -300,18 +316,15 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
 		if err != nil {
-			return true, err
+			return err
 		}
 
 		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "max")
 		if err != nil {
-			return true, err
+			return err
 		}
 	}
-
-	numaLogger.Debug("completed pre-upgrade processing of upgrading monovertex")
-
-	return false, nil
+	return nil
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*int64, *int64, error) {
@@ -419,7 +432,7 @@ func scaleDownPromotedMonoVertex(
 		WithValues("promotedMonoVertexNamespace", promotedMonoVertexDef.GetNamespace(), "promotedMonoVertexName", promotedMonoVertexDef.GetName())
 
 	// If the monovertex has been scaled down already, do not perform scaling down operations
-	if promotedMVStatus.AreAllSourceVerticesScaledDown(promotedMonoVertexDef.GetName()) {
+	if promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()) {
 		return false, nil
 	}
 
@@ -448,7 +461,7 @@ func scaleDownPromotedMonoVertex(
 		scaleValuesMap[promotedMonoVertexDef.GetName()] = vertexScaleValues
 
 		promotedMVStatus.ScaleValues = scaleValuesMap
-		promotedMVStatus.MarkAllSourceVerticesScaledDown()
+		promotedMVStatus.MarkAllVerticesScaledDown()
 
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
 		return true, nil
@@ -486,12 +499,12 @@ func scaleDownPromotedMonoVertex(
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
 
 	promotedMVStatus.ScaleValues = scaleValuesMap
-	promotedMVStatus.MarkAllSourceVerticesScaledDown()
+	promotedMVStatus.MarkAllVerticesScaledDown()
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedMVStatus.ScaleValuesRestoredToOriginal = false
 
-	return !promotedMVStatus.AreAllSourceVerticesScaledDown(promotedMonoVertexDef.GetName()), nil
+	return !promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()), nil
 }
 
 /*
@@ -537,7 +550,7 @@ func scalePromotedMonoVertexToOriginalValues(
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef).Debug("patched the promoted monovertex with the original scale configuration")
 
 	promotedMVStatus.ScaleValuesRestoredToOriginal = true
-	promotedMVStatus.AllSourceVerticesScaledDown = false
+	promotedMVStatus.AllVerticesScaledDown = false
 	promotedMVStatus.ScaleValues = nil
 
 	return false, nil

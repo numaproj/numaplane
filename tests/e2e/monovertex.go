@@ -463,7 +463,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			return false
 		}
 
-		return mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.AllSourceVerticesScaledDown &&
+		return mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.AllVerticesScaledDown &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.Name == mvtxNameWithIdx &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
 			mvr.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[mvtxNameWithIdx].Current == expectedCurrent &&

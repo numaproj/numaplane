@@ -142,7 +142,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 /*
 ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted pipeline.
 It performs the following pre-upgrade operations:
-- it ensures that the promoted pipeline source vertices are scaled down before proceeding with a progressive upgrade.
+- it ensures that the promoted pipeline vertices are scaled down before proceeding with a progressive upgrade.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -174,11 +174,11 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// scaleDownPipelineSourceVertices either updates the promoted pipeline to scale down the source vertices
-	// pods or retrieves the currently running pods to update the PromotedPipelineStatus scaleValues.
-	// This serves to make sure that the source vertices pods have been really scaled down before proceeding
+	// scaleDownPipelineVertices retrieves the currently running pods to update the PromotedPipelineStatus scaleValues,
+	// or if already retrieved, updates the promoted pipeline to scale down the vertex pods.
+	// This serves to make sure that the vertex pods have been really scaled down before proceeding
 	// with the progressive upgrade.
-	requeue, err := scaleDownPipelineSourceVertices(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
+	requeue, err := scaleDownPipelineVertices(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -191,7 +191,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 /*
 ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" pipeline has failed.
 It performs the following post-upgrade operations:
-- it restores the promoted pipeline source vertices scale values to the original values retrieved from the rollout status.
+- it restores the promoted pipeline vertices scale values to the original values retrieved from the rollout status.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -224,7 +224,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	requeue, err := scalePipelineSourceVerticesToOriginalValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
+	requeue, err := scalePipelineVerticesToOriginalValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -299,12 +299,10 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// TODO: create and implement updatePipelineVertexDefScale func
-	// CONSIDERATIONS:
-	// - how to scale vertices based on their type (source, sink, UDF)?
-	// - decide if min and max should be set to the same value or different values
-	// for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
-	// 	upgradingPipelineVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+	err := scaleDownUpgradingPipeline(pipelineRollout, upgradingPipelineDef)
+	if err != nil {
+		return true, err
+	}
 
 	// 	err := updatePipelineVertexDefScale(ctx, upgradingPipelineDef, vertexName, &upgradingPipelineVertexScaleTo, &upgradingPipelineVertexScaleTo)
 	// 	if err != nil {
@@ -317,11 +315,25 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	return false, nil
 }
 
+// scaleDownUpgradingPipeline sets the upgrading Pipeline's vertex scale definition to the number of Pods
+// that were removed from the same Vertex of the promoted Pipeline (thus the overall number stays the same)
+func scaleDownUpgradingPipeline(
+	pipelineRollout *apiv1.PipelineRollout,
+	upgradingPipelineDef *unstructured.Unstructured,
+) error {
+
+	//TODO: need to merge main in to get the code which saves the upgrading scale info
+	for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
+		upgradingPipelineVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+
+	}
+}
+
 /*
-scaleDownPipelineSourceVertices scales down the source vertices pods of a pipeline to half of the current count if not already scaled down.
-It checks if all source vertices are already scaled down and skips the operation if true.
+scaleDownPipelineVertices scales down the vertex pods of a pipeline to half of the current count if not already scaled down.
+It checks if all vertices are already scaled down and skips the operation if true.
 The function updates the scale values in the rollout status and adjusts the scale configuration
-of the promoted pipeline definition. It ensures that the scale.min does not exceed the new scale.max.
+of the promoted pipeline definition.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
@@ -330,21 +342,21 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all source vertices have been scaled down.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all vertices have been scaled down.
 - error: an error if any operation fails during the scaling process.
 */
-func scaleDownPipelineSourceVertices(
+func scaleDownPipelineVertices(
 	ctx context.Context,
 	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineSourceVertices").
+	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineVertices").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
-	// If the pipeline source vertices have been scaled down already, do not perform scaling down operations
-	if promotedPipelineStatus.AreAllSourceVerticesScaledDown(promotedPipelineDef.GetName()) {
+	// If the pipeline vertices have been scaled down already, do not perform scaling down operations
+	if promotedPipelineStatus.AreAllVerticesScaledDown(promotedPipelineDef.GetName()) {
 		return false, nil
 	}
 
@@ -363,13 +375,6 @@ func scaleDownPipelineSourceVertices(
 	promotedChildNeedsUpdate := false
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
-			_, foundVertexSource, err := unstructured.NestedMap(vertexAsMap, "source")
-			if err != nil {
-				return true, err
-			}
-			if !foundVertexSource {
-				continue
-			}
 
 			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
@@ -390,7 +395,7 @@ func scaleDownPipelineSourceVertices(
 
 			currentPodsCount := int64(len(podsList.Items))
 
-			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the source vertex")
+			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the vertex")
 
 			// If for the vertex we already set a ScaleTo value, we only need to update the current pods count
 			// to later verify that the pods were actually scaled down.
@@ -422,7 +427,7 @@ func scaleDownPipelineSourceVertices(
 				"newMin", newMin,
 				"newMax", newMax,
 				"originalScaleMinMax", originalScaleMinMax,
-			).Debugf("found %d pod(s) for the source vertex, scaling down to %d", currentPodsCount, newMax)
+			).Debugf("found %d pod(s) for the vertex, scaling down to %d", currentPodsCount, newMax)
 
 			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
 				return true, err
@@ -450,17 +455,17 @@ func scaleDownPipelineSourceVertices(
 	}
 
 	promotedPipelineStatus.ScaleValues = scaleValuesMap
-	promotedPipelineStatus.MarkAllSourceVerticesScaledDown()
+	promotedPipelineStatus.MarkAllVerticesScaledDown()
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = false
 
-	return !promotedPipelineStatus.AreAllSourceVerticesScaledDown(promotedPipelineDef.GetName()), nil
+	return !promotedPipelineStatus.AreAllVerticesScaledDown(promotedPipelineDef.GetName()), nil
 }
 
 /*
-scalePipelineSourceVerticesToOriginalValues scales the source vertices of a pipeline to their original values based on the rollout status.
-This function checks if the pipeline source vertices have already been scaled to the original values. If not, it restores the scale values
+scalePipelineVerticesToOriginalValues scales the vertices of a pipeline to their original values based on the rollout status.
+This function checks if the pipeline vertices have already been scaled to the original values. If not, it restores the scale values
 from the rollout's promoted pipeline status and updates the Kubernetes resource accordingly.
 
 Parameters:
@@ -470,26 +475,26 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all source vertices have been scaled back to the original values.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all vertices have been scaled back to the original values.
 - An error if any issues occur during the scaling process.
 */
-func scalePipelineSourceVerticesToOriginalValues(
+func scalePipelineVerticesToOriginalValues(
 	ctx context.Context,
 	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scalePipelineSourceVerticesToOriginalValues").
+	numaLogger := logger.FromContext(ctx).WithName("scalePipelineVerticesToOriginalValues").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
-	// If all the pipeline source vertices have been scaled back to the original values already, do not restore scaling values again
+	// If all the pipeline vertices have been scaled back to the original values already, do not restore scaling values again
 	if promotedPipelineStatus.AreScaleValuesRestoredToOriginal(promotedPipelineDef.GetName()) {
 		return false, nil
 	}
 
 	if promotedPipelineStatus.ScaleValues == nil {
-		return true, errors.New("unable to restore scale values for the promoted pipeline source vertices because the rollout does not have promotedChildStatus set")
+		return true, errors.New("unable to restore scale values for the promoted pipeline vertices because the rollout does not have promotedChildStatus set")
 	}
 
 	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
@@ -499,13 +504,6 @@ func scalePipelineSourceVerticesToOriginalValues(
 
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
-			_, found, err := unstructured.NestedMap(vertexAsMap, "source")
-			if err != nil {
-				return true, err
-			}
-			if !found {
-				continue
-			}
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
@@ -541,13 +539,13 @@ func scalePipelineSourceVerticesToOriginalValues(
 	}
 
 	if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
-		return true, fmt.Errorf("error scaling the existing promoted pipeline source vertices to original values: %w", err)
+		return true, fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
 	}
 
-	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline source vertices with the original scale configuration")
+	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline vertices with the original scale configuration")
 
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = true
-	promotedPipelineStatus.AllSourceVerticesScaledDown = false
+	promotedPipelineStatus.AllVerticesScaledDown = false
 	promotedPipelineStatus.ScaleValues = nil
 
 	return false, nil

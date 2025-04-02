@@ -245,7 +245,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
+					AllVerticesScaledDown: true,
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
@@ -307,7 +307,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
+					AllVerticesScaledDown: true,
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
@@ -362,8 +362,8 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
-					ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+					AllVerticesScaledDown: true,
+					ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
