@@ -127,7 +127,7 @@ func init() {
 	runningPipelineSpecWithTopologyChange = withInterstepBufferService(pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestISBSvcName)
 }
 
-var yamlHasDesiredPhase = `
+var specHasDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -172,7 +172,7 @@ var yamlHasDesiredPhase = `
 }
 `
 
-var yamlHasDesiredPhaseDifferentUDF = `
+var specHasDesiredPhaseDifferentUDF = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -217,7 +217,7 @@ var yamlHasDesiredPhaseDifferentUDF = `
 }
 `
 
-var yamlHasDesiredPhaseAndOtherLifecycleField = `
+var specHasDesiredPhaseAndOtherLifecycleField = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -263,7 +263,7 @@ var yamlHasDesiredPhaseAndOtherLifecycleField = `
 }
 `
 
-var yamlNoLifecycle = `
+var specNoLifecycle = `
 {
 	  "interStepBufferServiceName": "default",
 	  "vertices": [
@@ -305,7 +305,7 @@ var yamlNoLifecycle = `
 }
 `
 
-var yamlNoDesiredPhase = `
+var specNoDesiredPhase = `
 {
 	  "interStepBufferServiceName": "default",
 	  "lifecycle": {
@@ -349,8 +349,139 @@ var yamlNoDesiredPhase = `
 }
 `
 
+var specNoScale = `
+{
+	  "interStepBufferServiceName": "default",
+	  "vertices": [
+		{
+		  "name": "in",
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var specWithEmptyScale = `
+{
+	  "interStepBufferServiceName": "default",
+	  "vertices": [
+		{
+		  "name": "in",
+	  	  "scale": {},
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
+var specWithNonEmptyScale = `
+{
+	  "interStepBufferServiceName": "default",
+	  "vertices": [
+		{
+		  "name": "in",
+	      "scale": {
+		    "min": 3,
+	        "max": 5
+	      },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ],
+	  "edges": [
+		{
+		  "from": "in",
+		  "to": "cat"
+		},
+		{
+		  "from": "cat",
+		  "to": "out"
+		}
+	  ]
+	
+}
+`
+
 // TODO: update to account for Labels/Annotations differences
-func Test_pipelineSpecNeedsUpdating(t *testing.T) {
+func Test_ChildNeedsUpdating(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -365,36 +496,50 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		specYaml1             string
-		specYaml2             string
+		spec1                 string
+		spec2                 string
 		expectedNeedsUpdating bool
 		expectedError         bool
 	}{
 		{
 			name:                  "Not Equal",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlHasDesiredPhaseDifferentUDF,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhaseDifferentUDF,
 			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 		{
 			name:                  "Not Equal - another lifecycle field",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlHasDesiredPhaseAndOtherLifecycleField,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhaseAndOtherLifecycleField,
 			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just desiredPhase different",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlNoDesiredPhase,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specNoDesiredPhase,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
 			name:                  "Equal - just lifecycle different",
-			specYaml1:             yamlHasDesiredPhase,
-			specYaml2:             yamlNoLifecycle,
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specNoLifecycle,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Equal - just scale different",
+			spec1:                 specNoScale,
+			spec2:                 specWithEmptyScale,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Equal - just scale min/max different",
+			spec1:                 specWithEmptyScale,
+			spec2:                 specWithNonEmptyScale,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
@@ -404,13 +549,13 @@ func Test_pipelineSpecNeedsUpdating(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			obj1 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml1Spec map[string]interface{}
-			err := json.Unmarshal([]byte(tc.specYaml1), &yaml1Spec)
+			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
 			assert.NoError(t, err)
 			obj1.Object["spec"] = yaml1Spec
 
 			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml2Spec map[string]interface{}
-			err = json.Unmarshal([]byte(tc.specYaml2), &yaml2Spec)
+			err = json.Unmarshal([]byte(tc.spec2), &yaml2Spec)
 			assert.NoError(t, err)
 			obj2.Object["spec"] = yaml2Spec
 
@@ -1203,6 +1348,92 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				resultUpgradeState, found := pipeline.Labels[common.LabelKeyUpgradeState]
 				assert.True(t, found)
 				assert.Equal(t, string(expectedPipelineUpgradeState), resultUpgradeState)
+			}
+		})
+	}
+}
+
+func TestGetScalePatchesFromPipelineSpec(t *testing.T) {
+	tests := []struct {
+		name           string
+		pipelineDef    string
+		expectedResult []apiv1.VertexScale
+		expectError    bool
+	}{
+		{
+			name: "Valid pipeline spec with various scale definitions",
+			pipelineDef: `
+{
+	  "vertices": [
+		{
+		  "name": "in",
+		  "scale": {
+			"min": 1,
+			"max": 5
+		  },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "scale": {
+		  },
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ]
+	
+}
+			`,
+			expectedResult: []apiv1.VertexScale{
+				{
+					VertexName:  "in",
+					ScaleMinMax: `{"min": 1, "max": 5}`,
+				},
+				{
+					VertexName:  "cat",
+					ScaleMinMax: `{"min": null, "max": null}`,
+				},
+				{
+					VertexName:  "out",
+					ScaleMinMax: "null",
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var spec map[string]interface{}
+			err := json.Unmarshal([]byte(tt.pipelineDef), &spec)
+			assert.NoError(t, err)
+
+			obj.Object["spec"] = spec
+
+			result, err := getScalePatchesFromPipelineSpec(ctx, obj)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
 			}
 		})
 	}

@@ -36,6 +36,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -585,11 +586,10 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 	one := int64(1)
 	ten := int64(10)
 	tests := []struct {
-		name        string
-		input       map[string]interface{}
-		expectedMin *int64
-		expectedMax *int64
-		expectError bool
+		name                    string
+		input                   map[string]interface{}
+		expectedScaleDefinition *progressive.ScaleDefinition
+		expectError             bool
 	}{
 		{
 			name: "BothValuesPresent",
@@ -600,18 +600,22 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"anotherKey": "anotherValue",
 				},
 			},
-			expectedMin: &one,
-			expectedMax: &ten,
-			expectError: false,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: &ten},
+			expectError:             false,
+		},
+		{
+			name:                    "NoScalePresent",
+			input:                   map[string]interface{}{},
+			expectedScaleDefinition: nil,
+			expectError:             false,
 		},
 		{
 			name: "NoValuesPresent",
 			input: map[string]interface{}{
 				"scale": map[string]interface{}{},
 			},
-			expectedMin: nil,
-			expectedMax: nil,
-			expectError: false,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: nil, Max: nil},
+			expectError:             false,
 		},
 		{
 			name: "OneValuePresent",
@@ -620,33 +624,18 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"min": int64(1),
 				},
 			},
-			expectedMin: &one,
-			expectedMax: nil,
-			expectError: false,
-		},
-		{
-			name: "ErrorAccessingValues",
-			input: map[string]interface{}{
-				"scale": "invalid_structure",
-			},
-			expectedMin: nil,
-			expectedMax: nil,
-			expectError: true,
+			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: nil},
+			expectError:             false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			min, max, err := getScaleValuesFromMonoVertexSpec(tt.input)
+			scaleDefinition, err := getScaleValuesFromMonoVertexSpec(tt.input)
 			if (err != nil) != tt.expectError {
 				t.Errorf("Expected error: %v, got: %v", tt.expectError, err)
 			}
-			if (min == nil && tt.expectedMin != nil) || (min != nil && tt.expectedMin == nil) || (min != nil && *min != *tt.expectedMin) {
-				t.Errorf("Expected min: %v, got: %v", tt.expectedMin, min)
-			}
-			if (max == nil && tt.expectedMax != nil) || (max != nil && tt.expectedMax == nil) || (max != nil && *max != *tt.expectedMax) {
-				t.Errorf("Expected max: %v, got: %v", tt.expectedMax, max)
-			}
+			assert.Equal(t, tt.expectedScaleDefinition, scaleDefinition)
 		})
 	}
 }
@@ -657,42 +646,47 @@ func Test_scaleMonoVertex(t *testing.T) {
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
 
 	ctx := context.Background()
-	two := int32(2)
-	four := int32(4)
-	eight := int32(8)
+	two32 := int32(2)
+	four32 := int32(4)
+	eight32 := int32(8)
+	four64 := int64(4)
+	eight64 := int64(8)
 	tenUint := uint32(10)
 
 	tests := []struct {
-		name          string
-		originalScale numaflowv1.Scale
-		min           *int32
-		max           *int32
-		expectedScale numaflowv1.Scale
+		name               string
+		originalScale      numaflowv1.Scale
+		newScaleDefinition *progressive.ScaleDefinition
+		expectedScale      numaflowv1.Scale
 	}{
 		{
 			name: "newMin,newMax",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: &four,
-			max: &eight,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: &four64,
+				Max: &eight64,
+			},
 			expectedScale: numaflowv1.Scale{
-				Min:             &four,
-				Max:             &eight,
+				Min:             &four32,
+				Max:             &eight32,
 				LookbackSeconds: &tenUint,
 			},
 		},
 		{
 			name: "newNullValues",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: nil,
-			max: nil,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: nil,
+				Max: nil,
+			},
 			expectedScale: numaflowv1.Scale{
 				Min:             nil,
 				Max:             nil,
@@ -702,14 +696,16 @@ func Test_scaleMonoVertex(t *testing.T) {
 		{
 			name: "newMin,nullMax",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: &four,
-			max: nil,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: &four64,
+				Max: nil,
+			},
 			expectedScale: numaflowv1.Scale{
-				Min:             &four,
+				Min:             &four32,
 				Max:             nil,
 				LookbackSeconds: &tenUint,
 			},
@@ -717,16 +713,33 @@ func Test_scaleMonoVertex(t *testing.T) {
 		{
 			name: "newMax,nullMin",
 			originalScale: numaflowv1.Scale{
-				Min:             &two,
-				Max:             &four,
+				Min:             &two32,
+				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			min: nil,
-			max: &eight,
+			newScaleDefinition: &progressive.ScaleDefinition{
+				Min: nil,
+				Max: &eight64,
+			},
 			expectedScale: numaflowv1.Scale{
 				Min:             nil,
-				Max:             &eight,
+				Max:             &eight32,
 				LookbackSeconds: &tenUint,
+			},
+		},
+		{
+			name: "nullScale",
+			originalScale: numaflowv1.Scale{
+				Min:             &two32,
+				Max:             &four32,
+				LookbackSeconds: &tenUint,
+			},
+			newScaleDefinition: nil,
+
+			expectedScale: numaflowv1.Scale{
+				Min:             nil,
+				Max:             nil,
+				LookbackSeconds: nil,
 			},
 		},
 	}
@@ -750,16 +763,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 			err = client.Get(ctx, namespacedName, mvUnstruc)
 			assert.NoError(t, err)
 
-			var minInt64Ptr, maxInt64Ptr *int64
-			if tt.min != nil {
-				minInt64 := int64(*tt.min)
-				minInt64Ptr = &minInt64
-			}
-			if tt.max != nil {
-				maxInt64 := int64(*tt.max)
-				maxInt64Ptr = &maxInt64
-			}
-			err = scaleMonoVertex(ctx, mvUnstruc, minInt64Ptr, maxInt64Ptr, client)
+			err = scaleMonoVertex(ctx, mvUnstruc, tt.newScaleDefinition, client)
 			assert.NoError(t, err)
 
 			// Get result MonoVertex

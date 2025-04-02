@@ -31,6 +31,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -85,6 +86,11 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+}
+
+type ScaleDefinition struct {
+	Min *int64
+	Max *int64
 }
 
 // return:
@@ -170,6 +176,21 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	}
 
 	return upgradingChild, nil
+}
+
+func getAnalysisRunTimeout(ctx context.Context) (time.Duration, error) {
+
+	numaLogger := logger.FromContext(ctx)
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return 0, fmt.Errorf("error getting the global config for assessment processing: %w", err)
+	}
+	timeout, err := globalConfig.Progressive.GetAnalysisRunTimeout()
+	if err != nil {
+		numaLogger.Errorf(err, "error getting AnalysisRun timeout from global config")
+		return timeout, nil
+	}
+	return timeout, nil
 }
 
 func getChildStatusAssessmentSchedule(
@@ -300,10 +321,14 @@ func processUpgradingChild(
 
 	switch assessment {
 	case apiv1.AssessmentResultFailure:
-
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
 		childStatus.FailureReason = failureReason
+		rawChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
+		if err != nil {
+			return false, 0, err
+		}
+		childStatus.ChildStatus.Raw = rawChildStatus
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
@@ -404,6 +429,16 @@ func AssessUpgradingPipelineType(
 		WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
 		Debugf("Upgrading child is in phase %s, conditions healthy=%t, ready replicas match desired replicas=%t", upgradingObjectStatus.Phase, healthyConditions, healthyReplicas)
 
+	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
+		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
+		return apiv1.AssessmentResultFailure, failureReason, nil
+	}
+
+	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+
 	// conduct standard health assessment first
 	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
 		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
@@ -414,17 +449,16 @@ func AssessUpgradingPipelineType(
 			case argorolloutsv1.AnalysisPhaseSuccessful:
 				return apiv1.AssessmentResultSuccess, "", nil
 			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
-				return apiv1.AssessmentResultFailure, "", nil
+				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
 			default:
+				// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
+				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
+					return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+				}
 				return apiv1.AssessmentResultUnknown, "", nil
 			}
 		}
 		return apiv1.AssessmentResultSuccess, "", nil
-	}
-
-	if upgradingObjectStatus.Phase == "Failed" || !healthyConditions || !healthyReplicas {
-		failureReason := CalculateFailureReason(replicasFailureReason, upgradingObjectStatus.Phase, failedCondition)
-		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
@@ -589,11 +623,11 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 	return newMin, newMax, nil
 }
 
-// ExtractOriginalScaleMinMaxAsJSONString returns a JSON string of the scale definition
+// ExtractScaleMinMaxAsJSONString returns a JSON string of the scale definition
 // including only min and max fields extracted from the given unstructured object.
 // It returns "null" if the pathToScale is not found.
-func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
-	originalScaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string) (string, error) {
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
 		return "", err
 	}
@@ -602,17 +636,64 @@ func ExtractOriginalScaleMinMaxAsJSONString(object map[string]any, pathToScale [
 		return "null", nil
 	}
 
-	originalScaleMinMaxOnly := map[string]any{
-		"min": originalScaleDef["min"],
-		"max": originalScaleDef["max"],
+	scaleMinMax := map[string]any{
+		"min": scaleDef["min"],
+		"max": scaleDef["max"],
 	}
 
-	jsonBytes, err := json.Marshal(originalScaleMinMaxOnly)
+	jsonBytes, err := json.Marshal(scaleMinMax)
 	if err != nil {
 		return "", err
 	}
 
 	return string(jsonBytes), nil
+}
+
+func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
+
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !foundScale {
+		return nil, nil
+	}
+	scaleMinMax := ScaleDefinition{}
+	minInterface := scaleDef["min"]
+	maxInterface := scaleDef["max"]
+	if minInterface != nil {
+		min, valid := util.ToInt64(minInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale min %+v of unexpected type", minInterface)
+		}
+		scaleMinMax.Min = &min
+	}
+	if maxInterface != nil {
+		max, valid := util.ToInt64(maxInterface)
+		if !valid {
+			return nil, fmt.Errorf("scale max %+v of unexpected type", maxInterface)
+		}
+		scaleMinMax.Max = &max
+	}
+
+	return &scaleMinMax, nil
+}
+
+func ScaleDefinitionToPatchString(scaleDefinition *ScaleDefinition) string {
+	var scaleValue string
+	if scaleDefinition == nil {
+		scaleValue = "null"
+	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
+	} else if scaleDefinition.Min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
+	} else if scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
+	}
+	return scaleValue
 }
 
 /*

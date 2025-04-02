@@ -137,10 +137,10 @@ func VerifyPipelinePausing(namespace string, pipelineRolloutName string) {
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+func VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
 	CheckEventually("Verifying InProgressStrategy", func() bool {
-		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
-		return rollout.Status.UpgradeInProgress == inProgressStrategy
+		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
 }
 
@@ -371,7 +371,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	})
 
 	VerifyPipelineRolloutDeployed(name)
-	VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
 	if !failed {
 		VerifyPipelineRolloutHealthy(name)
@@ -444,7 +444,9 @@ func DeletePipelineRollout(name string) {
 // expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
-func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool) {
+func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
+	progressiveFieldChanged bool, expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus, expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
+) {
 
 	By("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
@@ -460,15 +462,20 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 		switch expectedFinalPhase {
 		case numaflowv1.PipelinePhasePausing:
-			VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
+			VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 			VerifyPipelinePausing(Namespace, name)
 		case numaflowv1.PipelinePhasePaused:
-			VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
+			VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 			VerifyPipelinePaused(Namespace, name)
 		case numaflowv1.PipelinePhaseFailed:
 			VerifyPipelineFailed(Namespace, name)
 		}
 
+	}
+
+	doProgressive := dataLoss || progressiveFieldChanged
+	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
+		PipelineProgressiveChecks(name, newSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
 	}
 
 	// wait for update to reconcile
@@ -487,9 +494,9 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	}
 	// slow pausing case
 	if expectedFinalPhase == numaflowv1.PipelinePhasePausing && UpgradeStrategy == config.PPNDStrategyID {
-		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
+		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 	} else {
-		VerifyInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 	}
 
 	switch expectedFinalPhase {
@@ -516,9 +523,20 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 			(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing)
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
 
-	VerifyInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 	pipeline, err := GetPipeline(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
+}
+
+func VerifyPipelineDeletion(name string) {
+	CheckEventually(fmt.Sprintf("Verifying that the Pipeline was deleted (%s)", name), func() bool {
+		pipeline, err := dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return errors.IsNotFound(err)
+		}
+
+		return pipeline == nil
+	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, name))
 }

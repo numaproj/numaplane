@@ -107,6 +107,9 @@ type GlobalConfig struct {
 type ProgressiveConfig struct {
 	// schedules for assessing upgrading child (one schedule per Kind)
 	DefaultAssessmentSchedule []DefaultAssessmentSchedule `json:"defaultAssessmentSchedule" mapstructure:"defaultAssessmentSchedule"`
+
+	// timeout duration which AnalysisRuns cannot continue to run after
+	AnalysisRunTimeout string `json:"analysisRunTimeout" mapstructure:"analysisRunTimeout"`
 }
 
 // DefaultAssessmentSchedule defines a default schedule for each Kind
@@ -357,4 +360,23 @@ func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (
 		}
 	}
 	return AssessmentSchedule{}, fmt.Errorf("No Assessment Schedule found for kind %q", kind)
+}
+
+// GetAnalysisRunTimeout parses the GlobalConfig for the analysisRunTimeout string to convert into a time.Duration
+func (config *ProgressiveConfig) GetAnalysisRunTimeout() (time.Duration, error) {
+
+	// default timeout is 20 minutes
+	defaultAnalysisRunTimeout := 1200
+
+	if config.AnalysisRunTimeout == "" {
+		return time.Duration(defaultAnalysisRunTimeout), nil
+	}
+
+	analysisRunTimeout, err := strconv.Atoi(config.AnalysisRunTimeout)
+	if err != nil {
+		return time.Duration(defaultAnalysisRunTimeout), fmt.Errorf("invalid analysisRunTimeout value: %w", err)
+	}
+
+	return time.Duration(analysisRunTimeout) * time.Second, nil
+
 }

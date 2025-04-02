@@ -378,6 +378,11 @@ spec:
                           which the assessment result will be computed
                         format: date-time
                         type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       failureReason:
                         description: FailureReason indicates the reason for the failure
                         type: string
@@ -392,6 +397,19 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      originalScaleMinMax:
+                        description: OriginalScaleMinMax stores for each vertex, the
+                          original scale min and max values as JSON string
+                        items:
+                          description: VertexScale stores the scale definition for
+                            a given vertex
+                          properties:
+                            scaleMinMax:
+                              type: string
+                            vertexName:
+                              type: string
+                          type: object
+                        type: array
                     required:
                     - name
                     type: object
