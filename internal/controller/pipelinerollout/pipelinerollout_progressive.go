@@ -313,6 +313,8 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	if err != nil {
 		return true, err
 	}
+	// TODO: what will happen if we fail to write the Status? We need to make sure to only use the original
+	// upgradingPipelineDef spec and not the one from after we reduce the scale
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
 
 	/*if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
