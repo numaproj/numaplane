@@ -251,6 +251,11 @@ func CreateISBServiceRollout(name string, isbServiceSpec numaflowv1.InterStepBuf
 
 	VerifyISBSvcReady(Namespace, name, 3)
 
+	By("getting new isbservice name")
+	newISBServiceName, err := GetISBServiceName(Namespace, name)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	VerifyPDBForISBService(Namespace, newISBServiceName)
 }
 
 func createISBServiceRolloutSpec(name, namespace string, isbServiceSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
