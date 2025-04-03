@@ -470,8 +470,6 @@ func VerifyPDBForISBService(namespace string, isbServiceName string) {
 	// verify there's a PDB selecting pods for this isbsvc
 	CheckEventually("Verifying PDB", func() bool {
 		pdbList, err := kubeClient.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
-		//By(fmt.Sprintf("labelSelector=%s, items length=%d", labelSelector, len(pdbList.Items)))
-		//fmt.Printf("labelSelector=%s, items length=%d", labelSelector, len(pdbList.Items))
 		if err != nil {
 			return false
 		}

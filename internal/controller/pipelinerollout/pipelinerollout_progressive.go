@@ -338,7 +338,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 }
 
 /*
-ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipelie definition after it's been created
+ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipeline definition after it's been created
 
 Parameters:
   - ctx: the context for managing request-scoped values.
