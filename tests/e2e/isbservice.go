@@ -468,11 +468,19 @@ func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inP
 
 func VerifyPDBForISBService(namespace string, isbServiceName string) {
 	CheckEventually("Verifying PDB", func() bool {
-		componentSelector := "app.kubernetes.io/component=isbsvc"
-		isbsvcSelector := fmt.Sprintf("numaflow.numaproj.io/isbsvc-name=%s", isbServiceName)
-		labelSelector := fmt.Sprintf("%s,%s", componentSelector, isbsvcSelector)
-		pdbList, err := kubeClient.PolicyV1beta1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-		return err == nil && len(pdbList.Items) == 1
+		pdbList, err := kubeClient.PolicyV1beta1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
+		//By(fmt.Sprintf("labelSelector=%s, items length=%d", labelSelector, len(pdbList.Items)))
+		//fmt.Printf("labelSelector=%s, items length=%d", labelSelector, len(pdbList.Items))
+		if err != nil {
+			return false
+		}
+		for _, pdb := range pdbList.Items {
+			if pdb.Spec.Selector.MatchLabels["app.kubernetes.io/component"] == "isbsvc" &&
+				pdb.Spec.Selector.MatchLabels["numaflow.numaproj.io/isbsvc-name"] == isbServiceName {
+				return true
+			}
+		}
+		return false
 
 	}).Should(BeTrue())
 }
