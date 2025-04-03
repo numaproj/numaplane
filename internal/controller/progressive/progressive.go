@@ -52,19 +52,27 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
+	// return true if requeue is needed
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
+	// return true if requeue is needed
 	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
+	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child definition prior to its creation in K8S (just the operations which are unique to this Kind)
+	// return true if requeue is needed
+	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// ProcessUpgradingChildPostUpgrade performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
+	// return true if requeue is needed
+	ProcessUpgradingChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
+
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
+	// return true if requeue is needed
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
-
-	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child prior to the upgrade (just the operations which are unique to this Kind)
-	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -570,7 +578,17 @@ func startUpgradeProcess(
 	}
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	if err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef); err != nil {
+		return newUpgradingChildDef, false, err
+	}
+	requeue, err = controller.ProcessUpgradingChildPostUpgrade(ctx, rolloutObject, newUpgradingChildDef, c)
+	if err != nil {
+		return newUpgradingChildDef, false, err
+	}
+	if requeue {
+		return newUpgradingChildDef, true, nil
+	}
+
 	return newUpgradingChildDef, false, err
 }
 

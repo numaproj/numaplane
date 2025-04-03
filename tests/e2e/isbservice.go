@@ -251,6 +251,11 @@ func CreateISBServiceRollout(name string, isbServiceSpec numaflowv1.InterStepBuf
 
 	VerifyISBSvcReady(Namespace, name, 3)
 
+	By("getting new isbservice name")
+	newISBServiceName, err := GetISBServiceName(Namespace, name)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	VerifyPDBForISBService(Namespace, newISBServiceName)
 }
 
 func createISBServiceRolloutSpec(name, namespace string, isbServiceSpec numaflowv1.InterStepBufferServiceSpec) *apiv1.ISBServiceRollout {
@@ -428,6 +433,8 @@ func UpdateISBServiceRollout(
 	newISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
+	VerifyPDBForISBService(Namespace, newISBServiceName)
+
 	for _, rolloutInfo := range pipelineRollouts {
 
 		rolloutName := rolloutInfo.PipelineRolloutName
@@ -456,5 +463,25 @@ func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inP
 	CheckEventually("Verifying InProgressStrategy", func() bool {
 		isbServiceRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return isbServiceRollout.Status.UpgradeInProgress == inProgressStrategy
+	}).Should(BeTrue())
+}
+
+func VerifyPDBForISBService(namespace string, isbServiceName string) {
+	// verify there's a PDB selecting pods for this isbsvc
+	CheckEventually("Verifying PDB", func() bool {
+		pdbList, err := kubeClient.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+		for _, pdb := range pdbList.Items {
+			By(fmt.Sprintf("found PDB with Match Labels: %+v", pdb.Spec.Selector.MatchLabels))
+			fmt.Printf("found PDB with Match Labels: %+v", pdb.Spec.Selector.MatchLabels)
+			if pdb.Spec.Selector.MatchLabels["app.kubernetes.io/component"] == "isbsvc" &&
+				pdb.Spec.Selector.MatchLabels["numaflow.numaproj.io/isbsvc-name"] == isbServiceName {
+				return true
+			}
+		}
+		return false
+
 	}).Should(BeTrue())
 }
