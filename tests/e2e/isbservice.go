@@ -428,6 +428,8 @@ func UpdateISBServiceRollout(
 	newISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
+	VerifyPDBForISBService(Namespace, newISBServiceName)
+
 	for _, rolloutInfo := range pipelineRollouts {
 
 		rolloutName := rolloutInfo.PipelineRolloutName
@@ -456,5 +458,16 @@ func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inP
 	CheckEventually("Verifying InProgressStrategy", func() bool {
 		isbServiceRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return isbServiceRollout.Status.UpgradeInProgress == inProgressStrategy
+	}).Should(BeTrue())
+}
+
+func VerifyPDBForISBService(namespace string, isbServiceName string) {
+	CheckEventually("Verifying PDB", func() bool {
+		componentSelector := "app.kubernetes.io/component=isbsvc"
+		isbsvcSelector := fmt.Sprintf(`"numaflow.numaproj.io/isbsvc-name"=%s`, isbServiceName)
+		labelSelector := fmt.Sprintf("%s,%s", componentSelector, isbsvcSelector)
+		pdbList, err := kubeClient.PolicyV1beta1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+		return err != nil && len(pdbList.Items) == 1
+
 	}).Should(BeTrue())
 }
