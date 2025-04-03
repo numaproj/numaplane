@@ -299,8 +299,13 @@ func processUpgradingChild(
 	// Otherwise, assess the previous child status.
 	assessment := childStatus.AssessmentResult
 	failureReason := childStatus.FailureReason
+	failureChildStatus := childStatus.ChildStatus.Raw
 	if childStatus.CanAssess() {
 		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
+		if err != nil {
+			return false, 0, err
+		}
+		failureChildStatus, err = json.Marshal(existingUpgradingChildDef.Object["status"])
 		if err != nil {
 			return false, 0, err
 		}
@@ -324,11 +329,7 @@ func processUpgradingChild(
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
 		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
 		childStatus.FailureReason = failureReason
-		rawChildStatus, err := json.Marshal(existingUpgradingChildDef.Object["status"])
-		if err != nil {
-			return false, 0, err
-		}
-		childStatus.ChildStatus.Raw = rawChildStatus
+		childStatus.ChildStatus.Raw = failureChildStatus
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
 		// check if there are any new incoming changes to the desired spec
