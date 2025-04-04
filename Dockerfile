@@ -3,7 +3,7 @@ FROM golang:1.23 as builder
 ARG TARGETOS
 ARG TARGETARCH
 
-WORKDIR /workspace
+WORKDIR /
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
@@ -24,11 +24,19 @@ ENV GOCACHE=/root/.cache/go-build
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN --mount=type=cache,target="/root/.cache/go-build" CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o manager cmd/main.go
+RUN --mount=type=cache,target="/root/.cache/go-build" CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -cover -coverpkg=./... -o manager cmd/main.go
 
-# Use alpine as minimal base image to package the manager binary
-FROM alpine
-WORKDIR /
-COPY --from=builder /workspace/manager .
+RUN mkdir covdatafiles
+ENV GOCOVERDIR=covdatafiles
+RUN go install github.com/onsi/ginkgo/v2/ginkgo
 
 ENTRYPOINT ["/manager"]
+
+## Use alpine as minimal base image to package the manager binary
+#FROM golang:1.23
+#WORKDIR /
+#COPY --from=builder /workspace/manager .
+#RUN mkdir covdatafiles
+#ENV GOCOVERDIR=covdatafiles
+#
+#ENTRYPOINT ["/manager"]
