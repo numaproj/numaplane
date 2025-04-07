@@ -53,7 +53,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 			if apierrors.IsNotFound(err) {
 				// analysisRun is created the first time the upgrading child is assessed
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				ownerRef := *metav1.NewControllerRef(mvtxRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
