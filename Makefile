@@ -10,6 +10,8 @@ VERSION ?= latest
 BASE_VERSION := latest
 IMAGE_NAMESPACE ?= quay.io/numaproj
 IMAGE_FULL_PATH ?= $(IMAGE_NAMESPACE)/$(IMG):$(VERSION)
+DEPLOYMENT_NAME ?= numaplane-controller-manager
+NAMESPACE ?= numaplane-system
 
 BUILD_DATE=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT=$(shell git rev-parse HEAD)
@@ -39,19 +41,32 @@ GCFLAGS="all=-N -l"
 ENVTEST_K8S_VERSION = 1.28.0
 
 TEST_MANIFEST_DIR_DEFAULT ?= tests/manifests/default
+TEST_MANIFEST_DIR_E2E ?= tests/manifests/e2e
 TEST_NOSTRATEGY_MANIFEST_DIR ?= tests/manifests/special-cases/no-strategy
 TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/special-cases/progressive
 
 TEST_MANIFEST_DIR := $(TEST_NOSTRATEGY_MANIFEST_DIR)
 
+ifeq ($(TEST_TYPE), e2e)
+TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E)
+endif
+
 ifeq ($(STRATEGY), pause-and-drain)
-TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_DEFAULT)
+TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E)
 endif
 
 ifeq ($(STRATEGY), progressive)
 TEST_MANIFEST_DIR := $(TEST_PROGRESSIVE_MANIFEST_DIR)
 endif
 
+# Set the Dockerfile path based on the condition
+DOCKERFILE := Dockerfile
+ifeq ($(TEST_TYPE), e2e)
+# Set the Dockerfile path for e2e tests
+DOCKERFILE := tests/e2e/coverage/Dockerfile
+# Set the image version for e2e tests
+VERSION = e2e
+endif
 
 ARGO_ROLLOUTS_PATH ?= https://github.com/argoproj/argo-rollouts/manifests/cluster-install?ref=stable
 
@@ -183,7 +198,7 @@ clean:
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: image
 image: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} .
+	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} -f ${DOCKERFILE} .
 ifdef IMAGE_IMPORT_CMD
 	$(IMAGE_IMPORT_CMD) ${IMAGE_FULL_PATH}
 endif
@@ -230,7 +245,6 @@ start: image prometheus rollouts
 	./hack/numaflow-controller-def-generator/numaflow-controller-def-generator.sh
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
 	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
-
 
 ##@ Build Dependencies
 

@@ -1,0 +1,27 @@
+# This snippet is used to remove the liveness and readiness probes as well as others from deployment, which is required to run the e2e tests.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../default
+
+patches:
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: remove
+        path: /spec/template/spec/containers/0/livenessProbe
+        value: null
+      - op: remove
+        path: /spec/template/spec/containers/0/readinessProbe
+        value: null
+      - op: remove
+        path: /spec/template/spec/containers/0/command
+        value: null
+      - op: remove
+        path: /spec/template/spec/containers/0/args
+        value: null
+    target:
+      kind: Deployment
+      name: numaplane-controller-manager
