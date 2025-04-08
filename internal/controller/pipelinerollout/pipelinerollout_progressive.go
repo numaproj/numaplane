@@ -366,7 +366,7 @@ func createScaledDownUpgradingPipelineDef(
 			// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
 			// autoscaling interfering with the assessment
 			// simplest thing is to set min=max=1
-			upgradingVertexScaleTo := 1
+			upgradingVertexScaleTo = 1
 			numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
 		} else {
 			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
