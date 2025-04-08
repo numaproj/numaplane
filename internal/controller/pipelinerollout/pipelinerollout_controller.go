@@ -1118,7 +1118,9 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 
 		case common.LabelValueProgressiveSuccess:
 			pause = true
-			requireDrain = true // TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
+			// TODO 1: this is not working reliably in Numaflow for Vertices with 0 Pods: https://github.com/numaproj/numaflow/issues/2535
+			// TODO 2: make configurable (https://github.com/numaproj/numaplane/issues/512)
+			//requireDrain = true
 
 		case common.LabelValueProgressiveFailure:
 
