@@ -191,7 +191,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 /*
 ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" pipeline has failed.
 It performs the following post-upgrade operations:
-- it restores the promoted pipeline vertices scale values to the original values retrieved from the rollout status.
+- it restores the promoted pipeline vertices' scale values to the original values retrieved from the rollout status.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -316,20 +316,10 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
 
-	/*if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
-	}*/
-
-	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef, c)
+	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef)
 	if err != nil {
 		return true, err
 	}
-
-	// 	err := updatePipelineVertexDefScale(ctx, upgradingPipelineDef, vertexName, &upgradingPipelineVertexScaleTo, &upgradingPipelineVertexScaleTo)
-	// 	if err != nil {
-	// 		return true, err
-	// 	}
-	// }
 
 	numaLogger.Debug("completed pre-upgrade processing of upgrading pipeline")
 
@@ -342,7 +332,6 @@ func createScaledDownUpgradingPipelineDef(
 	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 	upgradingPipelineDef *unstructured.Unstructured,
-	c client.Client,
 ) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
@@ -355,7 +344,8 @@ func createScaledDownUpgradingPipelineDef(
 		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", upgradingPipelineDef.GetName())
 	}
 
-	// map each vertex name to new min/max
+	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
+	// Vertex on the "promomoted" Pipeline, assuming it exists there
 	vertexScaleDefinitions := make([]VertexScaleDefinition, len(vertexDefinitions))
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
@@ -729,13 +719,13 @@ func applyScaleValuesToPipelineDefinition(
 
 				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Min != nil {
 					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.min' to %d", *scaleDef.scaleDefinition.Min)
-					if unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Min, "scale", "min"); err != nil {
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Min, "scale", "min"); err != nil {
 						return err
 					}
 				}
 				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Max != nil {
 					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.scaleDefinition.Max)
-					if unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Max, "scale", "max"); err != nil {
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Max, "scale", "max"); err != nil {
 						return err
 					}
 				}
@@ -751,8 +741,7 @@ func applyScaleValuesToPipelineDefinition(
 	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
 }
 
-// TODO: should we be updating our pipeline definition when we do the patching or no?
-func applyScaleValuesToLivePipeline(
+/*func applyScaleValuesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
 	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
 	for i, scaleDef := range vertexScaleDefinitions {
@@ -763,8 +752,9 @@ func applyScaleValuesToLivePipeline(
 	}
 
 	return applyScalePatchesToLivePipeline(ctx, pipelineDef, vertexPatches, c)
-}
+}*/
 
+// TODO: should we be updating our pipeline definition when we do the patching or no?
 func applyScalePatchesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScale, c client.Client) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
