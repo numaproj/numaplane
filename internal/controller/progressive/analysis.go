@@ -91,6 +91,7 @@ Parameters:
   - analysis: struct which contains templateRefs to AnalysisTemplates and ClusterAnalysisTemplates and arguments that can be passed
     and override values already specified in the templates
   - existingUpgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - ownerReference: reference to the upgrading child this AnalysisRun is associated with - ensures cleanup
   - client: the client used for interacting with the Kubernetes API.
 
 Returns:
@@ -124,7 +125,7 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 		return err
 	}
 
-	// set ownerReference to guarantee AnalysisRun deletion when rollout is cleaned up
+	// set ownerReference to guarantee AnalysisRun deletion when owner is cleaned up
 	analysisRun.SetOwnerReferences([]metav1.OwnerReference{ownerReference})
 	if err = client.Create(ctx, analysisRun); err != nil {
 		return err
