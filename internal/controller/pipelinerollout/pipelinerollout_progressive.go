@@ -308,20 +308,19 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-upgrade", rolloutObject)
 	}
 
-	// save the current scale definitions from the upgrading Pipeline to our Status
+	// save the current scale definitions from the upgrading Pipeline to our Status so we can use them when we scale it back up after success
 	scalePatchStrings, err := getScalePatchesFromPipelineSpec(ctx, upgradingPipelineDef)
 	if err != nil {
 		return true, err
 	}
-	// TODO: what will happen if we fail to write the Status? We need to make sure to only use the original
-	// upgradingPipelineDef spec and not the one from after we reduce the scale
+
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
 
 	/*if pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}*/
 
-	err = scaleDownUpgradingPipeline(pipelineRollout, upgradingPipelineDef)
+	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -337,25 +336,45 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	return false, nil
 }
 
-// scaleDownUpgradingPipeline sets the upgrading Pipeline's vertex scale definition to the number of Pods
+// createScaledDownUpgradingPipelineDef sets the upgrading Pipeline's vertex scale definition to the number of Pods
 // that were removed from the same Vertex of the promoted Pipeline (thus the overall number stays the same)
-func scaleDownUpgradingPipeline(
+func createScaledDownUpgradingPipelineDef(
+	ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
 	upgradingPipelineDef *unstructured.Unstructured,
+	c client.Client,
 ) error {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
+	// map each vertex name to new min/max
+	vertexScaleDefinitions := make([]VertexScaleDefinition, len(pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues))
+	count := 0
 	for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
-		upgradingPipelineVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+		upgradingVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 
+		vertexScaleDefinitions[count] = VertexScaleDefinition{
+			vertexName: vertexName,
+			scaleDefinition: &progressive.ScaleDefinition{
+				Min: &upgradingVertexScaleTo,
+				Max: &upgradingVertexScaleTo,
+			},
+		}
+
+		numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max= %d", upgradingVertexScaleTo)
+		count++
 	}
+
+	// apply the scale values for each vertex to the new min/max
+	return applyScaleValuesToPipeline(ctx, upgradingPipelineDef, vertexScaleDefinitions, c)
 }
+
 func scalePipelineVerticesToZero(
 	ctx context.Context,
 	pipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
 
-	numaLogger := logger.FromContext(ctx).WithValues("pipeline")
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
 	// scale down every Vertex to 0 Pods
 	// for each Vertex: first check to see if it's already scaled down
@@ -640,10 +659,18 @@ func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstru
 	return nil
 }
 
-// TODO: add this
-/*func applyScaleValuesToPipeline(ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition) error {
+func applyScaleValuesToPipeline(
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
+	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexPatches[i] = apiv1.VertexScale{
+			VertexName:  scaleDef.vertexName,
+			ScaleMinMax: progressive.ScaleDefinitionToPatchString(scaleDef.scaleDefinition),
+		}
+	}
 
-}*/
+	return applyScalePatchesToPipeline(ctx, pipelineDef, vertexPatches, c)
+}
 
 func applyScalePatchesToPipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScale, c client.Client) error {

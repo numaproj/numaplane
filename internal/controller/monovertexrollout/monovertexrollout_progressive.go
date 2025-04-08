@@ -62,7 +62,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
 				}
 				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
-				// and start time for it's assessment
+				// and start time for its assessment
 				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 				timeNow := metav1.NewTime(time.Now())
 				analysisStatus.StartTime = &timeNow

@@ -129,7 +129,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			return false
 		}
 
-		return mvrProgressiveStatus.PromotedMonoVertexStatus.AllSourceVerticesScaledDown &&
+		return mvrProgressiveStatus.PromotedMonoVertexStatus.AllVerticesScaledDown &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].Current == expectedCurrent &&
@@ -160,7 +160,7 @@ func VerifyPipelineRolloutScaledDownForProgressive(
 			return false
 		}
 
-		return prProgressiveStatus.PromotedPipelineStatus.AllSourceVerticesScaledDown &&
+		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
 			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedName &&
 			prProgressiveStatus.PromotedPipelineStatus.ScaleValues != nil &&
 			prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].Current == expectedCurrent &&
