@@ -247,7 +247,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 }
 
 /*
-ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading monovertex.
+ProcessUpgradingChildPreUpgrade handles the processing of an upgrading monovertex definition before it's been created
 It performs the following pre-upgrade operations:
 - it uses the promoted rollout status scale values to calculate the upgrading monovertex scale min and max.
 
@@ -325,6 +325,28 @@ func scaleDownUpgradingMonoVertex(
 		}
 	}
 	return nil
+}
+
+/*
+ProcessUpgradingChildPostUpgrade handles the processing of an upgrading monovertex definition after it's been created
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingMonoVertexDef: the definition of the upgrading monovertex as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*progressive.ScaleDefinition, error) {

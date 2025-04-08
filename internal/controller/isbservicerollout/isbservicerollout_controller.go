@@ -266,6 +266,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
 					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
 				}
+				if err = r.applyPodDisruptionBudget(ctx, newISBServiceDef); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", newISBServiceDef.GetName(), err)
+				}
 
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
@@ -290,16 +293,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error getting ISBService: %v", err)
 		}
+		if err = r.applyPodDisruptionBudget(ctx, existingISBServiceDef); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, UID=%s, err: %v", existingISBServiceDef.GetName(), existingISBServiceDef.GetUID(), err)
+		}
 
 		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 		requeueDelay, err = r.processExistingISBService(ctx, isbServiceRollout, existingISBServiceDef, newISBServiceDef, syncStartTime)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error processing existing ISBService: %v", err)
 		}
-	}
-
-	if err = r.applyPodDisruptionBudget(ctx, isbServiceRollout); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBServiceRollout %s, err: %v", isbServiceRollout.Name, err)
 	}
 
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
@@ -626,9 +628,10 @@ func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.
 }
 
 // Apply pod disruption budget for the ISBService
-func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) error {
-	pdb := kubernetes.NewPodDisruptionBudget(isbServiceRollout.Name, isbServiceRollout.Namespace, 1,
-		[]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)},
+func (r *ISBServiceRolloutReconciler) applyPodDisruptionBudget(ctx context.Context, isbService *unstructured.Unstructured) error {
+	pdb := kubernetes.NewPodDisruptionBudget(isbService.GetName(), isbService.GetNamespace(), 1,
+		[]metav1.OwnerReference{*metav1.NewControllerRef(&metav1.ObjectMeta{Name: isbService.GetName(), Namespace: isbService.GetNamespace(), UID: isbService.GetUID()},
+			numaflowv1.ISBGroupVersionKind)},
 	)
 
 	// Create the pdb only if it doesn't exist

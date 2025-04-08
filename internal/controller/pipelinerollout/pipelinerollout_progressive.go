@@ -278,7 +278,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 }
 
 /*
-ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading pipeline.
+ProcessUpgradingChildPreUpgrade handles the processing of an upgrading pipeline before it's been created
 It performs the following pre-upgrade operations:
 - it uses the promoted rollout status scale values to calculate the upgrading pipeline scale min and max for each vertex.
 
@@ -439,8 +439,31 @@ func scalePipelineVerticesToZero(
 }
 
 /*
-scaleDownPipelineVertices scales down the vertex pods of a pipeline to half of the current count if not already scaled down.
+ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipeline definition after it's been created
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingMonoVertexDef: the definition of the upgrading monovertex as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingPipelineDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
+}
+
+/*
+scaleDownPipelineertices scales down the vertices pods of a pipeline to half of the current count if not already scaled down.
 It checks if all vertices are already scaled down and skips the operation if true.
+
 The function updates the scale values in the rollout status and adjusts the scale configuration
 of the promoted pipeline definition.
 
