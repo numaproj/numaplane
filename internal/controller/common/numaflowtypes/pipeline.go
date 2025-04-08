@@ -34,10 +34,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// PipelineSpec keeps track of minimum number of fields we need to know about
+// PipelineSpec keeps track of minimum number of fields we need to know about in Numaflow's PipelineSpec, which are presumed not to change from version to version
 type PipelineSpec struct {
-	InterStepBufferServiceName string    `json:"interStepBufferServiceName"`
-	Lifecycle                  Lifecycle `json:"lifecycle,omitempty"`
+	InterStepBufferServiceName string           `json:"interStepBufferServiceName"`
+	Lifecycle                  Lifecycle        `json:"lifecycle,omitempty"`
+	Vertices                   []AbstractVertex `json:"vertices,omitempty"`
+}
+
+// AbstractVertex keeps track of minimum number of fields we need to know about in Numaflow's AbstractVertex, which are presumed not to change from version to version
+type AbstractVertex struct {
+	Name  string `json:"name"`
+	Scale Scale  `json:"scale,omitempty"`
+}
+
+// Scale keeps track of minimum number of fields we need to know about in Numaflow's Scale struct, which are presumed not to change from version to version
+type Scale struct {
+	// Minimum replicas.
+	Min *int32 `json:"min,omitempty"`
+	// Maximum replicas.
+	Max *int32 `json:"max,omitempty"`
 }
 
 func (pipeline PipelineSpec) GetISBSvcName() string {
@@ -54,6 +69,7 @@ type Lifecycle struct {
 	DesiredPhase string `json:"desiredPhase,omitempty"`
 }
 
+// PipelineStatus keeps track of minimum number of fields we need to know about in Numaflow's PipelineStatus, which are presumed not to change from version to version
 type PipelineStatus struct {
 	Phase              numaflowv1.PipelinePhase `json:"phase,omitempty"`
 	Conditions         []metav1.Condition       `json:"conditions,omitempty"`

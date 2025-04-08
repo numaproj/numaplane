@@ -274,7 +274,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
 	}
 
-	return applyScalePatchesToPipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
+	return applyScalePatchesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
 }
 
 /*
@@ -346,13 +346,35 @@ func createScaledDownUpgradingPipelineDef(
 ) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
+	// get the current Vertices definition
+	vertexDefinitions, exists, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting spec.vertices from pipeline %s: %s", upgradingPipelineDef.GetName(), err.Error())
+	}
+	if !exists {
+		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", upgradingPipelineDef.GetName())
+	}
+
 	// map each vertex name to new min/max
 	vertexScaleDefinitions := make([]VertexScaleDefinition, len(pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues))
-	count := 0
-	for vertexName, scaleValue := range pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues {
-		upgradingVertexScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+	for index, vertex := range vertexDefinitions {
+		vertexAsMap := vertex.(map[string]interface{})
+		vertexName := vertexAsMap["name"].(string)
+		scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
+		var upgradingVertexScaleTo int64
+		if !vertexFound {
+			// this must be a new vertex: we still need to set min=max so we will effectively be able to perform resource health check for readyReplicas without
+			// autoscaling interfering with the assessment
+			// simplest thing is to set min=max=1
+			upgradingVertexScaleTo := 1
+			numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+		} else {
+			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
+			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
+			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
+		}
 
-		vertexScaleDefinitions[count] = VertexScaleDefinition{
+		vertexScaleDefinitions[index] = VertexScaleDefinition{
 			vertexName: vertexName,
 			scaleDefinition: &progressive.ScaleDefinition{
 				Min: &upgradingVertexScaleTo,
@@ -360,12 +382,10 @@ func createScaledDownUpgradingPipelineDef(
 			},
 		}
 
-		numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max= %d", upgradingVertexScaleTo)
-		count++
 	}
 
 	// apply the scale values for each vertex to the new min/max
-	return applyScaleValuesToPipeline(ctx, upgradingPipelineDef, vertexScaleDefinitions, c)
+	return applyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
 }
 
 func scalePipelineVerticesToZero(
@@ -659,7 +679,57 @@ func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstru
 	return nil
 }
 
-func applyScaleValuesToPipeline(
+func applyScaleValuesToPipelineDefinition(
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	// get the current Vertices definition
+	vertexDefinitions, exists, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting spec.vertices from pipeline %s: %s", pipelineDef.GetName(), err.Error())
+	}
+	if !exists {
+		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", pipelineDef.GetName())
+	}
+
+	for _, scaleDef := range vertexScaleDefinitions {
+		vertexName := scaleDef.vertexName
+		// set the scale min/max for the vertex
+		// find this Vertex and update it
+
+		foundVertexInExisting := false
+		for index, vertex := range vertexDefinitions {
+			vertexAsMap := vertex.(map[string]interface{})
+			if vertexAsMap["name"] == vertexName {
+				foundVertexInExisting = true
+
+				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Min != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.min' to %d", *scaleDef.scaleDefinition.Min)
+					if unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Min, "scale", "min"); err != nil {
+						return err
+					}
+				}
+				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Max != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.scaleDefinition.Max)
+					if unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Max, "scale", "max"); err != nil {
+						return err
+					}
+				}
+				vertexDefinitions[index] = vertexAsMap
+			}
+		}
+		if !foundVertexInExisting {
+			numaLogger.WithValues("vertex", vertexName).Warnf("didn't find vertex in pipeline")
+		}
+	}
+
+	// now add back the vertex slice into the pipeline
+	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
+}
+
+// TODO: should we be updating our pipeline definition when we do the patching or no?
+func applyScaleValuesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
 	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
 	for i, scaleDef := range vertexScaleDefinitions {
@@ -669,10 +739,10 @@ func applyScaleValuesToPipeline(
 		}
 	}
 
-	return applyScalePatchesToPipeline(ctx, pipelineDef, vertexPatches, c)
+	return applyScalePatchesToLivePipeline(ctx, pipelineDef, vertexPatches, c)
 }
 
-func applyScalePatchesToPipeline(
+func applyScalePatchesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScale, c client.Client) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
