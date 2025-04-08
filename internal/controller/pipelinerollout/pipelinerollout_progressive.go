@@ -356,7 +356,7 @@ func createScaledDownUpgradingPipelineDef(
 	}
 
 	// map each vertex name to new min/max
-	vertexScaleDefinitions := make([]VertexScaleDefinition, len(pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues))
+	vertexScaleDefinitions := make([]VertexScaleDefinition, len(vertexDefinitions))
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
 		vertexName := vertexAsMap["name"].(string)
