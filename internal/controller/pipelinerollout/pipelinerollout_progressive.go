@@ -183,7 +183,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, err
 	}
 
-	numaLogger.Debug("completed pre-upgrade processing of promoted pipeline")
+	numaLogger.Debugf("completed pre-upgrade processing of promoted pipeline, requeue=%t", requeue)
 
 	return requeue, nil
 }

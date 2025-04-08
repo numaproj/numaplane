@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	"time"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -130,6 +131,7 @@ func (ucs *UpgradingChildStatus) IsFailed() bool {
 
 // AreAllVerticesScaledDown checks if all vertices have been scaled down for the named child.
 func (pcs *PromotedPipelineTypeStatus) AreAllVerticesScaledDown(name string) bool {
+	fmt.Printf("deletethis: pcs.Name=%q, pcs.AllVerticesScaledDown=%t\n", pcs.Name, pcs.AllVerticesScaledDown)
 	return pcs != nil && pcs.Name == name && pcs.AllVerticesScaledDown
 }
 

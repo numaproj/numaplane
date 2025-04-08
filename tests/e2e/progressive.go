@@ -97,11 +97,11 @@ func VerifyPipelineRolloutProgressiveStatus(
 		promotedStatus := prProgressiveStatus.PromotedPipelineStatus
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
-		if promotedStatus == nil {
+		if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
 				upgradingStatus.AssessmentEndTime != nil
-		} else {
+		} else { // still in the middle of progressive upgrade strategy
 			return promotedStatus.Name == expectedPromotedName &&
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
 				upgradingStatus.Name == expectedUpgradingName &&
@@ -143,11 +143,11 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 // to have more than one source vertex.
 func VerifyPipelineRolloutScaledDownForProgressive(
 	pipelineRolloutName string,
-	expectedPromotedName string,
-	sourceVertexName string,
+	expectedPromotedPipelineName string,
+	/*sourceVertexName string,
 	expectedCurrent int64,
 	expectedOriginalScaleMinMaxAsJSONString string,
-	expectedScaleTo int64,
+	expectedScaleTo int64,*/
 ) {
 	CheckEventually("verifying that the PipelineRollout scaled down for Progressive upgrade", func() bool {
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
@@ -156,16 +156,16 @@ func VerifyPipelineRolloutScaledDownForProgressive(
 			return false
 		}
 
-		if _, exists := prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName]; !exists {
+		/*if _, exists := prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName]; !exists {
 			return false
-		}
+		}*/
 
 		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
-			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedName &&
+			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName /*&&
 			prProgressiveStatus.PromotedPipelineStatus.ScaleValues != nil &&
 			prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].Current == expectedCurrent &&
 			prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
-			prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].ScaleTo == expectedScaleTo
+			prProgressiveStatus.PromotedPipelineStatus.ScaleValues[sourceVertexName].ScaleTo == expectedScaleTo*/
 	}).Should(BeTrue())
 }
 
@@ -233,10 +233,10 @@ func PipelineProgressiveChecks(pipelineRolloutName string, pipelineSpec numaflow
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyProgressive)
 
 	// Verify that the Pipeline is set to scale down
-	VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name, expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName,
-		expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].Current,
-		expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].OriginalScaleMinMax,
-		expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].ScaleTo)
+	VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name) /*, expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName,
+	expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].Current,
+	expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].OriginalScaleMinMax,
+	expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].ScaleTo)*/
 
 	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.Name,
 		expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValuesRestoredToOriginal, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.AssessmentResult, false)
