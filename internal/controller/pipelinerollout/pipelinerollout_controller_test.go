@@ -38,6 +38,7 @@ import (
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/metrics"
@@ -1456,4 +1457,175 @@ func TestGetScalePatchesFromPipelineSpec(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
+	one := int64(1)
+	five := int64(5)
+	tests := []struct {
+		name                      string
+		pipelineDef               string
+		vertexScaleDefinitions    []VertexScaleDefinition
+		expectError               bool
+		expectedResultPipelineDef string
+	}{
+		{
+			name: "various scale definitions",
+			pipelineDef: `
+{
+	  "vertices": [
+		{
+		  "name": "in",
+		  "scale": {
+			"min": 1,
+			"max": 5
+		  },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "cat",
+		  "scale": {
+		  },
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "cat-2",
+		  "udf": {
+			"builtin": {
+			  "name": "cat"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ]
+	
+}
+	  `,
+			vertexScaleDefinitions: []VertexScaleDefinition{
+				{
+					vertexName: "in",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: nil,
+						Max: nil,
+					},
+				},
+				{
+					vertexName: "cat",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: nil,
+						Max: &five,
+					},
+				},
+				{
+					vertexName: "cat-2",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: &one,
+						Max: nil,
+					},
+				},
+				{
+					vertexName: "out",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: &one,
+						Max: &five,
+					},
+				},
+			},
+			expectedResultPipelineDef: `
+	  
+{
+	  "vertices": [
+					{
+					  "name": "in",
+					  "scale": {
+					  },
+					  "source": {
+						"generator": {
+						  "rpu": 5,
+						  "duration": "1s"
+						}
+					  }
+					},
+					{
+					  "name": "cat",
+					  "scale": {
+						"max": 5
+					  },
+					  "udf": {
+						"builtin": {
+						  "name": "cat"
+						}
+					  }
+					},
+					{
+					  "name": "cat-2",
+					  "scale": {
+						"min": 1
+					  },
+					  "udf": {
+						"builtin": {
+						  "name": "cat"
+						}
+					  }
+					},
+					{
+					  "name": "out",
+					  "scale": {
+						"min": 1,
+						"max": 5
+					  },
+					  "sink": {
+						"log": {}
+					  }
+					}
+	  ]
+	
+}
+	  `,
+		},
+		/*{
+			name: "invalid vertex names",
+		},*/
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var spec map[string]interface{}
+			err := json.Unmarshal([]byte(tt.pipelineDef), &spec)
+			assert.NoError(t, err)
+
+			obj.Object["spec"] = spec
+
+			err = applyScaleValuesToPipelineDefinition(ctx, obj, tt.vertexScaleDefinitions)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				expectedPipelineSpecMap := make(map[string]interface{})
+				err := json.Unmarshal([]byte(tt.expectedResultPipelineDef), &expectedPipelineSpecMap)
+				assert.NoError(t, err)
+				//assert.Equal(t, expectedPipelineSpecMap, obj.Object["spec"])
+				assert.True(t, util.CompareStructNumTypeAgnostic(expectedPipelineSpecMap, obj.Object["spec"]))
+			}
+		})
+	}
+
 }
