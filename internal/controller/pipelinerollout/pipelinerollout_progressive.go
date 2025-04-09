@@ -722,12 +722,16 @@ func applyScaleValuesToPipelineDefinition(
 					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Min, "scale", "min"); err != nil {
 						return err
 					}
+				} else {
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
 				}
 				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Max != nil {
 					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.scaleDefinition.Max)
 					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Max, "scale", "max"); err != nil {
 						return err
 					}
+				} else {
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
 				}
 				vertexDefinitions[index] = vertexAsMap
 			}
