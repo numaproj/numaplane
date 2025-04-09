@@ -1000,16 +1000,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     1,
 			initialInProgressStrategy:   nil,
 			initialUpgradingChildStatus: nil,
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
+			initialPromotedChildStatus:  nil,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:        apiv1.PhasePending,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
@@ -1059,6 +1052,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
 						AssessmentResult:    apiv1.AssessmentResultSuccess,
 					},
+				},
+				OriginalScaleMinMax: []apiv1.VertexScale{
+					{VertexName: "in", ScaleMinMax: "null"},
+					{VertexName: "cat", ScaleMinMax: "null"},
+					{VertexName: "cat-2", ScaleMinMax: "null"},
+					{VertexName: "out", ScaleMinMax: "null"},
 				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
@@ -1121,6 +1120,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 						AssessmentResult:    apiv1.AssessmentResultFailure,
 					},
 				},
+				OriginalScaleMinMax: []apiv1.VertexScale{
+					{VertexName: "in", ScaleMinMax: "null"},
+					{VertexName: "cat", ScaleMinMax: "null"},
+					{VertexName: "cat-2", ScaleMinMax: "null"},
+					{VertexName: "out", ScaleMinMax: "null"},
+				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
@@ -1128,7 +1133,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 					},
 					AllVerticesScaledDown: true,
-					ScaleValues:           map[string]apiv1.ScaleValues{"in": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+					ScaleValues: map[string]apiv1.ScaleValues{
+						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+					},
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
@@ -1183,6 +1192,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 						AssessmentResult:    apiv1.AssessmentResultFailure,
 					},
 				},
+				OriginalScaleMinMax: []apiv1.VertexScale{
+					{VertexName: "in", ScaleMinMax: "null"},
+					{VertexName: "cat", ScaleMinMax: "null"},
+					{VertexName: "cat-2", ScaleMinMax: "null"},
+					{VertexName: "out", ScaleMinMax: "null"},
+				},
 			},
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
@@ -1190,7 +1205,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 					},
 					AllVerticesScaledDown: true,
-					ScaleValues:           map[string]apiv1.ScaleValues{"in": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+					ScaleValues: map[string]apiv1.ScaleValues{
+						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+					},
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
