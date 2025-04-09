@@ -1127,8 +1127,13 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	}
 
 	if requireDrain {
-		if err = r.ensurePipelineIsDrainable(ctx, pipeline); err != nil {
+		modified, err := r.ensurePipelineIsDrainable(ctx, pipeline)
+		if err != nil {
 			return false, err
+		}
+		if modified {
+			// come back later
+			return false, nil
 		}
 	}
 
@@ -1236,16 +1241,18 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 // In order to be "drainable", a Pipeline must not have any Vertices other than Source Vertex which have min=max=0,
 // since in order to drain, we need to be able to process messages from source through sink.
 // If it does have min=max=0, we need to patch it
-func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Context, pipeline *unstructured.Unstructured) error {
+// return whether a modification was made to the pipeline
+func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipeline.GetName())
 
 	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
 	if err != nil {
-		return err
+		return false, err
 	}
 	modified := false
 	for i, vertexScaleDef := range vertexScaleDefinitions {
 		if vertexScaleDef.scaleDefinition.Max != nil && *vertexScaleDef.scaleDefinition.Max == 0 {
+			// TODO: ideally we would only do this for non-source vertices; effect is that we briefly resume the Source but then take it back down to 0 Pods during the pause
 			numaLogger.WithValues("vertex", vertexScaleDef.vertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
 			one := int64(1)
 			vertexScaleDef.scaleDefinition.Min = &one
@@ -1256,10 +1263,10 @@ func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Contex
 	}
 	if modified {
 		if err = applyScaleValuesToLivePipeline(ctx, pipeline, vertexScaleDefinitions, r.client); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return modified, nil
 }
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {
