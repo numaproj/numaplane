@@ -1107,7 +1107,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
-		numaLogger.Error(errors.New("Should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
+		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
 			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
 	}
 	pause := false
@@ -1118,12 +1118,17 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 
 		case common.LabelValueProgressiveSuccess:
 			pause = true
-			// TODO 1: this is not working reliably in Numaflow for Vertices with 0 Pods which is why it's commented out: https://github.com/numaproj/numaflow/issues/2535
-			// TODO 2: make configurable (https://github.com/numaproj/numaplane/issues/512)
-			//requireDrain = true
+			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
+			requireDrain = true
 
 		case common.LabelValueProgressiveFailure:
+			// this is the case of a previously failed "upgrading" pipeline which was replaced with a new one
+		}
+	}
 
+	if requireDrain {
+		if err = r.ensurePipelineIsDrainable(ctx, pipeline); err != nil {
+			return false, err
 		}
 	}
 
@@ -1226,6 +1231,35 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	}
 
 	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+}
+
+// In order to be "drainable", a Pipeline must not have any Vertices other than Source Vertex which have min=max=0,
+// since in order to drain, we need to be able to process messages from source through sink.
+// If it does have min=max=0, we need to patch it
+func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Context, pipeline *unstructured.Unstructured) error {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipeline.GetName())
+
+	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+	modified := false
+	for i, vertexScaleDef := range vertexScaleDefinitions {
+		if vertexScaleDef.scaleDefinition.Max != nil && *vertexScaleDef.scaleDefinition.Max == 0 {
+			numaLogger.WithValues("vertex", vertexScaleDef.vertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
+			one := int64(1)
+			vertexScaleDef.scaleDefinition.Min = &one
+			vertexScaleDef.scaleDefinition.Max = &one
+			vertexScaleDefinitions[i] = vertexScaleDef
+			modified = true
+		}
+	}
+	if modified {
+		if err = applyScaleValuesToLivePipeline(ctx, pipeline, vertexScaleDefinitions, r.client); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {

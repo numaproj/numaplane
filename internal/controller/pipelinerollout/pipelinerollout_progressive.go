@@ -741,8 +741,7 @@ func applyScaleValuesToPipelineDefinition(
 	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
 }
 
-// TODO: if we unit test this one, then we can put this back in
-/*func applyScaleValuesToLivePipeline(
+func applyScaleValuesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
 	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
 	for i, scaleDef := range vertexScaleDefinitions {
@@ -753,7 +752,7 @@ func applyScaleValuesToPipelineDefinition(
 	}
 
 	return applyScalePatchesToLivePipeline(ctx, pipelineDef, vertexPatches, c)
-}*/
+}
 
 // TODO: should we be updating our pipeline definition when we do the patching or no?
 func applyScalePatchesToLivePipeline(
