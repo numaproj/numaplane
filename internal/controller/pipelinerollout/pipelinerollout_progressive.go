@@ -741,6 +741,7 @@ func applyScaleValuesToPipelineDefinition(
 	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
 }
 
+// TODO: if we unit test this one, then we can put this back in
 /*func applyScaleValuesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
 	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
