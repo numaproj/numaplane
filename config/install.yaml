@@ -1548,8 +1548,12 @@ spec:
                           OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
                           OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
                         items:
+                          description: VertexScaleDefinition is a struct to encapsulate
+                            the scale values for a given vertex
                           properties:
                             scaleDefinition:
+                              description: ScaleDefinition is a struct to encapsulate
+                                scale values (can be used for a Vertex)
                               properties:
                                 max:
                                   format: int64
