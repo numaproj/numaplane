@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	errors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -90,12 +91,13 @@ Parameters:
   - analysis: struct which contains templateRefs to AnalysisTemplates and ClusterAnalysisTemplates and arguments that can be passed
     and override values already specified in the templates
   - existingUpgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - ownerReference: reference to the upgrading child this AnalysisRun is associated with - ensures cleanup
   - client: the client used for interacting with the Kubernetes API.
 
 Returns:
   - An error if any issues occur during processing.
 */
-func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, client client.Client) error {
+func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client) error {
 
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
@@ -123,6 +125,8 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 		return err
 	}
 
+	// set ownerReference to guarantee AnalysisRun deletion when owner is cleaned up
+	analysisRun.SetOwnerReferences([]metav1.OwnerReference{ownerReference})
 	if err = client.Create(ctx, analysisRun); err != nil {
 		return err
 	}

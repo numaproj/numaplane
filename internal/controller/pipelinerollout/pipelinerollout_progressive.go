@@ -103,7 +103,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 			if apierrors.IsNotFound(err) {
 				// analysisRun is created the first time the upgrading child is assessed
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace(), UID: existingUpgradingChildDef.GetUID()}, numaflowv1.PipelineGroupVersionKind)
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
@@ -278,7 +279,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 }
 
 /*
-ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading pipeline.
+ProcessUpgradingChildPreUpgrade handles the processing of an upgrading pipeline before it's been created
 It performs the following pre-upgrade operations:
 - it uses the promoted rollout status scale values to calculate the upgrading pipeline scale min and max for each vertex.
 
@@ -385,6 +386,28 @@ func scalePipelineVerticesToZero(
 		}
 	}
 	return nil
+}
+
+/*
+ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipeline definition after it's been created
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingMonoVertexDef: the definition of the upgrading monovertex as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingPipelineDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
 }
 
 /*

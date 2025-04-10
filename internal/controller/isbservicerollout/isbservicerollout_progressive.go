@@ -126,3 +126,17 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 ) (bool, error) {
 	return false, nil
 }
+
+func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+
+	// need to make sure it has a PodDisruptionBudget associated with it, and owned by it
+	if err := r.applyPodDisruptionBudget(ctx, upgradingChildDef); err != nil {
+		return false, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", upgradingChildDef.GetName(), err)
+	}
+	return false, nil
+}

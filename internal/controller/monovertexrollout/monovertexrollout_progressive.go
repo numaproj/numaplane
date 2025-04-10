@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -53,7 +54,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 			if apierrors.IsNotFound(err) {
 				// analysisRun is created the first time the upgrading child is assessed
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, r.client)
+				ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace(), UID: existingUpgradingChildDef.GetUID()}, numaflowv1.MonoVertexGroupVersionKind)
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
@@ -247,7 +249,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostSuccess(
 }
 
 /*
-ProcessUpgradingChildPreUpgrade handles the pre-upgrade processing of an upgrading monovertex.
+ProcessUpgradingChildPreUpgrade handles the processing of an upgrading monovertex definition before it's been created
 It performs the following pre-upgrade operations:
 - it uses the promoted rollout status scale values to calculate the upgrading monovertex scale min and max.
 
@@ -311,6 +313,28 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 	numaLogger.Debug("completed pre-upgrade processing of upgrading monovertex")
 
+	return false, nil
+}
+
+/*
+ProcessUpgradingChildPostUpgrade handles the processing of an upgrading monovertex definition after it's been created
+
+Parameters:
+  - ctx: the context for managing request-scoped values.
+  - rolloutObject: the MonoVertexRollout instance
+  - upgradingMonoVertexDef: the definition of the upgrading monovertex as an unstructured object.
+  - c: the client used for interacting with the Kubernetes API.
+
+Returns:
+  - A boolean indicating whether we should requeue.
+  - An error if any issues occur during processing.
+*/
+func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
 	return false, nil
 }
 
