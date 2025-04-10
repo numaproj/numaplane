@@ -1560,50 +1560,50 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 	  
 {
 	  "vertices": [
-					{
-					  "name": "in",
-					  "scale": {
-						"lookbackSeconds": 1
-					  },
-					  "source": {
-						"generator": {
-						  "rpu": 5,
-						  "duration": "1s"
-						}
-					  }
-					},
-					{
-					  "name": "cat",
-					  "scale": {
-						"max": 5
-					  },
-					  "udf": {
-						"builtin": {
-						  "name": "cat"
-						}
-					  }
-					},
-					{
-					  "name": "cat-2",
-					  "scale": {
-						"min": 1
-					  },
-					  "udf": {
-						"builtin": {
-						  "name": "cat"
-						}
-					  }
-					},
-					{
-					  "name": "out",
-					  "scale": {
-						"min": 1,
-						"max": 5
-					  },
-					  "sink": {
-						"log": {}
-					  }
-					}
+		{
+			"name": "in",
+			"scale": {
+			"lookbackSeconds": 1
+			},
+			"source": {
+			"generator": {
+				"rpu": 5,
+				"duration": "1s"
+			}
+			}
+		},
+		{
+			"name": "cat",
+			"scale": {
+			"max": 5
+			},
+			"udf": {
+			"builtin": {
+				"name": "cat"
+			}
+			}
+		},
+		{
+			"name": "cat-2",
+			"scale": {
+			"min": 1
+			},
+			"udf": {
+			"builtin": {
+				"name": "cat"
+			}
+			}
+		},
+		{
+			"name": "out",
+			"scale": {
+			"min": 1,
+			"max": 5
+			},
+			"sink": {
+			"log": {}
+			}
+		}
 	  ]
 	
 }
@@ -1665,28 +1665,28 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 	  
 {
 	  "vertices": [
-					{
-					  "name": "in",
-					  "scale": {
-					  },
-					  "source": {
-						"generator": {
-						  "rpu": 5,
-						  "duration": "1s"
-						}
-					  }
-					},
-					{
-					  "name": "out",
-					  "scale": {
-						"min": 1,
-						"max": 5
-					  },
-					  "sink": {
-						"log": {}
-					  }
-					}
-	  ]
+		{
+			"name": "in",
+			"scale": {
+			},
+			"source": {
+			"generator": {
+				"rpu": 5,
+				"duration": "1s"
+			}
+			}
+		},
+		{
+			"name": "out",
+			"scale": {
+			"min": 1,
+			"max": 5
+			},
+			"sink": {
+			"log": {}
+			}
+		}
+]
 	
 }
 	  `,
@@ -1725,23 +1725,23 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 	assert.Nil(t, err)
 
 	ctx := context.Background()
-	oneInt32 := int32(1)
+	/*oneInt32 := int32(1)
 	fiveInt32 := int32(5)
-	oneUint32 := uint32(1)
+	oneUint32 := uint32(1)*/
 	oneInt64 := int64(1)
 	fiveInt64 := int64(5)
 
 	testCases := []struct {
 		name                   string
-		existingPipelineSpec   numaflowv1.PipelineSpec
+		existingPipelineSpec   string
 		vertexScaleDefinitions []apiv1.VertexScaleDefinition
 		expectError            bool
-		expectedPipelineSpec   numaflowv1.PipelineSpec
+		expectedPipelineSpec   string
 	}{
 		{
 			name: "variety of vertices",
 			// minimal spec for test
-			existingPipelineSpec: numaflowv1.PipelineSpec{
+			/*existingPipelineSpec: numaflowv1.PipelineSpec{
 				Vertices: []numaflowv1.AbstractVertex{
 					{
 						Name: "in",
@@ -1777,7 +1777,46 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 						},
 					},
 				},
-			},
+			},*/
+			existingPipelineSpec: `
+
+			{
+				  "vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 1,
+							"max": 5
+						},
+						"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"lookbackSeconds": 1
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				  ]
+
+			}
+				  `,
 			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -1800,48 +1839,51 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 						Max: &fiveInt64,
 					},
 				},
-			},
-			expectedPipelineSpec: numaflowv1.PipelineSpec{
-				Vertices: []numaflowv1.AbstractVertex{
+			}, expectedPipelineSpec: `
+
+			{
+				  "vertices": [
 					{
-						Name: "in",
-						Scale: numaflowv1.Scale{
-							LookbackSeconds: &oneUint32,
+						"name": "in",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": null,
+							"max": null
 						},
-						Source: &numaflowv1.Source{
-							Generator: &numaflowv1.GeneratorSource{
-								RPU:      &pipelineSpecSourceRPU,
-								Duration: &pipelineSpecSourceDuration,
-							},
-						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
 					},
 					{
-						Name: "cat",
-						Scale: numaflowv1.Scale{
-							LookbackSeconds: &oneUint32,
-							Max:             &fiveInt32,
+						"name": "cat",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": null,
+							"max": 5
 						},
-						UDF: &numaflowv1.UDF{
-							Builtin: &numaflowv1.Function{
-								Name: "cat",
-							},
-						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
 					},
 					{
-						Name: "out",
-						Scale: numaflowv1.Scale{
-							Min: &oneInt32,
-							Max: &fiveInt32,
+						"name": "out",
+						"scale": {
+							"min": 1,
+							"max": 5
 						},
-						Sink: &numaflowv1.Sink{
-							AbstractSink: numaflowv1.AbstractSink{
-								Log: &numaflowv1.Log{},
-							},
-						},
-					},
-				},
-			},
-		},
+						"sink": {
+							"log": {}
+						}
+					}
+				  ]
+
+			}
+				  `},
 	}
 
 	for _, tc := range testCases {
@@ -1849,28 +1891,46 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
-			pipelineSpec := ctlrcommon.CreateTestPipelineOfSpec(tc.existingPipelineSpec, ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, map[string]string{}, map[string]string{})
+			//pipelineSpec := ctlrcommon.CreateTestPipelineOfSpec(tc.existingPipelineSpec, ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, map[string]string{}, map[string]string{})
 			// create the pipeline first, and then we can patch it
-			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipelineSpec)
+			//ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipelineSpec)
+
+			// Create an Unstructured Pipeline based on our spec in K8S
+			pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			pipelineDef.SetName(ctlrcommon.DefaultTestPipelineName)
+			pipelineDef.SetNamespace(ctlrcommon.DefaultTestNamespace)
+			var pipelineSpec map[string]interface{}
+			err = json.Unmarshal([]byte(tc.existingPipelineSpec), &pipelineSpec)
+			assert.NoError(t, err)
+			pipelineDef.Object["spec"] = pipelineSpec
+			fmt.Printf("pipelineDef=%+v\n", pipelineDef)
+			err = kubernetes.CreateResource(ctx, client, pipelineDef)
+			assert.NoError(t, err)
 
 			pipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
 				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
 			assert.NoError(t, err)
 
-			applyScaleValuesToLivePipeline(ctx, pipeline, tc.vertexScaleDefinitions, client)
+			err = applyScaleValuesToLivePipeline(ctx, pipeline, tc.vertexScaleDefinitions, client)
+			assert.NoError(t, err)
 
 			// get the result pipeline after the patch
 			resultPipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
 				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
 			assert.NoError(t, err)
 
+			expectedSpecMap := map[string]interface{}{}
+			err = json.Unmarshal([]byte(tc.expectedPipelineSpec), &expectedSpecMap)
+			assert.NoError(t, err)
+			fmt.Printf("expectedSpecMap=%+v\n", expectedSpecMap)
+			fmt.Printf("result spec map=%+v\n", resultPipeline.Object["spec"])
+			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
+
 			// make sure the result spec is as expected
-			resultSpec := resultPipeline.Object["spec"].(map[string]interface{})
-			expectedVerticesMap := []map[string]interface{}{}
-			util.StructToStruct(tc.expectedPipelineSpec.Vertices, &expectedVerticesMap)
-			fmt.Printf("expectedVerticesMap=%+v\n", expectedVerticesMap)
+			/*resultSpec := resultPipeline.Object["spec"].(map[string]interface{})
 			fmt.Printf("vertices=%+v\n", resultSpec["vertices"])
-			assert.True(t, util.CompareStructNumTypeAgnostic(expectedVerticesMap, resultSpec["vertices"]))
+			assert.True(t, util.CompareStructNumTypeAgnostic(expectedVerticesMap, resultSpec["vertices"]))*/
 
 		})
 	}
