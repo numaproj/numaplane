@@ -76,21 +76,17 @@ type UpgradingPipelineStatus struct {
 	OriginalScaleMinMax []VertexScaleDefinition `json:"originalScaleMinMax,omitempty"`
 }
 
+// ScaleDefinition is a struct to encapsulate scale values (can be used for a Vertex)
 type ScaleDefinition struct {
 	Min *int64 `json:"min,omitempty"`
 	Max *int64 `json:"max,omitempty"`
 }
 
+// VertexScaleDefinition is a struct to encapsulate the scale values for a given vertex
 type VertexScaleDefinition struct {
 	VertexName      string           `json:"vertexName"`
 	ScaleDefinition *ScaleDefinition `json:"scaleDefinition,omitempty"`
 }
-
-// VertexScale stores the scale definition for a given vertex
-/*type VertexScale struct {
-	VertexName  string `json:"vertexName,omitempty"`
-	ScaleMinMax string `json:"scaleMinMax,omitempty"`
-}*/
 
 // PromotedPipelineStatus describes the status of the promoted child
 type PromotedPipelineStatus struct {

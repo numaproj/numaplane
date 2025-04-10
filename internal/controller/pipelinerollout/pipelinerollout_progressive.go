@@ -451,7 +451,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 }
 
 /*
-scaleDownPipelineertices scales down the vertices pods of a pipeline to half of the current count if not already scaled down.
+scaleDownPipelineVertices scales down the vertices pods of a pipeline to half of the current count if not already scaled down.
 It checks if all vertices are already scaled down and skips the operation if true.
 
 The function updates the scale values in the rollout status and adjusts the scale configuration

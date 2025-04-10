@@ -1929,10 +1929,6 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
-			//pipelineSpec := ctlrcommon.CreateTestPipelineOfSpec(tc.existingPipelineSpec, ctlrcommon.DefaultTestPipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, map[string]string{}, map[string]string{})
-			// create the pipeline first, and then we can patch it
-			//ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipelineSpec)
-
 			// Create an Unstructured Pipeline based on our spec in K8S
 			pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
@@ -1964,11 +1960,6 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 			fmt.Printf("expectedSpecMap=%+v\n", expectedSpecMap)
 			fmt.Printf("result spec map=%+v\n", resultPipeline.Object["spec"])
 			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
-
-			// make sure the result spec is as expected
-			/*resultSpec := resultPipeline.Object["spec"].(map[string]interface{})
-			fmt.Printf("vertices=%+v\n", resultSpec["vertices"])
-			assert.True(t, util.CompareStructNumTypeAgnostic(expectedVerticesMap, resultSpec["vertices"]))*/
 
 		})
 	}
