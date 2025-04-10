@@ -32,6 +32,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
+	v1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -216,6 +217,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		initialInProgressStrategy     *apiv1.UpgradeStrategy
 		initialUpgradingChildStatus   *apiv1.UpgradingMonoVertexStatus
 		initialPromotedChildStatus    *apiv1.PromotedMonoVertexStatus
+		analysisRun                   bool
 
 		expectedInProgressStrategy apiv1.UpgradeStrategy
 		expectedRolloutPhase       apiv1.Phase
@@ -249,12 +251,82 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					AllSourceVerticesScaledDown: true,
 				},
 			},
+			analysisRun:                false,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
 
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:                    "AnalysisRun successful",
+			newControllerInstanceID: "1",
+			existingOriginalMonoVertexDef: *createMonoVertex(
+				numaflowv1.MonoVertexPhaseRunning,
+				numaflowv1.Status{},
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "0",
+				}),
+			existingUpgradeMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
+				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
+				numaflowv1.MonoVertexPhaseRunning,
+				numaflowv1.Status{
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+							Status:             metav1.ConditionTrue,
+							Reason:             "healthy",
+							LastTransitionTime: metav1.NewTime(time.Now()),
+						},
+					},
+				},
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "1",
+				}),
+			initialRolloutPhase:       apiv1.PhasePending,
+			initialRolloutNameCount:   2,
+			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:    apiv1.AssessmentResultSuccess,
+					},
+					Analysis: apiv1.AnalysisStatus{
+						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
+						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
+						Phase:           v1alpha1.AnalysisPhaseSuccessful,
+					},
+				},
+			},
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+					},
+					AllSourceVerticesScaledDown: true,
+				},
+			},
+			analysisRun:                true,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:       apiv1.PhaseDeployed,
+
+			// original MonoVertex deleted, new one promoted
+			expectedMonoVertices: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
 		},
 		{
@@ -311,6 +383,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					AllSourceVerticesScaledDown: true,
 				},
 			},
+			analysisRun:                false,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:       apiv1.PhaseDeployed,
 
@@ -367,6 +440,70 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 				},
 			},
+			analysisRun:                false,
+			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:       apiv1.PhasePending,
+
+			expectedMonoVertices: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:                    "AnalysisRun failed",
+			newControllerInstanceID: "1",
+			existingOriginalMonoVertexDef: *createMonoVertex(
+				numaflowv1.MonoVertexPhaseRunning,
+				numaflowv1.Status{},
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "0",
+				}),
+			existingUpgradeMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
+				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
+				numaflowv1.MonoVertexPhaseFailed,
+				numaflowv1.Status{
+					Conditions: []metav1.Condition{},
+				},
+				map[string]string{
+					common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+				},
+				map[string]string{
+					common.AnnotationKeyNumaflowInstanceID: "1",
+				}),
+			initialRolloutPhase:       apiv1.PhasePending,
+			initialRolloutNameCount:   2,
+			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: apiv1.UpgradingChildStatus{
+						Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:    apiv1.AssessmentResultFailure,
+					},
+					Analysis: apiv1.AnalysisStatus{
+						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
+						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
+						Phase:           v1alpha1.AnalysisPhaseFailed,
+					},
+				},
+			},
+			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+					},
+					AllSourceVerticesScaledDown: true,
+					ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+				},
+			},
+			analysisRun:                true,
 			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:       apiv1.PhasePending,
 
@@ -380,6 +517,8 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	for _, tc := range testCases {
 
 		t.Run(tc.name, func(t *testing.T) {
+
+			v1alpha1.AddToScheme(r.scheme)
 
 			// first delete MonoVertex and MonoVertexRollout in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
@@ -412,6 +551,18 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
+
+			if tc.analysisRun {
+				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
+					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+						Analysis: apiv1.Analysis{
+							Templates: []v1alpha1.AnalysisTemplateRef{
+								v1alpha1.AnalysisTemplateRef{TemplateName: "test", ClusterScope: false},
+							},
+						},
+					},
+				}
+			}
 
 			rolloutCopy := *rollout
 			err = client.Create(ctx, rollout)

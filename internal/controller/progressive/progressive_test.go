@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -43,9 +44,9 @@ func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, exi
 
 func (fpc fakeProgressiveController) AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
 	switch existingUpgradingChildDef.GetName() {
-	case "test-success":
+	case "test-success", "test-analysis-success":
 		return apiv1.AssessmentResultSuccess, "", nil
-	case "test-failure":
+	case "test-failure", "test-analysis-failure":
 		return apiv1.AssessmentResultFailure, "test-fail-reason", nil
 	default:
 		return apiv1.AssessmentResultUnknown, "", nil
@@ -200,6 +201,60 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedRequeueDelay:      0,
 			expectedError:             nil,
 		},
+		{
+			name: "analysis status set - success",
+			rolloutObject: setMonoVertexProgressiveStatus(
+				analysisTmplMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                "test-analysis-success",
+							AssessmentResult:    apiv1.AssessmentResultUnknown,
+							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							AssessmentEndTime:   &metav1.Time{Time: time.Now()},
+						},
+						Analysis: apiv1.AnalysisStatus{
+							AnalysisRunName: "test-analysis-success",
+							StartTime:       &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							EndTime:         &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							Phase:           argorolloutsv1.AnalysisPhaseSuccessful,
+						},
+					},
+				},
+				nil,
+			),
+			existingUpgradingChildDef: createMonoVertex("test-analysis-success"),
+			expectedDone:              true,
+			expectedRequeueDelay:      0,
+			expectedError:             nil,
+		},
+		{
+			name: "analysis status set - failure",
+			rolloutObject: setMonoVertexProgressiveStatus(
+				analysisTmplMonoVertexRollout.DeepCopy(),
+				&apiv1.UpgradingMonoVertexStatus{
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                "test-analysis-failure",
+							AssessmentResult:    apiv1.AssessmentResultUnknown,
+							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							AssessmentEndTime:   &metav1.Time{Time: time.Now()},
+						},
+						Analysis: apiv1.AnalysisStatus{
+							AnalysisRunName: "test-analysis-failure",
+							StartTime:       &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							EndTime:         &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							Phase:           argorolloutsv1.AnalysisPhaseFailed,
+						},
+					},
+				},
+				nil,
+			),
+			existingUpgradingChildDef: createMonoVertex("test-analysis-failure"),
+			expectedDone:              false,
+			expectedRequeueDelay:      0,
+			expectedError:             nil,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -326,6 +381,29 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
 					ForcePromote: true,
+				},
+			},
+		},
+	},
+}
+
+var analysisTmplMonoVertexRollout = &apiv1.MonoVertexRollout{
+	ObjectMeta: metav1.ObjectMeta{
+		Name: "test",
+	},
+	Status: apiv1.MonoVertexRolloutStatus{
+		ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+			UpgradingMonoVertexStatus: nil,
+			PromotedMonoVertexStatus:  nil,
+		},
+	},
+	Spec: apiv1.MonoVertexRolloutSpec{
+		Strategy: &apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Analysis: apiv1.Analysis{
+					Templates: []argorolloutsv1.AnalysisTemplateRef{
+						argorolloutsv1.AnalysisTemplateRef{TemplateName: "test", ClusterScope: false},
+					},
 				},
 			},
 		},
