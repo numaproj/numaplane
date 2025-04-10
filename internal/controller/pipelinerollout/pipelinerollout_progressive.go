@@ -745,34 +745,38 @@ func applyScaleValuesToPipelineDefinition(
 	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
 }
 
-// vertexScaleDefinitions are assumed to correspond to actual vertices in order
+// apply the scale values to the running pipeline as patches
+// note that vertexScaleDefinitions are not required to be in order and also can be a partial set
 func applyScaleValuesToLivePipeline(
 	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScaleDefinition, c client.Client) error {
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
-	//pipelineSpec := numaflowtypes.PipelineSpec{}
-	//util.StructToStruct(pipelineDef.Object["spec"], &pipelineSpec)
 	vertices, found, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
 	if err != nil {
-		return err
+		return fmt.Errorf("error getting vertices from pipeline %s: %s", pipelineDef.GetName(), err)
 	}
 	if !found {
-
-	}
-	if len(vertices) != len(vertexScaleDefinitions) {
-		// todo: consider this being okay
+		return fmt.Errorf("error getting vertices from pipeline %s: not found", pipelineDef.GetName())
 	}
 
 	verticesPatch := "["
-	for index, vertexScale := range vertexScaleDefinitions {
+	for _, vertexScale := range vertexScaleDefinitions {
 
 		// find the vertex in the existing spec and determine if "scale" is set or unset; if it's not set, we need to set it
-		existingVertex := vertices[index].(map[string]interface{})
-		if existingVertex["name"] != vertexScale.VertexName {
-			// todo: consider adding flexibility with ordering the incoming vertexScaleDefinitions instead of erroring
-			return fmt.Errorf("vertexScaleDefinition indexing doesn't match live pipeline, vertexScaleDefinitions=%+v, pipeline vertices=%+v", vertexScaleDefinitions, vertices)
+		existingIndex := -1
+		existingVertex := map[string]interface{}{}
+		for index, v := range vertices {
+			existingVertex = v.(map[string]interface{})
+			if existingVertex["name"] == vertexScale.VertexName {
+				existingIndex = index
+				break
+			}
 		}
+		if existingIndex == -1 {
+			return fmt.Errorf("invalid vertex name %s in vertexScaleDefinitions, pipeline %s has vertices %+v", vertexScale.VertexName, pipelineDef.GetName(), vertices)
+		}
+
 		_, found := existingVertex["scale"]
 		if !found {
 			vertexPatch := fmt.Sprintf(`
@@ -780,7 +784,7 @@ func applyScaleValuesToLivePipeline(
 				"op": "add",
 				"path": "/spec/vertices/%d/scale",
 				"value": %s
-			},`, index, `{"min": null, "max": null}`)
+			},`, existingIndex, `{"min": null, "max": null}`)
 			verticesPatch = verticesPatch + vertexPatch
 		}
 
@@ -793,7 +797,7 @@ func applyScaleValuesToLivePipeline(
 			"op": "add",
 			"path": "/spec/vertices/%d/scale/min",
 			"value": %s
-		},`, index, minStr)
+		},`, existingIndex, minStr)
 		verticesPatch = verticesPatch + vertexPatch
 
 		maxStr := "null"
@@ -805,7 +809,7 @@ func applyScaleValuesToLivePipeline(
 			"op": "add",
 			"path": "/spec/vertices/%d/scale/max",
 			"value": %s
-		},`, index, maxStr)
+		},`, existingIndex, maxStr)
 		verticesPatch = verticesPatch + vertexPatch
 	}
 	// remove terminating comma
@@ -815,10 +819,7 @@ func applyScaleValuesToLivePipeline(
 	verticesPatch = verticesPatch + "]"
 	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices")
 
-	fmt.Printf("deletethis: pipelineDef=%+v\n", pipelineDef)
-	fmt.Printf("deletethis: verticesPatch=%+v\n", verticesPatch)
 	err = kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
-	fmt.Printf("deletethis: result of PatchResource=%v\n", err)
 	return err
 }
 

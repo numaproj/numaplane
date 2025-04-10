@@ -1731,9 +1731,6 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 	assert.Nil(t, err)
 
 	ctx := context.Background()
-	/*oneInt32 := int32(1)
-	fiveInt32 := int32(5)
-	oneUint32 := uint32(1)*/
 	oneInt64 := int64(1)
 	fiveInt64 := int64(5)
 
@@ -1746,44 +1743,6 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 	}{
 		{
 			name: "variety of vertices",
-			// minimal spec for test
-			/*existingPipelineSpec: numaflowv1.PipelineSpec{
-				Vertices: []numaflowv1.AbstractVertex{
-					{
-						Name: "in",
-						Scale: numaflowv1.Scale{
-							Min:             &oneInt32,
-							Max:             &fiveInt32,
-							LookbackSeconds: &oneUint32,
-						},
-						Source: &numaflowv1.Source{
-							Generator: &numaflowv1.GeneratorSource{
-								RPU:      &pipelineSpecSourceRPU,
-								Duration: &pipelineSpecSourceDuration,
-							},
-						},
-					},
-					{
-						Name: "cat",
-						Scale: numaflowv1.Scale{
-							LookbackSeconds: &oneUint32,
-						},
-						UDF: &numaflowv1.UDF{
-							Builtin: &numaflowv1.Function{
-								Name: "cat",
-							},
-						},
-					},
-					{
-						Name: "out",
-						Sink: &numaflowv1.Sink{
-							AbstractSink: numaflowv1.AbstractSink{
-								Log: &numaflowv1.Log{},
-							},
-						},
-					},
-				},
-			},*/
 			existingPipelineSpec: `
 
 			{
@@ -1845,7 +1804,8 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 						Max: &fiveInt64,
 					},
 				},
-			}, expectedPipelineSpec: `
+			},
+			expectedPipelineSpec: `
 
 			{
 				  "vertices": [
@@ -1890,6 +1850,78 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 
 			}
 				  `},
+
+		{
+			name: "partial set of vertices passed in",
+			existingPipelineSpec: `
+	
+				{
+						"vertices": [
+						{
+							"name": "in",
+							"scale": {
+								"lookbackSeconds": 1,
+								"min": 1,
+								"max": 5
+							},
+							"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+								}
+							}
+						},
+						{
+							"name": "out",
+							"sink": {
+								"log": {}
+							}
+						}
+						]
+	
+				}
+						`,
+			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &oneInt64,
+						Max: &fiveInt64,
+					},
+				},
+			},
+			expectedPipelineSpec: `
+
+				{
+					  "vertices": [
+						{
+							"name": "in",
+							"scale": {
+								"lookbackSeconds": 1,
+								"min": 1,
+								"max": 5
+							},
+							"source": {
+								"generator": {
+									"rpu": 5,
+									"duration": "1s"
+								}
+							}
+						},
+						{
+							"name": "out",
+							"scale": {
+								"min": 1,
+								"max": 5
+							},
+							"sink": {
+								"log": {}
+							}
+						}
+					  ]
+	
+				}
+					  `},
 	}
 
 	for _, tc := range testCases {
