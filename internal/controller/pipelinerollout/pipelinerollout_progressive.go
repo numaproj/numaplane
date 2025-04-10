@@ -751,15 +751,46 @@ func applyScaleValuesToLivePipeline(
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
+	//pipelineSpec := numaflowtypes.PipelineSpec{}
+	//util.StructToStruct(pipelineDef.Object["spec"], &pipelineSpec)
+	vertices, found, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return err
+	}
+	if !found {
+
+	}
+	if len(vertices) != len(vertexScaleDefinitions) {
+		// todo: consider this being okay
+	}
+
 	verticesPatch := "["
 	for index, vertexScale := range vertexScaleDefinitions {
+
+		// find the vertex in the existing spec and determine if "scale" is set or unset; if it's not set, we need to set it
+		existingVertex := vertices[index].(map[string]interface{})
+		if existingVertex["name"] != vertexScale.VertexName {
+			// todo: consider adding flexibility with ordering the incoming vertexScaleDefinitions instead of erroring
+			return fmt.Errorf("vertexScaleDefinition indexing doesn't match live pipeline, vertexScaleDefinitions=%+v, pipeline vertices=%+v", vertexScaleDefinitions, vertices)
+		}
+		_, found := existingVertex["scale"]
+		if !found {
+			vertexPatch := fmt.Sprintf(`
+			{
+				"op": "add",
+				"path": "/spec/vertices/%d/scale",
+				"value": %s
+			},`, index, `{"min": null, "max": null}`)
+			verticesPatch = verticesPatch + vertexPatch
+		}
+
 		minStr := "null"
 		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Min != nil {
 			minStr = fmt.Sprintf("%d", *vertexScale.ScaleDefinition.Min)
 		}
 		vertexPatch := fmt.Sprintf(`
 		{
-			"op": "replace",
+			"op": "add",
 			"path": "/spec/vertices/%d/scale/min",
 			"value": %s
 		},`, index, minStr)
@@ -771,7 +802,7 @@ func applyScaleValuesToLivePipeline(
 		}
 		vertexPatch = fmt.Sprintf(`
 		{
-			"op": "replace",
+			"op": "add",
 			"path": "/spec/vertices/%d/scale/max",
 			"value": %s
 		},`, index, maxStr)
@@ -786,7 +817,7 @@ func applyScaleValuesToLivePipeline(
 
 	fmt.Printf("deletethis: pipelineDef=%+v\n", pipelineDef)
 	fmt.Printf("deletethis: verticesPatch=%+v\n", verticesPatch)
-	err := kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
+	err = kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
 	fmt.Printf("deletethis: result of PatchResource=%v\n", err)
 	return err
 }

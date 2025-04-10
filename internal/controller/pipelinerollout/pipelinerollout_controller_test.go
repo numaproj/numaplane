@@ -23,6 +23,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"k8s.io/klog/v2"
+
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -1721,6 +1724,9 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 }
 
 func Test_applyScaleValuesToLivePipeline(t *testing.T) {
+
+	klog.InitFlags(nil)
+
 	_, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
