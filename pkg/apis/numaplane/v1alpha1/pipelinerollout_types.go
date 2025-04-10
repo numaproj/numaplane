@@ -72,14 +72,25 @@ type UpgradingPipelineStatus struct {
 	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
 
 	// OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
-	OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
+	//OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
+	OriginalScaleMinMax []VertexScaleDefinition `json:"originalScaleMinMax,omitempty"`
+}
+
+type ScaleDefinition struct {
+	Min *int64 `json:"min,omitempty"`
+	Max *int64 `json:"max,omitempty"`
+}
+
+type VertexScaleDefinition struct {
+	VertexName      string           `json:"vertexName"`
+	ScaleDefinition *ScaleDefinition `json:"scaleDefinition,omitempty"`
 }
 
 // VertexScale stores the scale definition for a given vertex
-type VertexScale struct {
+/*type VertexScale struct {
 	VertexName  string `json:"vertexName,omitempty"`
 	ScaleMinMax string `json:"scaleMinMax,omitempty"`
-}
+}*/
 
 // PromotedPipelineStatus describes the status of the promoted child
 type PromotedPipelineStatus struct {

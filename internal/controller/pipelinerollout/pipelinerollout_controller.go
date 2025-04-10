@@ -1251,12 +1251,12 @@ func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Contex
 	}
 	modified := false
 	for i, vertexScaleDef := range vertexScaleDefinitions {
-		if vertexScaleDef.scaleDefinition.Max != nil && *vertexScaleDef.scaleDefinition.Max == 0 {
+		if vertexScaleDef.ScaleDefinition.Max != nil && *vertexScaleDef.ScaleDefinition.Max == 0 {
 			// TODO: ideally we would only do this for non-source vertices; effect is that we briefly resume the Source but then take it back down to 0 Pods during the pause
-			numaLogger.WithValues("vertex", vertexScaleDef.vertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
+			numaLogger.WithValues("vertex", vertexScaleDef.VertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
 			one := int64(1)
-			vertexScaleDef.scaleDefinition.Min = &one
-			vertexScaleDef.scaleDefinition.Max = &one
+			vertexScaleDef.ScaleDefinition.Min = &one
+			vertexScaleDef.ScaleDefinition.Max = &one
 			vertexScaleDefinitions[i] = vertexScaleDef
 			modified = true
 		}

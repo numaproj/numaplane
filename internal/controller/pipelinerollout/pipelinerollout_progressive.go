@@ -274,7 +274,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostSuccess(
 		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
 	}
 
-	return applyScalePatchesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
+	return applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
 }
 
 /*
@@ -309,12 +309,12 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	// save the current scale definitions from the upgrading Pipeline to our Status so we can use them when we scale it back up after success
-	scalePatchStrings, err := getScalePatchesFromPipelineSpec(ctx, upgradingPipelineDef)
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, upgradingPipelineDef)
 	if err != nil {
 		return true, err
 	}
 
-	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scalePatchStrings
+	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.OriginalScaleMinMax = scaleDefinitions
 
 	err = createScaledDownUpgradingPipelineDef(ctx, pipelineRollout, upgradingPipelineDef)
 	if err != nil {
@@ -346,7 +346,7 @@ func createScaledDownUpgradingPipelineDef(
 
 	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
 	// Vertex on the "promomoted" Pipeline, assuming it exists there
-	vertexScaleDefinitions := make([]VertexScaleDefinition, len(vertexDefinitions))
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertexDefinitions))
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
 		vertexName := vertexAsMap["name"].(string)
@@ -364,9 +364,9 @@ func createScaledDownUpgradingPipelineDef(
 			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
 		}
 
-		vertexScaleDefinitions[index] = VertexScaleDefinition{
-			vertexName: vertexName,
-			scaleDefinition: &progressive.ScaleDefinition{
+		vertexScaleDefinitions[index] = apiv1.VertexScaleDefinition{
+			VertexName: vertexName,
+			ScaleDefinition: &apiv1.ScaleDefinition{
 				Min: &upgradingVertexScaleTo,
 				Max: &upgradingVertexScaleTo,
 			},
@@ -394,7 +394,7 @@ func scalePipelineVerticesToZero(
 	}
 	allVerticesScaledDown := true
 	for _, vertexScaleDef := range vertexScaleDefinitions {
-		scaleDef := vertexScaleDef.scaleDefinition
+		scaleDef := vertexScaleDef.ScaleDefinition
 		scaledDown := scaleDef != nil && scaleDef.Min != nil && *scaleDef.Min == 0 && scaleDef.Max != nil && *scaleDef.Max == 0
 
 		if !scaledDown {
@@ -693,7 +693,7 @@ func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstru
 }
 
 func applyScaleValuesToPipelineDefinition(
-	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition) error {
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScaleDefinition) error {
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
@@ -707,7 +707,7 @@ func applyScaleValuesToPipelineDefinition(
 	}
 
 	for _, scaleDef := range vertexScaleDefinitions {
-		vertexName := scaleDef.vertexName
+		vertexName := scaleDef.VertexName
 		// set the scale min/max for the vertex
 		// find this Vertex and update it
 
@@ -717,17 +717,17 @@ func applyScaleValuesToPipelineDefinition(
 			if vertexAsMap["name"] == vertexName {
 				foundVertexInExisting = true
 
-				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Min != nil {
-					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.min' to %d", *scaleDef.scaleDefinition.Min)
-					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Min, "scale", "min"); err != nil {
+				if scaleDef.ScaleDefinition != nil && scaleDef.ScaleDefinition.Min != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.min' to %d", *scaleDef.ScaleDefinition.Min)
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.ScaleDefinition.Min, "scale", "min"); err != nil {
 						return err
 					}
 				} else {
 					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
 				}
-				if scaleDef.scaleDefinition != nil && scaleDef.scaleDefinition.Max != nil {
-					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.scaleDefinition.Max)
-					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.scaleDefinition.Max, "scale", "max"); err != nil {
+				if scaleDef.ScaleDefinition != nil && scaleDef.ScaleDefinition.Max != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.ScaleDefinition.Max)
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.ScaleDefinition.Max, "scale", "max"); err != nil {
 						return err
 					}
 				} else {
@@ -745,36 +745,38 @@ func applyScaleValuesToPipelineDefinition(
 	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
 }
 
+// vertexScaleDefinitions are assumed to correspond to actual vertices in order
 func applyScaleValuesToLivePipeline(
-	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []VertexScaleDefinition, c client.Client) error {
-	vertexPatches := make([]apiv1.VertexScale, len(vertexScaleDefinitions))
-	for i, scaleDef := range vertexScaleDefinitions {
-		vertexPatches[i] = apiv1.VertexScale{
-			VertexName:  scaleDef.vertexName,
-			ScaleMinMax: progressive.ScaleDefinitionToPatchString(scaleDef.scaleDefinition),
-		}
-	}
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScaleDefinition, c client.Client) error {
 
-	return applyScalePatchesToLivePipeline(ctx, pipelineDef, vertexPatches, c)
-}
-
-// TODO: should we be updating our pipeline definition when we do the patching or no?
-func applyScalePatchesToLivePipeline(
-	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScale, c client.Client) error {
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
 	verticesPatch := "["
-
 	for index, vertexScale := range vertexScaleDefinitions {
+		minStr := "null"
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Min != nil {
+			minStr = fmt.Sprintf("%d", *vertexScale.ScaleDefinition.Min)
+		}
 		vertexPatch := fmt.Sprintf(`
-			{
-				"op": "replace",
-				"path": "/spec/vertices/%d/scale",
-				"value": %s
-			},`, index, vertexScale.ScaleMinMax)
+		{
+			"op": "replace",
+			"path": "/spec/vertices/%d/scale/min",
+			"value": %s
+		},`, index, minStr)
+		verticesPatch = verticesPatch + vertexPatch
+
+		maxStr := "null"
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Max != nil {
+			maxStr = fmt.Sprintf("%d", *vertexScale.ScaleDefinition.Max)
+		}
+		vertexPatch = fmt.Sprintf(`
+		{
+			"op": "replace",
+			"path": "/spec/vertices/%d/scale/max",
+			"value": %s
+		},`, index, maxStr)
 		verticesPatch = verticesPatch + vertexPatch
 	}
-
 	// remove terminating comma
 	if verticesPatch[len(verticesPatch)-1] == ',' {
 		verticesPatch = verticesPatch[0 : len(verticesPatch)-1]
@@ -785,15 +787,10 @@ func applyScalePatchesToLivePipeline(
 	return kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
 }
 
-type VertexScaleDefinition struct {
-	vertexName      string
-	scaleDefinition *progressive.ScaleDefinition
-}
-
 // for each Vertex, get the definition of the Scale
 // return map of Vertex name to scale definition
 func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
-	[]VertexScaleDefinition, error) {
+	[]apiv1.VertexScaleDefinition, error) {
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
 
@@ -804,7 +801,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 
 	numaLogger.WithValues("vertices", vertices).Debugf("found vertices for the pipeline: %d", len(vertices))
 
-	scaleDefinitions := []VertexScaleDefinition{}
+	scaleDefinitions := []apiv1.VertexScaleDefinition{}
 
 	for _, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
@@ -821,22 +818,8 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 			if err != nil {
 				return nil, err
 			}
-			scaleDefinitions = append(scaleDefinitions, VertexScaleDefinition{vertexName: vertexName, scaleDefinition: vertexScaleDef})
+			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
 		}
 	}
 	return scaleDefinitions, nil
-}
-
-func getScalePatchesFromPipelineSpec(ctx context.Context, pipelineDef *unstructured.Unstructured) (
-	[]apiv1.VertexScale, error) {
-
-	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
-	if err != nil {
-		return nil, err
-	}
-	scalePatchStrings := []apiv1.VertexScale{}
-	for _, vertexScaleDef := range scaleDefinitions {
-		scalePatchStrings = append(scalePatchStrings, apiv1.VertexScale{VertexName: vertexScaleDef.vertexName, ScaleMinMax: progressive.ScaleDefinitionToPatchString(vertexScaleDef.scaleDefinition)})
-	}
-	return scalePatchStrings, nil
 }

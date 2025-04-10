@@ -182,7 +182,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &progressive.ScaleDefinition{Min: &min, Max: &max}, c)
+	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &apiv1.ScaleDefinition{Min: &min, Max: &max}, c)
 	if err != nil {
 		return true, err
 	}
@@ -349,7 +349,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
-func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*progressive.ScaleDefinition, error) {
+func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*apiv1.ScaleDefinition, error) {
 	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 
@@ -487,7 +487,7 @@ func scaleDownPromotedMonoVertex(
 		Initial:             currentPodsCount,
 	}
 
-	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &progressive.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
+	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
 	}
 
@@ -568,10 +568,26 @@ Returns:
 func scaleMonoVertex(
 	ctx context.Context,
 	monovertex *unstructured.Unstructured,
-	scaleDefinition *progressive.ScaleDefinition,
+	scaleDefinition *apiv1.ScaleDefinition,
 	c client.Client) error {
 
-	scaleValue := progressive.ScaleDefinitionToPatchString(scaleDefinition)
+	scaleValue := scaleDefinitionToPatchString(scaleDefinition)
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
+}
+
+func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string {
+	var scaleValue string
+	if scaleDefinition == nil {
+		scaleValue = "null"
+	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
+	} else if scaleDefinition.Min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
+	} else if scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
+	}
+	return scaleValue
 }

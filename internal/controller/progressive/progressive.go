@@ -96,11 +96,6 @@ type ProgressiveRolloutObject interface {
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
 }
 
-type ScaleDefinition struct {
-	Min *int64
-	Max *int64
-}
-
 // return:
 // - whether we're done
 // - duration indicating the requeue delay for the controller to use for next reconciliation
@@ -668,7 +663,7 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	return string(jsonBytes), nil
 }
 
-func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefinition, error) {
+func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*apiv1.ScaleDefinition, error) {
 
 	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
 	if err != nil {
@@ -678,7 +673,7 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 	if !foundScale {
 		return nil, nil
 	}
-	scaleMinMax := ScaleDefinition{}
+	scaleMinMax := apiv1.ScaleDefinition{}
 	minInterface := scaleDef["min"]
 	maxInterface := scaleDef["max"]
 	if minInterface != nil {
@@ -697,22 +692,6 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*ScaleDefi
 	}
 
 	return &scaleMinMax, nil
-}
-
-func ScaleDefinitionToPatchString(scaleDefinition *ScaleDefinition) string {
-	var scaleValue string
-	if scaleDefinition == nil {
-		scaleValue = "null"
-	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
-	} else if scaleDefinition.Min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
-	} else if scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
-	} else {
-		scaleValue = `{"min": null, "max": null}`
-	}
-	return scaleValue
 }
 
 /*
