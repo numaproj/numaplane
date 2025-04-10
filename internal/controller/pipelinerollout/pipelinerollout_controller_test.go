@@ -1545,6 +1545,7 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 					},
 				},
 			},
+			expectError: false,
 			expectedResultPipelineDef: `
 	  
 {
@@ -1597,9 +1598,88 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 }
 	  `,
 		},
-		/*{
-			name: "invalid vertex names",
-		},*/
+		{
+			name: "invalid vertex names", // this should just issue a warning
+			pipelineDef: `
+{
+	  "vertices": [
+		{
+		  "name": "in",
+		  "scale": {
+			"min": 1,
+			"max": 5
+		  },
+		  "source": {
+			"generator": {
+			  "rpu": 5,
+			  "duration": "1s"
+			}
+		  }
+		},
+		{
+		  "name": "out",
+		  "sink": {
+			"log": {}
+		  }
+		}
+	  ]
+	
+}
+	  `,
+			vertexScaleDefinitions: []VertexScaleDefinition{
+				{
+					vertexName: "in",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: nil,
+						Max: nil,
+					},
+				},
+				{
+					vertexName: "cat",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: nil,
+						Max: &five,
+					},
+				},
+				{
+					vertexName: "out",
+					scaleDefinition: &progressive.ScaleDefinition{
+						Min: &one,
+						Max: &five,
+					},
+				},
+			},
+			expectError: false,
+			expectedResultPipelineDef: `
+	  
+{
+	  "vertices": [
+					{
+					  "name": "in",
+					  "scale": {
+					  },
+					  "source": {
+						"generator": {
+						  "rpu": 5,
+						  "duration": "1s"
+						}
+					  }
+					},
+					{
+					  "name": "out",
+					  "scale": {
+						"min": 1,
+						"max": 5
+					  },
+					  "sink": {
+						"log": {}
+					  }
+					}
+	  ]
+	
+}
+	  `,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1622,7 +1702,6 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 				expectedPipelineSpecMap := make(map[string]interface{})
 				err := json.Unmarshal([]byte(tt.expectedResultPipelineDef), &expectedPipelineSpecMap)
 				assert.NoError(t, err)
-				//assert.Equal(t, expectedPipelineSpecMap, obj.Object["spec"])
 				assert.True(t, util.CompareStructNumTypeAgnostic(expectedPipelineSpecMap, obj.Object["spec"]))
 			}
 		})
