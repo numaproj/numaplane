@@ -518,8 +518,6 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			v1alpha1.AddToScheme(r.scheme)
-
 			// first delete MonoVertex and MonoVertexRollout in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
@@ -557,7 +555,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 						Analysis: apiv1.Analysis{
 							Templates: []v1alpha1.AnalysisTemplateRef{
-								v1alpha1.AnalysisTemplateRef{TemplateName: "test", ClusterScope: false},
+								{TemplateName: "test", ClusterScope: false},
 							},
 						},
 					},

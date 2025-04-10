@@ -405,7 +405,7 @@ var analysisTmplMonoVertexRollout = &apiv1.MonoVertexRollout{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Analysis: apiv1.Analysis{
 					Templates: []argorolloutsv1.AnalysisTemplateRef{
-						argorolloutsv1.AnalysisTemplateRef{TemplateName: "test", ClusterScope: false},
+						{TemplateName: "test", ClusterScope: false},
 					},
 				},
 			},
