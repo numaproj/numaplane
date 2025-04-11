@@ -21,6 +21,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -36,6 +37,11 @@ func GetGVRForISBService() schema.GroupVersionResource {
 
 func GetPromotedISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
 	return getChildResource(GetGVRForISBService(), namespace, isbServiceRolloutName)
+}
+
+func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstructured.UnstructuredList, error) {
+	return GetChildrenOfUpgradeStrategy(GetGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradeInProgress)
+
 }
 
 // Get ISBServiceSpec from Unstructured type
@@ -329,8 +335,6 @@ func UpdateISBServiceRollout(
 	dataLossFieldChanged bool,
 	recreateFieldChanged bool,
 	progressiveFieldChanged bool,
-	expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus,
-	expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -405,12 +409,14 @@ func UpdateISBServiceRollout(
 
 		// Perform Progressive checks for all pipelines associated to the ISBService
 		for _, pipelineRollout := range pipelineRollouts {
-			pipeline, err := GetPipeline(Namespace, pipelineRollout.PipelineRolloutName)
-			Expect(err).ShouldNot(HaveOccurred())
-			pipelineSpec, err := GetPipelineSpec(pipeline)
-			Expect(err).ShouldNot(HaveOccurred())
+			//pipeline, err := GetPromotedPipeline(Namespace, pipelineRollout.PipelineRolloutName)
+			//Expect(err).ShouldNot(HaveOccurred())
+			//_, err = GetPipelineSpec(pipeline)
+			//Expect(err).ShouldNot(HaveOccurred())
 
-			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
+			expectedPromotedName := fmt.Sprintf("%s-%s", pipelineRollout.CurrentCount-1)
+			expectedUpgradingName := fmt.Sprintf("%s-%s", pipelineRollout.CurrentCount)
+			PipelineTransientProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName)
 		}
 	}
 
