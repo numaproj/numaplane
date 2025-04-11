@@ -72,34 +72,35 @@ var (
 		},
 	}
 
-	testTemplate = argorolloutsv1.AnalysisTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AnalysisTemplate",
-			APIVersion: "argoproj.io/v1alpha1",
-		},
-		Spec: argorolloutsv1.AnalysisTemplateSpec{
-			Args: []argorolloutsv1.Argument{
-				{Name: "monovertex-name"},
-				{Name: "monovertex-namespace"},
-			},
-			Metrics: []argorolloutsv1.Metric{
-				{
-					Name: "return-true",
-					Provider: argorolloutsv1.MetricProvider{
-						Prometheus: &argorolloutsv1.PrometheusMetric{
-							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-							Query:   "vector(1) == vector(2)",
-						},
-					},
-					SuccessCondition: "true",
-				},
-			},
-		},
-	}
+	// TODO: will use in AnalysisRun test later
+	// testTemplate = argorolloutsv1.AnalysisTemplate{
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      "test",
+	// 		Namespace: ctlrcommon.DefaultTestNamespace,
+	// 	},
+	// 	TypeMeta: metav1.TypeMeta{
+	// 		Kind:       "AnalysisTemplate",
+	// 		APIVersion: "argoproj.io/v1alpha1",
+	// 	},
+	// 	Spec: argorolloutsv1.AnalysisTemplateSpec{
+	// 		Args: []argorolloutsv1.Argument{
+	// 			{Name: "monovertex-name"},
+	// 			{Name: "monovertex-namespace"},
+	// 		},
+	// 		Metrics: []argorolloutsv1.Metric{
+	// 			{
+	// 				Name: "return-true",
+	// 				Provider: argorolloutsv1.MetricProvider{
+	// 					Prometheus: &argorolloutsv1.PrometheusMetric{
+	// 						Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+	// 						Query:   "vector(1) == vector(2)",
+	// 					},
+	// 				},
+	// 				SuccessCondition: "true",
+	// 			},
+	// 		},
+	// 	},
+	// }
 
 	analysisRunName = "monovertexrollout-test-1"
 	testAnalysisRun = argorolloutsv1.AnalysisRun{
@@ -262,9 +263,6 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	err = client.Create(ctx, &testTemplate)
-	assert.NoError(t, err)
-
 	err = client.Create(ctx, &testAnalysisRun)
 	assert.NoError(t, err)
 
@@ -288,8 +286,9 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		initialPromotedChildStatus    *apiv1.PromotedMonoVertexStatus
 		analysisRun                   bool
 
-		expectedInProgressStrategy apiv1.UpgradeStrategy
-		expectedRolloutPhase       apiv1.Phase
+		expectedInProgressStrategy   apiv1.UpgradeStrategy
+		expectedRolloutPhase         apiv1.Phase
+		expectedProgressiveCondition metav1.ConditionStatus
 
 		expectedMonoVertices map[string]common.UpgradeState // after reconcile(), these are the only monoVertexs we expect to exist along with their expected UpgradeState
 
@@ -320,10 +319,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					AllVerticesScaledDown: true,
 				},
 			},
-			analysisRun:                false,
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
-
+			analysisRun:                  false,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedProgressiveCondition: metav1.ConditionUnknown,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
@@ -371,7 +370,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 						Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
 						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:    apiv1.AssessmentResultSuccess,
+						AssessmentResult:    apiv1.AssessmentResultUnknown,
 					},
 					Analysis: apiv1.AnalysisStatus{
 						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
@@ -388,10 +387,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					},
 				},
 			},
-			analysisRun:                true,
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
-
+			analysisRun:                  true,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			expectedProgressiveCondition: metav1.ConditionTrue,
 			// original MonoVertex deleted, new one promoted
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
@@ -451,10 +450,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					AllVerticesScaledDown: true,
 				},
 			},
-			analysisRun:                false,
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
-
+			analysisRun:                  false,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			expectedProgressiveCondition: metav1.ConditionTrue,
 			// original MonoVertex deleted, new one promoted
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradePromoted,
@@ -508,10 +507,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 				},
 			},
-			analysisRun:                false,
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
-
+			analysisRun:                  false,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedProgressiveCondition: metav1.ConditionFalse,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
@@ -569,10 +568,10 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 				},
 			},
-			analysisRun:                true,
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
-
+			analysisRun:                  true,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:         apiv1.PhasePending,
+			expectedProgressiveCondition: metav1.ConditionFalse,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
@@ -667,6 +666,12 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			// Check In-Progress Strategy
 			assert.Equal(t, tc.expectedInProgressStrategy, rollout.Status.UpgradeInProgress)
+			// Check ProgressiveUpgradeSucceeded Condition
+			for _, cond := range rollout.Status.Conditions {
+				if cond.Type == "ProgressiveUpgradeSucceeded" {
+					assert.Equal(t, cond.Status, tc.expectedProgressiveCondition)
+				}
+			}
 
 			resultMonoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
 			assert.NoError(t, err)
