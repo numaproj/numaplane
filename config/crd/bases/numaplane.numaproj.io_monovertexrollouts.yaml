@@ -264,9 +264,9 @@ spec:
                     description: PromotedMonoVertexStatus stores information regarding
                       the current "promoted" MonoVertex
                     properties:
-                      allSourceVerticesScaledDown:
-                        description: AllSourceVerticesScaledDown indicates if ALL
-                          the promoted child source vertices have been scaled down
+                      allVerticesScaledDown:
+                        description: AllVerticesScaledDown indicates if ALL the promoted
+                          child vertices have been scaled down
                         type: boolean
                       name:
                         description: Name of the promoted child
@@ -304,12 +304,12 @@ spec:
                           - scaleTo
                           type: object
                         description: |-
-                          ScaleValues is a map where the keys are the promoted child source vertices names
-                          and the values are the scale values of the source vertices
+                          ScaleValues is a map where the keys are the promoted child vertices names
+                          and the values are the scale values of the vertices
                         type: object
                       scaleValuesRestoredToOriginal:
                         description: |-
-                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child source vertices have been set back to the original min and max scale values.
+                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
                           This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
                         type: boolean
                     required:

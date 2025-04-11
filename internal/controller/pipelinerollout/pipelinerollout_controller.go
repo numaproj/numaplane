@@ -1107,7 +1107,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
-		numaLogger.Error(errors.New("Should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
+		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
 			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
 	}
 	pause := false
@@ -1115,13 +1115,30 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 	if upgradeStateReason != nil {
 		switch *upgradeStateReason {
 		case common.LabelValueDeleteRecreateChild:
-
+			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
+			// which required that.
+			// no need to pause here (for the case of PPND, it will have already been done before getting here)
 		case common.LabelValueProgressiveSuccess:
+			// this is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
+			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
 			pause = true
-			requireDrain = true // TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
+			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
+			requireDrain = true
 
 		case common.LabelValueProgressiveFailure:
+			// this is the case of a previously failed "upgrading" pipeline which was replaced with a new one
+			// no need to pause since it's unhealthy
+		}
+	}
 
+	if requireDrain {
+		modified, err := r.ensurePipelineIsDrainable(ctx, pipeline)
+		if err != nil {
+			return false, err
+		}
+		if modified {
+			// since we just changed the pipeline, give numaflow a chance to reconcile it and then pause it, so requeue
+			return false, nil
 		}
 	}
 
@@ -1224,6 +1241,38 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	}
 
 	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
+}
+
+// In order to be "drainable", a Pipeline must not have any Vertices other than Source Vertex which have min=max=0,
+// since in order to drain, we need to be able to process messages from source through sink.
+// If it does have min=max=0, we need to patch it
+// return whether a modification was made to the pipeline
+func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipeline.GetName())
+
+	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	modified := false
+	for i, vertexScaleDef := range vertexScaleDefinitions {
+		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Max != nil && *vertexScaleDef.ScaleDefinition.Max == 0 {
+			// TODO: ideally we would only do this for non-source vertices; effect is that when this is called as part of recycling pipeline,
+			// we briefly resume the Source but then take it back down to 0 Pods during the pause which is unnnecessary
+			numaLogger.WithValues("vertex", vertexScaleDef.VertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
+			one := int64(1)
+			vertexScaleDef.ScaleDefinition.Min = &one
+			vertexScaleDef.ScaleDefinition.Max = &one
+			vertexScaleDefinitions[i] = vertexScaleDef
+			modified = true
+		}
+	}
+	if modified {
+		if err = applyScaleValuesToLivePipeline(ctx, pipeline, vertexScaleDefinitions, r.client); err != nil {
+			return false, err
+		}
+	}
+	return modified, nil
 }
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {

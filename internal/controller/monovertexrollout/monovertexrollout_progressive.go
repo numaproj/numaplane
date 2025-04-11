@@ -64,7 +64,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
 				}
 				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
-				// and start time for it's assessment
+				// and start time for its assessment
 				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 				timeNow := metav1.NewTime(time.Now())
 				analysisStatus.StartTime = &timeNow
@@ -184,7 +184,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostFailure(
 	// scale the Pods down to 0
 	min := int64(0)
 	max := int64(0)
-	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &progressive.ScaleDefinition{Min: &min, Max: &max}, c)
+	err = scaleMonoVertex(ctx, upgradingMonoVertexDef, &apiv1.ScaleDefinition{Min: &min, Max: &max}, c)
 	if err != nil {
 		return true, err
 	}
@@ -279,15 +279,31 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading monovertex pre-upgrade", rolloutObject)
 	}
 
+	err := scaleDownUpgradingMonoVertex(monoVertexRollout, upgradingMonoVertexDef)
+	if err != nil {
+		return true, err
+	}
+
+	numaLogger.Debug("completed pre-upgrade processing of upgrading monovertex")
+
+	return false, nil
+}
+
+// scaleDownUpgradingMonoVertex sets the upgrading MonoVertex's scale definition to the number of Pods
+// that were removed from the promoted MonoVertex
+func scaleDownUpgradingMonoVertex(
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	upgradingMonoVertexDef *unstructured.Unstructured,
+) error {
 	// Update the scale values of the Upgrading Child, but first save the original scale values
 	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
-		return true, fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
+		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMax
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
+		return errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
@@ -302,18 +318,15 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
 		if err != nil {
-			return true, err
+			return err
 		}
 
 		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "max")
 		if err != nil {
-			return true, err
+			return err
 		}
 	}
-
-	numaLogger.Debug("completed pre-upgrade processing of upgrading monovertex")
-
-	return false, nil
+	return nil
 }
 
 /*
@@ -338,7 +351,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
-func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*progressive.ScaleDefinition, error) {
+func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*apiv1.ScaleDefinition, error) {
 	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 
@@ -416,7 +429,7 @@ func scaleDownPromotedMonoVertex(
 		WithValues("promotedMonoVertexNamespace", promotedMonoVertexDef.GetNamespace(), "promotedMonoVertexName", promotedMonoVertexDef.GetName())
 
 	// If the monovertex has been scaled down already, do not perform scaling down operations
-	if promotedMVStatus.AreAllSourceVerticesScaledDown(promotedMonoVertexDef.GetName()) {
+	if promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()) {
 		return false, nil
 	}
 
@@ -445,7 +458,7 @@ func scaleDownPromotedMonoVertex(
 		scaleValuesMap[promotedMonoVertexDef.GetName()] = vertexScaleValues
 
 		promotedMVStatus.ScaleValues = scaleValuesMap
-		promotedMVStatus.MarkAllSourceVerticesScaledDown()
+		promotedMVStatus.MarkAllVerticesScaledDown()
 
 		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
 		return true, nil
@@ -476,19 +489,19 @@ func scaleDownPromotedMonoVertex(
 		Initial:             currentPodsCount,
 	}
 
-	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &progressive.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
+	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
 	}
 
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
 
 	promotedMVStatus.ScaleValues = scaleValuesMap
-	promotedMVStatus.MarkAllSourceVerticesScaledDown()
+	promotedMVStatus.MarkAllVerticesScaledDown()
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedMVStatus.ScaleValuesRestoredToOriginal = false
 
-	return !promotedMVStatus.AreAllSourceVerticesScaledDown(promotedMonoVertexDef.GetName()), nil
+	return !promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()), nil
 }
 
 /*
@@ -534,7 +547,7 @@ func scalePromotedMonoVertexToOriginalValues(
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef).Debug("patched the promoted monovertex with the original scale configuration")
 
 	promotedMVStatus.ScaleValuesRestoredToOriginal = true
-	promotedMVStatus.AllSourceVerticesScaledDown = false
+	promotedMVStatus.AllVerticesScaledDown = false
 	promotedMVStatus.ScaleValues = nil
 
 	return false, nil
@@ -557,10 +570,26 @@ Returns:
 func scaleMonoVertex(
 	ctx context.Context,
 	monovertex *unstructured.Unstructured,
-	scaleDefinition *progressive.ScaleDefinition,
+	scaleDefinition *apiv1.ScaleDefinition,
 	c client.Client) error {
 
-	scaleValue := progressive.ScaleDefinitionToPatchString(scaleDefinition)
+	scaleValue := scaleDefinitionToPatchString(scaleDefinition)
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
+}
+
+func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string {
+	var scaleValue string
+	if scaleDefinition == nil {
+		scaleValue = "null"
+	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
+	} else if scaleDefinition.Min != nil {
+		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
+	} else if scaleDefinition.Max != nil {
+		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
+	} else {
+		scaleValue = `{"min": null, "max": null}`
+	}
+	return scaleValue
 }
