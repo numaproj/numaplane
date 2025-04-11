@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
-	v1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -70,6 +70,70 @@ var (
 					},
 				},
 			},
+		},
+	}
+
+	testTemplate = argorolloutsv1.AnalysisTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisTemplate",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisTemplateSpec{
+			Args: []argorolloutsv1.Argument{
+				{Name: "monovertex-name"},
+				{Name: "monovertex-namespace"},
+			},
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-true",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "vector(1) == vector(2)",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+		},
+	}
+
+	analysisRunName = "monovertexrollout-test-1"
+	testAnalysisRun = argorolloutsv1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      analysisRunName,
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisRun",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisRunSpec{
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-true",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "vector(1) == vector(2)",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+			Args: []argorolloutsv1.Argument{
+				{Name: "monovertex-name", Value: &analysisRunName},
+				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
+			},
+		},
+		Status: argorolloutsv1.AnalysisRunStatus{
+			Phase:       argorolloutsv1.AnalysisPhaseSuccessful,
+			StartedAt:   &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
+			CompletedAt: &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
 		},
 	}
 )
@@ -199,6 +263,12 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
+	err = client.Create(ctx, &testTemplate)
+	assert.NoError(t, err)
+
+	err = client.Create(ctx, &testAnalysisRun)
+	assert.NoError(t, err)
+
 	r := NewMonoVertexRolloutReconciler(
 		client,
 		scheme.Scheme,
@@ -308,7 +378,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
 						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
 						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-						Phase:           v1alpha1.AnalysisPhaseSuccessful,
+						Phase:           argorolloutsv1.AnalysisPhaseSuccessful,
 					},
 				},
 			},
@@ -490,7 +560,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
 						StartTime:       &metav1.Time{Time: time.Now().Add(-45 * time.Second)},
 						EndTime:         &metav1.Time{Time: time.Now().Add(-40 * time.Second)},
-						Phase:           v1alpha1.AnalysisPhaseFailed,
+						Phase:           argorolloutsv1.AnalysisPhaseFailed,
 					},
 				},
 			},
@@ -554,7 +624,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 						Analysis: apiv1.Analysis{
-							Templates: []v1alpha1.AnalysisTemplateRef{
+							Templates: []argorolloutsv1.AnalysisTemplateRef{
 								{TemplateName: "test", ClusterScope: false},
 							},
 						},
