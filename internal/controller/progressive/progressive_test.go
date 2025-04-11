@@ -772,7 +772,7 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 		name                    string
 		objAsJson               string
 		path                    []string
-		expectedScaleDefinition *ScaleDefinition
+		expectedScaleDefinition *apiv1.ScaleDefinition
 		expectedErr             bool
 	}{
 		{
@@ -791,7 +791,7 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 			}
 			`,
 			path:                    []string{"something", "scale"},
-			expectedScaleDefinition: &ScaleDefinition{Min: &two, Max: &three},
+			expectedScaleDefinition: &apiv1.ScaleDefinition{Min: &two, Max: &three},
 			expectedErr:             false,
 		},
 		{
@@ -822,7 +822,7 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 			}
 			`,
 			path:                    []string{"something", "scale"},
-			expectedScaleDefinition: &ScaleDefinition{Min: nil, Max: nil},
+			expectedScaleDefinition: &apiv1.ScaleDefinition{Min: nil, Max: nil},
 			expectedErr:             false,
 		},
 		{

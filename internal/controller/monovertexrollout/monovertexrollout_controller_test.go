@@ -37,7 +37,6 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -318,7 +317,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
+					AllVerticesScaledDown: true,
 				},
 			},
 			analysisRun:                false,
@@ -450,7 +449,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
+					AllVerticesScaledDown: true,
 				},
 			},
 			analysisRun:                false,
@@ -506,8 +505,8 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					PromotedChildStatus: apiv1.PromotedChildStatus{
 						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 					},
-					AllSourceVerticesScaledDown: true,
-					ScaleValues:                 map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+					AllVerticesScaledDown: true,
+					ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 				},
 			},
 			analysisRun:                false,
@@ -807,7 +806,7 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 	tests := []struct {
 		name                    string
 		input                   map[string]interface{}
-		expectedScaleDefinition *progressive.ScaleDefinition
+		expectedScaleDefinition *apiv1.ScaleDefinition
 		expectError             bool
 	}{
 		{
@@ -819,7 +818,7 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"anotherKey": "anotherValue",
 				},
 			},
-			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: &ten},
+			expectedScaleDefinition: &apiv1.ScaleDefinition{Min: &one, Max: &ten},
 			expectError:             false,
 		},
 		{
@@ -833,7 +832,7 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 			input: map[string]interface{}{
 				"scale": map[string]interface{}{},
 			},
-			expectedScaleDefinition: &progressive.ScaleDefinition{Min: nil, Max: nil},
+			expectedScaleDefinition: &apiv1.ScaleDefinition{Min: nil, Max: nil},
 			expectError:             false,
 		},
 		{
@@ -843,7 +842,7 @@ func TestGetScaleValuesFromMonoVertexSpec(t *testing.T) {
 					"min": int64(1),
 				},
 			},
-			expectedScaleDefinition: &progressive.ScaleDefinition{Min: &one, Max: nil},
+			expectedScaleDefinition: &apiv1.ScaleDefinition{Min: &one, Max: nil},
 			expectError:             false,
 		},
 	}
@@ -875,7 +874,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 	tests := []struct {
 		name               string
 		originalScale      numaflowv1.Scale
-		newScaleDefinition *progressive.ScaleDefinition
+		newScaleDefinition *apiv1.ScaleDefinition
 		expectedScale      numaflowv1.Scale
 	}{
 		{
@@ -885,7 +884,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			newScaleDefinition: &progressive.ScaleDefinition{
+			newScaleDefinition: &apiv1.ScaleDefinition{
 				Min: &four64,
 				Max: &eight64,
 			},
@@ -902,7 +901,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			newScaleDefinition: &progressive.ScaleDefinition{
+			newScaleDefinition: &apiv1.ScaleDefinition{
 				Min: nil,
 				Max: nil,
 			},
@@ -919,7 +918,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			newScaleDefinition: &progressive.ScaleDefinition{
+			newScaleDefinition: &apiv1.ScaleDefinition{
 				Min: &four64,
 				Max: nil,
 			},
@@ -936,7 +935,7 @@ func Test_scaleMonoVertex(t *testing.T) {
 				Max:             &four32,
 				LookbackSeconds: &tenUint,
 			},
-			newScaleDefinition: &progressive.ScaleDefinition{
+			newScaleDefinition: &apiv1.ScaleDefinition{
 				Min: nil,
 				Max: &eight64,
 			},
