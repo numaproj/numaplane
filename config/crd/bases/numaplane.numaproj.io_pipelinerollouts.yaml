@@ -287,9 +287,9 @@ spec:
                     description: PromotedPipelineStatus stores information regarding
                       the current "promoted" pipeline
                     properties:
-                      allSourceVerticesScaledDown:
-                        description: AllSourceVerticesScaledDown indicates if ALL
-                          the promoted child source vertices have been scaled down
+                      allVerticesScaledDown:
+                        description: AllVerticesScaledDown indicates if ALL the promoted
+                          child vertices have been scaled down
                         type: boolean
                       name:
                         description: Name of the promoted child
@@ -327,12 +327,12 @@ spec:
                           - scaleTo
                           type: object
                         description: |-
-                          ScaleValues is a map where the keys are the promoted child source vertices names
-                          and the values are the scale values of the source vertices
+                          ScaleValues is a map where the keys are the promoted child vertices names
+                          and the values are the scale values of the vertices
                         type: object
                       scaleValuesRestoredToOriginal:
                         description: |-
-                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child source vertices have been set back to the original min and max scale values.
+                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
                           This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
                         type: boolean
                     required:
@@ -398,16 +398,28 @@ spec:
                         description: Name of the upgrading child
                         type: string
                       originalScaleMinMax:
-                        description: OriginalScaleMinMax stores for each vertex, the
-                          original scale min and max values as JSON string
+                        description: |-
+                          OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
+                          OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
                         items:
-                          description: VertexScale stores the scale definition for
-                            a given vertex
+                          description: VertexScaleDefinition is a struct to encapsulate
+                            the scale values for a given vertex
                           properties:
-                            scaleMinMax:
-                              type: string
+                            scaleDefinition:
+                              description: ScaleDefinition is a struct to encapsulate
+                                scale values (can be used for a Vertex)
+                              properties:
+                                max:
+                                  format: int64
+                                  type: integer
+                                min:
+                                  format: int64
+                                  type: integer
+                              type: object
                             vertexName:
                               type: string
+                          required:
+                          - vertexName
                           type: object
                         type: array
                     required:

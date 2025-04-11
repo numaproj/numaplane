@@ -240,6 +240,20 @@ func CreateTestPipelineOfSpec(
 
 }
 
+func CreateTestPipelineUnstructured(name string, spec string) (*unstructured.Unstructured, error) {
+	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipelineDef.SetName(name)
+	pipelineDef.SetNamespace(DefaultTestNamespace)
+	var pipelineSpec map[string]interface{}
+	if err := json.Unmarshal([]byte(spec), &pipelineSpec); err != nil {
+		return nil, err
+	}
+	pipelineDef.Object["spec"] = pipelineSpec
+
+	return pipelineDef, nil
+}
+
 func CreateDefaultTestMVOfPhase(phase numaflowv1.MonoVertexPhase) *numaflowv1.MonoVertex {
 	return &numaflowv1.MonoVertex{
 		ObjectMeta: metav1.ObjectMeta{
