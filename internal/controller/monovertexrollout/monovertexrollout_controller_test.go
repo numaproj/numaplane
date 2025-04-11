@@ -551,8 +551,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
 						Name:                ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
 						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:    apiv1.AssessmentResultFailure,
+						AssessmentResult:    apiv1.AssessmentResultUnknown,
 					},
 					Analysis: apiv1.AnalysisStatus{
 						AnalysisRunName: ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
