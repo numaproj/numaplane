@@ -30,6 +30,7 @@ import (
 	clientgo "k8s.io/client-go/kubernetes"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -110,8 +111,9 @@ type Output struct {
 }
 
 type PipelineRolloutInfo struct {
-	PipelineRolloutName string `json:"pipelineRolloutName"`
-	PipelineIsFailed    bool   `json:"pipelineIsFailed,omitempty"`
+	CurrentCount        int
+	PipelineRolloutName string
+	PipelineIsFailed    bool
 }
 
 type ComponentType = string
@@ -469,6 +471,12 @@ func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName st
 
 func GetChildren(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.UnstructuredList, error) {
 	label := fmt.Sprintf("%s=%s", ParentRolloutLabel, rolloutName)
+
+	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
+}
+
+func GetChildrenOfUpgradeStrategy(gvr schema.GroupVersionResource, namespace, rolloutName string, upgradeState common.UpgradeState) (*unstructured.UnstructuredList, error) {
+	label := fmt.Sprintf("%s=%s,%s=%s", ParentRolloutLabel, rolloutName, common.LabelKeyUpgradeState, upgradeState)
 
 	return dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
 }

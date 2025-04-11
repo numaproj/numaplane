@@ -18,14 +18,19 @@ import (
 	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func GetMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
+func GetPromotedMonoVertex(namespace, monoVertexRolloutName string) (*unstructured.Unstructured, error) {
 	return getChildResource(GetGVRForMonoVertex(), namespace, monoVertexRolloutName)
+}
+
+func GetUpgradingMonoVertices(namespace, monoVertexRolloutName string) (*unstructured.UnstructuredList, error) {
+	return GetChildrenOfUpgradeStrategy(GetGVRForMonoVertex(), namespace, monoVertexRolloutName, common.LabelValueUpgradeInProgress)
 }
 
 func GetGVRForMonoVertex() schema.GroupVersionResource {
@@ -47,7 +52,7 @@ func getMonoVertexSpec(u *unstructured.Unstructured) (numaflowv1.MonoVertexSpec,
 func VerifyMonoVertexSpec(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec) bool) {
 	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
 	CheckEventually("verifying MonoVertex Spec", func() bool {
-		unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
+		unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
 		if err != nil {
 			return false
 		}
@@ -83,7 +88,7 @@ func VerifyMonoVertexReady(namespace, monoVertexRolloutName string) error {
 			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
 		})
 
-	unstructMonoVertex, err := GetMonoVertex(namespace, monoVertexRolloutName)
+	unstructMonoVertex, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
 	if err != nil {
 		return fmt.Errorf("unable to get the MonoVertex for the MonoVertexRollout %s/%s: %w", namespace, monoVertexRolloutName, err)
 	}
@@ -106,7 +111,7 @@ func VerifyMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numa
 	var retrievedMonoVertexStatus kubernetes.GenericStatus
 	var monoVertexName string
 	CheckEventually("verifying MonoVertexStatus", func() bool {
-		unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
+		unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
 		if err != nil {
 			return false
 		}
@@ -214,7 +219,7 @@ func GetMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unst
 	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
 	var retrievedMonoVertexStatus numaflowv1.MonoVertexStatus
 
-	unstruct, err := GetMonoVertex(namespace, monoVertexRolloutName)
+	unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
 	if err != nil {
 		return nil, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
 	}
