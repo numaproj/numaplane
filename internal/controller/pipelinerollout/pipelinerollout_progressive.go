@@ -404,7 +404,7 @@ func scalePipelineVerticesToZero(
 	}
 	if !allVerticesScaledDown {
 
-		vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+		/*vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
 		if err != nil {
 			return fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 		}
@@ -419,10 +419,15 @@ func scalePipelineVerticesToZero(
 					return err
 				}
 			}
+		}*/
+		zero := int64(0)
+		for i := range vertexScaleDefinitions {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
 		}
 
 		numaLogger.Debug("Scaling down all vertices to 0 Pods")
-		if err := patchPipelineVertices(ctx, pipelineDef, vertices, c); err != nil {
+		//if err := patchPipelineVertices(ctx, pipelineDef, vertices, c); err != nil {
+		if err := applyScaleValuesToLivePipeline(ctx, pipelineDef, vertexScaleDefinitions, c); err != nil {
 			return fmt.Errorf("error scaling down the pipeline: %w", err)
 		}
 	}
@@ -675,6 +680,9 @@ func scalePipelineVerticesToOriginalValues(
 }
 
 func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstructured, vertices []any, c client.Client) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
 	patch := &unstructured.Unstructured{Object: make(map[string]any)}
 	err := unstructured.SetNestedSlice(patch.Object, vertices, "spec", "vertices")
 	if err != nil {
@@ -685,6 +693,7 @@ func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstru
 	if err != nil {
 		return err
 	}
+	numaLogger.Debugf("applying patch %q to pipeline %s", string(patchAsBytes), pipelineDef.GetName())
 
 	if err := kubernetes.PatchResource(ctx, c, pipelineDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
 		return err
