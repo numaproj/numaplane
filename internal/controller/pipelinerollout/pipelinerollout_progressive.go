@@ -362,6 +362,9 @@ func createScaledDownUpgradingPipelineDef(
 		} else {
 			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
 			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
+			if upgradingVertexScaleTo == 0 { // if for some reason the Initial value was 0, we don't want to set our Pods to 0
+				upgradingVertexScaleTo = 1
+			}
 			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
 		}
 
