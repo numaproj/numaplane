@@ -541,13 +541,6 @@ func scaleDownPipelineVertices(
 				"originalScaleMinMax", originalScaleMinMax,
 			).Debugf("found %d pod(s) for the vertex, scaling down to %d", currentPodsCount, newMax)
 
-			/*if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
-				return true, err
-			}
-
-			if err := unstructured.SetNestedField(vertexAsMap, newMax, "scale", "max"); err != nil {
-				return true, err
-			}*/
 			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 				VertexName: vertexName,
 				ScaleDefinition: &apiv1.ScaleDefinition{
@@ -566,7 +559,6 @@ func scaleDownPipelineVertices(
 	}
 
 	if promotedChildNeedsUpdate {
-		//if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
 		if err := applyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
 			return true, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
 		}
@@ -647,7 +639,6 @@ func scalePipelineVerticesToOriginalValues(
 						Max: nil,
 					},
 				}
-				//unstructured.RemoveNestedField(vertexAsMap, "scale")
 			} else {
 				scaleAsMap := map[string]any{}
 				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
@@ -655,28 +646,27 @@ func scalePipelineVerticesToOriginalValues(
 					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 				}
 
-				/*if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
-					return true, err
+				var min, max *int64
+				if scaleAsMap["min"] != nil {
+					minInt := int64(scaleAsMap["min"].(float64))
+					min = &minInt
 				}
-
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
-					return true, err
-				}*/
-				min := int64(scaleAsMap["min"].(float64))
-				max := int64(scaleAsMap["max"].(float64))
+				if scaleAsMap["max"] != nil {
+					maxInt := int64(scaleAsMap["max"].(float64))
+					max = &maxInt
+				}
 
 				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 					VertexName: vertexName,
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &min,
-						Max: &max,
+						Min: min,
+						Max: max,
 					},
 				}
 			}
 		}
 	}
 
-	//if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
 	if err := applyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
 	}
