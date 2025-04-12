@@ -508,6 +508,12 @@ func scaleDownPipelineVertices(
 				return true, err
 			}
 
+			fmt.Printf("deletethis: got %d Pods with labels %s\n", len(podsList.Items), fmt.Sprintf(
+				"%s=%s, %s=%s",
+				common.LabelKeyNumaflowPodPipelineName, promotedPipelineDef.GetName(),
+				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
+			))
+
 			currentPodsCount := int64(len(podsList.Items))
 
 			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the vertex")

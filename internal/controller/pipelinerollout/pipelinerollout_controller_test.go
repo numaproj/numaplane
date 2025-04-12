@@ -2192,13 +2192,13 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 
 					ScaleValues: map[string]apiv1.ScaleValues{
 						"in": {
-							OriginalScaleMinMax: `{"max": 5, "min": 1}`,
+							OriginalScaleMinMax: `{"max":5,"min":1}`,
 							ScaleTo:             2,
 							Current:             5,
 							Initial:             5,
 						},
 						"cat": {
-							OriginalScaleMinMax: `{"max": null, "min": null}`,
+							OriginalScaleMinMax: `{"max":null,"min":null}`,
 							ScaleTo:             0,
 							Current:             1,
 							Initial:             1,
@@ -2246,6 +2246,7 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						},
 					}, metav1.CreateOptions{})
 					assert.NoError(t, err)
+					fmt.Printf("deletethis: pod labels for test: %+v\n", labels)
 				}
 
 			}
