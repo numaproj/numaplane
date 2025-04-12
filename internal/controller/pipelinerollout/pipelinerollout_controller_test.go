@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -2109,6 +2110,169 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 				assert.NoError(t, err)
 				assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, pipeline.Object["spec"]))
 			}
+		})
+	}
+}
+
+func Test_scaleDownPipelineVertices(t *testing.T) {
+
+	_, numaflowClientSet, client, k8sclientset, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name string
+
+		initialPromotedPipelineStatus *apiv1.PromotedPipelineStatus
+		initialPromotedPipelineSpec   string
+		// number of Pods that initially exist for each Vertex
+		initialPodsPerVertex           map[string]int
+		expectedPromotedPipelineStatus *apiv1.PromotedPipelineStatus
+		expectedPromotedPipelineSpec   string
+	}{
+		{
+			name: "variety of vertices, not yet scaled down",
+			initialPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestPipelineName,
+					},
+				},
+			},
+			initialPromotedPipelineSpec: `
+
+			{
+				  "vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 1,
+							"max": 5
+						},
+						"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"lookbackSeconds": 1
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				  ]
+
+			}
+				  `,
+			initialPodsPerVertex: map[string]int{
+				"in":  5,
+				"cat": 1,
+				"out": 1,
+			},
+			expectedPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestPipelineName,
+					},
+
+					ScaleValues: map[string]apiv1.ScaleValues{
+						"in": {
+							OriginalScaleMinMax: `{"max": 5, "min": 1}`,
+							ScaleTo:             2,
+							Current:             5,
+							Initial:             5,
+						},
+						"cat": {
+							OriginalScaleMinMax: `{"max": null, "min": null}`,
+							ScaleTo:             0,
+							Current:             1,
+							Initial:             1,
+						},
+						"out": {
+							OriginalScaleMinMax: `null`,
+							ScaleTo:             0,
+							Current:             1,
+							Initial:             1,
+						},
+					},
+				},
+			},
+		},
+		/*{
+			name: "vertices already scaled down",
+		},*/
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = k8sclientset.CoreV1().Pods(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+			// Create an Unstructured Pipeline based on our spec in K8S
+			pipelineDef, err := ctlrcommon.CreateTestPipelineUnstructured(ctlrcommon.DefaultTestPipelineName, tc.initialPromotedPipelineSpec)
+			assert.NoError(t, err)
+
+			err = kubernetes.CreateResource(ctx, client, pipelineDef)
+			assert.NoError(t, err)
+
+			// Create the Pods
+			for vertexName, numPods := range tc.initialPodsPerVertex {
+				labels := map[string]string{
+					common.LabelKeyNumaflowPodPipelineName:       pipelineDef.GetName(),
+					common.LabelKeyNumaflowPodPipelineVertexName: vertexName,
+				}
+				for i := 0; i < numPods; i++ {
+					podName := fmt.Sprintf("%s-%s-%d", ctlrcommon.DefaultTestPipelineName, vertexName, i)
+					_, err := k8sclientset.CoreV1().Pods(ctlrcommon.DefaultTestNamespace).Create(ctx, &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:   podName,
+							Labels: labels,
+						},
+					}, metav1.CreateOptions{})
+					assert.NoError(t, err)
+				}
+
+			}
+
+			// get live Pipeline
+			pipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
+				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
+			assert.NoError(t, err)
+
+			// Call scaleDownPipelineVertices()
+			promotedPipelineStatus := tc.initialPromotedPipelineStatus.DeepCopy()
+			needsRequeue, err := scaleDownPipelineVertices(ctx, promotedPipelineStatus, pipeline, client)
+			assert.NoError(t, err)
+			assert.True(t, needsRequeue) // this will require requeue because the Pods won't be scaled down yet
+
+			// Get Pipeline and confirm its spec is as expected
+			resultPipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
+				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
+			assert.NoError(t, err)
+
+			expectedSpecMap := map[string]interface{}{}
+			err = json.Unmarshal([]byte(tc.expectedPromotedPipelineSpec), &expectedSpecMap)
+			assert.NoError(t, err)
+			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
+
+			// Compare result Status to expected
+			assert.Equal(t, tc.expectedPromotedPipelineStatus, promotedPipelineStatus)
 		})
 	}
 }
