@@ -15,6 +15,7 @@ import (
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
+	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -40,6 +41,8 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_pipelines.yaml",
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_vertices.yaml",
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_monovertices.yaml",
+		"https://raw.githubusercontent.com/argoproj/argo-rollouts/refs/heads/master/manifests/crds/analysis-run-crd.yaml",
+		"https://raw.githubusercontent.com/argoproj/argo-rollouts/refs/heads/master/manifests/crds/analysis-template-crd.yaml",
 	}
 	externalCRDsDir := crdDirectory + "/external"
 	for _, crdURL := range crdsURLs {
@@ -80,6 +83,10 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 		return
 	}
 	err = apiv1.AddToScheme(scheme.Scheme)
+	if err != nil {
+		return
+	}
+	err = argorolloutsv1.AddToScheme(scheme.Scheme)
 	if err != nil {
 		return
 	}
