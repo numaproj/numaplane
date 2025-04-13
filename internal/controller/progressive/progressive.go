@@ -601,42 +601,6 @@ func checkChildConditions(upgradingObjectStatus *kubernetes.GenericStatus) (bool
 	return true, nil
 }
 
-/*
-CalculateScaleMinMaxValues computes new minimum and maximum scale values
-// for a given object based on the current number of pods.
-
-Numaflow notes:
-- if max is unset, Numaflow uses DefaultMaxReplicas (50)
-- if min is unset or negative, Numaflow uses 0
-
-Parameters:
-  - object: A map representing the object from which to retrieve min and max values.
-  - podsCount: The current number of pods.
-  - pathToMin: A slice of strings representing the path to the min value in the object.
-
-Returns:
-  - newMin: The adjusted minimum scale value.
-  - newMax: The adjusted maximum scale value.
-  - error: An error if there is an issue retrieving the min or max values.
-*/
-/*func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin []string) (int64, int64, error) {
-	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
-
-	// Get the min from the resource definition; if it is not set, use 0
-	min, found, err := unstructured.NestedInt64(object, pathToMin...)
-	if !found || err != nil {
-		min = 0
-	}
-
-	// If min exceeds the newMax, reduce also min to newMax
-	newMin := min
-	if min > newMax {
-		newMin = newMax
-	}
-
-	return newMin, newMax, nil
-}*/
-
 func CalculateScaleMinMaxValues(podsCount int) int64 {
 	return int64(math.Floor(float64(podsCount) / float64(2)))
 }

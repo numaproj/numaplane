@@ -472,10 +472,6 @@ func scaleDownPromotedMonoVertex(
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
 
-	/*newMin, newMax, err := progressive.CalculateScaleMinMaxValues(promotedMonoVertexDef.Object, int(currentPodsCount), []string{"spec", "scale", "min"})
-	if err != nil {
-		return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
-	}*/
 	scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
 	newMin := scaleTo
 	newMax := scaleTo
