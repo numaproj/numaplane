@@ -508,12 +508,6 @@ func scaleDownPipelineVertices(
 				return true, err
 			}
 
-			fmt.Printf("deletethis: got %d Pods with labels %s\n", len(podsList.Items), fmt.Sprintf(
-				"%s=%s, %s=%s",
-				common.LabelKeyNumaflowPodPipelineName, promotedPipelineDef.GetName(),
-				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
-			))
-
 			currentPodsCount := int64(len(podsList.Items))
 
 			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the vertex")
@@ -536,10 +530,9 @@ func scaleDownPipelineVertices(
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
 
-			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(currentPodsCount), []string{"scale", "min"})
-			if err != nil {
-				return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
-			}
+			scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
+			newMin := scaleTo
+			newMax := scaleTo
 
 			numaLogger.WithValues(
 				"promotedChildName", promotedPipelineDef.GetName(),

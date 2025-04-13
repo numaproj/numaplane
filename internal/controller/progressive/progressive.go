@@ -619,7 +619,7 @@ Returns:
   - newMax: The adjusted maximum scale value.
   - error: An error if there is an issue retrieving the min or max values.
 */
-func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin []string) (int64, int64, error) {
+/*func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin []string) (int64, int64, error) {
 	newMax := int64(math.Floor(float64(podsCount) / float64(2)))
 
 	// Get the min from the resource definition; if it is not set, use 0
@@ -635,6 +635,10 @@ func CalculateScaleMinMaxValues(object map[string]any, podsCount int, pathToMin 
 	}
 
 	return newMin, newMax, nil
+}*/
+
+func CalculateScaleMinMaxValues(podsCount int) int64 {
+	return int64(math.Floor(float64(podsCount) / float64(2)))
 }
 
 // ExtractScaleMinMaxAsJSONString returns a JSON string of the scale definition

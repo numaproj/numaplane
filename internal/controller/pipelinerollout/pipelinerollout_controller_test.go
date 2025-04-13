@@ -2133,6 +2133,7 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 		initialPodsPerVertex           map[string]int
 		expectedPromotedPipelineStatus *apiv1.PromotedPipelineStatus
 		expectedPromotedPipelineSpec   string
+		expectedRequeue                bool // whether we expect this to cause a requeue or not
 	}{
 		{
 			name: "variety of vertices, not yet scaled down",
@@ -2215,10 +2216,209 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 					},
 				},
 			},
+			expectedPromotedPipelineSpec: `
+
+			{
+				  "vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 2,
+							"max": 2
+						},
+						"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 0,
+							"max": 0
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"sink": {
+							"log": {}
+						}
+					}
+				  ]
+
+			}
+				  `,
+			expectedRequeue: true,
 		},
-		/*{
+		{
 			name: "vertices already scaled down",
-		},*/
+			initialPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestPipelineName,
+					},
+
+					ScaleValues: map[string]apiv1.ScaleValues{
+						"in": {
+							OriginalScaleMinMax: `{"max":5,"min":1}`,
+							ScaleTo:             2,
+							Current:             5,
+							Initial:             5,
+						},
+						"cat": {
+							OriginalScaleMinMax: `{"max":null,"min":null}`,
+							ScaleTo:             0,
+							Current:             1,
+							Initial:             1,
+						},
+						"out": {
+							OriginalScaleMinMax: `null`,
+							ScaleTo:             0,
+							Current:             1,
+							Initial:             1,
+						},
+					},
+				},
+			},
+			initialPromotedPipelineSpec: `
+
+			{
+				  "vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 2,
+							"max": 2
+						},
+						"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"lookbackSeconds": 1,
+							"min": 0,
+							"max": 0
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"sink": {
+							"log": {}
+						}
+					}
+				  ]
+
+			}
+				  `,
+			initialPodsPerVertex: map[string]int{
+				"in":  2,
+				"cat": 0,
+				"out": 0,
+			},
+			expectedPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
+				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+					PromotedChildStatus: apiv1.PromotedChildStatus{
+						Name: ctlrcommon.DefaultTestPipelineName,
+					},
+
+					AllVerticesScaledDown: true,
+					ScaleValues: map[string]apiv1.ScaleValues{
+						"in": {
+							OriginalScaleMinMax: `{"max":5,"min":1}`,
+							ScaleTo:             2,
+							Current:             2,
+							Initial:             5,
+						},
+						"cat": {
+							OriginalScaleMinMax: `{"max":null,"min":null}`,
+							ScaleTo:             0,
+							Current:             0,
+							Initial:             1,
+						},
+						"out": {
+							OriginalScaleMinMax: `null`,
+							ScaleTo:             0,
+							Current:             0,
+							Initial:             1,
+						},
+					},
+				},
+			},
+			expectedPromotedPipelineSpec: `
+	  
+				  {
+						"vertices": [
+						  {
+							  "name": "in",
+							  "scale": {
+								  "lookbackSeconds": 1,
+								  "min": 2,
+								  "max": 2
+							  },
+							  "source": {
+							  "generator": {
+								  "rpu": 5,
+								  "duration": "1s"
+								  }
+							  }
+						  },
+						  {
+							  "name": "cat",
+							  "scale": {
+								  "lookbackSeconds": 1,
+								  "min": 0,
+								  "max": 0
+							  },
+							  "udf": {
+								  "builtin": {
+									  "name": "cat"
+								  }
+							  }
+						  },
+						  {
+							  "name": "out",
+							  "scale": {
+								  "min": 0,
+								  "max": 0
+							  },
+							  "sink": {
+								  "log": {}
+							  }
+						  }
+						]
+	  
+				  }
+						`,
+			expectedRequeue: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -2257,7 +2457,6 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						},
 					}, metav1.CreateOptions{})
 					assert.NoError(t, err)
-					fmt.Printf("deletethis: pod labels for test: %+v\n", labels)
 				}
 
 			}
@@ -2269,9 +2468,9 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 
 			// Call scaleDownPipelineVertices()
 			promotedPipelineStatus := tc.initialPromotedPipelineStatus.DeepCopy()
-			needsRequeue, err := scaleDownPipelineVertices(ctx, promotedPipelineStatus, pipeline, client)
+			requeueRequired, err := scaleDownPipelineVertices(ctx, promotedPipelineStatus, pipeline, client)
 			assert.NoError(t, err)
-			assert.True(t, needsRequeue) // this will require requeue because the Pods won't be scaled down yet
+			assert.Equal(t, tc.expectedRequeue, requeueRequired) // this will require requeue because the Pods won't be scaled down yet
 
 			// Get Pipeline and confirm its spec is as expected
 			resultPipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
