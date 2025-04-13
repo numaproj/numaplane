@@ -2119,6 +2119,9 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 	_, numaflowClientSet, client, k8sclientset, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 
+	kubernetes.KubernetesClient = k8sclientset
+	assert.Nil(t, err)
+
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -2243,6 +2246,14 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:   podName,
 							Labels: labels,
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "numa",
+									Image: "quay.io/numaproj/numaflow:v1.4.4",
+								},
+							},
 						},
 					}, metav1.CreateOptions{})
 					assert.NoError(t, err)
