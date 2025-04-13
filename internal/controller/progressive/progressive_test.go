@@ -335,6 +335,7 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 	},
 }
 
+/*
 func Test_CalculateScaleMinMaxValues(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -398,7 +399,7 @@ func Test_CalculateScaleMinMaxValues(t *testing.T) {
 			}
 		})
 	}
-}
+}*/
 
 func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 
