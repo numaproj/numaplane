@@ -77,7 +77,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 	CheckEventually(fmt.Sprintf("verifying the PipelineRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
-		if forcedPromotion {
+		/*if forcedPromotion {
 			upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 			if upgradingStatus == nil {
 				return false
@@ -87,7 +87,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
 				upgradingStatus.ForcedSuccess
-		}
+		}*/
 
 		if prProgressiveStatus.UpgradingPipelineStatus == nil {
 			return false
@@ -107,9 +107,14 @@ func VerifyPipelineRolloutProgressiveStatus(
 				upgradingStatus.AssessmentResult == expectedAssessmentResult
 		}*/
 		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
-			return promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
+			success := promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
 				upgradingStatus.AssessmentEndTime != nil
+			if forcedPromotion {
+				return success && upgradingStatus.ForcedSuccess
+			} else {
+				return success
+			}
 		} else {
 			// still in the middle of progressive upgrade strategy
 			return promotedStatus.Name == expectedPromotedName &&
