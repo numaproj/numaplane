@@ -74,7 +74,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 	expectedAssessmentResult apiv1.AssessmentResult,
 	forcedPromotion bool,
 ) {
-	CheckEventually("verifying the PipelineRollout Progressive Status", func() bool {
+	CheckEventually(fmt.Sprintf("verifying the PipelineRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
 		if forcedPromotion {

@@ -111,7 +111,6 @@ type Output struct {
 }
 
 type PipelineRolloutInfo struct {
-	CurrentCount        int
 	PipelineRolloutName string
 	PipelineIsFailed    bool
 }

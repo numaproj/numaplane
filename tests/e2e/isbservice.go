@@ -346,11 +346,14 @@ func UpdateISBServiceRollout(
 
 	// need to iterate over rollout names
 	originalPipelineNames := make(map[string]string)
+	originalPipelineCount := make(map[string]int)
 	for _, rolloutInfo := range pipelineRollouts {
 		originalPipelineName, err := GetPipelineName(Namespace, rolloutInfo.PipelineRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		originalPipelineNames[rolloutInfo.PipelineRolloutName] = originalPipelineName
+
+		originalPipelineCount[rolloutInfo.PipelineRolloutName] = GetCurrentPipelineCount(rolloutInfo.PipelineRolloutName)
 	}
 
 	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
@@ -409,13 +412,9 @@ func UpdateISBServiceRollout(
 
 		// Perform Progressive checks for all pipelines associated to the ISBService
 		for _, pipelineRollout := range pipelineRollouts {
-			//pipeline, err := GetPromotedPipeline(Namespace, pipelineRollout.PipelineRolloutName)
-			//Expect(err).ShouldNot(HaveOccurred())
-			//_, err = GetPipelineSpec(pipeline)
-			//Expect(err).ShouldNot(HaveOccurred())
 
-			expectedPromotedName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, pipelineRollout.CurrentCount-1)
-			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, pipelineRollout.CurrentCount)
+			expectedPromotedName := originalPipelineNames[pipelineRollout.PipelineRolloutName]
+			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName])
 			PipelineTransientProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName)
 		}
 	}
