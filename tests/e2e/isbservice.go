@@ -414,8 +414,8 @@ func UpdateISBServiceRollout(
 			//_, err = GetPipelineSpec(pipeline)
 			//Expect(err).ShouldNot(HaveOccurred())
 
-			expectedPromotedName := fmt.Sprintf("%s-%s", pipelineRollout.CurrentCount-1)
-			expectedUpgradingName := fmt.Sprintf("%s-%s", pipelineRollout.CurrentCount)
+			expectedPromotedName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, pipelineRollout.CurrentCount-1)
+			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, pipelineRollout.CurrentCount)
 			PipelineTransientProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName)
 		}
 	}
@@ -462,6 +462,8 @@ func UpdateISBServiceRollout(
 		}
 
 	}
+
+	// TODO: PipelineFinalProgressiveChecks()
 
 }
 

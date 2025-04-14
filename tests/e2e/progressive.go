@@ -96,12 +96,22 @@ func VerifyPipelineRolloutProgressiveStatus(
 		promotedStatus := prProgressiveStatus.PromotedPipelineStatus
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
-		// TODO: can we change this by passing in a parameter for "final"?
-		if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
+		/*if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
 				upgradingStatus.AssessmentEndTime != nil
 		} else { // still in the middle of progressive upgrade strategy
+			return promotedStatus.Name == expectedPromotedName &&
+				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
+				upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult
+		}*/
+		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
+			return promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+				upgradingStatus.AssessmentEndTime != nil
+		} else {
+			// still in the middle of progressive upgrade strategy
 			return promotedStatus.Name == expectedPromotedName &&
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
 				upgradingStatus.Name == expectedUpgradingName &&
