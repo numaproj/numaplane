@@ -77,7 +77,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 	CheckEventually(fmt.Sprintf("verifying the PipelineRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
-		if forcedPromotion {
+		/*if forcedPromotion {
 			upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 			if upgradingStatus == nil {
 				return false
@@ -91,25 +91,21 @@ func VerifyPipelineRolloutProgressiveStatus(
 
 		if prProgressiveStatus.UpgradingPipelineStatus == nil {
 			return false
-		}
+		}*/
 
 		promotedStatus := prProgressiveStatus.PromotedPipelineStatus
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
-		/*if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
-			return upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
-		} else { // still in the middle of progressive upgrade strategy
-			return promotedStatus.Name == expectedPromotedName &&
+		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
+			successCheck := promotedStatus.Name == expectedPromotedName &&
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
 				upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult
-		}*/
-		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
-			return promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
+			if forcedPromotion {
+				return successCheck && upgradingStatus.ForcedSuccess
+			} else {
+				return successCheck
+			}
 		} else {
 			// still in the middle of progressive upgrade strategy
 			return promotedStatus.Name == expectedPromotedName &&
