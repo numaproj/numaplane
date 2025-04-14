@@ -454,7 +454,7 @@ func DeletePipelineRollout(name string) {
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
 func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
-	progressiveFieldChanged bool,
+	progressiveFieldChanged bool, expectedSuccess bool,
 ) {
 
 	By("Updating Pipeline spec in PipelineRollout")
@@ -484,15 +484,19 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	}
 
+	var expectedPromotedPipelineName, expectedUpgradingPipelineName string
+
 	doProgressive := dataLoss || progressiveFieldChanged
 	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
-		expectedPromotedPipelineName := fmt.Sprintf("%s-%d", name, pipelineCount-1)
-		expectedUpgradingPipelineName := fmt.Sprintf("%s-%d", name, pipelineCount)
+		expectedPromotedPipelineName = fmt.Sprintf("%s-%d", name, pipelineCount-1)
+		expectedUpgradingPipelineName = fmt.Sprintf("%s-%d", name, pipelineCount)
 		PipelineTransientProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName)
 	}
 
 	// wait for update to reconcile
 	time.Sleep(5 * time.Second)
+
+	// FINAL STATE checks:
 
 	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
 	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
@@ -501,15 +505,16 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelineSpec(Namespace, name, verifySpecFunc)
 		VerifyPipelineRolloutDeployed(name)
 	}
-	// child pipeline will only be healthy if it is running
-	if expectedFinalPhase == numaflowv1.PipelinePhaseRunning {
-		VerifyPipelineRolloutHealthy(name)
-	}
 	// slow pausing case
 	if expectedFinalPhase == numaflowv1.PipelinePhasePausing && UpgradeStrategy == config.PPNDStrategyID {
 		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 	} else {
 		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+	}
+
+	if UpgradeStrategy == config.ProgressiveStrategyID {
+		PipelineFinalProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName, expectedSuccess, newSpec)
+
 	}
 
 	switch expectedFinalPhase {
@@ -521,6 +526,10 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelineFailed(Namespace, name)
 	case numaflowv1.PipelinePhaseRunning:
 		VerifyPipelineRunning(Namespace, name)
+	}
+	// child pipeline will only be healthy if it is running
+	if expectedFinalPhase == numaflowv1.PipelinePhaseRunning && expectedSuccess {
+		VerifyPipelineRolloutHealthy(name)
 	}
 
 }

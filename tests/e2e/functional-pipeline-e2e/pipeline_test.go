@@ -243,7 +243,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true, true)
+		}, true, true, true)
 	})
 
 	It("Should pause the Pipeline if user requests it", func() {
@@ -253,7 +253,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false, false)
+		}, false, false, true)
 
 		VerifyPipelineStaysPaused(pipelineRolloutName)
 	})
@@ -265,7 +265,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false, false)
+		}, false, false, true)
 	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {

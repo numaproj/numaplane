@@ -5,7 +5,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -79,12 +78,12 @@ func VerifyPipelineRolloutProgressiveStatus(
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
 		if forcedPromotion {
-			if prProgressiveStatus.UpgradingPipelineStatus == nil {
+			upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
+			if upgradingStatus == nil {
 				return false
 			}
 
-			upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
-
+			// TODO: can't this just be incorporated into the "success" case below?
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
 				upgradingStatus.ForcedSuccess
@@ -97,6 +96,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 		promotedStatus := prProgressiveStatus.PromotedPipelineStatus
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
+		// TODO: can we change this by passing in a parameter for "final"?
 		if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
@@ -156,9 +156,10 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		if !scaledDown {
 			return false
 		}
+		// maybe instead of doing this just check the Status in the caller?
 		// Check the promoted pipeline itself to confirm that all Vertices have min=max
 		// (ideally we would check the value itself but can't know for sure what it should be in the case of a Promoted Pipeline Vertex that's permitted to auto-scale)
-		promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
+		/*promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
 		if err != nil || promotedPipeline.GetName() != expectedPromotedPipelineName {
 			return false
 		}
@@ -178,7 +179,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 			if min != max {
 				return false
 			}
-		}
+		}*/
 		return true
 	}).Should(BeTrue())
 }
@@ -249,10 +250,52 @@ func PipelineTransientProgressiveChecks(pipelineRolloutName string, expectedProm
 
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyProgressive)
 
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPromotedPipelineName, expectedUpgradingPipelineName,
+		false, apiv1.AssessmentResultUnknown, false)
+
+	// TODO: in here check the number of Pods running per vertex wrt ScaleTo value
 	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, expectedPromotedPipelineName)
-	//VerifyUpgradingPipelineScaledDownForProgressive(PipelineRolloutInfo, expectedUpgradingPipelineName)
+	//VerifyUpgradingPipelineScaledDownForProgressive(expectedUpgradingPipelineName, expectedUpgradingPipelineName)
 
 }
+
+// if expectedAssessmentResult==Success, check that promoted pipeline min and max match PipelineSpec
+// if expectedAssessmentResult==Failure, check that promoted pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
+func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromotedPipelineName string, expectedUpgradingPipelineName string, expectedSuccess bool,
+	newPipelineSpec numaflowv1.PipelineSpec) {
+
+	expectedAssessment := apiv1.AssessmentResultSuccess
+	if !expectedSuccess {
+		expectedAssessment = apiv1.AssessmentResultFailure
+	}
+
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPromotedPipelineName, expectedUpgradingPipelineName,
+		expectedSuccess, expectedAssessment, false)
+
+	// if expectedAssessmentResult==Success, check that new pipeline min and max match PipelineSpec
+	// if expectedAssessmentResult==Failure, check that original pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
+
+	// Verify that the previously promoted pipeline was deleted
+
+}
+
+// what could we pass in to perform the below for transient check?:
+// - promotedName, upgradingName
+// - do we really need ScaleValuesRestoredToOriginal? shouldn't they always be?
+// check:
+// - VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, promotedName)
+// - VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promoted.Name, upgrading.Name,
+//		notRestoredToOriginal, AssessmentUnknown, false)
+// - Get scaleTo value for each Promoted vertex and verify that that number of Pods is running
+// - Get initial-scaleTo for each Upgrading vertex  and verify that that number of Pods is running
+
+// what could we pass in to perform the below for final check?:
+// - promotedName, upgradingName
+// - expected pass vs fail
+// - pipeline spec (to know that the promoted one scaled back up)
+// check:
+// - VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promoted.Name, upgrading.Name,
+//		scaleValuesRestoredToOriginal, assessmentResult, false)
 
 /*	// Verify that the Pipeline is set to scale down
 	VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name)
@@ -295,13 +338,6 @@ func PipelineTransientProgressiveChecks(pipelineRolloutName string, expectedProm
 		[]numaflowv1.AbstractVertex{{Name: expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
 	VerifyPipelineDeletion(expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name)
 }*/
-
-// what can we check?
-// if expectedAssessmentResult==Success, check that promoted pipeline min and max match PipelineSpec
-// if expectedAssessmentResult==Failure, check that promoted pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
-func PipelineFinalProgressiveChecks(pipelineRolloutName string, pipelineSpec numaflowv1.PipelineSpec, expectedAssessmentResult apiv1.AssessmentResult) {
-
-}
 
 func GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName string) apiv1.MonoVertexProgressiveStatus {
 	mvr, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
