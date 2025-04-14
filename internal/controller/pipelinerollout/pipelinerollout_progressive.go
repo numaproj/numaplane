@@ -362,6 +362,9 @@ func createScaledDownUpgradingPipelineDef(
 		} else {
 			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
 			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
+			if upgradingVertexScaleTo <= 0 { // if for some reason the Initial value was 0, we don't want to set our Pods to 0
+				upgradingVertexScaleTo = 1
+			}
 			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
 		}
 
@@ -403,26 +406,13 @@ func scalePipelineVerticesToZero(
 		}
 	}
 	if !allVerticesScaledDown {
-
-		vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
-		if err != nil {
-			return fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
-		}
-		for _, vertex := range vertices {
-			if vertexAsMap, ok := vertex.(map[string]any); ok {
-
-				if err := unstructured.SetNestedField(vertexAsMap, int64(0), "scale", "min"); err != nil {
-					return err
-				}
-
-				if err := unstructured.SetNestedField(vertexAsMap, int64(0), "scale", "max"); err != nil {
-					return err
-				}
-			}
+		zero := int64(0)
+		for i := range vertexScaleDefinitions {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
 		}
 
 		numaLogger.Debug("Scaling down all vertices to 0 Pods")
-		if err := patchPipelineVertices(ctx, pipelineDef, vertices, c); err != nil {
+		if err := applyScaleValuesToLivePipeline(ctx, pipelineDef, vertexScaleDefinitions, c); err != nil {
 			return fmt.Errorf("error scaling down the pipeline: %w", err)
 		}
 	}
@@ -495,8 +485,10 @@ func scaleDownPipelineVertices(
 		scaleValuesMap = promotedPipelineStatus.ScaleValues
 	}
 
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
+
 	promotedChildNeedsUpdate := false
-	for _, vertex := range vertices {
+	for vertexIndex, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
 
 			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
@@ -538,10 +530,9 @@ func scaleDownPipelineVertices(
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
 			}
 
-			newMin, newMax, err := progressive.CalculateScaleMinMaxValues(vertexAsMap, int(currentPodsCount), []string{"scale", "min"})
-			if err != nil {
-				return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
-			}
+			scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
+			newMin := scaleTo
+			newMax := scaleTo
 
 			numaLogger.WithValues(
 				"promotedChildName", promotedPipelineDef.GetName(),
@@ -552,12 +543,12 @@ func scaleDownPipelineVertices(
 				"originalScaleMinMax", originalScaleMinMax,
 			).Debugf("found %d pod(s) for the vertex, scaling down to %d", currentPodsCount, newMax)
 
-			if err := unstructured.SetNestedField(vertexAsMap, newMin, "scale", "min"); err != nil {
-				return true, err
-			}
-
-			if err := unstructured.SetNestedField(vertexAsMap, newMax, "scale", "max"); err != nil {
-				return true, err
+			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+				VertexName: vertexName,
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: &newMin,
+					Max: &newMax,
+				},
 			}
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
@@ -570,7 +561,7 @@ func scaleDownPipelineVertices(
 	}
 
 	if promotedChildNeedsUpdate {
-		if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
+		if err := applyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
 			return true, fmt.Errorf("error scaling down the existing promoted pipeline: %w", err)
 		}
 
@@ -624,8 +615,9 @@ func scalePipelineVerticesToOriginalValues(
 	if err != nil {
 		return true, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
 
-	for _, vertex := range vertices {
+	for vertexIndex, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
@@ -642,7 +634,13 @@ func scalePipelineVerticesToOriginalValues(
 			}
 
 			if vertexScaleValues.OriginalScaleMinMax == "null" {
-				unstructured.RemoveNestedField(vertexAsMap, "scale")
+				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+					VertexName: vertexName,
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: nil,
+						Max: nil,
+					},
+				}
 			} else {
 				scaleAsMap := map[string]any{}
 				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
@@ -650,18 +648,28 @@ func scalePipelineVerticesToOriginalValues(
 					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 				}
 
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["min"], "scale", "min"); err != nil {
-					return true, err
+				var min, max *int64
+				if scaleAsMap["min"] != nil {
+					minInt := int64(scaleAsMap["min"].(float64))
+					min = &minInt
+				}
+				if scaleAsMap["max"] != nil {
+					maxInt := int64(scaleAsMap["max"].(float64))
+					max = &maxInt
 				}
 
-				if err := unstructured.SetNestedField(vertexAsMap, scaleAsMap["max"], "scale", "max"); err != nil {
-					return true, err
+				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+					VertexName: vertexName,
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: min,
+						Max: max,
+					},
 				}
 			}
 		}
 	}
 
-	if err := patchPipelineVertices(ctx, promotedPipelineDef, vertices, c); err != nil {
+	if err := applyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
 		return true, fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
 	}
 
@@ -672,25 +680,6 @@ func scalePipelineVerticesToOriginalValues(
 	promotedPipelineStatus.ScaleValues = nil
 
 	return false, nil
-}
-
-func patchPipelineVertices(ctx context.Context, pipelineDef *unstructured.Unstructured, vertices []any, c client.Client) error {
-	patch := &unstructured.Unstructured{Object: make(map[string]any)}
-	err := unstructured.SetNestedSlice(patch.Object, vertices, "spec", "vertices")
-	if err != nil {
-		return err
-	}
-
-	patchAsBytes, err := patch.MarshalJSON()
-	if err != nil {
-		return err
-	}
-
-	if err := kubernetes.PatchResource(ctx, c, pipelineDef, string(patchAsBytes), k8stypes.MergePatchType); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func applyScaleValuesToPipelineDefinition(

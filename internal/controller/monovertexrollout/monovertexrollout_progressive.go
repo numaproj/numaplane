@@ -315,6 +315,9 @@ func scaleDownUpgradingMonoVertex(
 		// which is necessary when performing the health check for "ready replicas >= desired replicas"
 		// 2. that the total number of Pods (between the 2 monovertices) before and during upgrade remains the same
 		upgradingChildScaleTo := scaleValue.Initial - scaleValue.ScaleTo
+		if upgradingChildScaleTo <= 0 { // if for some reason the Initial value was 0, we don't want to set our Pods to 0
+			upgradingChildScaleTo = 1
+		}
 
 		err := unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "min")
 		if err != nil {
@@ -469,10 +472,9 @@ func scaleDownPromotedMonoVertex(
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
 	}
 
-	newMin, newMax, err := progressive.CalculateScaleMinMaxValues(promotedMonoVertexDef.Object, int(currentPodsCount), []string{"spec", "scale", "min"})
-	if err != nil {
-		return true, fmt.Errorf("cannot calculate the scale min and max values: %+w", err)
-	}
+	scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
+	newMin := scaleTo
+	newMax := scaleTo
 
 	numaLogger.WithValues(
 		"promotedChildName", promotedMonoVertexDef.GetName(),
