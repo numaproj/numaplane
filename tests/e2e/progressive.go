@@ -97,9 +97,10 @@ func VerifyPipelineRolloutProgressiveStatus(
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
 		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
-			successCheck := promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
+			successCheck := promotedStatus.Name == expectedPromotedName &&
+				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
+				upgradingStatus.Name == expectedUpgradingName &&
+				upgradingStatus.AssessmentResult == expectedAssessmentResult
 			if forcedPromotion {
 				return successCheck && upgradingStatus.ForcedSuccess
 			} else {
