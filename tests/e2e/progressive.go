@@ -1,12 +1,15 @@
 package e2e
 
 import (
+	"errors"
 	"fmt"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -153,6 +156,35 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 	}).Should(BeTrue())
 }
 
+func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
+	vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
+	}
+
+	scaleDefinitions := []apiv1.VertexScaleDefinition{}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return nil, err
+			}
+			if !foundVertexName {
+				return nil, errors.New("a vertex must have a name")
+			}
+
+			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return nil, err
+			}
+			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
+		}
+	}
+	return scaleDefinitions, nil
+}
+
 func VerifyPromotedPipelineScaledDownForProgressive(
 	pipelineRolloutName string,
 	expectedPromotedPipelineName string,
@@ -165,36 +197,48 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		}
 
 		// first make sure that the Progressive status indicates that scale down happened
-		scaledDown := prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
+		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
 			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
 
-		if !scaledDown {
+	}).Should(BeTrue())
+
+	CheckEventually("verifying Promoted Pipeline Vertex Scale", func() bool {
+
+		promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
+		if err != nil {
 			return false
 		}
-		// maybe instead of doing this just check the Status in the caller?
-		// Check the promoted pipeline itself to confirm that all Vertices have min=max
-		// (ideally we would check the value itself but can't know for sure what it should be in the case of a Promoted Pipeline Vertex that's permitted to auto-scale)
-		/*promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
-		if err != nil || promotedPipeline.GetName() != expectedPromotedPipelineName {
+		if promotedPipeline.GetName() != expectedPromotedPipelineName {
 			return false
 		}
-		vertices, found, err := unstructured.NestedSlice(promotedPipeline.Object, "spec", "vertices")
-		if err != nil || !found {
+		_, err = GetScaleValuesFromPipelineSpec(promotedPipeline)
+		if err != nil {
 			return false
 		}
-		for _, vertex := range vertices {
-			min, found, err := unstructured.NestedFloat64(vertex.(map[string]interface{}), "scale", "min")
-			if err != nil || !found {
+
+		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
+
+		vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(promotedPipeline)
+		if err != nil {
+			return false
+		}
+
+		// make sure the min/max from the promoted pipeline matches the Status
+		// and make sure min=max
+		if len(vertexScaleDefinitions) != len(prProgressiveStatus.PromotedPipelineStatus.ScaleValues) {
+			return false
+		}
+
+		for _, vertexScaleDef := range vertexScaleDefinitions {
+			statusDefinedScale := prProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexScaleDef.VertexName]
+			if vertexScaleDef.ScaleDefinition == nil || vertexScaleDef.ScaleDefinition.Min == nil || vertexScaleDef.ScaleDefinition.Max == nil ||
+				*vertexScaleDef.ScaleDefinition.Min != *vertexScaleDef.ScaleDefinition.Max || statusDefinedScale.ScaleTo != *vertexScaleDef.ScaleDefinition.Min {
 				return false
 			}
-			max, found, err := unstructured.NestedFloat64(vertex.(map[string]interface{}), "scale", "max")
-			if err != nil || !found {
-				return false
-			}
-			if min != max {
-				return false
-			}
-		}*/
+		}
+
+		// TODO: look at actual number of Pods running
+
 		return true
 	}).Should(BeTrue())
 }
@@ -213,6 +257,45 @@ func VerifyMonoVertexPromotedScale(namespace, monoVertexRolloutName string, expe
 
 		return VerifyVerticesScale(actualMonoVertexScaleMap, expectedMonoVertexScaleMap)
 	}).WithTimeout(TestTimeout).Should(BeTrue())
+}
+
+// Make sure Upgrading Pipeline has min=max equal to difference between Initial and ScaleTo in promoted status
+func VerifyUpgradingPipelineScaledDownForProgressive(
+	pipelineRolloutName string,
+	expectedUpgradingPipelineName string,
+) {
+	CheckEventually("verifying Upgrading Pipeline Vertex Scale", func() bool {
+
+		upgradingPipeline, err := GetPipelineByName(Namespace, expectedUpgradingPipelineName)
+		if err != nil {
+			return false
+		}
+		upgradingScaleDefinitions, err := GetScaleValuesFromPipelineSpec(upgradingPipeline)
+		if err != nil {
+			return false
+		}
+
+		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
+		promotedScaleValues := prProgressiveStatus.PromotedPipelineStatus.ScaleValues
+		for _, upgradingScaleDef := range upgradingScaleDefinitions {
+			expectedUpgradingScaleMinMax := 1
+
+			// is this vertex in the promoted pipeline?
+			promotedScale, vertexExistsInPromoted := promotedScaleValues[upgradingScaleDef.VertexName]
+			if vertexExistsInPromoted {
+				expectedUpgradingScaleMinMax = int(promotedScale.Initial - promotedScale.ScaleTo)
+			}
+			if upgradingScaleDef.ScaleDefinition == nil ||
+				upgradingScaleDef.ScaleDefinition.Min == nil || *upgradingScaleDef.ScaleDefinition.Min != int64(expectedUpgradingScaleMinMax) ||
+				upgradingScaleDef.ScaleDefinition.Max == nil || *upgradingScaleDef.ScaleDefinition.Max != int64(expectedUpgradingScaleMinMax) {
+				return false
+			}
+		}
+
+		// TODO: look at actual number of Pods running
+
+		return true
+	}).Should(BeTrue())
 }
 
 func MakeExpectedPipelineTypeProgressiveStatus(
@@ -268,9 +351,8 @@ func PipelineTransientProgressiveChecks(pipelineRolloutName string, expectedProm
 	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPromotedPipelineName, expectedUpgradingPipelineName,
 		false, apiv1.AssessmentResultUnknown, false)
 
-	// TODO: in here check the number of Pods running per vertex wrt ScaleTo value
 	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, expectedPromotedPipelineName)
-	//VerifyUpgradingPipelineScaledDownForProgressive(expectedUpgradingPipelineName, expectedUpgradingPipelineName)
+	VerifyUpgradingPipelineScaledDownForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
 
 }
 

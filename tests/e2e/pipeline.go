@@ -31,6 +31,10 @@ func GetUpgradingPipelines(namespace, pipelineRolloutName string) (*unstructured
 	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeInProgress)
 }
 
+func GetPipelineByName(namespace, pipelineName string) (*unstructured.Unstructured, error) {
+	return dynamicClient.Resource(GetGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+}
+
 func GetPipelineName(namespace, pipelineRolloutName string) (string, error) {
 	pipeline, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 	if err != nil {
