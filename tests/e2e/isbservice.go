@@ -461,6 +461,7 @@ func UpdateISBServiceRollout(
 			Expect(originalPipelineNames[rolloutName] == newPipelineName).To(BeTrue())
 		}
 
+		// for progressive strategy, make sure the pipelines look right (original should be cleaned up, etc)
 		if UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField {
 			expectedPromotedName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName]-1)
 			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName])
