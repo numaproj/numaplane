@@ -80,18 +80,6 @@ func VerifyPipelineRolloutProgressiveStatus(
 	CheckEventually(fmt.Sprintf("verifying the PipelineRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
-		/*if forcedPromotion {
-			upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
-			if upgradingStatus == nil {
-				return false
-			}
-
-			// TODO: can't this just be incorporated into the "success" case below?
-			return upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.ForcedSuccess
-		}*/
-
 		if prProgressiveStatus.UpgradingPipelineStatus == nil {
 			return false
 		}
@@ -99,16 +87,6 @@ func VerifyPipelineRolloutProgressiveStatus(
 		promotedStatus := prProgressiveStatus.PromotedPipelineStatus
 		upgradingStatus := prProgressiveStatus.UpgradingPipelineStatus
 
-		/*if promotedStatus == nil { // this indicates that the upgrading pipeline was deemed successful and we're no longer in the middle of progressive upgrade strategy
-			return upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
-		} else { // still in the middle of progressive upgrade strategy
-			return promotedStatus.Name == expectedPromotedName &&
-				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
-				upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult
-		}*/
 		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
 			success := promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
@@ -211,10 +189,6 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		if promotedPipeline.GetName() != expectedPromotedPipelineName {
 			return false
 		}
-		_, err = GetScaleValuesFromPipelineSpec(promotedPipeline)
-		if err != nil {
-			return false
-		}
 
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
@@ -298,6 +272,67 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 	}).Should(BeTrue())
 }
 
+func VerifyPromotedPipelineScaledUpForProgressive(
+	pipelineRolloutName string,
+	expectedPromotedPipelineName string,
+	newPipelineSpec numaflowv1.PipelineSpec,
+) {
+	CheckEventually("verifying expected pipeline is promoted", func() bool {
+
+		promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		if promotedPipeline.GetName() != expectedPromotedPipelineName {
+			return false
+		}
+
+		return true
+	}).Should(BeTrue())
+
+	CheckEventually("verifying promoted pipeline matches PipelineRollout-defined scale definition", func() bool {
+
+		promotedPipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(promotedPipeline)
+		if err != nil {
+			return false
+		}
+		if len(vertexScaleDefinitions) != len(newPipelineSpec.Vertices) {
+			return false
+		}
+		for i, vertexScaleDef := range vertexScaleDefinitions {
+			originalSpecVertex := newPipelineSpec.Vertices[i]
+			if originalSpecVertex.Name != vertexScaleDef.VertexName {
+				return false
+			}
+			// compare Min
+			if vertexScaleDef.ScaleDefinition == nil || vertexScaleDef.ScaleDefinition.Min == nil {
+				if originalSpecVertex.Scale.Min != nil {
+					return false
+				}
+			} else {
+				if originalSpecVertex.Scale.Min == nil || *vertexScaleDef.ScaleDefinition.Min != int64(*originalSpecVertex.Scale.Min) {
+					return false
+				}
+			}
+			// compare Max
+			if vertexScaleDef.ScaleDefinition == nil || vertexScaleDef.ScaleDefinition.Max == nil {
+				if originalSpecVertex.Scale.Max != nil {
+					return false
+				}
+			} else {
+				if originalSpecVertex.Scale.Max == nil || *vertexScaleDef.ScaleDefinition.Max != int64(*originalSpecVertex.Scale.Max) {
+					return false
+				}
+			}
+		}
+		return true
+	}).Should(BeTrue())
+}
+
 func MakeExpectedPipelineTypeProgressiveStatus(
 	promotedName, upgradingName, sourceVertexName string,
 	current, scaleTo int64,
@@ -370,9 +405,17 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 		expectedSuccess, expectedAssessment, false)
 
 	// if expectedAssessmentResult==Success, check that new pipeline min and max match PipelineSpec
+	// TODO: we should check the entire spec for match for every rollout as a separate issue, outside of just progressive
 	// if expectedAssessmentResult==Failure, check that original pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
-
-	// Verify that the previously promoted pipeline was deleted
+	if expectedSuccess {
+		// this is the "new" promoted pipeline
+		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, expectedUpgradingPipelineName, newPipelineSpec)
+		// TODO: Verify that the previously promoted pipeline was deleted
+	} else {
+		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, expectedPromotedPipelineName, newPipelineSpec)
+		//TODO:
+		//VerifyUpgradingPipelineScaledToZeroForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
+	}
 
 }
 
