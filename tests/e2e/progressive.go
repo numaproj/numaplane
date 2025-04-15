@@ -212,9 +212,25 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		}
 
 		// TODO: look at actual number of Pods running
+		//VerifyPodsRunningForAllVertices(vertexScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
+}
+
+func VerifyPodsRunningForAllVertices(vertexScaleDefinitions []apiv1.VertexScaleDefinition) {
+	for _, vertexScaleDef := range vertexScaleDefinitions {
+		min := int32(1)
+		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Min != nil {
+			min = int32(*vertexScaleDef.ScaleDefinition.Min)
+		}
+		max := int32(1)
+		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Max != nil {
+			max = int32(*vertexScaleDef.ScaleDefinition.Max)
+		}
+		VerifyVerticesPodsRunning(Namespace, vertexScaleDef.VertexName,
+			[]numaflowv1.AbstractVertex{{Name: vertexScaleDef.VertexName, Scale: numaflowv1.Scale{Min: &min, Max: &max}}}, ComponentVertex)
+	}
 }
 
 func VerifyMonoVertexPromotedScale(namespace, monoVertexRolloutName string, expectedMonoVertexScaleMap map[string]numaflowv1.Scale) {
@@ -267,6 +283,7 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 		}
 
 		// TODO: look at actual number of Pods running
+		//verifyPodsRunningForAllVertices(upgradingScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
@@ -436,7 +453,6 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 		expectedSuccess, expectedAssessment, false)
 
 	// if expectedAssessmentResult==Success, check that new pipeline min and max match PipelineSpec
-	// TODO: we should check the entire spec for match for every rollout as a separate issue, outside of just progressive
 	// if expectedAssessmentResult==Failure, check that original pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
 	if expectedSuccess {
 		// this is the "new" promoted pipeline
