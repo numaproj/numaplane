@@ -272,6 +272,37 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 	}).Should(BeTrue())
 }
 
+// verify that when the upgrading Pipeline fails, its Vertices scale to 0 Pods
+func VerifyUpgradingPipelineScaledToZeroForProgressive(
+	pipelineRolloutName string,
+	expectedUpgradingPipelineName string,
+) {
+	CheckEventually("verifying Upgrading Pipeline Vertex Scaled down to 0 Pods", func() bool {
+
+		upgradingPipeline, err := GetPipelineByName(Namespace, expectedUpgradingPipelineName)
+		if err != nil {
+			return false
+		}
+		upgradingScaleDefinitions, err := GetScaleValuesFromPipelineSpec(upgradingPipeline)
+		if err != nil {
+			return false
+		}
+
+		for _, upgradingScaleDef := range upgradingScaleDefinitions {
+
+			if upgradingScaleDef.ScaleDefinition == nil ||
+				upgradingScaleDef.ScaleDefinition.Min == nil || *upgradingScaleDef.ScaleDefinition.Min != 0 ||
+				upgradingScaleDef.ScaleDefinition.Max == nil || *upgradingScaleDef.ScaleDefinition.Max != 0 {
+				return false
+			}
+		}
+
+		// TODO: look at actual number of Pods running
+
+		return true
+	}).Should(BeTrue())
+}
+
 func VerifyPromotedPipelineScaledUpForProgressive(
 	pipelineRolloutName string,
 	expectedPromotedPipelineName string,
@@ -410,11 +441,10 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 	if expectedSuccess {
 		// this is the "new" promoted pipeline
 		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, expectedUpgradingPipelineName, newPipelineSpec)
-		// TODO: Verify that the previously promoted pipeline was deleted
+		VerifyPipelineDeletion(expectedPromotedPipelineName)
 	} else {
 		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, expectedPromotedPipelineName, newPipelineSpec)
-		//TODO:
-		//VerifyUpgradingPipelineScaledToZeroForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
+		VerifyUpgradingPipelineScaledToZeroForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
 	}
 
 }
