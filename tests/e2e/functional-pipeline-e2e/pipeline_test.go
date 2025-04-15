@@ -265,13 +265,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedISBServiceSpec := isbServiceSpec
 		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
 
-		/*expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
-			GetInstanceName(pipelineRolloutName, 1), GetInstanceName(pipelineRolloutName, 2), sourceVertexName,
-			sourceVertexScaleTo, sourceVertexScaleTo,
-			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
-			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
-		)*/
-
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
 		}, true, false, true)
@@ -288,13 +281,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should update the child ISBService updating a recreate field", func() {
-		/*expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
-			GetInstanceName(pipelineRolloutName, 2), GetInstanceName(pipelineRolloutName, 3), sourceVertexName,
-			sourceVertexScaleTo, sourceVertexScaleTo,
-			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
-			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
-		)*/
-
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 		}, false, true, true)

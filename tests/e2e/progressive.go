@@ -134,6 +134,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 	}).Should(BeTrue())
 }
 
+// get the Scale definitions for each Vertex
 func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
 	vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
 	if err != nil {
@@ -423,9 +424,7 @@ func MakeExpectedPipelineTypeProgressiveStatus(
 	return expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone
 }
 
-// what can we check?
-// all promoted and upgrading vertices in actual Pipeline have min=max
-// promoted status indicates allVerticesScaledDown
+// Verify promoted pipeline and upgrading pipeline during Progressive Rollout
 func PipelineTransientProgressiveChecks(pipelineRolloutName string, expectedPromotedPipelineName string, expectedUpgradingPipelineName string) {
 
 	// Check Progressive status and pipelines while the assessment is in progress
@@ -440,8 +439,7 @@ func PipelineTransientProgressiveChecks(pipelineRolloutName string, expectedProm
 
 }
 
-// if expectedAssessmentResult==Success, check that promoted pipeline min and max match PipelineSpec
-// if expectedAssessmentResult==Failure, check that promoted pipeline min and max match PipelineSpec and that upgrading pipeline min=max=0
+// Verify promoted pipeline and upgrading pipeline after Progressive Rollout
 func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromotedPipelineName string, expectedUpgradingPipelineName string, expectedSuccess bool,
 	newPipelineSpec numaflowv1.PipelineSpec) {
 
