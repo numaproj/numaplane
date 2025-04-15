@@ -390,7 +390,6 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 	},
 }
 
-
 var analysisTmplMonoVertexRollout = &apiv1.MonoVertexRollout{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "test",
@@ -457,7 +456,6 @@ func Test_getAnalysisRunTimeout(t *testing.T) {
 
 }
 
->>>>>>> bc2a1d8 (feat: AnalysisRun implementation - unit tests  (#695))
 func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 
 	getwd, err := os.Getwd()
