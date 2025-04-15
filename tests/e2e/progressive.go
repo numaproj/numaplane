@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -212,13 +213,13 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		}
 
 		// Verify the number of Pods for each Vertex
-		VerifyPodsRunningForAllVertices(vertexScaleDefinitions)
+		VerifyPodsRunningForAllVertices(promotedPipeline.GetName(), vertexScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
 }
 
-func VerifyPodsRunningForAllVertices(vertexScaleDefinitions []apiv1.VertexScaleDefinition) {
+func VerifyPodsRunningForAllVertices(pipelineName string, vertexScaleDefinitions []apiv1.VertexScaleDefinition) {
 	for _, vertexScaleDef := range vertexScaleDefinitions {
 		min := int32(1)
 		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Min != nil {
@@ -228,7 +229,7 @@ func VerifyPodsRunningForAllVertices(vertexScaleDefinitions []apiv1.VertexScaleD
 		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Max != nil {
 			max = int32(*vertexScaleDef.ScaleDefinition.Max)
 		}
-		VerifyVerticesPodsRunning(Namespace, vertexScaleDef.VertexName,
+		VerifyVerticesPodsRunning(Namespace, pipelineName,
 			[]numaflowv1.AbstractVertex{{Name: vertexScaleDef.VertexName, Scale: numaflowv1.Scale{Min: &min, Max: &max}}}, ComponentVertex)
 	}
 }
@@ -283,7 +284,7 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 		}
 
 		// Verify the number of Pods for each Vertex
-		VerifyPodsRunningForAllVertices(upgradingScaleDefinitions)
+		VerifyPodsRunningForAllVertices(expectedUpgradingPipelineName, upgradingScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
@@ -315,7 +316,7 @@ func VerifyUpgradingPipelineScaledToZeroForProgressive(
 		}
 
 		// Verify the number of Pods for each Vertex
-		VerifyPodsRunningForAllVertices(upgradingScaleDefinitions)
+		VerifyPodsRunningForAllVertices(expectedUpgradingPipelineName, upgradingScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())

@@ -148,33 +148,35 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 	switch component {
 	case ComponentVertex:
 		baseLabelSelector = fmt.Sprintf("%s,%s=%s", baseLabelSelector, numaflowv1.KeyPipelineName, rolloutChildName)
-		msg = "for each Pipeline Vertex"
+		msg = "for Pipeline Vertex"
 	case ComponentMonoVertex:
 		baseLabelSelector = fmt.Sprintf("%s,%s=%s", baseLabelSelector, numaflowv1.KeyMonoVertexName, rolloutChildName)
 		msg = "for the MonoVertex"
 	}
 
-	CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s (%s)", msg, rolloutChildName), func() bool {
-		for _, vtx := range specVertices {
-			vtxLabelSelector := ""
-			switch component {
-			case ComponentVertex:
-				vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s-%s", rolloutChildName, vtx.Name)
-			case ComponentMonoVertex:
-				vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s", rolloutChildName)
-			}
+	for _, vtx := range specVertices {
 
-			labelSelector := fmt.Sprintf("%s,%s", baseLabelSelector, vtxLabelSelector)
+		min := vtx.Scale.Min
+		if min == nil {
+			min = ptr.To(int32(0))
+		}
 
-			min := vtx.Scale.Min
-			if min == nil {
-				min = ptr.To(int32(0))
-			}
+		max := vtx.Scale.Max
+		if max == nil {
+			max = ptr.To(int32(numaflowv1.DefaultMaxReplicas))
+		}
 
-			max := vtx.Scale.Max
-			if max == nil {
-				max = ptr.To(int32(numaflowv1.DefaultMaxReplicas))
-			}
+		vtxLabelSelector := ""
+		switch component {
+		case ComponentVertex:
+			vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s-%s", rolloutChildName, vtx.Name)
+		case ComponentMonoVertex:
+			vtxLabelSelector = fmt.Sprintf("app.kubernetes.io/name=%s", rolloutChildName)
+		}
+
+		labelSelector := fmt.Sprintf("%s,%s", baseLabelSelector, vtxLabelSelector)
+
+		CheckEventually(fmt.Sprintf("verifying that the correct number of Pods is running %s (%s): between min=%d and max=%d with label selector %s", msg, vtx.Name, *min, *max, labelSelector), func() bool {
 
 			podsList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 			if err != nil {
@@ -195,10 +197,10 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 					return false
 				}
 			}
-		}
 
-		return true
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+			return true
+		}).WithTimeout(TestTimeout).Should(BeTrue())
+	}
 }
 
 func getRolloutCondition(conditions []metav1.Condition, conditionType apiv1.ConditionType) *metav1.Condition {
