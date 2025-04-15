@@ -391,7 +391,10 @@ var forcePromoteMonoVertexRollout = &apiv1.MonoVertexRollout{
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> origin/main
 var analysisTmplMonoVertexRollout = &apiv1.MonoVertexRollout{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "test",

@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -233,7 +234,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 
-		/*expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
+		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), sourceVertexName,
 			sourceVertexScaleTo, sourceVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", sourceVertexScaleMax, sourceVertexScaleMin),
