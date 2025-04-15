@@ -211,8 +211,8 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 			}
 		}
 
-		// TODO: look at actual number of Pods running
-		//VerifyPodsRunningForAllVertices(vertexScaleDefinitions)
+		// Verify the number of Pods for each Vertex
+		VerifyPodsRunningForAllVertices(vertexScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
@@ -282,8 +282,8 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 			}
 		}
 
-		// TODO: look at actual number of Pods running
-		//verifyPodsRunningForAllVertices(upgradingScaleDefinitions)
+		// Verify the number of Pods for each Vertex
+		VerifyPodsRunningForAllVertices(upgradingScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
@@ -314,7 +314,8 @@ func VerifyUpgradingPipelineScaledToZeroForProgressive(
 			}
 		}
 
-		// TODO: look at actual number of Pods running
+		// Verify the number of Pods for each Vertex
+		VerifyPodsRunningForAllVertices(upgradingScaleDefinitions)
 
 		return true
 	}).Should(BeTrue())
@@ -464,66 +465,6 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 	}
 
 }
-
-// what could we pass in to perform the below for transient check?:
-// - promotedName, upgradingName
-// - do we really need ScaleValuesRestoredToOriginal? shouldn't they always be?
-// check:
-// - VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, promotedName)
-// - VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promoted.Name, upgrading.Name,
-//		notRestoredToOriginal, AssessmentUnknown, false)
-// - Get scaleTo value for each Promoted vertex and verify that that number of Pods is running
-// - Get initial-scaleTo for each Upgrading vertex  and verify that that number of Pods is running
-
-// what could we pass in to perform the below for final check?:
-// - promotedName, upgradingName
-// - expected pass vs fail
-// - pipeline spec (to know that the promoted one scaled back up)
-// check:
-// - VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promoted.Name, upgrading.Name,
-//		scaleValuesRestoredToOriginal, assessmentResult, false)
-
-/*	// Verify that the Pipeline is set to scale down
-	VerifyPipelineRolloutScaledDownForProgressive(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name)
-
-	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.Name,
-		expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValuesRestoredToOriginal, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.AssessmentResult, false)
-
-	// Verify that the expected number of promoted Pipeline pods is running (only for source vertex)
-	// NOTE: min is set same as max if the original min if greater than scaleTo
-	prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
-	Expect(prProgressiveStatus.PromotedPipelineStatus).NotTo(BeNil())
-	scaleTo := expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].ScaleTo
-	min := prProgressiveStatus.PromotedPipelineStatus.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName].Initial
-	if min > scaleTo {
-		min = scaleTo
-	}
-	promotedScale := numaflowv1.Scale{Min: ptr.To(int32(min)), Max: ptr.To(int32(scaleTo))}
-	VerifyVerticesPodsRunning(Namespace, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name,
-		[]numaflowv1.AbstractVertex{{Name: expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName, Scale: promotedScale}}, ComponentVertex)
-
-	// Verify that the expected number of upgrading Pipeline pods is running (only for source vertex)
-	// Min and max are set to the same value which is the scale.min of the pipeline.
-	// TODO: when progressive scaling for pipeline is implemented similarly to monovertex, set this value to initial - scaleTo
-	minMax := pipelineSpec.Vertices[0].Scale.Min
-	VerifyVerticesPodsRunning(Namespace, expectedPipelineTypeProgressiveStatusInProgress.Upgrading.Name,
-		[]numaflowv1.AbstractVertex{{Name: expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName, Scale: numaflowv1.Scale{Min: minMax, Max: minMax}}}, ComponentVertex)
-
-	// Check Progressive status post-assessment
-
-	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name, expectedPipelineTypeProgressiveStatusOnDone.Upgrading.Name,
-		expectedPipelineTypeProgressiveStatusOnDone.Promoted.ScaleValuesRestoredToOriginal, expectedPipelineTypeProgressiveStatusOnDone.Upgrading.AssessmentResult, false)
-
-	// Verify that the upgrading pipeline was promoted by checking that the expected number of pods are running with the correct pipeline name (only for source vertex)
-	VerifyVerticesPodsRunning(Namespace, expectedPipelineTypeProgressiveStatusOnDone.Upgrading.Name,
-		[]numaflowv1.AbstractVertex{{Name: expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName, Scale: pipelineSpec.Vertices[0].Scale}}, ComponentVertex)
-
-	// Verify that the previously promoted pipeline was deleted
-	// NOTE: checking no pods are running for the source vertex only
-	VerifyVerticesPodsRunning(Namespace, expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name,
-		[]numaflowv1.AbstractVertex{{Name: expectedPipelineTypeProgressiveStatusInProgress.PipelineSourceVertexName, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
-	VerifyPipelineDeletion(expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name)
-}*/
 
 func GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName string) apiv1.MonoVertexProgressiveStatus {
 	mvr, err := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
