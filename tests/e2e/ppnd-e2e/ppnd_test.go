@@ -176,7 +176,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
-			}, true, false, nil, nil)
+			}, true, false, true)
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
@@ -255,7 +255,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change
 		UpdatePipelineRollout(failedPipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, nil, nil)
+		}, true, false, true)
 
 		time.Sleep(5 * time.Second)
 
@@ -283,7 +283,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update would normally cause data loss
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
-		}, true, false, false, nil, nil)
+		}, true, false, false)
 
 		time.Sleep(5 * time.Second)
 

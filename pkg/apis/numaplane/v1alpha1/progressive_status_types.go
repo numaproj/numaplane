@@ -27,9 +27,9 @@ import (
 type AssessmentResult string
 
 const (
-	AssessmentResultSuccess = "Success"
-	AssessmentResultFailure = "Failure"
-	AssessmentResultUnknown = "Unknown"
+	AssessmentResultSuccess AssessmentResult = "Success"
+	AssessmentResultFailure AssessmentResult = "Failure"
+	AssessmentResultUnknown AssessmentResult = "Unknown"
 )
 
 // UpgradingChildStatus describes the status of an upgrading child

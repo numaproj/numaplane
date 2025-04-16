@@ -18,27 +18,40 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-func GetPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
+func GetPromotedPipeline(namespace, pipelineRolloutName string) (*unstructured.Unstructured, error) {
 	return getChildResource(GetGVRForPipeline(), namespace, pipelineRolloutName)
+}
+func GetUpgradingPipelines(namespace, pipelineRolloutName string) (*unstructured.UnstructuredList, error) {
+	return GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), namespace, pipelineRolloutName, common.LabelValueUpgradeInProgress)
+}
+
+func GetPipelineByName(namespace, pipelineName string) (*unstructured.Unstructured, error) {
+	return dynamicClient.Resource(GetGVRForPipeline()).Namespace(namespace).Get(ctx, pipelineName, metav1.GetOptions{})
 }
 
 func GetPipelineName(namespace, pipelineRolloutName string) (string, error) {
-	pipeline, err := GetPipeline(namespace, pipelineRolloutName)
+	pipeline, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 	if err != nil {
 		return "", err
 	}
 	return pipeline.GetName(), nil
 }
 
+func GetCurrentPipelineCount(pipelineRolloutName string) int {
+	rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+	return int(*rollout.Status.NameCount)
+}
+
 func VerifyPipelineSpec(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) bool) {
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	CheckEventually("verifying Pipeline Spec", func() bool {
-		unstruct, err := GetPipeline(namespace, pipelineRolloutName)
+		unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 		if err != nil {
 			return false
 		}
@@ -98,7 +111,7 @@ func VerifyPipelineRunning(namespace string, pipelineRolloutName string) {
 	// Get Pipeline Pods to verify they're all up
 	By("Verifying that the Pipeline is ready")
 	// check "vertex" Pods
-	pipeline, err := GetPipeline(namespace, pipelineRolloutName)
+	pipeline, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	spec, err := GetPipelineSpec(pipeline)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -191,7 +204,7 @@ func GetPipelineSpecAndStatus(namespace string, pipelineRolloutName string) (*un
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus numaflowv1.PipelineStatus
 
-	unstruct, err := GetPipeline(namespace, pipelineRolloutName)
+	unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 	if err != nil {
 		return nil, retrievedPipelineSpec, retrievedPipelineStatus, err
 	}
@@ -217,7 +230,7 @@ func GetPipelineStatus(u *unstructured.Unstructured) (numaflowv1.PipelineStatus,
 
 func UpdatePipelineSpecInK8S(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec) (numaflowv1.PipelineSpec, error)) {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		unstruct, err := GetPipeline(namespace, pipelineRolloutName)
+		unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 		retrievedPipeline := unstruct
 
@@ -445,12 +458,14 @@ func DeletePipelineRollout(name string) {
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
 func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
-	progressiveFieldChanged bool, expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus, expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
+	progressiveFieldChanged bool, expectedSuccess bool,
 ) {
 
 	By("Updating Pipeline spec in PipelineRollout")
 	rawSpec, err := json.Marshal(newSpec)
 	Expect(err).ShouldNot(HaveOccurred())
+
+	pipelineCount := GetCurrentPipelineCount(name)
 
 	// update the PipelineRollout
 	UpdatePipelineRolloutInK8S(Namespace, name, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
@@ -473,13 +488,19 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	}
 
+	var expectedPromotedPipelineName, expectedUpgradingPipelineName string
+
 	doProgressive := dataLoss || progressiveFieldChanged
 	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
-		PipelineProgressiveChecks(name, newSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
+		expectedPromotedPipelineName = fmt.Sprintf("%s-%d", name, pipelineCount-1)
+		expectedUpgradingPipelineName = fmt.Sprintf("%s-%d", name, pipelineCount)
+		PipelineTransientProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName)
 	}
 
 	// wait for update to reconcile
 	time.Sleep(5 * time.Second)
+
+	// FINAL STATE checks:
 
 	// rollout phase will be pending if we are expecting a long pausing state and Pipeline will not be fully updated
 	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
@@ -488,15 +509,16 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelineSpec(Namespace, name, verifySpecFunc)
 		VerifyPipelineRolloutDeployed(name)
 	}
-	// child pipeline will only be healthy if it is running
-	if expectedFinalPhase == numaflowv1.PipelinePhaseRunning {
-		VerifyPipelineRolloutHealthy(name)
-	}
 	// slow pausing case
 	if expectedFinalPhase == numaflowv1.PipelinePhasePausing && UpgradeStrategy == config.PPNDStrategyID {
 		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyPPND)
 	} else {
 		VerifyPipelineRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
+	}
+
+	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
+		PipelineFinalProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName, expectedSuccess, newSpec)
+
 	}
 
 	switch expectedFinalPhase {
@@ -508,6 +530,10 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		VerifyPipelineFailed(Namespace, name)
 	case numaflowv1.PipelinePhaseRunning:
 		VerifyPipelineRunning(Namespace, name)
+	}
+	// child pipeline will only be healthy if it is running
+	if expectedFinalPhase == numaflowv1.PipelinePhaseRunning && expectedSuccess {
+		VerifyPipelineRolloutHealthy(name)
 	}
 
 }
@@ -525,7 +551,7 @@ func VerifyPipelineStaysPaused(pipelineRolloutName string) {
 
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-	pipeline, err := GetPipeline(Namespace, pipelineRolloutName)
+	pipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
 }

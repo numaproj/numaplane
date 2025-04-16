@@ -21,6 +21,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -36,6 +37,11 @@ func GetGVRForISBService() schema.GroupVersionResource {
 
 func GetPromotedISBService(namespace, isbServiceRolloutName string) (*unstructured.Unstructured, error) {
 	return getChildResource(GetGVRForISBService(), namespace, isbServiceRolloutName)
+}
+
+func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstructured.UnstructuredList, error) {
+	return GetChildrenOfUpgradeStrategy(GetGVRForISBService(), namespace, isbServiceRolloutName, common.LabelValueUpgradeInProgress)
+
 }
 
 // Get ISBServiceSpec from Unstructured type
@@ -329,8 +335,6 @@ func UpdateISBServiceRollout(
 	dataLossFieldChanged bool,
 	recreateFieldChanged bool,
 	progressiveFieldChanged bool,
-	expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus,
-	expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -342,11 +346,14 @@ func UpdateISBServiceRollout(
 
 	// need to iterate over rollout names
 	originalPipelineNames := make(map[string]string)
-	for _, rolloutInfo := range pipelineRollouts {
-		originalPipelineName, err := GetPipelineName(Namespace, rolloutInfo.PipelineRolloutName)
+	originalPipelineCount := make(map[string]int)
+	for _, pipelineRollout := range pipelineRollouts {
+		originalPipelineName, err := GetPipelineName(Namespace, pipelineRollout.PipelineRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		originalPipelineNames[rolloutInfo.PipelineRolloutName] = originalPipelineName
+		originalPipelineNames[pipelineRollout.PipelineRolloutName] = originalPipelineName
+
+		originalPipelineCount[pipelineRollout.PipelineRolloutName] = GetCurrentPipelineCount(pipelineRollout.PipelineRolloutName)
 	}
 
 	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
@@ -356,6 +363,7 @@ func UpdateISBServiceRollout(
 
 	// both "dataLoss" fields and "recreate" fields have risk of data loss
 	dataLossRisk := dataLossFieldChanged || recreateFieldChanged
+	progressiveRequiredField := dataLossRisk || recreateFieldChanged || progressiveFieldChanged
 	if UpgradeStrategy == config.PPNDStrategyID {
 
 		verifyNotPausing := func() bool {
@@ -400,17 +408,15 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	if UpgradeStrategy == config.ProgressiveStrategyID && (dataLossRisk || recreateFieldChanged || progressiveFieldChanged) {
+	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField {
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyProgressive)
 
 		// Perform Progressive checks for all pipelines associated to the ISBService
 		for _, pipelineRollout := range pipelineRollouts {
-			pipeline, err := GetPipeline(Namespace, pipelineRollout.PipelineRolloutName)
-			Expect(err).ShouldNot(HaveOccurred())
-			pipelineSpec, err := GetPipelineSpec(pipeline)
-			Expect(err).ShouldNot(HaveOccurred())
 
-			PipelineProgressiveChecks(pipelineRollout.PipelineRolloutName, pipelineSpec, expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone)
+			expectedPromotedName := originalPipelineNames[pipelineRollout.PipelineRolloutName]
+			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName])
+			PipelineTransientProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName)
 		}
 	}
 
@@ -435,15 +441,15 @@ func UpdateISBServiceRollout(
 
 	VerifyPDBForISBService(Namespace, newISBServiceName)
 
-	for _, rolloutInfo := range pipelineRollouts {
+	for _, pipelineRollout := range pipelineRollouts {
 
-		rolloutName := rolloutInfo.PipelineRolloutName
+		rolloutName := pipelineRollout.PipelineRolloutName
 
 		By("getting new pipeline name")
 		newPipelineName, err := GetPipelineName(Namespace, rolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		if recreateFieldChanged || (dataLossFieldChanged && UpgradeStrategy == config.ProgressiveStrategyID) {
+		if (recreateFieldChanged && UpgradeStrategy != config.ProgressiveStrategyID) || (UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField) {
 			// make sure the names of isbsvc and pipeline have changed
 			By(fmt.Sprintf("verifying new isbservice name is different from original %s and new pipeline name is different from original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
 			Expect(originalISBServiceName != newISBServiceName).To(BeTrue())
@@ -453,6 +459,17 @@ func UpdateISBServiceRollout(
 			By(fmt.Sprintf("verifying new isbservice name matches original %s and new pipeline name matches original %s", originalISBServiceName, originalPipelineNames[rolloutName]))
 			Expect(originalISBServiceName == newISBServiceName).To(BeTrue())
 			Expect(originalPipelineNames[rolloutName] == newPipelineName).To(BeTrue())
+		}
+
+		// for progressive strategy, make sure the pipelines look right (original should be cleaned up, etc)
+		if UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField {
+			expectedPromotedName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName]-1)
+			expectedUpgradingName := fmt.Sprintf("%s-%d", pipelineRollout.PipelineRolloutName, originalPipelineCount[pipelineRollout.PipelineRolloutName])
+			pipeline, err := GetPipelineByName(Namespace, expectedUpgradingName)
+			Expect(err).ShouldNot(HaveOccurred())
+			pipelineSpec, err := GetPipelineSpec(pipeline)
+			Expect(err).ShouldNot(HaveOccurred())
+			PipelineFinalProgressiveChecks(pipelineRollout.PipelineRolloutName, expectedPromotedName, expectedUpgradingName, true, pipelineSpec)
 		}
 
 	}
