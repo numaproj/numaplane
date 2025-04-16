@@ -284,7 +284,7 @@ func processUpgradingChild(
 		forcePromote = true
 	}
 
-	// check for Force Promote set in Progressive strategy to force success logic OR if promoted child has force-promote label
+	// check for Force Promote set in Progressive strategy to force success logic OR if upgrading child has force-promote label
 	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote {
 		childStatus.ForcedSuccess = true
 
