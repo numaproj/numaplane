@@ -278,8 +278,14 @@ func processUpgradingChild(
 	}
 	childStatus = rolloutObject.GetUpgradingChildStatus()
 
-	// check for Force Promote set in Progressive strategy to force success logic
-	if rolloutObject.GetProgressiveStrategy().ForcePromote {
+	forcePromote := false
+	_, ok := existingUpgradingChildDef.GetLabels()[common.LabelKeyForcePromote]
+	if ok {
+		forcePromote = true
+	}
+
+	// check for Force Promote set in Progressive strategy to force success logic OR if upgrading child has force-promote label
+	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote {
 		childStatus.ForcedSuccess = true
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)

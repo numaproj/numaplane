@@ -128,6 +128,9 @@ const (
 	// LabelKeyNumaflowPodMonoVertexVertexName is the label key used to identify the pod associated to a specific monovertex vertex
 	LabelKeyNumaflowPodMonoVertexVertexName = "numaflow.numaproj.io/mono-vertex-name"
 
+	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade
+	LabelKeyForcePromote = "numaplane.numaproj.io/force-promote"
+
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"
 
