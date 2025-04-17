@@ -385,12 +385,6 @@ func processUpgradingChild(
 			if needRequeue {
 				return false, common.DefaultRequeueDelay, nil
 			}
-		}
-		childStatus = rolloutObject.GetUpgradingChildStatus()
-
-		// if we now have an upgrading child, make sure we mark the existing one for garbage collection
-		// and do post-upgrade process if we haven't
-		if !childStatus.InitializationComplete {
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			reasonFailure := common.LabelValueProgressiveFailure
@@ -398,6 +392,12 @@ func processUpgradingChild(
 			if err != nil {
 				return false, 0, err
 			}
+		}
+		childStatus = rolloutObject.GetUpgradingChildStatus()
+
+		// if we now have an upgrading child, make sure we mark the existing one for garbage collection
+		// and do post-upgrade process if we haven't
+		if !childStatus.InitializationComplete {
 
 			needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, controller, c)
 			if needsRequeue {
