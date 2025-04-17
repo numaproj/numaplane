@@ -375,15 +375,13 @@ func processUpgradingChild(
 
 		// if so, mark the existing one for garbage collection and then create a new upgrading one
 		if needsUpdating {
-			needRequeue := false
-			newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
+			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
 				return false, 0, err
 			}
 			if needRequeue {
 				return false, common.DefaultRequeueDelay, nil
 			}
-			existingUpgradingChildDef = newUpgradingChildDef
 
 			return false, 0, nil
 		}
