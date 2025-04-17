@@ -375,8 +375,6 @@ func processUpgradingChild(
 		}
 
 		// if so, create a new upgrading one and mark the existing one for garbage collection
-
-		// first create the new one
 		if needsUpdating {
 			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
@@ -395,8 +393,7 @@ func processUpgradingChild(
 		}
 		childStatus = rolloutObject.GetUpgradingChildStatus()
 
-		// if we now have an upgrading child, make sure we mark the existing one for garbage collection
-		// and do post-upgrade process if we haven't
+		// do post-upgrade process if we haven't (check that AssessmentResult is not set just in case)
 		if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 
 			needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, controller, c)
