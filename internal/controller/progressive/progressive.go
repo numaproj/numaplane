@@ -165,7 +165,7 @@ func ProcessResource(
 	}
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
-	if !childStatus.InitializationComplete {
+	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return false, common.DefaultRequeueDelay, err
