@@ -374,7 +374,9 @@ func processUpgradingChild(
 			return false, 0, err
 		}
 
-		// if so, mark the existing one for garbage collection and then create a new upgrading one
+		// if so, create a new upgrading one and mark the existing one for garbage collection
+
+		// first create the new one
 		if needsUpdating {
 			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
@@ -386,7 +388,8 @@ func processUpgradingChild(
 		}
 		childStatus = rolloutObject.GetUpgradingChildStatus()
 
-		// if we now have an upgrading child, make sure we do post-upgrade process if we haven't
+		// if we now have an upgrading child, make sure we mark the existing one for garbage collection
+		// and do post-upgrade process if we haven't
 		if !childStatus.InitializationComplete {
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
