@@ -154,6 +154,22 @@ func ProcessResource(
 		return false, 0, err
 	}
 
+	// get UpgradingChildStatus and reset it if necessary
+	childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
+	if err != nil {
+		return false, 0, err
+	}
+
+	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
+	if !childStatus.InitializationComplete {
+		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
+		if needsRequeue {
+			return false, common.DefaultRequeueDelay, err
+		} else {
+			return false, 0, err
+		}
+	}
+
 	done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if err != nil {
 		return false, 0, err
@@ -179,6 +195,31 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 	}
 
 	return upgradingChild, nil
+}
+
+// get the UpgradingChildStatus for the current upgrading child; if it needs to be reset, then reset it
+func getUpgradingChildStatus(ctx context.Context, rolloutObject ProgressiveRolloutObject, currentUpgradingChildDef *unstructured.Unstructured) (*apiv1.UpgradingChildStatus, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// if the Upgrading child status is not for current child, reset it
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+	// Create a new childStatus object if not present in the live rollout object or
+	// if it is that of a previous progressive upgrade.
+	if childStatus == nil || childStatus.Name != currentUpgradingChildDef.GetName() {
+		if childStatus != nil {
+			numaLogger.WithValues("name", currentUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("the live upgrading child status is stale, resetting it")
+		} else {
+			numaLogger.WithValues("name", currentUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
+		}
+
+		err := rolloutObject.ResetUpgradingChildStatus(currentUpgradingChildDef)
+		if err != nil {
+			return nil, fmt.Errorf("processing upgrading child, failed to reset the upgrading child status for child %s/%s", currentUpgradingChildDef.GetNamespace(), currentUpgradingChildDef.GetName())
+		}
+	} else {
+		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
+	}
+	return rolloutObject.GetUpgradingChildStatus(), nil
 }
 
 func getAnalysisRunTimeout(ctx context.Context) (time.Duration, error) {
@@ -260,23 +301,6 @@ func processUpgradingChild(
 	}
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
-	// Create a new childStatus object if not present in the live rollout object or
-	// if it is that of a previous progressive upgrade.
-	if childStatus == nil || childStatus.Name != existingUpgradingChildDef.GetName() {
-		if childStatus != nil {
-			numaLogger.WithValues("name", existingUpgradingChildDef.GetName(), "childStatus", *childStatus).Debug("the live upgrading child status is stale, resetting it")
-		} else {
-			numaLogger.WithValues("name", existingUpgradingChildDef.GetName()).Debug("the live upgrading child status has not been set yet, initializing it")
-		}
-
-		err = rolloutObject.ResetUpgradingChildStatus(existingUpgradingChildDef)
-		if err != nil {
-			return false, 0, fmt.Errorf("processing upgrading child, failed to reset the upgrading child status for child %s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
-		}
-	} else {
-		numaLogger.WithValues("childStatus", *childStatus).Debug("live upgrading child previously set")
-	}
-	childStatus = rolloutObject.GetUpgradingChildStatus()
 
 	// check for Force Promote set in Progressive strategy to force success logic
 	if rolloutObject.GetProgressiveStrategy().ForcePromote {
@@ -354,6 +378,13 @@ func processUpgradingChild(
 			if needRequeue {
 				return false, common.DefaultRequeueDelay, nil
 			}
+			existingUpgradingChildDef = newUpgradingChildDef
+
+			return false, 0, nil
+		}
+
+		// if we now have an upgrading child, make sure we do post-upgrade process if we haven't
+		if !childStatus.InitializationComplete {
 
 			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			reasonFailure := common.LabelValueProgressiveFailure
@@ -362,22 +393,27 @@ func processUpgradingChild(
 				return false, 0, err
 			}
 
-			return false, 0, nil
-		} else {
-			requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
-			if err != nil {
+			needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, controller, c)
+			if needsRequeue {
+				return false, common.DefaultRequeueDelay, err
+			} else {
 				return false, 0, err
 			}
-			if requeue {
-				return false, common.DefaultRequeueDelay, nil
-			}
-			requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, existingUpgradingChildDef, c)
-			if err != nil {
-				return false, 0, err
-			}
-			if requeue {
-				return false, common.DefaultRequeueDelay, nil
-			}
+		}
+
+		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
+		if err != nil {
+			return false, 0, err
+		}
+		if requeue {
+			return false, common.DefaultRequeueDelay, nil
+		}
+		requeue, err = controller.ProcessUpgradingChildPostFailure(ctx, rolloutObject, existingUpgradingChildDef, c)
+		if err != nil {
+			return false, 0, err
+		}
+		if requeue {
+			return false, common.DefaultRequeueDelay, nil
 		}
 
 		return false, 0, nil
@@ -533,6 +569,10 @@ func declareSuccess(
 	return true, nil
 }
 
+// startUpgradeProcess() is the process required to create a new Upgrading child as well as
+// everything that must be done beforehand.
+// Critically, the last part of this function is the creation of the child.
+// Therefore, it should be called if that child has not yet been created.
 // return:
 // - the new child we created, if any
 // - whether we need to requeue
@@ -573,19 +613,43 @@ func startUpgradeProcess(
 		return newUpgradingChildDef, true, nil
 	}
 
+	// Critically, the last part of this function must be the creation of the child, since this is
+	// only guaranteed to be called up until that child has been created.
+
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-	if err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef); err != nil {
-		return newUpgradingChildDef, false, err
-	}
-	requeue, err = controller.ProcessUpgradingChildPostUpgrade(ctx, rolloutObject, newUpgradingChildDef, c)
+	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	return newUpgradingChildDef, false, err
+}
+
+func startPostUpgradeProcess(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	existingPromotedChild *unstructured.Unstructured,
+	existingUpgradingChild *unstructured.Unstructured,
+	controller progressiveController,
+	c client.Client,
+) (bool, error) {
+	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingUpgradingChild, c)
 	if err != nil {
-		return newUpgradingChildDef, false, err
+		return false, err
 	}
 	if requeue {
-		return newUpgradingChildDef, true, nil
+		return true, nil
+	}
+	requeue, err = controller.ProcessUpgradingChildPostUpgrade(ctx, rolloutObject, existingUpgradingChild, c)
+	if err != nil {
+		return false, err
+	}
+	if requeue {
+		return true, nil
 	}
 
-	return newUpgradingChildDef, false, err
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+	childStatus.InitializationComplete = true
+	rolloutObject.SetUpgradingChildStatus(childStatus)
+
+	return false, err
+
 }
 
 // return true if all Conditions are true
