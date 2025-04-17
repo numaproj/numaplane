@@ -368,6 +368,7 @@ func processUpgradingChild(
 		if err != nil {
 			return false, 0, err
 		}
+
 		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
 			return false, 0, err
@@ -382,9 +383,8 @@ func processUpgradingChild(
 			if needRequeue {
 				return false, common.DefaultRequeueDelay, nil
 			}
-
-			return false, 0, nil
 		}
+		childStatus = rolloutObject.GetUpgradingChildStatus()
 
 		// if we now have an upgrading child, make sure we do post-upgrade process if we haven't
 		if !childStatus.InitializationComplete {
@@ -589,6 +589,8 @@ func startUpgradeProcess(
 ) (*unstructured.Unstructured, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	numaLogger.WithValues("promoted child", existingPromotedChild.GetName()).Debug("starting upgrade process")
+
 	requeue, err := controller.ProcessPromotedChildPreUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {
 		return nil, false, err
@@ -632,7 +634,13 @@ func startPostUpgradeProcess(
 	controller progressiveController,
 	c client.Client,
 ) (bool, error) {
-	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingUpgradingChild, c)
+	numaLogger := logger.FromContext(ctx)
+
+	numaLogger.WithValues(
+		"promoted child", existingPromotedChild.GetName(),
+		"upgading child", existingUpgradingChild).Debug("starting post upgrade process")
+
+	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {
 		return false, err
 	}

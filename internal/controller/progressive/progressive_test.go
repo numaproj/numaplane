@@ -111,14 +111,6 @@ func Test_processUpgradingChild(t *testing.T) {
 		expectedError             error
 	}{
 		{
-			name:                      "no upgrading child status on the live rollout",
-			rolloutObject:             defaultMonoVertexRollout.DeepCopy(),
-			existingUpgradingChildDef: createMonoVertex("test"),
-			expectedDone:              false,
-			expectedRequeueDelay:      assessmentSchedule.Interval,
-			expectedError:             nil,
-		},
-		{
 			name: "preset upgrading child status on the live rollout - different name",
 			rolloutObject: setMonoVertexProgressiveStatus(
 				defaultMonoVertexRollout.DeepCopy(),

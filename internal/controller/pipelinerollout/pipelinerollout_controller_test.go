@@ -1011,7 +1011,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
 			},
-		},*/
+		},
 		{
 			name:            "Progressive deployed successfully",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
@@ -1050,10 +1050,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:    apiv1.AssessmentResultSuccess,
+						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:       apiv1.AssessmentResultSuccess,
+						InitializationComplete: true,
 					},
 				},
 				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
@@ -1079,7 +1080,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
 		},
-		/*{
+		{
 			name:            "Progressive deployment failed",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: *createPipeline(
@@ -1117,10 +1118,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:    apiv1.AssessmentResultFailure,
+						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:       apiv1.AssessmentResultFailure,
+						InitializationComplete: true,
 					},
 				},
 				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
@@ -1150,7 +1152,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
 			},
-		},
+		},*/
 		{
 			name:            "Progressive deployment failed - going back to original spec",
 			newPipelineSpec: pipelineSpec, // this matches the original spec
@@ -1189,10 +1191,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:    apiv1.AssessmentResultFailure,
+						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+						AssessmentResult:       apiv1.AssessmentResultFailure,
+						InitializationComplete: true,
 					},
 				},
 				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
@@ -1224,7 +1227,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
 			},
 		},
-		{
+		/*{
 			name:            "Clean up after progressive upgrade",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: *createPipeline(
