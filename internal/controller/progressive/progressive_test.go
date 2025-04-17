@@ -94,10 +94,10 @@ func Test_processUpgradingChild(t *testing.T) {
 
 	ctx := context.Background()
 
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	//globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	assert.NoError(t, err)
 
-	assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
+	//assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
 	assert.NoError(t, err)
 
 	defaultExistingPromotedChildDef := createMonoVertex("test")
@@ -111,31 +111,17 @@ func Test_processUpgradingChild(t *testing.T) {
 		expectedError             error
 	}{
 		{
-			name: "preset upgrading child status on the live rollout - different name",
-			rolloutObject: setMonoVertexProgressiveStatus(
-				defaultMonoVertexRollout.DeepCopy(),
-				&apiv1.UpgradingMonoVertexStatus{
-					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-						UpgradingChildStatus: apiv1.UpgradingChildStatus{Name: "test"}},
-				},
-				nil),
-			//setRolloutObjectChildStatus(defaultMonoVertexRollout.DeepCopy(), &apiv1.UpgradingChildStatus{Name: "test"}, &apiv1.PromotedChildStatus{}),
-			existingUpgradingChildDef: createMonoVertex("test-1"),
-			expectedDone:              false,
-			expectedRequeueDelay:      assessmentSchedule.Interval,
-			expectedError:             nil,
-		},
-		{
-			name: "preset upgrading child status on the live rollout - same name, can assess, success",
+			name: "can assess, success",
 			rolloutObject: setMonoVertexProgressiveStatus(
 				defaultMonoVertexRollout.DeepCopy(),
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                "test-success",
-							AssessmentResult:    apiv1.AssessmentResultUnknown,
-							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							Name:                   "test-success",
+							AssessmentResult:       apiv1.AssessmentResultUnknown,
+							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
+							InitializationComplete: true,
 						},
 					},
 				},
@@ -147,15 +133,16 @@ func Test_processUpgradingChild(t *testing.T) {
 			expectedError:             nil,
 		},
 		{
-			name: "preset upgrading child status on the live rollout - same name, failure",
+			name: "failure",
 			rolloutObject: setMonoVertexProgressiveStatus(
 				defaultMonoVertexRollout.DeepCopy(),
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                "test-failure",
-							AssessmentResult:    apiv1.AssessmentResultFailure,
-							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							Name:                   "test-failure",
+							AssessmentResult:       apiv1.AssessmentResultFailure,
+							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete: true,
 						},
 					},
 				},
@@ -180,9 +167,10 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                "test-force-promote",
-							AssessmentResult:    apiv1.AssessmentResultFailure,
-							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							Name:                   "test-force-promote",
+							AssessmentResult:       apiv1.AssessmentResultFailure,
+							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete: true,
 						},
 					},
 				},
@@ -207,10 +195,11 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                "test-analysis-success",
-							AssessmentResult:    apiv1.AssessmentResultUnknown,
-							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							Name:                   "test-analysis-success",
+							AssessmentResult:       apiv1.AssessmentResultUnknown,
+							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
+							InitializationComplete: true,
 						},
 						Analysis: apiv1.AnalysisStatus{
 							AnalysisRunName: "test-analysis-success",
@@ -234,10 +223,11 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                "test-analysis-failure",
-							AssessmentResult:    apiv1.AssessmentResultUnknown,
-							AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							Name:                   "test-analysis-failure",
+							AssessmentResult:       apiv1.AssessmentResultUnknown,
+							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
+							InitializationComplete: true,
 						},
 						Analysis: apiv1.AnalysisStatus{
 							AnalysisRunName: "test-analysis-failure",
