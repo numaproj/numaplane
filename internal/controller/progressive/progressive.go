@@ -397,7 +397,7 @@ func processUpgradingChild(
 
 		// if we now have an upgrading child, make sure we mark the existing one for garbage collection
 		// and do post-upgrade process if we haven't
-		if !childStatus.InitializationComplete {
+		if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 
 			needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, existingUpgradingChildDef, controller, c)
 			if needsRequeue {
