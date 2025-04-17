@@ -91,6 +91,15 @@ func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return false, nil
 }
 
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
+}
+
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,

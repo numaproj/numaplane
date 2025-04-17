@@ -189,6 +189,15 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return requeue, nil
 }
 
+func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
+	ctx context.Context,
+	pipelineRollout progressive.ProgressiveRolloutObject,
+	promotedPipelineDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
+}
+
 /*
 ProcessPromotedChildPostFailure handles the post-upgrade processing of the promoted pipeline after the "upgrading" pipeline has failed.
 It performs the following post-upgrade operations:

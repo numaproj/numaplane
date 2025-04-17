@@ -57,6 +57,10 @@ func (fpc fakeProgressiveController) ProcessPromotedChildPreUpgrade(ctx context.
 	return false, nil
 }
 
+func (fpc fakeProgressiveController) ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
+	return false, nil
+}
+
 func (fpc fakeProgressiveController) ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
 }
