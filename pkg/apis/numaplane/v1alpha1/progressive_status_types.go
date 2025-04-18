@@ -48,6 +48,8 @@ type UpgradingChildStatus struct {
 	FailureReason string `json:"failureReason,omitempty"`
 	// ChildStatus is the full dump of child status object
 	ChildStatus runtime.RawExtension `json:"childStatus,omitempty"`
+	// InitializationComplete determines if the upgrade process has completed (if it hasn't, we will come back and try it again)
+	InitializationComplete bool `json:"initializationComplete,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {

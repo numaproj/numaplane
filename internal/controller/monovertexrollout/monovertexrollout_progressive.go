@@ -140,6 +140,15 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 	return requeue, nil
 }
 
+func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	promotedMonoVertexDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	return false, nil
+}
+
 /*
 ProcessUpgradingChildPostFailure handles the failure of an upgrading monovertex (anything specific to MonoVertex)
 It performs the following post-failure operations:

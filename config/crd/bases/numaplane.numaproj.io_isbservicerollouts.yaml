@@ -249,6 +249,11 @@ spec:
                         description: ForcedSuccess indicates if this promotion was
                           forced to complete
                         type: boolean
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
                       name:
                         description: Name of the upgrading child
                         type: string

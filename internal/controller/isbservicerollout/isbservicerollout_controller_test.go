@@ -466,8 +466,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
 							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:             defaultUpgradingPipelineName,
-									AssessmentResult: apiv1.AssessmentResultSuccess,
+									Name:                   defaultUpgradingPipelineName,
+									AssessmentResult:       apiv1.AssessmentResultSuccess,
+									InitializationComplete: true,
 								},
 							},
 						},
@@ -489,10 +490,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultSuccess,
+					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:       apiv1.AssessmentResultSuccess,
+					InitializationComplete: true,
 				},
 			},
 			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
@@ -517,8 +519,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
 							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:             defaultUpgradingPipelineName,
-									AssessmentResult: apiv1.AssessmentResultFailure,
+									Name:                   defaultUpgradingPipelineName,
+									AssessmentResult:       apiv1.AssessmentResultFailure,
+									InitializationComplete: true,
 								},
 							},
 						},
@@ -532,10 +535,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultFailure,
+					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:       apiv1.AssessmentResultFailure,
+					InitializationComplete: true,
 				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,
@@ -561,8 +565,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
 							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:             defaultUpgradingPipelineName,
-									AssessmentResult: apiv1.AssessmentResultFailure,
+									Name:                   defaultUpgradingPipelineName,
+									AssessmentResult:       apiv1.AssessmentResultFailure,
+									InitializationComplete: true,
 								},
 							},
 						},
@@ -576,10 +581,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
 				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:    apiv1.AssessmentResultFailure,
+					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+					AssessmentResult:       apiv1.AssessmentResultFailure,
+					InitializationComplete: true,
 				},
 			},
 			expectedInProgressStrategy: progressiveUpgradeStrategy,
