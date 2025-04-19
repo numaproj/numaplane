@@ -142,10 +142,10 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	result, err := r.reconcile(ctx, isbServiceRollout, syncStartTime)
 	if err != nil {
-		r.ErrorHandler(isbServiceRollout, err, "ReconcileFailed", "Failed to reconcile isb service rollout")
+		r.ErrorHandler(ctx, isbServiceRollout, err, "ReconcileFailed", "Failed to reconcile isb service rollout")
 		statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
+			r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
@@ -154,9 +154,9 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
 		if err := r.client.Patch(ctx, isbServiceRollout, client.MergeFrom(isbServiceRolloutOrig)); err != nil {
-			r.ErrorHandler(isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
+			r.ErrorHandler(ctx, isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
 			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
-				r.ErrorHandler(isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
+				r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -167,7 +167,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if isbServiceRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
+			r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -821,7 +821,9 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 	return r.updateISBServiceRolloutStatus(ctx, isbServiceRollout)
 }
 
-func (r *ISBServiceRolloutReconciler) ErrorHandler(isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
+func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Error(err, "ErrorHandler")
 	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

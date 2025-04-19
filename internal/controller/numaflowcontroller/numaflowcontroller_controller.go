@@ -135,7 +135,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		} else {
-			r.ErrorHandler(numaflowController, err, "GetNumaflowControllerFailed", "Failed to get NumaflowController")
+			r.ErrorHandler(ctx, numaflowController, err, "GetNumaflowControllerFailed", "Failed to get NumaflowController")
 			return ctrl.Result{}, err
 		}
 	}
@@ -148,10 +148,10 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	result, err := r.reconcile(ctx, numaflowController, req.Namespace, syncStartTime)
 	if err != nil {
-		r.ErrorHandler(numaflowController, err, "ReconcileFailed", "Failed to reconcile NumaflowController")
+		r.ErrorHandler(ctx, numaflowController, err, "ReconcileFailed", "Failed to reconcile NumaflowController")
 		statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
+			r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
@@ -173,9 +173,9 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
 		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
-			r.ErrorHandler(numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
+			r.ErrorHandler(ctx, numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
 			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
-				r.ErrorHandler(numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
+				r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -186,7 +186,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if numaflowController.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerStatus(ctx, numaflowController)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
+			r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -724,7 +724,9 @@ func (r *NumaflowControllerReconciler) updateNumaflowControllerStatusToFailed(ct
 	return r.updateNumaflowControllerStatus(ctx, controller)
 }
 
-func (r *NumaflowControllerReconciler) ErrorHandler(numaflowController *apiv1.NumaflowController, err error, reason, msg string) {
+func (r *NumaflowControllerReconciler) ErrorHandler(ctx context.Context, numaflowController *apiv1.NumaflowController, err error, reason, msg string) {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Error(err, "ErrorHandler")
 	r.customMetrics.NumaflowControllerSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
