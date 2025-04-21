@@ -51,6 +51,9 @@ type MonoVertexRolloutStatus struct {
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
 	ProgressiveStatus MonoVertexProgressiveStatus `json:"progressiveStatus,omitempty"`
+
+	// Riders stores the list of Riders that have been deployed along with the "promoted" MonoVertex
+	Riders []Rider `json:"riders,omitempty"`
 }
 
 type MonoVertexProgressiveStatus struct {

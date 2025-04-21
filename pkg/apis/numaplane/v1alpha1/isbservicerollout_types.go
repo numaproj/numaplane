@@ -55,6 +55,9 @@ type ISBServiceRolloutStatus struct {
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
 	ProgressiveStatus ISBServiceProgressiveStatus `json:"progressiveStatus,omitempty"`
+
+	// Riders stores the list of Riders that have been deployed along with the "promoted" InterstepBufferService
+	Riders []Rider `json:"riders,omitempty"`
 }
 
 type ISBServiceProgressiveStatus struct {

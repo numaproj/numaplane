@@ -359,7 +359,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		// TODO: "promotedDifference" should be set true if riderAdditions is non-empty
+		// TODO: "promotedDifference" should be set true if riderAdditions/modifications/deletions non-empty
 		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err
@@ -389,6 +389,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
+
+		// TODO:
+		// go through Rider Additions, modifications, and deletions
 	}
 
 	return requeueDelay, nil
