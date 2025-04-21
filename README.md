@@ -13,6 +13,7 @@ Numaplane is a control plane for installing, managing and running numaflow resou
 
 `make start`
 
+
 ### To auto-generate code and manifests from Go
 
 `make codegen`
