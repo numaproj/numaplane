@@ -20,6 +20,7 @@ package v1alpha1
 
 import (
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ControllerDefinitions stores the Numaflow controller definitions
@@ -72,4 +73,13 @@ type ProgressiveStrategy struct {
 
 	// if ForcePromote is set, assessment will be skipped and Progressive upgrade will succeed
 	ForcePromote bool `json:"forcePromote,omitempty"`
+}
+
+// Rider defines a resource that can be deployed along with the primary child of a rollout
+type Rider struct {
+	// if set, perform progressive rollout when it changes
+	Progressive bool `json:"progressive,omitempty"`
+
+	// Definition of resource that is deployed with primary child
+	Definition runtime.RawExtension `json:"definition,omitempty"`
 }

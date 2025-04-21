@@ -33,6 +33,7 @@ const (
 type MonoVertexRolloutSpec struct {
 	MonoVertex MonoVertex                   `json:"monoVertex"`
 	Strategy   *PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
+	Riders     []Rider                      `json:"riders,omitempty"`
 }
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
