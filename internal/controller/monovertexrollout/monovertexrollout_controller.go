@@ -299,17 +299,27 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
+	// TODO:
+	// create newRiders by templating riders from MonoVertexRollout definition
+	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one????
+
 	// determine if we're trying to update the MonoVertex spec
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	mvNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
+	// TODO: before here we can derive the new ones by templating the definitions in the MVRollout
+	// and we can also take the list of riders from the Status and get their definitions
+	// USDE will actually only use the hash on the existing ones
+	// USDE plan:
+	// - determine if there are any additions or deletions
+	// - determine if there are any modifications by comparing hash - if there are, determine if the resource change requires progressive
+	mvNeedsToUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, newRiders, existingRiders)
 	if err != nil {
 		return 0, err
 	}
-	numaLogger.
-		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
-		Debug("Upgrade decision result")
+	numaLogger.WithValues(
+		"mvNeedsToUpdate", mvNeedsToUpdate,
+		"upgradeStrategyType", upgradeStrategyType).Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
 	// if mvNeedsToUpdate - this means there's a mismatch between the desired MonoVertex spec and actual MonoVertex spec
@@ -349,11 +359,15 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
+		// TODO: "promotedDifference" should be set true if riderAdditions is non-empty
 		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
 		if done {
+
+			// TODO: update the list of riders in the Status based on what's defined in newRiders
+
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)

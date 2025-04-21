@@ -24,14 +24,29 @@ var (
 	}
 )
 
+// have one of these per vertex for pipeline
+type Rider struct {
+	// new definition
+	Definition *unstructured.Unstructured
+	// type of change required
+	RequiresProgressive bool
+}
+
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns the following parameters:
 // - bool: Indicates whether the resource needs an update.
 // - apiv1.UpgradeStrategy: The most conservative upgrade strategy to be used for updating the resource.
 // - bool: Indicates if the controller managed resources should be recreated (delete-recreate).
+// - unstructured.UnstructuredList: Resources that require addition
+// - unstructured.UnstructuredList: Resources that require modification
+// - unstructured.UnstructuredList: Resources that require deletion
 // - error: Any error encountered during the function execution.
-func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, bool, error) {
+func ResourceNeedsUpdating(
+	ctx context.Context,
+	newDef, existingDef *unstructured.Unstructured,
+	newRiders []Rider,
+	existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, bool, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
@@ -44,16 +59,22 @@ func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructure
 		return false, apiv1.UpgradeStrategyError, false, err
 	}
 
+	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, newRiders, existingRiders)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, false, err
+	}
+
 	numaLogger.WithValues(
 		"metadataUpgradeStrategy", metadataUpgradeStrategy,
 		"specUpgradeStrategy", specUpgradeStrategy,
+		"ridersUpgradeStrategy", ridersUpgradeStrategy,
 	).Debug("upgrade strategies")
 
 	if !metadataNeedsUpdating && !specNeedsUpdating {
 		return false, apiv1.UpgradeStrategyNoOp, false, nil
 	}
 
-	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy}), recreate, nil
+	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy, ridersUpgradeStrategy}), recreate, nil
 
 }
 
@@ -239,6 +260,13 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 	return false, apiv1.UpgradeStrategyNoOp, nil
+}
+
+// return required upgrade strategy, list of additions required, list of deletions required
+func ridersNeedUpdating(ctx context.Context, newRiders []Rider, existingRiders []*unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+	// go through newRiders and find the ones with no corresponding existing
+
+	// log additionsRequired, modifictionsRequired, deletionsRequired, as well as upgrade strategy
 }
 
 func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
