@@ -144,10 +144,10 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	result, err := r.reconcile(ctx, monoVertexRollout, syncStartTime)
 	if err != nil {
-		r.ErrorHandler(monoVertexRollout, err, "ReconcileFailed", "Failed to reconcile MonoVertexRollout")
+		r.ErrorHandler(ctx, monoVertexRollout, err, "ReconcileFailed", "Failed to reconcile MonoVertexRollout")
 		statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
+			r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
@@ -156,9 +156,9 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
 		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
-			r.ErrorHandler(monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
+			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
 			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
-				r.ErrorHandler(monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
+				r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -168,7 +168,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if monoVertexRollout.DeletionTimestamp.IsZero() {
 		statusUpdateErr := r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(monoVertexRollout, statusUpdateErr, "StatusUpdateFailed", "Failed to update MonoVertexRollout")
+			r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "StatusUpdateFailed", "Failed to update MonoVertexRollout")
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -584,7 +584,9 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 	return r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
 }
 
-func (r *MonoVertexRolloutReconciler) ErrorHandler(monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
+func (r *MonoVertexRolloutReconciler) ErrorHandler(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Error(err, "ErrorHandler")
 	r.customMetrics.MonoVertexROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
