@@ -980,6 +980,7 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 }
 
 // listAndDeleteChildISBServices lists all child ISBServices and deletes them
+// return true if we need to requeue
 func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.ISBGroupVersionResource.Resource,
@@ -987,7 +988,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 	if err != nil {
 		return false, err
 	}
-	if len(isbServiceList.Items) > 0 {
+	if isbServiceList != nil && len(isbServiceList.Items) > 0 {
 		// Delete all isbServices that are children of this ISBServiceRollout
 		numaLogger.Infof("Deleting ISBService %s/%s", isbServiceRollout.Namespace, isbServiceRollout.Name)
 		for _, isbService := range isbServiceList.Items {
