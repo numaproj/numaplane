@@ -31,6 +31,7 @@ import (
 type ISBServiceRolloutSpec struct {
 	InterStepBufferService InterStepBufferService     `json:"interStepBufferService"`
 	Strategy               *ISBServiceRolloutStrategy `json:"strategy,omitempty"`
+	Riders                 []Rider                    `json:"riders,omitempty"`
 }
 
 type ISBServiceRolloutStrategy struct {

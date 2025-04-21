@@ -35,6 +35,7 @@ const (
 type PipelineRolloutSpec struct {
 	Pipeline Pipeline                     `json:"pipeline"`
 	Strategy *PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
+	Riders   []Rider                      `json:"riders,omitempty"`
 }
 
 // Pipeline includes the spec of Pipeline in Numaflow
