@@ -361,6 +361,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 
 		// TODO: "promotedDifference" should be set true if riderAdditions/modifications/deletions non-empty
+		// TODO: make sure when we create the new resource in here we include the hash
 		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
 		if err != nil {
 			return 0, err

@@ -27,7 +27,7 @@ var (
 // have one of these per vertex for pipeline
 type Rider struct {
 	// new definition
-	Definition *unstructured.Unstructured
+	Definition unstructured.Unstructured
 	// type of change required
 	RequiresProgressive bool
 }
@@ -51,17 +51,17 @@ func ResourceNeedsUpdating(
 
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, err
+		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
 
 	specNeedsUpdating, specUpgradeStrategy, recreate, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, err
+		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
 
-	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, newRiders, existingRiders)
+	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), newRiders, existingRiders)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, err
+		return false, apiv1.UpgradeStrategyError, false, additionsRequired, modificationsRequired, deletionsRequired, err
 	}
 
 	numaLogger.WithValues(
@@ -70,11 +70,11 @@ func ResourceNeedsUpdating(
 		"ridersUpgradeStrategy", ridersUpgradeStrategy,
 	).Debug("upgrade strategies")
 
-	if !metadataNeedsUpdating && !specNeedsUpdating {
-		return false, apiv1.UpgradeStrategyNoOp, false, nil
+	if !metadataNeedsUpdating && !specNeedsUpdating && !ridersNeedUpdating {
+		return false, apiv1.UpgradeStrategyNoOp, false, additionsRequired, modificationsRequired, deletionsRequired, nil
 	}
 
-	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy, ridersUpgradeStrategy}), recreate, nil
+	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy, ridersUpgradeStrategy}), recreate, additionsRequired, modificationsRequired, deletionsRequired, nil
 
 }
 
@@ -262,11 +262,85 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
-// return required upgrade strategy, list of additions required, list of deletions required
-func ridersNeedUpdating(ctx context.Context, newRiders []Rider, existingRiders []*unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
-	// go through newRiders and find the ones with no corresponding existing
+// return required upgrade strategy, list of additions, modifications, deletions required
+func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, newRiders []Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 
-	// log additionsRequired, modifictionsRequired, deletionsRequired, as well as upgrade strategy
+	additionsRequired := unstructured.UnstructuredList{}
+	deletionsRequired := unstructured.UnstructuredList{}
+	modificationsRequired := unstructured.UnstructuredList{}
+	upgradeStrategy := apiv1.UpgradeStrategyNoOp
+
+	existingRiderMap := make(map[string]unstructured.Unstructured)
+	newRiderMap := make(map[string]unstructured.Unstructured)
+
+	dataLossUpgradeStrategy, err := getDataLossUpggradeStrategy(ctx, namespace, childKind)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, err
+	}
+	userPrefersProgressive := (dataLossUpgradeStrategy == apiv1.UpgradeStrategyProgressive)
+
+	// Create a map of newRiders
+	for _, rider := range newRiders {
+		gvk := rider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + rider.Definition.GetName()
+		newRiderMap[key] = rider.Definition
+	}
+
+	// Create a map of existingRiders
+	for _, rider := range existingRiders.Items {
+		gvk := rider.GroupVersionKind()
+		key := gvk.String() + "/" + rider.GetName()
+		existingRiderMap[key] = rider
+	}
+
+	// Get the additionsRequired
+	// Find new riders not in existing
+	for _, newRider := range newRiders {
+		gvk := newRider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + newRider.Definition.GetName()
+
+		if _, found := existingRiderMap[key]; !found {
+			// Rider is in newRiders but not in existingRiders
+			additionsRequired.Items = append(additionsRequired.Items, withHashAnnotation(newRider.Definition))
+			upgradeStrategy = apiv1.UpgradeStrategyApply
+		}
+	}
+
+	// Get the deletionsRequired
+	// Find existing riders not in new
+	for _, existingRider := range existingRiders.Items {
+		gvk := existingRider.GroupVersionKind()
+		key := gvk.String() + "/" + existingRider.GetName()
+
+		if _, found := newRiderMap[key]; !found {
+			// Rider is in newRiders but not in existingRiders
+			deletionsRequired.Items = append(deletionsRequired.Items, existingRider)
+			upgradeStrategy = apiv1.UpgradeStrategyApply
+		}
+	}
+
+	// Get the modificationsRequired
+	for _, newRider := range newRiders {
+		gvk := newRider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + newRider.Definition.GetName()
+
+		if existingRider, found := existingRiderMap[key]; found {
+			newHash := withHashAnnotation(newRider.Definition)
+			existingHash := getExistingHashAnnotation(existingRider)
+			if newHash != existingHash {
+				// return progressive if user prefers progressive and it's required for this resource change
+				if newRider.RequiresProgressive && userPrefersProgressive {
+					upgradeStrategy = apiv1.UpgradeStrategyProgressive
+				} else {
+					if upgradeStrategy == apiv1.UpgradeStrategyNoOp {
+						upgradeStrategy = apiv1.UpgradeStrategyApply
+					}
+				}
+			}
+		}
+	}
+
+	// log additionsRequired, modificationsRequired, deletionsRequired, as well as upgrade strategy
 }
 
 func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
