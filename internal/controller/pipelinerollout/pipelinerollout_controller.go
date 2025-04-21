@@ -188,10 +188,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	requeueDelay, existingPipelineDef, err := r.reconcile(ctx, pipelineRollout, syncStartTime)
 	if err != nil {
-		r.ErrorHandler(pipelineRollout, err, "ReconcileFailed", "Failed to reconcile PipelineRollout")
+		r.ErrorHandler(ctx, pipelineRollout, err, "ReconcileFailed", "Failed to reconcile PipelineRollout")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -201,10 +201,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
 	if err != nil {
-		r.ErrorHandler(pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
+		r.ErrorHandler(ctx, pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
 		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 
@@ -214,10 +214,10 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		if err := r.client.Patch(ctx, pipelineRollout, client.MergeFrom(pipelineRolloutOrig)); err != nil {
-			r.ErrorHandler(pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
+			r.ErrorHandler(ctx, pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
-				r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+				r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 				return ctrl.Result{}, statusUpdateErr
 			}
 			return ctrl.Result{}, err
@@ -228,7 +228,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	if pipelineRollout.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 		if statusUpdateErr != nil {
-			r.ErrorHandler(pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
 			return ctrl.Result{}, statusUpdateErr
 		}
 	}
@@ -1194,7 +1194,9 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, nil, false, r.client)
 }
 
-func (r *PipelineRolloutReconciler) ErrorHandler(pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
+func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
+	numaLogger := logger.FromContext(ctx)
+	numaLogger.Error(err, "ErrorHandler")
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
