@@ -199,21 +199,15 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		numaLogger.Info("Deleting ISBServiceRollout")
 		if controllerutil.ContainsFinalizer(isbServiceRollout, common.FinalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(isbsvcKey)
-			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, isbServiceRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Get the ISBServiceRollout live resource
-			liveISBServiceRollout, err := getLiveISBServiceRollout(ctx, isbServiceRollout.Name, isbServiceRollout.Namespace)
+			// delete the ISBServiceRollout child objects once the ISBServiceRollout is being deleted
+			requeue, err := r.listAndDeleteChildISBServices(ctx, isbServiceRollout)
 			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("ISBServiceRollout not found, %v", err)
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
+				return ctrl.Result{}, fmt.Errorf("error deleting ISBServiceRollout child: %v", err)
 			}
-			*isbServiceRollout = *liveISBServiceRollout
+			// if we have any ISBServices that are still in the process of being deleted, requeue
+			if requeue {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
 			controllerutil.RemoveFinalizer(isbServiceRollout, common.FinalizerName)
 		}
 		// generate metrics for ISB Service deletion.
@@ -983,4 +977,26 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	isbServiceRollout.SetGroupVersionKind(apiv1.ISBServiceRolloutGroupVersionKind)
 
 	return isbServiceRollout, err
+}
+
+// listAndDeleteChildISBServices lists all child ISBServices and deletes them
+// return true if we need to requeue
+func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.ISBGroupVersionResource.Resource,
+		isbServiceRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, isbServiceRollout.Name), "")
+	if err != nil {
+		return false, err
+	}
+	if isbServiceList != nil && len(isbServiceList.Items) > 0 {
+		// Delete all isbServices that are children of this ISBServiceRollout
+		numaLogger.Infof("Deleting ISBService %s/%s", isbServiceRollout.Namespace, isbServiceRollout.Name)
+		for _, isbService := range isbServiceList.Items {
+			if err := r.client.Delete(ctx, &isbService); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	return false, nil
 }
