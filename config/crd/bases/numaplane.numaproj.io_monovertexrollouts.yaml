@@ -77,10 +77,6 @@ spec:
                         child
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
-                    perVertex:
-                      description: if set, rider resource should be created for each
-                        vertex
-                      type: boolean
                     progressive:
                       description: if set, perform progressive rollout when it changes
                       type: boolean
