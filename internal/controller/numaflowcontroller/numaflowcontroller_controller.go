@@ -228,21 +228,22 @@ func (r *NumaflowControllerReconciler) reconcile(
 		numaLogger.Info("Deleting NumaflowController")
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
 		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
+			// TODO: this is a temporary fix to delete the controller and its children
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Get the controller live resource
-			liveController, err := getLiveNumaflowController(ctx, controller.Name, controller.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("NumaflowController not found, %v", err)
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
-			}
-			*controller = *liveController
+			//foreground := metav1.DeletePropagationForeground
+			//if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			//	return ctrl.Result{}, err
+			//}
+			//// Get the controller live resource
+			//liveController, err := getLiveNumaflowController(ctx, controller.Name, controller.Namespace)
+			//if err != nil {
+			//	if apierrors.IsNotFound(err) {
+			//		numaLogger.Info("NumaflowController not found, %v", err)
+			//		return ctrl.Result{}, nil
+			//	}
+			//	return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
+			//}
+			//*controller = *liveController
 			// Check if dependent resources are deleted, if not then requeue
 			if ok, err := r.areDependentResourcesDeleted(ctx, controller); !ok || err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete dependent resources: %v", err)

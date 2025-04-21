@@ -342,21 +342,22 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if !pipelineRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting PipelineRollout")
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
+			// TODO: this is a temporary fix to delete the controller and its children
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return 0, nil, err
-			}
-			// Get the PipelineRollout live resource
-			livePipelineRollout, err := getLivePipelineRollout(ctx, pipelineRollout.Name, pipelineRollout.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("PipelineRollout not found, %v", err)
-					return 0, nil, nil
-				}
-				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
-			}
-			*pipelineRollout = *livePipelineRollout
+			//foreground := metav1.DeletePropagationForeground
+			//if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			//	return 0, nil, err
+			//}
+			//// Get the PipelineRollout live resource
+			//livePipelineRollout, err := getLivePipelineRollout(ctx, pipelineRollout.Name, pipelineRollout.Namespace)
+			//if err != nil {
+			//	if apierrors.IsNotFound(err) {
+			//		numaLogger.Info("PipelineRollout not found, %v", err)
+			//		return 0, nil, nil
+			//	}
+			//	return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
+			//}
+			//*pipelineRollout = *livePipelineRollout
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
