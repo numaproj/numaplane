@@ -83,11 +83,3 @@ type Rider struct {
 	// Definition of resource that is deployed with primary child
 	Definition runtime.RawExtension `json:"definition,omitempty"`
 }
-
-// PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
-type PipelineRider struct {
-	Rider `json:",inline"`
-
-	// if set, rider resource should be created for each vertex of the pipeline
-	PerVertex bool `json:"perVertex,omitempty"`
-}
