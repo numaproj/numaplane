@@ -195,21 +195,22 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting MonoVertexRollout")
 		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+			// TODO: this is a temporary fix to delete the controller and its children
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Get the monoVertexRollout live resource
-			liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("MonoVertxRollout not found, %v", err)
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
-			}
-			*monoVertexRollout = *liveMonoVertexRollout
+			//foreground := metav1.DeletePropagationForeground
+			//if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			//	return ctrl.Result{}, err
+			//}
+			//// Get the monoVertexRollout live resource
+			//liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
+			//if err != nil {
+			//	if apierrors.IsNotFound(err) {
+			//		numaLogger.Info("MonoVertxRollout not found, %v", err)
+			//		return ctrl.Result{}, nil
+			//	}
+			//	return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
+			//}
+			//*monoVertexRollout = *liveMonoVertexRollout
 			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
 		}
 		// generate metrics for MonoVertex deletion
