@@ -208,3 +208,11 @@ func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersion
 func DeleteResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Delete(ctx, obj)
 }
+
+func MetaGVKToSchemaGVK(metaGVK metav1.GroupVersionKind) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   metaGVK.Group,
+		Version: metaGVK.Version,
+		Kind:    metaGVK.Kind,
+	}
+}

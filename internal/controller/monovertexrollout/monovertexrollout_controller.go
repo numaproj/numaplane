@@ -299,20 +299,21 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
-	// TODO:
 	// create newRiders by templating riders from MonoVertexRollout definition
-	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one????
+	newRiders, err := r.getDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName())
+	if err != nil {
+		// TODO
+	}
+	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one?: don't include it in existingRiders then
+	existingRiders, err := r.getExistingRiders(ctx, monoVertexRollout)
+	if err != nil {
+		// TODO
+	}
 
 	// determine if we're trying to update the MonoVertex spec
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	// TODO: before here we can derive the new ones by templating the definitions in the MVRollout
-	// and we can also take the list of riders from the Status and get their definitions
-	// USDE will actually only use the hash on the existing ones
-	// USDE plan:
-	// - determine if there are any additions or deletions
-	// - determine if there are any modifications by comparing hash - if there are, determine if the resource change requires progressive
 	mvNeedsToUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, newRiders, existingRiders)
 	if err != nil {
 		return 0, err
@@ -780,4 +781,39 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 	monoVertexRollout.SetGroupVersionKind(apiv1.MonoVertexRolloutGroupVersionKind)
 
 	return monoVertexRollout, err
+}
+
+func (r *MonoVertexRolloutReconciler) getDesiredRiders(monoVertexRollout *apiv1.MonoVertexRollout, monoVertexName string) ([]usde.Rider, error) {
+	// TODO: for each defined rider, evaluate template using the monoVertexName
+}
+
+func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (unstructured.UnstructuredList, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	existingRiders := unstructured.UnstructuredList{}
+
+	// for each Rider defined in the Status, get the child and return it
+	// if for some reason, it's not found, just log an error here and don't include it in the list
+	for _, existingRider := range monoVertexRollout.Status.Riders {
+		unstruc, err := kubernetes.GetResource(ctx, r.client, kubernetes.MetaGVKToSchemaGVK(existingRider.GroupVersionKind), k8stypes.NamespacedName{Namespace: monoVertexRollout.GetNamespace(), Name: existingRider.Name})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// if for some reason it's not found, just don't include it in the list that we return and move on
+				numaLogger.WithValues("GVK", existingRider.GroupVersionKind, "Name", existingRider.Name).Warn("Existing Rider not found")
+			} else {
+				return existingRiders, err
+			}
+		} else {
+			if unstruc == nil {
+				// this shouldn't happen but just in case
+				//numaLogger.WithValues("GVK", existingRider.GroupVersionKind, "Name", existingRider.Name).Error(errors.New("Existing Rider nil"), "Existing Rider nil")
+				return existingRiders, fmt.Errorf("GetResource() returned nil Unstructured for Rider %s", existingRider.Name)
+			} else {
+				existingRiders.Items = append(existingRiders.Items, *unstruc)
+			}
+		}
+
+	}
+
+	return existingRiders, nil
 }
