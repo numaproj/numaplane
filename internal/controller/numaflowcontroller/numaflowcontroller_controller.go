@@ -34,7 +34,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -763,14 +762,4 @@ func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.
 	}
 
 	return false, fmt.Errorf("dependent resources are not deleted")
-}
-
-func getLiveNumaflowController(ctx context.Context, name, namespace string) (*apiv1.NumaflowController, error) {
-	numaflowController, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllers(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	numaflowController.SetGroupVersionKind(apiv1.NumaflowControllerGroupVersionKind)
-
-	return numaflowController, err
 }

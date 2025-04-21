@@ -607,13 +607,3 @@ func generateNewNumaflowControllerDef(nfcRollout *apiv1.NumaflowControllerRollou
 
 	return newNumaflowControllerDef, nil
 }
-
-func getLiveNumaflowControllerRollout(ctx context.Context, name, namespace string) (*apiv1.NumaflowControllerRollout, error) {
-	numaflowControllerRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().NumaflowControllerRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	numaflowControllerRollout.SetGroupVersionKind(apiv1.NumaflowControllerRolloutGroupVersionKind)
-
-	return numaflowControllerRollout, err
-}
