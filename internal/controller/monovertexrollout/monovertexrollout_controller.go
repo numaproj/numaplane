@@ -368,10 +368,8 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 		if done {
 
-			// TODO: update the list of riders in the Status based on what's defined in newRiders
-			if err := r.setCurrentRiderList(ctx, monoVertexRollout, newRiders); err != nil {
-
-			}
+			// update the list of riders in the Status based on what's defined in newRiders
+			r.setCurrentRiderList(ctx, monoVertexRollout, newRiders)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -399,9 +397,8 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if err := r.updateRiders(ctx, riderAdditions, riderModifications, riderDeletions); err != nil {
 
 		}
-		if err := r.setCurrentRiderList(ctx, monoVertexRollout, newRiders); err != nil {
-
-		}
+		// update the list of riders in the Status based on what's defined in newRiders
+		r.setCurrentRiderList(ctx, monoVertexRollout, newRiders)
 	}
 
 	return requeueDelay, nil
@@ -869,4 +866,19 @@ func (r *MonoVertexRolloutReconciler) updateRiders(
 		}
 	}
 	return nil
+}
+
+func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	riders []usde.Rider) {
+
+	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
+	for index, rider := range riders {
+		monoVertexRollout.Status.Riders[index] = apiv1.RiderStatus{
+			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+			Name:             rider.Definition.GetName(),
+		}
+	}
+
 }

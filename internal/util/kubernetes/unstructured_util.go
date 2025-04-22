@@ -216,3 +216,11 @@ func MetaGVKToSchemaGVK(metaGVK metav1.GroupVersionKind) schema.GroupVersionKind
 		Kind:    metaGVK.Kind,
 	}
 }
+
+func SchemaGVKToMetaGVK(schemaGVK schema.GroupVersionKind) metav1.GroupVersionKind {
+	return metav1.GroupVersionKind{
+		Group:   schemaGVK.Group,
+		Version: schemaGVK.Version,
+		Kind:    schemaGVK.Kind,
+	}
+}
