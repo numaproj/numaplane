@@ -46,6 +46,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -852,6 +853,12 @@ func (r *MonoVertexRolloutReconciler) updateRiders(
 
 	numaLogger := logger.FromContext(ctx)
 
+	numaLogger.WithValues(
+		"monovertex", monoVertex.GetName(),
+		"rider additions", riderAdditions,
+		"rider modifications", riderModifications,
+		"rider deletions", riderDeletions).Debug("updating riders")
+
 	for _, rider := range riderAdditions.Items {
 
 		if err := kubernetes.ApplyOwnerReference(&rider, monoVertex); err != nil {
@@ -913,6 +920,10 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
 	}
 	for _, rider := range newRiders {
+		rider.Definition, _, err = riders.WithHashAnnotation(rider.Definition)
+		if err != nil {
+			return err
+		}
 		if err := kubernetes.ApplyOwnerReference(&rider.Definition, monoVertex); err != nil {
 			return err
 		}

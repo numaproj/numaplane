@@ -2,6 +2,7 @@ package riders
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -16,6 +17,7 @@ func WithHashAnnotation(resource unstructured.Unstructured) (unstructured.Unstru
 	if err != nil {
 		return resource, "", err
 	}
+	//hashVal := hex.EncodeToString(sha256.Sum256([]byte(asBytes)))
 	h := sha256.New()
 	_, err = h.Write(asBytes)
 	if err != nil {
@@ -24,7 +26,7 @@ func WithHashAnnotation(resource unstructured.Unstructured) (unstructured.Unstru
 
 	unstrucWithAnnotation := resource.DeepCopy()
 	annotations := unstrucWithAnnotation.GetAnnotations()
-	hashVal := string(h.Sum(nil))
+	hashVal := hex.EncodeToString(h.Sum(nil))
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
