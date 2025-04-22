@@ -99,7 +99,7 @@ type PauseStatus struct {
 }
 
 // Rider represents a Rider which has been deployed for a promoted child
-type Rider struct {
+type RiderStatus struct {
 	GroupVersionKind metav1.GroupVersionKind `json:"groupVersionKind"`
 	Name             string                  `json:"name"`
 }

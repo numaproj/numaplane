@@ -119,6 +119,21 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 properties:
                   progressive:
@@ -424,6 +439,21 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
@@ -1288,6 +1318,25 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: PipelineRider defines a resource that can be deployed
+                    along with the primary child of a PipelineRollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    perVertex:
+                      description: if set, rider resource should be created for each
+                        vertex of the pipeline
+                      type: boolean
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
