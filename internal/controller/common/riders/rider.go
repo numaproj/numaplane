@@ -25,6 +25,9 @@ func WithHashAnnotation(resource unstructured.Unstructured) (unstructured.Unstru
 	unstrucWithAnnotation := resource.DeepCopy()
 	annotations := unstrucWithAnnotation.GetAnnotations()
 	hashVal := string(h.Sum(nil))
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
 	annotations[common.AnnotationKeyHash] = hashVal
 	unstrucWithAnnotation.SetAnnotations(annotations)
 	return *unstrucWithAnnotation, hashVal, nil

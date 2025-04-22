@@ -397,7 +397,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 
 			// go through Rider Additions, modifications, and deletions
-			// TODO: see if newMonovertexDef actually has a UUID
 			if err := r.updateRiders(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions); err != nil {
 				return 0, err
 			}
@@ -917,6 +916,7 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 		if err := kubernetes.ApplyOwnerReference(&rider.Definition, monoVertex); err != nil {
 			return err
 		}
+		rider.Definition.SetNamespace(monoVertexRollout.GetNamespace())
 
 		if err := kubernetes.CreateResource(ctx, r.client, &rider.Definition); err != nil {
 			if apierrors.IsAlreadyExists(err) {

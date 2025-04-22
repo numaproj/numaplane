@@ -7,7 +7,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -167,8 +166,10 @@ func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
 }
 
 // CreateResource creates the resource in the kubernetes cluster
+// TODO: maybe we should pass in **unstructured.Unstructured
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
-	return c.Create(ctx, obj)
+	err := c.Create(ctx, obj)
+	return err
 }
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
@@ -226,20 +227,13 @@ func SchemaGVKToMetaGVK(schemaGVK schema.GroupVersionKind) metav1.GroupVersionKi
 	}
 }
 
-func UnstructuredToObjectMeta(u *unstructured.Unstructured) (*metav1.ObjectMeta, error) {
-	obj := &metav1.ObjectMeta{}
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, obj)
-	if err != nil {
-		return nil, err
-	}
-	return obj, nil
-}
-
 func ApplyOwnerReference(child *unstructured.Unstructured, owner *unstructured.Unstructured) error {
-	ownerObjectMeta, err := UnstructuredToObjectMeta(owner)
-	if err != nil {
-		return err
+	ownerRef := metav1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
 	}
-	child.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(ownerObjectMeta, owner.GroupVersionKind())})
+	child.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 	return nil
 }

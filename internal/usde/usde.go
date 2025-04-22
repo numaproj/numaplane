@@ -310,6 +310,7 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 			if err != nil {
 				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
 			}
+			unstruc.SetNamespace(namespace)
 			additionsRequired.Items = append(additionsRequired.Items, unstruc)
 			upgradeStrategy = apiv1.UpgradeStrategyApply
 		}
@@ -339,6 +340,7 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 			if err != nil {
 				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
 			}
+			unstruc.SetNamespace(namespace)
 			existingHash := riders.GetExistingHashAnnotation(existingRider)
 			if newHash != existingHash {
 				// return progressive if user prefers progressive and it's required for this resource change
