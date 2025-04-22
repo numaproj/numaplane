@@ -558,7 +558,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}
 
 			// TODO: add some recreate test cases
-			needsUpdating, strategy, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition)
+			// TODO: test riders
+			needsUpdating, strategy, _, _, _, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition, []Rider{}, unstructured.UnstructuredList{})
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			assert.Equal(t, tc.expectedStrategy, strategy)
