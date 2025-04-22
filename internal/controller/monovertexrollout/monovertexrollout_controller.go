@@ -369,7 +369,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// TODO: update the list of riders in the Status based on what's defined in newRiders
-			if err := r.setCurrentRiderList(ctx, newRiders); err != nil {
+			if err := r.setCurrentRiderList(ctx, monoVertexRollout, newRiders); err != nil {
 
 			}
 
@@ -396,10 +396,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 
 		// go through Rider Additions, modifications, and deletions
-		if err := r.updateRiders(ctx, monoVertexRollout, riderAdditions, riderModifications, riderDeletions); err != nil {
+		if err := r.updateRiders(ctx, riderAdditions, riderModifications, riderDeletions); err != nil {
 
 		}
-		if err := r.setCurrentRiderList(ctx, newRiders); err != nil {
+		if err := r.setCurrentRiderList(ctx, monoVertexRollout, newRiders); err != nil {
 
 		}
 	}
@@ -844,9 +844,29 @@ func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, mon
 // and update the MonoVertexRollout Status to reflect the current resources
 func (r *MonoVertexRolloutReconciler) updateRiders(
 	ctx context.Context,
-	monoVertexRollout *apiv1.MonoVertexRollout,
 	riderAdditions unstructured.UnstructuredList,
 	riderModifications unstructured.UnstructuredList,
 	riderDeletions unstructured.UnstructuredList) error {
 
+	for _, rider := range riderAdditions.Items {
+		err := kubernetes.CreateResource(ctx, r.client, &rider)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+		}
+	}
+
+	for _, rider := range riderModifications.Items {
+		err := kubernetes.UpdateResource(ctx, r.client, &rider)
+		if err != nil {
+			return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+		}
+	}
+
+	for _, rider := range riderDeletions.Items {
+		err := kubernetes.DeleteResource(ctx, r.client, &rider)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+		}
+	}
+	return nil
 }
