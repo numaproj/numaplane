@@ -976,20 +976,39 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
-	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-	pipelineDef.SetName(pipelineName)
-	pipelineDef.SetNamespace(pipelineRollout.Namespace)
-	pipelineDef.SetLabels(metadata.Labels)
-	pipelineDef.SetAnnotations(metadata.Annotations)
-	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
-	var pipelineSpec map[string]interface{}
-	if err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpec); err != nil {
+	args := struct {
+		PipelineName      string
+		PipelineNamespace string
+	}{
+		PipelineName:      pipelineName,
+		PipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	f := func(data []byte) string {
+		dataString := string(data)
+		dataString = strings.ReplaceAll(dataString, "pipeline-name", "PipelineName")
+		dataString = strings.ReplaceAll(dataString, "pipeline-namespace", "PipelineNamespace")
+		return dataString
+	}
+
+	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args, f)
+	if err != nil {
 		return nil, err
 	}
 
-	// use the imcoming spec from the PipelineRollout as is, except replace the InterstepBufferServiceName with the one that's dynamically derived
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	if err != nil {
+		return nil, err
+	}
+
+	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
 	pipelineDef.Object["spec"] = pipelineSpec
+	pipelineDef.Object["metadata"] = metadataResolved
+	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipelineDef.SetName(pipelineName)
+	pipelineDef.SetNamespace(pipelineRollout.Namespace)
+	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
 
 	if err := numaflowtypes.PipelineWithISBServiceName(pipelineDef, isbsvcName); err != nil {
 		return nil, err

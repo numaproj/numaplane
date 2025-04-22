@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -854,20 +855,39 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
+	args := struct {
+		ISBSvcName      string
+		ISBSvcNamespace string
+	}{
+		ISBSvcName:      isbsvcName,
+		ISBSvcNamespace: isbServiceRollout.Namespace,
+	}
+
+	f := func(data []byte) string {
+		dataString := string(data)
+		dataString = strings.ReplaceAll(dataString, "isbsvc-name", "ISBSvcName")
+		dataString = strings.ReplaceAll(dataString, "isbsvc-namespace", "ISBSvcNamespace")
+		return dataString
+	}
+
+	isbServiceSpec, err := ctlrcommon.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args, f)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	if err != nil {
+		return nil, err
+	}
+
 	newISBServiceDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	newISBServiceDef.Object["spec"] = isbServiceSpec
+	newISBServiceDef.Object["metadata"] = metadataResolved
 	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
 	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
 	newISBServiceDef.SetName(isbsvcName)
 	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
-	newISBServiceDef.SetLabels(metadata.Labels)
-	newISBServiceDef.SetAnnotations(metadata.Annotations)
 	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
-	// Update spec of ISBService to match the ISBServiceRollout spec
-	var isbServiceSpec map[string]interface{}
-	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
-		return nil, err
-	}
-	newISBServiceDef.Object["spec"] = isbServiceSpec
 
 	return newISBServiceDef, nil
 }
