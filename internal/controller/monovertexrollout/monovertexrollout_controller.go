@@ -305,7 +305,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	numaLogger := logger.FromContext(ctx)
 
 	// create newRiders by templating riders from MonoVertexRollout definition
-	newRiders, err := r.getDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName())
+	newRiders, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
 	if err != nil {
 		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
@@ -365,8 +365,6 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		// TODO: "promotedDifference" should be set true if riderAdditions/modifications/deletions non-empty
-		// TODO: make sure when we create the new resource in here we include the hash
 		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, err
@@ -794,21 +792,21 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 	return monoVertexRollout, err
 }
 
-func (r *MonoVertexRolloutReconciler) getDesiredRiders(monoVertexRollout *apiv1.MonoVertexRollout, monoVertexName string) ([]usde.Rider, error) {
-
-	riders := []usde.Rider{}
+func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertex *unstructured.Unstructured) ([]riders.Rider, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	desiredRiders := []riders.Rider{}
 	for _, rider := range monoVertexRollout.Spec.Riders {
 		var asMap map[string]interface{}
 		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
-			return riders, fmt.Errorf("rider definition could not converted to map: %w", err)
+			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
 		}
 		// TODO: for each defined rider, evaluate template using the monoVertexName
 		//asMap := util.EvaluateTemplate(asMap, )
 		unstruc := unstructured.Unstructured{}
 		unstruc.Object = asMap
-		riders = append(riders, usde.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 	}
-	return riders, nil
+	return desiredRiders, nil
 }
 
 func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (unstructured.UnstructuredList, error) {
@@ -844,7 +842,7 @@ func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, mon
 
 func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
 	monoVertexRollout *apiv1.MonoVertexRollout,
-	riders []usde.Rider) {
+	riders []riders.Rider) {
 
 	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
 	for index, rider := range riders {
@@ -863,7 +861,7 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 ) error {
 
 	// create definitions for by templating riders from MonoVertexRollout definition
-	newRiders, err := r.getDesiredRiders(monoVertexRollout, monoVertex.GetName())
+	newRiders, err := r.GetDesiredRiders(monoVertexRollout, monoVertex)
 	if err != nil {
 		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
 	}
@@ -879,19 +877,6 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 	if err = riders.UpdateRiders(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
 		return err
 	}
-
-	/*if err := kubernetes.ApplyOwnerReference(&rider.Definition, monoVertex); err != nil {
-		return err
-	}
-	rider.Definition.SetNamespace(monoVertexRollout.GetNamespace())
-
-	if err := kubernetes.CreateResource(ctx, r.client, &rider.Definition); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			numaLogger.Warnf("rider %s already exists so won't create", rider.Definition.GetName())
-		} else {
-			return fmt.Errorf("failed to create resource %s/%s: %s", rider.Definition.GetNamespace(), rider.Definition.GetName(), err)
-		}
-	}*/
 
 	// now reflect this in the Status
 	r.setCurrentRiderList(monoVertexRollout, newRiders)

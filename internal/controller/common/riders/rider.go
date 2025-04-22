@@ -15,6 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// have one of these per vertex for pipeline
+type Rider struct {
+	// new definition
+	Definition unstructured.Unstructured
+	// type of change required
+	RequiresProgressive bool
+}
+
 // create an annotation to preserve a hash of the metadata and spec, so that we can compare the new value to the existing value
 // to know if there was a change
 func WithHashAnnotation(resource unstructured.Unstructured) (unstructured.Unstructured, string, error) {

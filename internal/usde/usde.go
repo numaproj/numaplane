@@ -25,14 +25,6 @@ var (
 	}
 )
 
-// have one of these per vertex for pipeline
-type Rider struct {
-	// new definition
-	Definition unstructured.Unstructured
-	// type of change required
-	RequiresProgressive bool
-}
-
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
 // It returns the following parameters:
@@ -46,7 +38,7 @@ type Rider struct {
 func ResourceNeedsUpdating(
 	ctx context.Context,
 	newDef, existingDef *unstructured.Unstructured,
-	newRiders []Rider,
+	newRiders []riders.Rider,
 	existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, bool, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -264,7 +256,7 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 }
 
 // return required upgrade strategy, list of additions, modifications, deletions required
-func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []riders.Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
@@ -305,7 +297,7 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		key := gvk.String() + "/" + newRider.Definition.GetName()
 
 		if _, found := existingRiderMap[key]; !found {
-			// Rider is in newRiders but not in existingRiders
+			// riders.Rider is in newRiders but not in existingRiders
 			unstruc, _, err := riders.WithHashAnnotation(newRider.Definition)
 			if err != nil {
 				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
@@ -323,7 +315,7 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		key := gvk.String() + "/" + existingRider.GetName()
 
 		if _, found := newRiderMap[key]; !found {
-			// Rider is in newRiders but not in existingRiders
+			// riders.Rider is in newRiders but not in existingRiders
 			deletionsRequired.Items = append(deletionsRequired.Items, existingRider)
 			upgradeStrategy = apiv1.UpgradeStrategyApply
 		}

@@ -40,6 +40,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -320,7 +321,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 	// determine if we're trying to update the NumaflowController spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	numaflowControllerNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newNumaflowControllerDef, existingNumaflowControllerDef, []usde.Rider{}, unstructured.UnstructuredList{})
+	numaflowControllerNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newNumaflowControllerDef, existingNumaflowControllerDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return false, err
 	}
@@ -615,4 +616,10 @@ func getLiveNumaflowControllerRollout(ctx context.Context, name, namespace strin
 	numaflowControllerRollout.SetGroupVersionKind(apiv1.NumaflowControllerRolloutGroupVersionKind)
 
 	return numaflowControllerRollout, err
+}
+
+func (r *NumaflowControllerRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, nc *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	// TODO
+	return desiredRiders, nil
 }

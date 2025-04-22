@@ -30,6 +30,7 @@ import (
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -629,6 +630,7 @@ func startUpgradeProcess(
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+
 	return newUpgradingChildDef, false, err
 }
 
@@ -640,11 +642,25 @@ func startPostUpgradeProcess(
 	controller progressiveController,
 	c client.Client,
 ) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	numaLogger.WithValues(
+	numaLogger := logger.FromContext(ctx).WithValues(
 		"promoted child", existingPromotedChild.GetName(),
-		"upgading child", existingUpgradingChild).Debug("starting post upgrade process")
+		"upgading child", existingUpgradingChild.GetName())
+
+	numaLogger.Debug("starting post upgrade process")
+
+	// Create Riders for the new Upgrading child
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingUpgradingChild)
+	if err != nil {
+		return false, err
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	riderAdditions.Items = make([]unstructured.Unstructured, len(newRiders))
+	for index, rider := range newRiders {
+		riderAdditions.Items[index] = rider.Definition
+	}
+	if err = riders.UpdateRiders(ctx, existingUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+		return false, err
+	}
 
 	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {

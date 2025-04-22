@@ -10,6 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -24,6 +25,8 @@ type RolloutController interface {
 
 	// Recycle deletes child; returns true if it was in fact deleted
 	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
+
+	GetDesiredRiders(rolloutObject RolloutObject, child *unstructured.Unstructured) ([]riders.Rider, error)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable

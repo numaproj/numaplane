@@ -44,6 +44,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -347,7 +348,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, []usde.Rider{}, unstructured.UnstructuredList{})
+	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}
@@ -983,4 +984,10 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	isbServiceRollout.SetGroupVersionKind(apiv1.ISBServiceRolloutGroupVersionKind)
 
 	return isbServiceRollout, err
+}
+
+func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvc *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	// TODO
+	return desiredRiders, nil
 }

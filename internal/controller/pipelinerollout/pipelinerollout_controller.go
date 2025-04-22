@@ -50,6 +50,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -512,7 +513,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// does the Resource need updating, and if so how?
 	// TODO: handle recreate parameter
-	pipelineNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []usde.Rider{}, unstructured.UnstructuredList{})
+	pipelineNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}
@@ -1285,4 +1286,10 @@ func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1
 	PipelineRollout.SetGroupVersionKind(apiv1.PipelineRolloutGroupVersionKind)
 
 	return PipelineRollout, err
+}
+
+func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, pipeline *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	// TODO
+	return desiredRiders, nil
 }
