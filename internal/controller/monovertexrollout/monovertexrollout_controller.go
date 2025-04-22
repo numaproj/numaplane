@@ -302,12 +302,12 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// create newRiders by templating riders from MonoVertexRollout definition
 	newRiders, err := r.getDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName())
 	if err != nil {
-		// TODO
+		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
 	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one?: don't include it in existingRiders then
 	existingRiders, err := r.getExistingRiders(ctx, monoVertexRollout)
 	if err != nil {
-		// TODO
+		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
 
 	// determine if we're trying to update the MonoVertex spec
@@ -369,6 +369,9 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// TODO: update the list of riders in the Status based on what's defined in newRiders
+			if err := r.setCurrentRiderList(ctx, newRiders); err != nil {
+
+			}
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -392,8 +395,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 		}
 
-		// TODO:
 		// go through Rider Additions, modifications, and deletions
+		if err := r.updateRiders(ctx, monoVertexRollout, riderAdditions, riderModifications, riderDeletions); err != nil {
+
+		}
+		if err := r.setCurrentRiderList(ctx, newRiders); err != nil {
+
+		}
 	}
 
 	return requeueDelay, nil
@@ -785,7 +793,20 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 }
 
 func (r *MonoVertexRolloutReconciler) getDesiredRiders(monoVertexRollout *apiv1.MonoVertexRollout, monoVertexName string) ([]usde.Rider, error) {
-	// TODO: for each defined rider, evaluate template using the monoVertexName
+
+	riders := []usde.Rider{}
+	for _, rider := range monoVertexRollout.Spec.Riders {
+		var asMap map[string]interface{}
+		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
+			return riders, fmt.Errorf("rider definition could not converted to map: %w", err)
+		}
+		// TODO: for each defined rider, evaluate template using the monoVertexName
+		//asMap := util.EvaluateTemplate(asMap, )
+		unstruc := unstructured.Unstructured{}
+		unstruc.Object = asMap
+		riders = append(riders, usde.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+	}
+	return riders, nil
 }
 
 func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (unstructured.UnstructuredList, error) {
@@ -817,4 +838,15 @@ func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, mon
 	}
 
 	return existingRiders, nil
+}
+
+// update the cluster according to the desired modifications to the resources (additions, mods, deletions)
+// and update the MonoVertexRollout Status to reflect the current resources
+func (r *MonoVertexRolloutReconciler) updateRiders(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	riderAdditions unstructured.UnstructuredList,
+	riderModifications unstructured.UnstructuredList,
+	riderDeletions unstructured.UnstructuredList) error {
+
 }
