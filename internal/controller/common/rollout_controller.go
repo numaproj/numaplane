@@ -1,11 +1,14 @@
 package common
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"text/template"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -255,4 +258,38 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	} else {
 		return existingChild.GetName(), nil
 	}
+}
+
+// resolves templated definitions of a child resource with arguments for name and namespace
+// for resources that reference each other, arguments will be dynamically updated with current name of child
+func ResolveTemplateSpec(data any, args any, f func([]byte) string) (map[string]interface{}, error) {
+
+	// marshal data into bytes and use func to replace arguments with valid syntax (cannot resolve hyphen)
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	dataString := f(dataBytes)
+
+	// take data with corrected arguments and parse it as a template
+	tmpl, err := template.New("manifest").Parse(dataString)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse spec: %v", err)
+	}
+
+	// use supplied arguments to execute template
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, args)
+	if err != nil {
+		return nil, fmt.Errorf("unable to apply information to manifest: %v", err)
+	}
+
+	// unmarshal into map to be returned and used for resource spec
+	var ret map[string]interface{}
+	err = json.Unmarshal(buf.Bytes(), &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
 }
