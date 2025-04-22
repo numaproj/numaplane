@@ -9,6 +9,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -59,7 +60,7 @@ func ResourceNeedsUpdating(
 		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
 
-	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), newRiders, existingRiders)
+	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), existingDef.GetName(), newRiders, existingRiders)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, additionsRequired, modificationsRequired, deletionsRequired, err
 	}
@@ -263,7 +264,9 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 }
 
 // return required upgrade strategy, list of additions, modifications, deletions required
-func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, newRiders []Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	additionsRequired := unstructured.UnstructuredList{}
 	deletionsRequired := unstructured.UnstructuredList{}
@@ -273,6 +276,8 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 	existingRiderMap := make(map[string]unstructured.Unstructured)
 	newRiderMap := make(map[string]unstructured.Unstructured)
 
+	// which upgrade strategy does user prefer for this type of Child Kind? find out if it's Progressive
+	// since some Riders, if changed, can invoke a Progressive strategy
 	dataLossUpgradeStrategy, err := getDataLossUpggradeStrategy(ctx, namespace, childKind)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, err
@@ -301,7 +306,11 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 
 		if _, found := existingRiderMap[key]; !found {
 			// Rider is in newRiders but not in existingRiders
-			additionsRequired.Items = append(additionsRequired.Items, withHashAnnotation(newRider.Definition))
+			unstruc, _, err := riders.WithHashAnnotation(newRider.Definition)
+			if err != nil {
+				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
+			}
+			additionsRequired.Items = append(additionsRequired.Items, unstruc)
 			upgradeStrategy = apiv1.UpgradeStrategyApply
 		}
 	}
@@ -320,13 +329,17 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 	}
 
 	// Get the modificationsRequired
+	// Find the resources that are in both newRiders and existingRiders and determine which ones have changed
 	for _, newRider := range newRiders {
 		gvk := newRider.Definition.GroupVersionKind()
 		key := gvk.String() + "/" + newRider.Definition.GetName()
 
 		if existingRider, found := existingRiderMap[key]; found {
-			newHash := withHashAnnotation(newRider.Definition)
-			existingHash := getExistingHashAnnotation(existingRider)
+			unstruc, newHash, err := riders.WithHashAnnotation(newRider.Definition)
+			if err != nil {
+				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
+			}
+			existingHash := riders.GetExistingHashAnnotation(existingRider)
 			if newHash != existingHash {
 				// return progressive if user prefers progressive and it's required for this resource change
 				if newRider.RequiresProgressive && userPrefersProgressive {
@@ -336,11 +349,30 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 						upgradeStrategy = apiv1.UpgradeStrategyApply
 					}
 				}
+
+				modificationsRequired.Items = append(modificationsRequired.Items, unstruc)
 			}
 		}
 	}
 
 	// log additionsRequired, modificationsRequired, deletionsRequired, as well as upgrade strategy
+	numaLogger.WithValues(
+		"child name", childName,
+		"additionsRequired", getNamesAndKinds(additionsRequired),
+		"modificationsRequired", getNamesAndKinds(modificationsRequired),
+		"deletionsRequired", getNamesAndKinds(deletionsRequired),
+	).Debug("rider changes")
+
+	requiresUpdate := upgradeStrategy == apiv1.UpgradeStrategyApply || upgradeStrategy == apiv1.UpgradeStrategyProgressive
+	return requiresUpdate, upgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, nil
+}
+
+func getNamesAndKinds(ulist unstructured.UnstructuredList) string {
+	namesAndKinds := ""
+	for _, u := range ulist.Items {
+		namesAndKinds = namesAndKinds + u.GetKind() + "/" + u.GetName() + "; "
+	}
+	return namesAndKinds
 }
 
 func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
