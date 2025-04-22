@@ -285,11 +285,11 @@ func ResolveTemplateSpec(data any, args any, f func([]byte) string) (map[string]
 	}
 
 	// unmarshal into map to be returned and used for resource spec
-	var ret map[string]interface{}
-	err = json.Unmarshal(buf.Bytes(), &ret)
+	var resolvedTmpl map[string]interface{}
+	err = json.Unmarshal(buf.Bytes(), &resolvedTmpl)
 	if err != nil {
 		return nil, err
 	}
 
-	return ret, nil
+	return resolvedTmpl, nil
 }
