@@ -314,18 +314,18 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	mvNeedsToUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, newRiders, existingRiders)
+	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, newRiders, existingRiders)
 	if err != nil {
 		return 0, err
 	}
 	numaLogger.WithValues(
-		"mvNeedsToUpdate", mvNeedsToUpdate,
+		"needsUpdate", needsUpdate,
 		"upgradeStrategyType", upgradeStrategyType).Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if mvNeedsToUpdate - this means there's a mismatch between the desired MonoVertex spec and actual MonoVertex spec
+	// if needsUpdate - this means we need to deploy a change
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
-	if mvNeedsToUpdate {
+	if needsUpdate {
 		monoVertexRollout.Status.MarkPending()
 	} else {
 		monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
@@ -362,14 +362,14 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 		// TODO: "promotedDifference" should be set true if riderAdditions/modifications/deletions non-empty
 		// TODO: make sure when we create the new resource in here we include the hash
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
 		if done {
 
 			// update the list of riders in the Status based on what's defined in newRiders
-			r.setCurrentRiderList(ctx, monoVertexRollout, newRiders)
+			r.setCurrentRiderList(monoVertexRollout, newRiders)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -385,20 +385,21 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 
 	default:
-		if mvNeedsToUpdate {
+		if needsUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
-		}
 
-		// go through Rider Additions, modifications, and deletions
-		if err := r.updateRiders(ctx, riderAdditions, riderModifications, riderDeletions); err != nil {
-
+			// go through Rider Additions, modifications, and deletions
+			// TODO: see if newMonovertexDef actually has a UUID
+			if err := r.updateRiders(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions); err != nil {
+				return 0, err
+			}
 		}
 		// update the list of riders in the Status based on what's defined in newRiders
-		r.setCurrentRiderList(ctx, monoVertexRollout, newRiders)
+		r.setCurrentRiderList(monoVertexRollout, newRiders)
 	}
 
 	return requeueDelay, nil
@@ -841,11 +842,15 @@ func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, mon
 // and update the MonoVertexRollout Status to reflect the current resources
 func (r *MonoVertexRolloutReconciler) updateRiders(
 	ctx context.Context,
+	monoVertex *unstructured.Unstructured,
 	riderAdditions unstructured.UnstructuredList,
 	riderModifications unstructured.UnstructuredList,
 	riderDeletions unstructured.UnstructuredList) error {
 
 	for _, rider := range riderAdditions.Items {
+
+		kubernetes.ApplyOwnerReference(&rider, monoVertex)
+
 		err := kubernetes.CreateResource(ctx, r.client, &rider)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
@@ -853,6 +858,9 @@ func (r *MonoVertexRolloutReconciler) updateRiders(
 	}
 
 	for _, rider := range riderModifications.Items {
+
+		kubernetes.ApplyOwnerReference(&rider, monoVertex)
+
 		err := kubernetes.UpdateResource(ctx, r.client, &rider)
 		if err != nil {
 			return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
@@ -869,7 +877,6 @@ func (r *MonoVertexRolloutReconciler) updateRiders(
 }
 
 func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
-	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	riders []usde.Rider) {
 

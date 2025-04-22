@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -223,4 +224,22 @@ func SchemaGVKToMetaGVK(schemaGVK schema.GroupVersionKind) metav1.GroupVersionKi
 		Version: schemaGVK.Version,
 		Kind:    schemaGVK.Kind,
 	}
+}
+
+func UnstructuredToObjectMeta(u *unstructured.Unstructured) (*metav1.ObjectMeta, error) {
+	obj := &metav1.ObjectMeta{}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, obj)
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+func ApplyOwnerReference(child *unstructured.Unstructured, owner *unstructured.Unstructured) error {
+	ownerObjectMeta, err := UnstructuredToObjectMeta(owner)
+	if err != nil {
+		return err
+	}
+	child.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(ownerObjectMeta, owner.GroupVersionKind())})
+	return nil
 }
