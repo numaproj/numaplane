@@ -10,6 +10,15 @@ spec:
     analysis:
       args:
       templates:
+  riders:
+    - definition:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: source-and-sink-configmap
+        data:
+          something: something
+
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:

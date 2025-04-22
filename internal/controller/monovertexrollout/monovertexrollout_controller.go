@@ -244,6 +244,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 				return ctrl.Result{}, err
 			}
 
+			if err := r.createRidersForMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
+			}
+
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
@@ -847,29 +851,36 @@ func (r *MonoVertexRolloutReconciler) updateRiders(
 	riderModifications unstructured.UnstructuredList,
 	riderDeletions unstructured.UnstructuredList) error {
 
+	numaLogger := logger.FromContext(ctx)
+
 	for _, rider := range riderAdditions.Items {
 
-		kubernetes.ApplyOwnerReference(&rider, monoVertex)
+		if err := kubernetes.ApplyOwnerReference(&rider, monoVertex); err != nil {
+			return err
+		}
 
-		err := kubernetes.CreateResource(ctx, r.client, &rider)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+		if err := kubernetes.CreateResource(ctx, r.client, &rider); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				numaLogger.Warnf("rider %s already exists so won't create", rider.GetName())
+			} else {
+				return fmt.Errorf("failed to create resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+			}
 		}
 	}
 
 	for _, rider := range riderModifications.Items {
 
-		kubernetes.ApplyOwnerReference(&rider, monoVertex)
+		if err := kubernetes.ApplyOwnerReference(&rider, monoVertex); err != nil {
+			return err
+		}
 
-		err := kubernetes.UpdateResource(ctx, r.client, &rider)
-		if err != nil {
+		if err := kubernetes.UpdateResource(ctx, r.client, &rider); err != nil {
 			return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
 		}
 	}
 
 	for _, rider := range riderDeletions.Items {
-		err := kubernetes.DeleteResource(ctx, r.client, &rider)
-		if err != nil && !apierrors.IsNotFound(err) {
+		if err := kubernetes.DeleteResource(ctx, r.client, &rider); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
 		}
 	}
@@ -888,4 +899,34 @@ func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
 		}
 	}
 
+}
+
+func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	monoVertex *unstructured.Unstructured,
+) error {
+	numaLogger := logger.FromContext(ctx)
+
+	// create definitions for by templating riders from MonoVertexRollout definition
+	newRiders, err := r.getDesiredRiders(monoVertexRollout, monoVertex.GetName())
+	if err != nil {
+		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
+	}
+	for _, rider := range newRiders {
+		if err := kubernetes.ApplyOwnerReference(&rider.Definition, monoVertex); err != nil {
+			return err
+		}
+
+		if err := kubernetes.CreateResource(ctx, r.client, &rider.Definition); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				numaLogger.Warnf("rider %s already exists so won't create", rider.Definition.GetName())
+			} else {
+				return fmt.Errorf("failed to create resource %s/%s: %s", rider.Definition.GetNamespace(), rider.Definition.GetName(), err)
+			}
+		}
+	}
+	// now reflect this in the Status
+	r.setCurrentRiderList(monoVertexRollout, newRiders)
+	return nil
 }
