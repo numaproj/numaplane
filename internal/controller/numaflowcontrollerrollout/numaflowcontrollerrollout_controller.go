@@ -320,7 +320,7 @@ func (r *NumaflowControllerRolloutReconciler) processExistingNumaflowController(
 	// determine if we're trying to update the NumaflowController spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	numaflowControllerNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newNumaflowControllerDef, existingNumaflowControllerDef)
+	numaflowControllerNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newNumaflowControllerDef, existingNumaflowControllerDef, []usde.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return false, err
 	}

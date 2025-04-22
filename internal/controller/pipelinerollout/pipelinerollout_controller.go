@@ -512,7 +512,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// does the Resource need updating, and if so how?
 	// TODO: handle recreate parameter
-	pipelineNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	pipelineNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []usde.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}

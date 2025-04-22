@@ -347,7 +347,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, []usde.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}
