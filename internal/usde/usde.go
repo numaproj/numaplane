@@ -290,8 +290,6 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		existingRiderMap[key] = rider
 	}
 
-	fmt.Printf("deletethis: newRiderMap=%+v, existingRiderMap=%+v\n", newRiderMap, existingRiderMap)
-
 	// Get the additionsRequired
 	// Find new riders not in existing
 	for _, newRider := range newRiders {
@@ -299,12 +297,6 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		key := gvk.String() + "/" + newRider.Definition.GetName()
 
 		if _, found := existingRiderMap[key]; !found {
-			// riders.Rider is in newRiders but not in existingRiders
-			/*unstruc, _, err := riders.WithHashAnnotation(ctx, newRider.Definition)
-			if err != nil {
-				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
-			}*/
-
 			additionsRequired.Items = append(additionsRequired.Items, newRider.Definition)
 			upgradeStrategy = apiv1.UpgradeStrategyApply
 		}
@@ -338,12 +330,10 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 			existingHash := riders.GetExistingHashAnnotation(existingRider)
 			if newHash != existingHash {
 
-				fmt.Printf("deletethis: newHash=%s, existingHash=%s\n", newHash, existingHash)
 				// return progressive if user prefers progressive and it's required for this resource change
 				if newRider.RequiresProgressive && userPrefersProgressive {
 					upgradeStrategy = apiv1.UpgradeStrategyProgressive
 				} else {
-					fmt.Printf("deletethis: newRider.RequiresProgressive=%t, userPrefersProgressive=%t\n", newRider.RequiresProgressive, userPrefersProgressive)
 					if upgradeStrategy == apiv1.UpgradeStrategyNoOp {
 						upgradeStrategy = apiv1.UpgradeStrategyApply
 					}
