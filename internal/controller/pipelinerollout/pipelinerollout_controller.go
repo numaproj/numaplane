@@ -64,6 +64,9 @@ const (
 	ControllerPipelineRollout = "pipeline-rollout-controller"
 	loggerName                = "pipelinerollout-reconciler"
 	numWorkers                = 16 // can consider making configurable
+
+	TemplatePipelineName      = ".pipeline-name"
+	TemplatePipelineNamespace = ".pipeline-namespace"
 )
 
 var (
@@ -976,27 +979,18 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
-	args := struct {
-		PipelineName      string
-		PipelineNamespace string
-	}{
-		PipelineName:      pipelineName,
-		PipelineNamespace: pipelineRollout.Namespace,
+
+	args := map[string]interface{}{
+		TemplatePipelineName:      pipelineName,
+		TemplatePipelineNamespace: pipelineRollout.Namespace,
 	}
 
-	f := func(data []byte) string {
-		dataString := string(data)
-		dataString = strings.ReplaceAll(dataString, "pipeline-name", "PipelineName")
-		dataString = strings.ReplaceAll(dataString, "pipeline-namespace", "PipelineNamespace")
-		return dataString
-	}
-
-	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args, f)
+	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}

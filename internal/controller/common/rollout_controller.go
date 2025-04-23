@@ -1,15 +1,14 @@
 package common
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
-	"text/template"
 
+	fasttemplate "github.com/valyala/fasttemplate"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -262,31 +261,25 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 
 // resolves templated definitions of a child resource with arguments for name and namespace
 // for resources that reference each other, arguments will be dynamically updated with current name of child
-func ResolveTemplateSpec(data any, args any, f func([]byte) string) (map[string]interface{}, error) {
+func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
 
-	// marshal data into bytes and use func to replace arguments with valid syntax (cannot resolve hyphen)
+	// marshal data to cast as a string
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
 	}
-	dataString := f(dataBytes)
+	dataString := string(dataBytes)
 
-	// take data with corrected arguments and parse it as a template
-	tmpl, err := template.New("manifest").Parse(dataString)
+	// create and execute template with supplied arguments
+	tmpl, err := fasttemplate.NewTemplate(dataString, "{{", "}}")
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse spec: %v", err)
+		return nil, err
 	}
-
-	// use supplied arguments to execute template
-	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, args)
-	if err != nil {
-		return nil, fmt.Errorf("unable to apply information to manifest: %v", err)
-	}
+	templatedSpec := tmpl.ExecuteString(args)
 
 	// unmarshal into map to be returned and used for resource spec
 	var resolvedTmpl map[string]interface{}
-	err = json.Unmarshal(buf.Bytes(), &resolvedTmpl)
+	err = json.Unmarshal([]byte(templatedSpec), &resolvedTmpl)
 	if err != nil {
 		return nil, err
 	}
