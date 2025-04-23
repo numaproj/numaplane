@@ -268,10 +268,9 @@ func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]inte
 	if err != nil {
 		return nil, err
 	}
-	dataString := string(dataBytes)
 
 	// create and execute template with supplied arguments
-	tmpl, err := fasttemplate.NewTemplate(dataString, "{{", "}}")
+	tmpl, err := fasttemplate.NewTemplate(string(dataBytes), "{{", "}}")
 	if err != nil {
 		return nil, err
 	}
