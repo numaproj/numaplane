@@ -300,12 +300,12 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 
 		if _, found := existingRiderMap[key]; !found {
 			// riders.Rider is in newRiders but not in existingRiders
-			unstruc, _, err := riders.WithHashAnnotation(newRider.Definition)
+			/*unstruc, _, err := riders.WithHashAnnotation(ctx, newRider.Definition)
 			if err != nil {
 				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
-			}
+			}*/
 
-			additionsRequired.Items = append(additionsRequired.Items, unstruc)
+			additionsRequired.Items = append(additionsRequired.Items, newRider.Definition)
 			upgradeStrategy = apiv1.UpgradeStrategyApply
 		}
 	}
@@ -330,13 +330,15 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		key := gvk.String() + "/" + newRider.Definition.GetName()
 
 		if existingRider, found := existingRiderMap[key]; found {
-			unstruc, newHash, err := riders.WithHashAnnotation(newRider.Definition)
+			newHash, err := riders.CalculateHash(ctx, newRider.Definition)
 			if err != nil {
-				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to apply hash annotation to rider %s: %s", newRider.Definition.GetName(), err)
+				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to calculate hash annotation for rider %s: %s", newRider.Definition.GetName(), err)
 			}
 
 			existingHash := riders.GetExistingHashAnnotation(existingRider)
 			if newHash != existingHash {
+
+				fmt.Printf("deletethis: newHash=%s, existingHash=%s\n", newHash, existingHash)
 				// return progressive if user prefers progressive and it's required for this resource change
 				if newRider.RequiresProgressive && userPrefersProgressive {
 					upgradeStrategy = apiv1.UpgradeStrategyProgressive
@@ -347,7 +349,7 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 					}
 				}
 
-				modificationsRequired.Items = append(modificationsRequired.Items, unstruc)
+				modificationsRequired.Items = append(modificationsRequired.Items, newRider.Definition)
 			}
 		}
 	}

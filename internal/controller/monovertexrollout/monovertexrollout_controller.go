@@ -877,10 +877,10 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 	}
 	riderAdditions := unstructured.UnstructuredList{}
 	for _, rider := range newRiders {
-		rider.Definition, _, err = riders.WithHashAnnotation(rider.Definition)
+		/*rider.Definition, _, err = riders.WithHashAnnotation(ctx, rider.Definition)
 		if err != nil {
 			return err
-		}
+		}*/
 		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
 	}
 
