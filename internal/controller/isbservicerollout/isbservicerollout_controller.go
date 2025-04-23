@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -57,7 +56,9 @@ import (
 )
 
 const (
-	ControllerISBSVCRollout = "isbsvc-rollout-controller"
+	ControllerISBSVCRollout     = "isbsvc-rollout-controller"
+	TemplateISBServiceName      = ".isbsvc-name"
+	TemplateISBServiceNamespace = ".isbsvc-namespace"
 )
 
 // ISBServiceRolloutReconciler reconciles an ISBServiceRollout object
@@ -849,27 +850,18 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
-	args := struct {
-		ISBSvcName      string
-		ISBSvcNamespace string
-	}{
-		ISBSvcName:      isbsvcName,
-		ISBSvcNamespace: isbServiceRollout.Namespace,
+
+	args := map[string]interface{}{
+		TemplateISBServiceName:      isbsvcName,
+		TemplateISBServiceNamespace: isbServiceRollout.Namespace,
 	}
 
-	f := func(data []byte) string {
-		dataString := string(data)
-		dataString = strings.ReplaceAll(dataString, "isbsvc-name", "ISBSvcName")
-		dataString = strings.ReplaceAll(dataString, "isbsvc-namespace", "ISBSvcNamespace")
-		return dataString
-	}
-
-	isbServiceSpec, err := ctlrcommon.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args, f)
+	isbServiceSpec, err := ctlrcommon.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}

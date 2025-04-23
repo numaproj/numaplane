@@ -23,6 +23,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.10.0
+	github.com/valyala/fasttemplate v1.2.2
 	golang.org/x/sync v0.10.0
 	golang.org/x/tools v0.26.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -131,7 +132,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/toqueteos/webbrowser v1.2.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.15.0 // indirect

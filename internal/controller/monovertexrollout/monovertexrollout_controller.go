@@ -57,6 +57,8 @@ import (
 
 const (
 	ControllerMonoVertexRollout = "monovertex-rollout-controller"
+	TemplateMonoVertexName      = ".monovertex-name"
+	TemplateMonoVertexNamespace = ".monovertex-namespace"
 )
 
 // MonoVertexRolloutReconciler reconciles a MonoVertexRollout object
@@ -628,27 +630,18 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
-	args := struct {
-		MonoVertexName      string
-		MonoVertexNamespace string
-	}{
-		MonoVertexName:      monoVertexName,
-		MonoVertexNamespace: monoVertexRollout.Namespace,
+
+	args := map[string]interface{}{
+		TemplateMonoVertexName:      monoVertexName,
+		TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 	}
 
-	f := func(data []byte) string {
-		dataString := string(data)
-		dataString = strings.ReplaceAll(dataString, "monovertex-name", "MonoVertexName")
-		dataString = strings.ReplaceAll(dataString, "monovertex-namespace", "MonoVertexNamespace")
-		return dataString
-	}
-
-	monoVertexSpec, err := ctlrcommon.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args, f)
+	monoVertexSpec, err := ctlrcommon.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
