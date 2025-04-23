@@ -384,7 +384,7 @@ func processUpgradingChild(
 
 		// if so, create a new upgrading one and mark the existing one for garbage collection
 		if needsUpdating {
-			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
+			newUpgradingChildDef, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
 				return false, 0, err
 			}
@@ -392,7 +392,7 @@ func processUpgradingChild(
 				return false, common.DefaultRequeueDelay, nil
 			}
 
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
+			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			reasonFailure := common.LabelValueProgressiveFailure
 			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
 			if err != nil {
