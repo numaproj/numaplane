@@ -71,9 +71,9 @@ func UpdateRiders(
 		"rider deletions", riderDeletions).Debug("updating riders")
 
 	for _, rider := range riderAdditions.Items {
-		/*if err := prepareRiderForDeployment(&rider, child); err != nil {
+		if err := kubernetes.ApplyOwnerReference(&rider, child); err != nil {
 			return err
-		}*/
+		}
 
 		if err := kubernetes.CreateResource(ctx, c, &rider); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -89,9 +89,9 @@ func UpdateRiders(
 
 	for _, rider := range riderModifications.Items {
 
-		/*if err := prepareRiderForDeployment(&rider, child); err != nil {
+		if err := kubernetes.ApplyOwnerReference(&rider, child); err != nil {
 			return err
-		}*/
+		}
 
 		if err := kubernetes.UpdateResource(ctx, c, &rider); err != nil {
 			return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
