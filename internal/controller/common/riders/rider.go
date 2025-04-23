@@ -105,20 +105,3 @@ func UpdateRiders(
 	}
 	return nil
 }
-
-/*
-func prepareRiderForDeployment(
-	rider *unstructured.Unstructured,
-	child *unstructured.Unstructured,
-) error {
-	if err := kubernetes.ApplyOwnerReference(rider, child); err != nil {
-		return err
-	}
-	rider.SetNamespace(child.GetNamespace())
-	// rename the Rider to a combination of the Rider name and the child name, for the purpose of creating
-	// uniqueness between children of the same Rollout
-	riderName := fmt.Sprintf("%s-%s", rider.GetName(), child.GetName())
-	rider.SetName(riderName)
-	return nil
-}
-*/

@@ -991,3 +991,8 @@ func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 	// TODO
 	return desiredRiders, nil
 }
+
+func (r *ISBServiceRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	// TODO
+	return unstructured.UnstructuredList{}, nil
+}

@@ -1293,3 +1293,8 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 	// TODO
 	return desiredRiders, nil
 }
+
+func (r *PipelineRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	// TODO
+	return unstructured.UnstructuredList{}, nil
+}

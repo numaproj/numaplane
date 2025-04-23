@@ -27,6 +27,8 @@ type RolloutController interface {
 	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
 
 	GetDesiredRiders(rolloutObject RolloutObject, child *unstructured.Unstructured) ([]riders.Rider, error)
+
+	GetExistingRiders(ctx context.Context, rolloutObject RolloutObject, upgrading bool) (unstructured.UnstructuredList, error)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable

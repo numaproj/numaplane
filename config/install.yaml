@@ -323,6 +323,36 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
                     required:
                     - name
                     type: object
@@ -766,6 +796,36 @@ spec:
                         description: OriginalScaleMinMax stores the original scale
                           min and max values as JSON string
                         type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
                     required:
                     - name
                     - originalScaleMinMax
@@ -1690,6 +1750,36 @@ spec:
                               type: string
                           required:
                           - vertexName
+                          type: object
+                        type: array
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
                           type: object
                         type: array
                     required:

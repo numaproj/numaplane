@@ -310,7 +310,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
 	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one?: don't include it in existingRiders then
-	existingRiders, err := r.getExistingRiders(ctx, monoVertexRollout)
+	existingRiders, err := r.GetExistingRiders(ctx, monoVertexRollout, false)
 	if err != nil {
 		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
@@ -811,14 +811,22 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 	return desiredRiders, nil
 }
 
-func (r *MonoVertexRolloutReconciler) getExistingRiders(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) (unstructured.UnstructuredList, error) {
+// Get the Riders that have been deployed
+// If "upgrading==true", return those which are associated with the Upgrading MonoVertex; otherwise return those which are associated with the Promoted one
+func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	existingRiders := unstructured.UnstructuredList{}
+
+	ridersList := monoVertexRollout.Status.Riders
+	if upgrading {
+		ridersList = monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Riders
+	}
 
 	// for each Rider defined in the Status, get the child and return it
 	// if for some reason, it's not found, just log an error here and don't include it in the list
-	for _, existingRider := range monoVertexRollout.Status.Riders {
+	for _, existingRider := range ridersList {
 		unstruc, err := kubernetes.GetResource(ctx, r.client, kubernetes.MetaGVKToSchemaGVK(existingRider.GroupVersionKind), k8stypes.NamespacedName{Namespace: monoVertexRollout.GetNamespace(), Name: existingRider.Name})
 		if err != nil {
 			if apierrors.IsNotFound(err) {

@@ -43,6 +43,9 @@ func (fpc fakeProgressiveController) GetDesiredRiders(rolloutObject ctlrcommon.R
 	desiredRiders := []riders.Rider{}
 	return desiredRiders, nil
 }
+func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	return unstructured.UnstructuredList{}, nil
+}
 
 func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
 	return false, nil

@@ -52,7 +52,7 @@ func ResourceNeedsUpdating(
 		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
 
-	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := ridersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), existingDef.GetName(), newRiders, existingRiders)
+	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := RidersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), existingDef.GetName(), newRiders, existingRiders)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, additionsRequired, modificationsRequired, deletionsRequired, err
 	}
@@ -256,7 +256,7 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 }
 
 // return required upgrade strategy, list of additions, modifications, deletions required
-func ridersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []riders.Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+func RidersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []riders.Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
