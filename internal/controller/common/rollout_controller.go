@@ -259,8 +259,7 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	}
 }
 
-// resolves templated definitions of a child resource with arguments for name and namespace
-// for resources that reference each other, arguments will be dynamically updated with current name of child
+// resolves templated definitions of a resource with any arguments
 func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
 
 	// marshal data to cast as a string
