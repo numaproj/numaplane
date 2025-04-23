@@ -663,12 +663,12 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 		TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 	}
 
-	monoVertexSpec, err := ctlrcommon.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
+	monoVertexSpec, err := util.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -814,10 +814,15 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
 			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
 		}
-		// TODO: for each defined rider, evaluate template using the monoVertexName
-		//asMap := util.EvaluateTemplate(asMap, )
+		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+			TemplateMonoVertexName:      monoVertex.GetName(),
+			TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
+		})
+		if err != nil {
+			return desiredRiders, err
+		}
 		unstruc := unstructured.Unstructured{}
-		unstruc.Object = asMap
+		unstruc.Object = resolvedMap
 		unstruc.SetNamespace(monoVertex.GetNamespace())
 		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertex.GetName()))
 		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})

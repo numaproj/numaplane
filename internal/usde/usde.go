@@ -349,6 +349,7 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 					}
 				}
 
+				newRider.Definition.SetResourceVersion(existingRider.GetResourceVersion())
 				modificationsRequired.Items = append(modificationsRequired.Items, newRider.Definition)
 			}
 		}

@@ -857,12 +857,12 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 		TemplateISBServiceNamespace: isbServiceRollout.Namespace,
 	}
 
-	isbServiceSpec, err := ctlrcommon.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
+	isbServiceSpec, err := util.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}

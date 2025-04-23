@@ -957,12 +957,12 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		TemplatePipelineNamespace: pipelineRollout.Namespace,
 	}
 
-	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+	pipelineSpec, err := util.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
