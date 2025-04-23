@@ -131,7 +131,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	monoVertexRollout, err := getLiveMonovertexRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Info("MonoVertxRollout not found, %v", err)
+			numaLogger.Info("MonoVertexRollout not found, %v", err)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
@@ -196,21 +196,22 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting MonoVertexRollout")
 		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+			// TODO: this is a temporary fix to delete the controller and its children
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Get the monoVertexRollout live resource
-			liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("MonoVertxRollout not found, %v", err)
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
-			}
-			*monoVertexRollout = *liveMonoVertexRollout
+			//foreground := metav1.DeletePropagationForeground
+			//if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			//	return ctrl.Result{}, err
+			//}
+			//// Get the monoVertexRollout live resource
+			//liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
+			//if err != nil {
+			//	if apierrors.IsNotFound(err) {
+			//		numaLogger.Info("MonoVertxRollout not found, %v", err)
+			//		return ctrl.Result{}, nil
+			//	}
+			//	return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
+			//}
+			//*monoVertexRollout = *liveMonoVertexRollout
 			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
 		}
 		// generate metrics for MonoVertex deletion
@@ -588,7 +589,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.
 		liveRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				numaLogger.Info("MonoVertxRollout not found, %v", err)
+				numaLogger.Info("MonoVertexRollout not found, %v", err)
 				return nil
 			}
 			return fmt.Errorf("error getting the live MonoVertexRollout after attempting to update the MonoVertexRollout Status: %w", err)
@@ -654,18 +655,38 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
+	args := struct {
+		MonoVertexName      string
+		MonoVertexNamespace string
+	}{
+		MonoVertexName:      monoVertexName,
+		MonoVertexNamespace: monoVertexRollout.Namespace,
+	}
+
+	f := func(data []byte) string {
+		dataString := string(data)
+		dataString = strings.ReplaceAll(dataString, "monovertex-name", "MonoVertexName")
+		dataString = strings.ReplaceAll(dataString, "monovertex-namespace", "MonoVertexNamespace")
+		return dataString
+	}
+
+	monoVertexSpec, err := ctlrcommon.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args, f)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	if err != nil {
+		return nil, err
+	}
+
 	monoVertexDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	monoVertexDef.Object["spec"] = monoVertexSpec
+	monoVertexDef.Object["metadata"] = metadataResolved
 	monoVertexDef.SetGroupVersionKind(numaflowv1.MonoVertexGroupVersionKind)
 	monoVertexDef.SetName(monoVertexName)
 	monoVertexDef.SetNamespace(monoVertexRollout.Namespace)
-	monoVertexDef.SetLabels(metadata.Labels)
-	monoVertexDef.SetAnnotations(metadata.Annotations)
 	monoVertexDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(monoVertexRollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)})
-	var monoVertexSpec map[string]interface{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Spec, &monoVertexSpec); err != nil {
-		return nil, err
-	}
-	monoVertexDef.Object["spec"] = monoVertexSpec
 
 	return monoVertexDef, nil
 }

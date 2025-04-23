@@ -196,21 +196,22 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 		if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
 			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
+			// TODO: this is a temporary fix to delete the controller and its children
 			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, nfcRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Get the nfcRollout live resource
-			liveControllerRollout, err := getLiveNumaflowControllerRollout(ctx, nfcRollout.Name, nfcRollout.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("NumaflowControllerRollout not found, %v", err)
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
-			}
-			*nfcRollout = *liveControllerRollout
+			//foreground := metav1.DeletePropagationForeground
+			//if err := r.client.Delete(ctx, nfcRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
+			//	return ctrl.Result{}, err
+			//}
+			//// Get the nfcRollout live resource
+			//liveControllerRollout, err := getLiveNumaflowControllerRollout(ctx, nfcRollout.Name, nfcRollout.Namespace)
+			//if err != nil {
+			//	if apierrors.IsNotFound(err) {
+			//		numaLogger.Info("NumaflowControllerRollout not found, %v", err)
+			//		return ctrl.Result{}, nil
+			//	}
+			//	return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
+			//}
+			//*nfcRollout = *liveControllerRollout
 			controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
 		}
 

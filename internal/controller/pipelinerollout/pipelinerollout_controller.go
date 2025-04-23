@@ -343,21 +343,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if !pipelineRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting PipelineRollout")
 		if controllerutil.ContainsFinalizer(pipelineRollout, common.FinalizerName) {
-			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			foreground := metav1.DeletePropagationForeground
-			if err := r.client.Delete(ctx, pipelineRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-				return 0, nil, err
-			}
-			// Get the PipelineRollout live resource
-			livePipelineRollout, err := getLivePipelineRollout(ctx, pipelineRollout.Name, pipelineRollout.Namespace)
+			// delete the PipelineRollout child objects once the PipelineRollout is being deleted
+			requeue, err := r.listAndDeleteChildPipelines(ctx, pipelineRollout)
 			if err != nil {
-				if apierrors.IsNotFound(err) {
-					numaLogger.Info("PipelineRollout not found, %v", err)
-					return 0, nil, nil
-				}
-				return 0, nil, fmt.Errorf("error getting the live PipelineRollout: %w", err)
+				return 0, nil, fmt.Errorf("error deleting pipelineRollout child: %v", err)
 			}
-			*pipelineRollout = *livePipelineRollout
+			// if we have any pipelines that are still in the process of being deleted, requeue
+			if requeue {
+				return 5 * time.Second, nil, nil
+			}
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
@@ -636,40 +630,17 @@ func pipelineObservedGenerationCurrent(generation int64, observedGeneration int6
 func (r *PipelineRolloutReconciler) processPipelineStatus(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, existingPipelineDef *unstructured.Unstructured) error {
 	numaLogger := logger.FromContext(ctx)
 
-	// Only fetch the latest pipeline object while deleting the pipeline object, i.e. when pipelineRollout.DeletionTimestamp.IsZero() is false
-	if existingPipelineDef == nil {
-		// determine name of the promoted Pipeline
-		pipelineName, err := ctlrcommon.GetChildName(ctx, pipelineRollout, r, common.LabelValueUpgradePromoted, nil, r.client, true)
+	if existingPipelineDef != nil {
+		pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
 		if err != nil {
-			return fmt.Errorf("Unable to process pipeline status: err=%s", err)
+			return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
 		}
-		pipelineDef := &unstructured.Unstructured{}
-		pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-		pipelineDef.SetNamespace(pipelineRollout.Namespace)
-		pipelineDef.SetName(pipelineName)
 
-		livePipelineDef, err := kubernetes.GetLiveResource(ctx, pipelineDef, "pipelines")
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				numaLogger.WithValues("pipelineDefinition", *pipelineDef).Warn("Pipeline not found. Unable to process status during this reconciliation.")
-				return nil
-			} else {
-				return fmt.Errorf("error getting Pipeline for status processing: %v", err)
-			}
-		}
-		existingPipelineDef = livePipelineDef
+		numaLogger.Debugf("pipeline status: %v", pipelineStatus)
+
+		r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
+		r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
 	}
-
-	pipelineStatus, err := kubernetes.ParseStatus(existingPipelineDef)
-	if err != nil {
-		return fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", existingPipelineDef, err)
-	}
-
-	numaLogger.Debugf("pipeline status: %v", pipelineStatus)
-
-	r.setChildResourcesHealthCondition(pipelineRollout, existingPipelineDef, &pipelineStatus)
-	r.setChildResourcesPauseCondition(pipelineRollout, &pipelineStatus)
-
 	return nil
 }
 
@@ -977,20 +948,39 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
-	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
-	pipelineDef.SetName(pipelineName)
-	pipelineDef.SetNamespace(pipelineRollout.Namespace)
-	pipelineDef.SetLabels(metadata.Labels)
-	pipelineDef.SetAnnotations(metadata.Annotations)
-	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
-	var pipelineSpec map[string]interface{}
-	if err := util.StructToStruct(pipelineRollout.Spec.Pipeline.Spec, &pipelineSpec); err != nil {
+	args := struct {
+		PipelineName      string
+		PipelineNamespace string
+	}{
+		PipelineName:      pipelineName,
+		PipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	f := func(data []byte) string {
+		dataString := string(data)
+		dataString = strings.ReplaceAll(dataString, "pipeline-name", "PipelineName")
+		dataString = strings.ReplaceAll(dataString, "pipeline-namespace", "PipelineNamespace")
+		return dataString
+	}
+
+	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args, f)
+	if err != nil {
 		return nil, err
 	}
 
-	// use the imcoming spec from the PipelineRollout as is, except replace the InterstepBufferServiceName with the one that's dynamically derived
+	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args, f)
+	if err != nil {
+		return nil, err
+	}
+
+	pipelineDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
 	pipelineDef.Object["spec"] = pipelineSpec
+	pipelineDef.Object["metadata"] = metadataResolved
+	pipelineDef.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+	pipelineDef.SetName(pipelineName)
+	pipelineDef.SetNamespace(pipelineRollout.Namespace)
+	pipelineDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(pipelineRollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)})
 
 	if err := numaflowtypes.PipelineWithISBServiceName(pipelineDef, isbsvcName); err != nil {
 		return nil, err
@@ -1297,4 +1287,30 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 func (r *PipelineRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
 	// TODO
 	return unstructured.UnstructuredList{}, nil
+}
+
+// listAndDeleteChildPipelines lists all child pipelines and deletes them
+// return true if we need to requeue
+func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.PipelineGroupVersionResource.Resource,
+		pipelineRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name), "")
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			numaLogger.Warnf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
+			return false, nil
+		}
+		return false, err
+	}
+	if pipelineList != nil && len(pipelineList.Items) > 0 {
+		// Delete all pipelines that are children of this PipelineRollout
+		numaLogger.Infof("Deleting pipeline %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
+		for _, pipeline := range pipelineList.Items {
+			if err := r.client.Delete(ctx, &pipeline); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	return false, nil
 }
