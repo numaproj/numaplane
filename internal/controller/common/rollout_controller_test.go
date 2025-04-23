@@ -24,7 +24,7 @@ func TestResolveTemplateSpec(t *testing.T) {
 		expectedOutput map[string]interface{}
 	}{
 		{
-			name: "multiple arguments",
+			name: "standard test",
 			data: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"configMap": map[string]interface{}{
