@@ -1265,7 +1265,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.PipelineGroupVersionResource.Resource,
 		pipelineRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.Name), "")
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			numaLogger.Warnf("no child pipeline found for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
 			return false, nil
 		}

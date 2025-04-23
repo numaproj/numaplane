@@ -986,7 +986,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.ISBGroupVersionResource.Resource,
 		isbServiceRollout.Namespace, fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, isbServiceRollout.Name), "")
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			numaLogger.Warnf("no child ISBServices found for ISBServiceRollout %s/%s: %v", isbServiceRollout.Namespace, isbServiceRollout.Name, err)
 			return false, nil
 		}
