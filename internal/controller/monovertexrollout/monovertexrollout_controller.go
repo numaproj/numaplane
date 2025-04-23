@@ -804,6 +804,8 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		//asMap := util.EvaluateTemplate(asMap, )
 		unstruc := unstructured.Unstructured{}
 		unstruc.Object = asMap
+		unstruc.SetNamespace(monoVertex.GetNamespace())
+		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertex.GetName()))
 		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 	}
 	return desiredRiders, nil

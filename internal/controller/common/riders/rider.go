@@ -71,15 +71,16 @@ func UpdateRiders(
 		"rider deletions", riderDeletions).Debug("updating riders")
 
 	for _, rider := range riderAdditions.Items {
-
-		if err := kubernetes.ApplyOwnerReference(&rider, child); err != nil {
+		/*if err := prepareRiderForDeployment(&rider, child); err != nil {
 			return err
-		}
-		rider.SetNamespace(child.GetNamespace())
+		}*/
 
 		if err := kubernetes.CreateResource(ctx, c, &rider); err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				numaLogger.Warnf("rider %s already exists so won't create", rider.GetName())
+				numaLogger.Warnf("rider %s already exists so updating instead of creating", rider.GetName())
+				if err := kubernetes.UpdateResource(ctx, c, &rider); err != nil {
+					return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+				}
 			} else {
 				return fmt.Errorf("failed to create resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
 			}
@@ -88,10 +89,9 @@ func UpdateRiders(
 
 	for _, rider := range riderModifications.Items {
 
-		if err := kubernetes.ApplyOwnerReference(&rider, child); err != nil {
+		/*if err := prepareRiderForDeployment(&rider, child); err != nil {
 			return err
-		}
-		rider.SetNamespace(child.GetNamespace())
+		}*/
 
 		if err := kubernetes.UpdateResource(ctx, c, &rider); err != nil {
 			return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
@@ -105,3 +105,20 @@ func UpdateRiders(
 	}
 	return nil
 }
+
+/*
+func prepareRiderForDeployment(
+	rider *unstructured.Unstructured,
+	child *unstructured.Unstructured,
+) error {
+	if err := kubernetes.ApplyOwnerReference(rider, child); err != nil {
+		return err
+	}
+	rider.SetNamespace(child.GetNamespace())
+	// rename the Rider to a combination of the Rider name and the child name, for the purpose of creating
+	// uniqueness between children of the same Rollout
+	riderName := fmt.Sprintf("%s-%s", rider.GetName(), child.GetName())
+	rider.SetName(riderName)
+	return nil
+}
+*/

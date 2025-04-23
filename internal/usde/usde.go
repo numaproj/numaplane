@@ -290,6 +290,8 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		existingRiderMap[key] = rider
 	}
 
+	fmt.Printf("deletethis: newRiderMap=%+v, existingRiderMap=%+v\n", newRiderMap, existingRiderMap)
+
 	// Get the additionsRequired
 	// Find new riders not in existing
 	for _, newRider := range newRiders {
@@ -339,6 +341,7 @@ func ridersNeedUpdating(ctx context.Context, namespace string, childKind string,
 				if newRider.RequiresProgressive && userPrefersProgressive {
 					upgradeStrategy = apiv1.UpgradeStrategyProgressive
 				} else {
+					fmt.Printf("deletethis: newRider.RequiresProgressive=%t, userPrefersProgressive=%t\n", newRider.RequiresProgressive, userPrefersProgressive)
 					if upgradeStrategy == apiv1.UpgradeStrategyNoOp {
 						upgradeStrategy = apiv1.UpgradeStrategyApply
 					}

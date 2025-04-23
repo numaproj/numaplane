@@ -18,6 +18,7 @@ spec:
           name: source-and-sink-configmap
         data:
           something: something
+      progressive: true
 
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
