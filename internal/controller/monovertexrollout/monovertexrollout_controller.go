@@ -834,39 +834,15 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 // Get the Riders that have been deployed
 // If "upgrading==true", return those which are associated with the Upgrading MonoVertex; otherwise return those which are associated with the Promoted one
 func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
-	numaLogger := logger.FromContext(ctx)
 
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-	existingRiders := unstructured.UnstructuredList{}
 
 	ridersList := monoVertexRollout.Status.Riders // use the Riders for the promoted monovertex
 	if upgrading {
 		ridersList = monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Riders // use the Riders for the upgrading monovertex
 	}
 
-	// for each Rider defined in the Status, get the child and return it
-	// if for some reason, it's not found, just log an error here and don't include it in the list
-	for _, existingRider := range ridersList {
-		unstruc, err := kubernetes.GetResource(ctx, r.client, kubernetes.MetaGVKToSchemaGVK(existingRider.GroupVersionKind), k8stypes.NamespacedName{Namespace: monoVertexRollout.GetNamespace(), Name: existingRider.Name})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// if for some reason it's not found, just don't include it in the list that we return and move on
-				numaLogger.WithValues("GVK", existingRider.GroupVersionKind, "Name", existingRider.Name).Warn("Existing Rider not found")
-			} else {
-				return existingRiders, err
-			}
-		} else {
-			if unstruc == nil {
-				// this shouldn't happen but just in case
-				return existingRiders, fmt.Errorf("GetResource() returned nil Unstructured for Rider %s", existingRider.Name)
-			} else {
-				existingRiders.Items = append(existingRiders.Items, *unstruc)
-			}
-		}
-
-	}
-
-	return existingRiders, nil
+	return riders.GetRidersFromK8S(ctx, monoVertexRollout.GetNamespace(), ridersList, r.client)
 }
 
 // update Status to reflect the current Riders (for promoted monovertex)

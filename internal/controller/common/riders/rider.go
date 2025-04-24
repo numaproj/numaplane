@@ -10,8 +10,10 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -135,28 +137,31 @@ func prepareRiderForDeployment(ctx context.Context, rider *unstructured.Unstruct
 	return nil
 }
 
-// Determine the list of Riders which are needed for the child and create them on the cluster
-func CreateRidersForNewChild(
-	ctx context.Context,
-	rolloutObject ctlrcommon.RolloutObject,
-	monoVertex *unstructured.Unstructured,
-) error {
+func GetRidersFromK8S(ctx context.Context, namespace string, ridersList []apiv1.RiderStatus, c client.Client) (unstructured.UnstructuredList, error) {
 
-	// create definitions for riders by templating what's defined in the MonoVertexRollout definition with the monovertex name
-	newRiders, err := r.GetDesiredRiders(monoVertexRollout, monoVertex)
-	if err != nil {
-		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
-	}
-	riderAdditions := unstructured.UnstructuredList{}
-	for _, rider := range newRiders {
-		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
-	}
+	numaLogger := logger.FromContext(ctx)
 
-	if err = riders.UpdateRidersInK8S(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
-		return err
-	}
+	// for each Rider defined in the Status, get the child and return it
+	// if for some reason, it's not found, just log an error here and don't include it in the list
+	existingRiders := unstructured.UnstructuredList{}
+	for _, existingRider := range ridersList {
+		unstruc, err := kubernetes.GetResource(ctx, c, kubernetes.MetaGVKToSchemaGVK(existingRider.GroupVersionKind), k8stypes.NamespacedName{Namespace: namespace, Name: existingRider.Name})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// if for some reason it's not found, just don't include it in the list that we return and move on
+				numaLogger.WithValues("GVK", existingRider.GroupVersionKind, "Name", existingRider.Name).Warn("Existing Rider not found")
+			} else {
+				return existingRiders, err
+			}
+		} else {
+			if unstruc == nil {
+				// this shouldn't happen but just in case
+				return existingRiders, fmt.Errorf("GetResource() returned nil Unstructured for Rider %s", existingRider.Name)
+			} else {
+				existingRiders.Items = append(existingRiders.Items, *unstruc)
+			}
+		}
 
-	// now reflect this in the Status
-	r.SetCurrentRiderList(monoVertexRollout, newRiders)
-	return nil
+	}
+	return existingRiders, nil
 }
