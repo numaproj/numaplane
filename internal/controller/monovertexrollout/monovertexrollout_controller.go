@@ -24,7 +24,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,7 +35,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -109,7 +107,6 @@ func NewMonoVertexRolloutReconciler(
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -153,18 +150,6 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// Update the resource definition (everything except the Status subresource)
-	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
-		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
-			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
-			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
-				r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
-				return ctrl.Result{}, statusUpdateErr
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
 	if monoVertexRollout.DeletionTimestamp.IsZero() {
 		statusUpdateErr := r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
 		if statusUpdateErr != nil {
@@ -191,37 +176,14 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
 	}()
 
-	// remove finalizers if monoVertexRollout is being deleted
+	// Update metrics if monoVertexRollout is being deleted
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting MonoVertexRollout")
-		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
-			// TODO: this is a temporary fix to delete the controller and its children
-			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			//foreground := metav1.DeletePropagationForeground
-			//if err := r.client.Delete(ctx, monoVertexRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-			//	return ctrl.Result{}, err
-			//}
-			//// Get the monoVertexRollout live resource
-			//liveMonoVertexRollout, err := getLiveMonovertexRollout(ctx, monoVertexRollout.Name, monoVertexRollout.Namespace)
-			//if err != nil {
-			//	if apierrors.IsNotFound(err) {
-			//		numaLogger.Info("MonoVertxRollout not found, %v", err)
-			//		return ctrl.Result{}, nil
-			//	}
-			//	return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
-			//}
-			//*monoVertexRollout = *liveMonoVertexRollout
-			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
-		}
 		// generate metrics for MonoVertex deletion
 		r.customMetrics.DecMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.DeleteMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name)
 		return ctrl.Result{}, nil
-	}
-
-	if !controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
-		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
 	// check if there's a promoted monovertex yet
@@ -528,16 +490,6 @@ func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *a
 		rollout.Status.MarkMonoVertexUnpaused(rollout.Generation)
 	}
 
-}
-
-func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
-	if old == nil {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
-		return true
-	}
-	return false
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) error {

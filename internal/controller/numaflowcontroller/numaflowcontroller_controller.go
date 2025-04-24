@@ -32,7 +32,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,13 +43,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	sigsyaml "sigs.k8s.io/yaml"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -115,7 +112,6 @@ func NewNumaflowControllerReconciler(
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -169,18 +165,6 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// Update the resource definition (everything except the Status subresource)
-	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
-		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
-			r.ErrorHandler(ctx, numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
-			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
-				r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
-				return ctrl.Result{}, statusUpdateErr
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
 	// Update the Status subresource
 	if numaflowController.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerStatus(ctx, numaflowController)
@@ -193,21 +177,6 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	numaLogger.Debug("reconciliation successful")
 	r.recorder.Eventf(numaflowController, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
 	return result, nil
-}
-
-func (r *NumaflowControllerReconciler) needsUpdate(old, new *apiv1.NumaflowController) bool {
-
-	if old == nil {
-		return true
-	}
-
-	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
-	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
-	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
-		return true
-	}
-
-	return false
 }
 
 // reconcile does the real logic
@@ -226,39 +195,10 @@ func (r *NumaflowControllerReconciler) reconcile(
 	if !controller.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowController")
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
-		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
-			// TODO: this is a temporary fix to delete the controller and its children
-			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			//foreground := metav1.DeletePropagationForeground
-			//if err := r.client.Delete(ctx, controller, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-			//	return ctrl.Result{}, err
-			//}
-			//// Get the controller live resource
-			//liveController, err := getLiveNumaflowController(ctx, controller.Name, controller.Namespace)
-			//if err != nil {
-			//	if apierrors.IsNotFound(err) {
-			//		numaLogger.Info("NumaflowController not found, %v", err)
-			//		return ctrl.Result{}, nil
-			//	}
-			//	return ctrl.Result{}, fmt.Errorf("error getting the live controller: %w", err)
-			//}
-			//*controller = *liveController
-			// Check if dependent resources are deleted, if not then requeue
-			if ok, err := r.areDependentResourcesDeleted(ctx, controller); !ok || err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to delete dependent resources: %v", err)
-			}
-			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
-		}
-
 		// generate the metrics for the numaflow controller deletion
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowController, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.DeleteNumaflowControllersHealth(controller.Namespace, controller.Name)
 		return ctrl.Result{}, nil
-	}
-
-	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
-	if !controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
-		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
 
 	_, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
@@ -729,37 +669,4 @@ func (r *NumaflowControllerReconciler) ErrorHandler(ctx context.Context, numaflo
 	numaLogger.Error(err, "ErrorHandler")
 	r.customMetrics.NumaflowControllerSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
-}
-
-// areDependentResourcesDeleted checks if dependent resources are deleted.
-func (r *NumaflowControllerReconciler) areDependentResourcesDeleted(ctx context.Context, controller *apiv1.NumaflowController) (bool, error) {
-	pipelineList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.PipelineGroupVersionResource.Resource,
-		controller.Namespace, common.LabelKeyParentRollout, "")
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, err
-		}
-		pipelineList = &unstructured.UnstructuredList{} // Assume it as an empty list
-	}
-	monoVertexList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.MonoVertexGroupVersionResource.Resource,
-		controller.Namespace, common.LabelKeyParentRollout, "")
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, err
-		}
-		monoVertexList = &unstructured.UnstructuredList{} // Assume it as an empty list
-	}
-	isbServiceList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion, numaflowv1.ISBGroupVersionResource.Resource,
-		controller.Namespace, common.LabelKeyParentRollout, "")
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, err
-		}
-		isbServiceList = &unstructured.UnstructuredList{} // Assume it as an empty list
-	}
-	if len(pipelineList.Items)+len(monoVertexList.Items)+len(isbServiceList.Items) == 0 {
-		return true, nil
-	}
-
-	return false, fmt.Errorf("dependent resources are not deleted")
 }
