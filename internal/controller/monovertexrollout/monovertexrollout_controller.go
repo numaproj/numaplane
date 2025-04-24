@@ -248,7 +248,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 				return ctrl.Result{}, err
 			}
 
-			if err := r.createRidersForMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
+			if err := ctlrcommon.CreateRidersForNewChild(ctx, r, monoVertexRollout, newMonoVertexDef, r.client); err != nil {
 				return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
 			}
 
@@ -375,7 +375,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
-			r.setCurrentRiderList(monoVertexRollout, currentRiderList)
+			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -404,7 +404,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 		// update the list of riders in the Status
-		r.setCurrentRiderList(monoVertexRollout, currentRiderList)
+		r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 	}
 
 	return requeueDelay, nil
@@ -870,10 +870,11 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 }
 
 // update Status to reflect the current Riders (for promoted monovertex)
-func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
-	monoVertexRollout *apiv1.MonoVertexRollout,
+func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
+	rolloutObject ctlrcommon.RolloutObject,
 	riders []riders.Rider) {
 
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
 	for index, rider := range riders {
 		monoVertexRollout.Status.Riders[index] = apiv1.RiderStatus{
@@ -882,30 +883,4 @@ func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
 		}
 	}
 
-}
-
-// Determine the list of Riders which are needed for the MonoVertex and create them on the cluster
-func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
-	ctx context.Context,
-	monoVertexRollout *apiv1.MonoVertexRollout,
-	monoVertex *unstructured.Unstructured,
-) error {
-
-	// create definitions for riders by templating what's defined in the MonoVertexRollout definition with the monovertex name
-	newRiders, err := r.GetDesiredRiders(monoVertexRollout, monoVertex)
-	if err != nil {
-		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
-	}
-	riderAdditions := unstructured.UnstructuredList{}
-	for _, rider := range newRiders {
-		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
-	}
-
-	if err = riders.UpdateRidersInK8S(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
-		return err
-	}
-
-	// now reflect this in the Status
-	r.setCurrentRiderList(monoVertexRollout, newRiders)
-	return nil
 }

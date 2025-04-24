@@ -31,6 +31,9 @@ type RolloutController interface {
 
 	// GetExistingRiders gets the list of Riders that already exists, either for the Promoted child or the Upgrading child depending on the value of "upgrading"
 	GetExistingRiders(ctx context.Context, rolloutObject RolloutObject, upgrading bool) (unstructured.UnstructuredList, error)
+
+	// SetCurrentRiderList updates the list of Riders
+	SetCurrentRiderList(rolloutObject RolloutObject, riders []riders.Rider)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
@@ -262,4 +265,32 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	} else {
 		return existingChild.GetName(), nil
 	}
+}
+
+// Determine the list of Riders which are needed for the child and create them on the cluster
+func CreateRidersForNewChild(
+	ctx context.Context,
+	controller RolloutController,
+	rolloutObject RolloutObject,
+	child *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	// create definitions for riders by templating what's defined in the Rollout definition with the child definition
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, child)
+	if err != nil {
+		return fmt.Errorf("error getting desired Riders for child %s: %s", child.GetName(), err)
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	for _, rider := range newRiders {
+		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
+	}
+
+	if err = riders.UpdateRidersInK8S(ctx, child, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+		return err
+	}
+
+	// now reflect this in the Status
+	controller.SetCurrentRiderList(rolloutObject, newRiders)
+	return nil
 }

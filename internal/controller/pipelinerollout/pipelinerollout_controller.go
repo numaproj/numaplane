@@ -1308,3 +1308,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 	}
 	return false, nil
 }
+
+func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+}

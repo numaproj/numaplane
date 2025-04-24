@@ -89,6 +89,10 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPostUpgrade(ctx contex
 	return false, nil
 }
 
+func (fpc fakeProgressiveController) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

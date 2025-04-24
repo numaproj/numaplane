@@ -1028,3 +1028,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 	}
 	return false, nil
 }
+
+func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+}

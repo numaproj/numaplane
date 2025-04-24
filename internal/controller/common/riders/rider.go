@@ -134,3 +134,29 @@ func prepareRiderForDeployment(ctx context.Context, rider *unstructured.Unstruct
 	}
 	return nil
 }
+
+// Determine the list of Riders which are needed for the child and create them on the cluster
+func CreateRidersForNewChild(
+	ctx context.Context,
+	rolloutObject ctlrcommon.RolloutObject,
+	monoVertex *unstructured.Unstructured,
+) error {
+
+	// create definitions for riders by templating what's defined in the MonoVertexRollout definition with the monovertex name
+	newRiders, err := r.GetDesiredRiders(monoVertexRollout, monoVertex)
+	if err != nil {
+		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	for _, rider := range newRiders {
+		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
+	}
+
+	if err = riders.UpdateRidersInK8S(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
+		return err
+	}
+
+	// now reflect this in the Status
+	r.SetCurrentRiderList(monoVertexRollout, newRiders)
+	return nil
+}
