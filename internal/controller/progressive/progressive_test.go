@@ -39,7 +39,7 @@ func (fpc fakeProgressiveController) Recycle(ctx context.Context, childObject *u
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvc *unstructured.Unstructured) ([]riders.Rider, error) {
+func (fpc fakeProgressiveController) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, name string, childDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	desiredRiders := []riders.Rider{}
 	return desiredRiders, nil
 }

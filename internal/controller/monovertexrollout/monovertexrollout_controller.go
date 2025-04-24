@@ -308,7 +308,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	numaLogger := logger.FromContext(ctx)
 
 	// get the list of Riders that we need based on the MonoVertexRollout definition
-	currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+	currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName(), newMonoVertexDef)
 	if err != nil {
 		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
@@ -375,7 +375,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName(), newMonoVertexDef)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
 			}
@@ -811,7 +811,7 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 }
 
 // Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the monoVertex child
-func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertex *unstructured.Unstructured) ([]riders.Rider, error) {
+func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertexName string, monoVertexDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	desiredRiders := []riders.Rider{}
 	for _, rider := range monoVertexRollout.Spec.Riders {
@@ -820,7 +820,7 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
 		}
 		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
-			TemplateMonoVertexName:      monoVertex.GetName(),
+			TemplateMonoVertexName:      monoVertexName,
 			TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 		})
 		if err != nil {
@@ -828,8 +828,8 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		}
 		unstruc := unstructured.Unstructured{}
 		unstruc.Object = resolvedMap
-		unstruc.SetNamespace(monoVertex.GetNamespace())
-		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertex.GetName()))
+		unstruc.SetNamespace(monoVertexRollout.Namespace)
+		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertexName))
 		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 	}
 	return desiredRiders, nil

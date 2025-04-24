@@ -992,7 +992,7 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	return isbServiceRollout, err
 }
 
-func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvc *unstructured.Unstructured) ([]riders.Rider, error) {
+func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvcName string, isbsvcDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	desiredRiders := []riders.Rider{}
 	// TODO
 	return desiredRiders, nil

@@ -475,7 +475,7 @@ func rolloutNeedsUpdating(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = ridersNeedUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef)
+		needsUpdating, err = ridersNeedUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -484,8 +484,13 @@ func rolloutNeedsUpdating(
 }
 
 // Do any Riders need updating? (including additions, modifications, or deletions)
-func ridersNeedUpdating(ctx context.Context, controller progressiveController, rolloutObject ctlrcommon.RolloutObject, existingChild *unstructured.Unstructured) (bool, error) {
-	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChild)
+func ridersNeedUpdating(
+	ctx context.Context,
+	controller progressiveController,
+	rolloutObject ctlrcommon.RolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingUpgradingChildDef.GetName(), newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
@@ -495,7 +500,7 @@ func ridersNeedUpdating(ctx context.Context, controller progressiveController, r
 		return false, err
 	}
 
-	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChild.GetNamespace(), existingChild.GetKind(), existingChild.GetName(),
+	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetKind(), existingUpgradingChildDef.GetName(),
 		newRiders, existingRiders)
 	if err != nil {
 		return false, err
@@ -704,7 +709,7 @@ func startPostUpgradeProcess(
 	numaLogger.Debug("starting post upgrade process")
 
 	// Create Riders for the new Upgrading child
-	newRiders, err := controller.GetDesiredRiders(rolloutObject, newUpgradingChild)
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, newUpgradingChild.GetName(), newUpgradingChild)
 	if err != nil {
 		return false, err
 	}

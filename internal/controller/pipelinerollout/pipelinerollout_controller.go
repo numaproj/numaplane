@@ -67,6 +67,7 @@ const (
 	numWorkers                = 16 // can consider making configurable
 
 	TemplatePipelineName      = ".pipeline-name"
+	TemplateVertexName        = ".vertex-name"
 	TemplatePipelineNamespace = ".pipeline-namespace"
 )
 
@@ -417,6 +418,9 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if err != nil {
 				return 0, nil, err
 			}
+			if err := ctlrcommon.CreateRidersForNewChild(ctx, r, pipelineRollout, newPipelineDef, r.client); err != nil {
+				return 0, nil, fmt.Errorf("error creating riders: %s", err)
+			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 		} else {
@@ -502,6 +506,17 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	numaLogger := logger.FromContext(ctx)
 
+	// get the list of Riders that we need based on the PipelineRollout definition
+	currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
+	if err != nil {
+		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingPipelineDef.GetName(), err)
+	}
+	// get the list of Riders that we have now (for promoted child)
+	existingRiderList, err := r.GetExistingRiders(ctx, pipelineRollout, false)
+	if err != nil {
+		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingPipelineDef.GetName(), err)
+	}
+
 	// what is the preferred strategy for this namespace?
 	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), existingPipelineDef.GetKind())
 	if err != nil {
@@ -510,17 +525,17 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// does the Resource need updating, and if so how?
 	// TODO: handle recreate parameter
-	pipelineNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []riders.Rider{}, unstructured.UnstructuredList{})
+	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, currentRiderList, existingRiderList)
 	if err != nil {
 		return 0, err
 	}
 
 	numaLogger.
-		WithValues("pipelineNeedsToUpdate", pipelineNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		WithValues("needsUpdate", needsUpdate, "upgradeStrategyType", upgradeStrategyType).
 		Debug("Upgrade decision result")
 
-	// set the Status appropriately to "Pending" or "Deployed" depending on whether pipeline needs to update
-	if pipelineNeedsToUpdate {
+	// set the Status appropriately to "Pending" or "Deployed" depending on whether rollout needs to update
+	if needsUpdate {
 		pipelineRollout.Status.MarkPending()
 	} else {
 		pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -588,15 +603,29 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		}
+		// update the cluster to reflect the Rider additions, modifications, and deletions
+		if err := riders.UpdateRidersInK8S(ctx, newPipelineDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
+			return 0, err
+		}
+
+		// update the list of riders in the Status
+		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
 
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
 
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, pipelineNeedsToUpdate, r, r.client)
+		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, pipelineRollout, existingPipelineDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
 		if done {
+			// update the list of riders in the Status based on our child which was just promoted
+			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
+			if err != nil {
+				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newPipelineDef.GetName(), err)
+			}
+			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
@@ -610,15 +639,23 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 	default:
-		if pipelineNeedsToUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
+		if needsUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.client, newPipelineDef); err != nil {
 				return 0, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+
+			// update the cluster to reflect the Rider additions, modifications, and deletions
+			if err := riders.UpdateRidersInK8S(ctx, newPipelineDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
+				return 0, err
+			}
 		}
+
+		// update the list of riders in the Status
+		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
 	}
 
-	if pipelineNeedsToUpdate {
+	if needsUpdate {
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	}
 
@@ -1272,9 +1309,54 @@ func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1
 	return PipelineRollout, err
 }
 
-func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, pipeline *unstructured.Unstructured) ([]riders.Rider, error) {
+func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, pipelineName string, pipelineDef *unstructured.Unstructured) ([]riders.Rider, error) {
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	desiredRiders := []riders.Rider{}
-	// TODO
+	for _, rider := range pipelineRollout.Spec.Riders {
+
+		var asMap map[string]interface{}
+		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
+			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
+		}
+
+		if rider.PerVertex {
+			// create one Rider per Vertex
+			vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+			if err != nil {
+				return desiredRiders, err
+			}
+			for _, vertex := range vertices {
+				vertexName := vertex.(map[string]interface{})["name"]
+				resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+					TemplatePipelineName:      pipelineName,
+					TemplatePipelineNamespace: pipelineRollout.Namespace,
+					TemplateVertexName:        vertexName,
+				})
+				if err != nil {
+					return desiredRiders, err
+				}
+				unstruc := unstructured.Unstructured{}
+				unstruc.Object = resolvedMap
+				unstruc.SetNamespace(pipelineRollout.Namespace)
+				unstruc.SetName(fmt.Sprintf("%s-%s-%s", unstruc.GetName(), pipelineName, vertexName))
+				desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+			}
+		} else {
+			// create one Rider for the Pipeline
+			resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+				TemplatePipelineName:      pipelineName,
+				TemplatePipelineNamespace: pipelineRollout.Namespace,
+			})
+			if err != nil {
+				return desiredRiders, err
+			}
+			unstruc := unstructured.Unstructured{}
+			unstruc.Object = resolvedMap
+			unstruc.SetNamespace(pipelineRollout.Namespace)
+			unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), pipelineName))
+			desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+		}
+	}
 	return desiredRiders, nil
 }
 
