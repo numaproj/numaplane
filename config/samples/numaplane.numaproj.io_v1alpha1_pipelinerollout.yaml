@@ -10,6 +10,18 @@ spec:
     analysis:
       args:
       templates:
+  riders:
+    - perVertex: true
+      definition:
+        apiVersion: autoscaling.k8s.io/v1beta2
+        kind: VerticalPodAutoscaler
+        metadata: 
+          name: vpa
+        spec:
+          targetRef: 
+            apiVersion: numaproj.io/v1alpha1
+            kind: Vertex
+            name: '{{.pipeline-name}}-{{.vertex-name}}'
   pipeline:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
