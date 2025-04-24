@@ -50,6 +50,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -509,7 +510,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	// does the Resource need updating, and if so how?
 	// TODO: handle recreate parameter
-	pipelineNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef)
+	pipelineNeedsToUpdate, upgradeStrategyType, _, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newPipelineDef, existingPipelineDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}
@@ -956,12 +957,12 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		TemplatePipelineNamespace: pipelineRollout.Namespace,
 	}
 
-	pipelineSpec, err := ctlrcommon.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+	pipelineSpec, err := util.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1271,6 +1272,17 @@ func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1
 	return PipelineRollout, err
 }
 
+func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, pipeline *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	// TODO
+	return desiredRiders, nil
+}
+
+func (r *PipelineRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	// TODO
+	return unstructured.UnstructuredList{}, nil
+}
+
 // listAndDeleteChildPipelines lists all child pipelines and deletes them
 // return true if we need to requeue
 func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) (bool, error) {
@@ -1295,4 +1307,8 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		return true, nil
 	}
 	return false, nil
+}
+
+func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
 }

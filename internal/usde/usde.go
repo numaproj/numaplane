@@ -9,6 +9,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -26,34 +27,47 @@ var (
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
-// It returns the following parameters:
+// It returns the following values:
 // - bool: Indicates whether the resource needs an update.
 // - apiv1.UpgradeStrategy: The most conservative upgrade strategy to be used for updating the resource.
 // - bool: Indicates if the controller managed resources should be recreated (delete-recreate).
+// - unstructured.UnstructuredList: Resources that require addition
+// - unstructured.UnstructuredList: Resources that require modification
+// - unstructured.UnstructuredList: Resources that require deletion
 // - error: Any error encountered during the function execution.
-func ResourceNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, bool, error) {
+func ResourceNeedsUpdating(
+	ctx context.Context,
+	newDef, existingDef *unstructured.Unstructured,
+	newRiders []riders.Rider,
+	existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, bool, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, err
+		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
 
 	specNeedsUpdating, specUpgradeStrategy, recreate, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, err
+		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
+	}
+
+	ridersNeedUpdating, ridersUpgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, err := RidersNeedUpdating(ctx, existingDef.GetNamespace(), existingDef.GetKind(), existingDef.GetName(), newRiders, existingRiders)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, false, additionsRequired, modificationsRequired, deletionsRequired, err
 	}
 
 	numaLogger.WithValues(
 		"metadataUpgradeStrategy", metadataUpgradeStrategy,
 		"specUpgradeStrategy", specUpgradeStrategy,
+		"ridersUpgradeStrategy", ridersUpgradeStrategy,
 	).Debug("upgrade strategies")
 
-	if !metadataNeedsUpdating && !specNeedsUpdating {
-		return false, apiv1.UpgradeStrategyNoOp, false, nil
+	if !metadataNeedsUpdating && !specNeedsUpdating && !ridersNeedUpdating {
+		return false, apiv1.UpgradeStrategyNoOp, false, additionsRequired, modificationsRequired, deletionsRequired, nil
 	}
 
-	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy}), recreate, nil
+	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy, ridersUpgradeStrategy}), recreate, additionsRequired, modificationsRequired, deletionsRequired, nil
 
 }
 
@@ -76,7 +90,7 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	dataLossFields := usdeConfig[usdeConfigMapKey].DataLoss
 	progressiveFields := usdeConfig[usdeConfigMapKey].Progressive
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
+	upgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, err
 	}
@@ -214,7 +228,7 @@ func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.Upgra
 func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	upgradeStrategy, err := getDataLossUpggradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
+	upgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, err
 	}
@@ -241,6 +255,116 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
+// return required upgrade strategy, list of additions, modifications, deletions required
+func RidersNeedUpdating(ctx context.Context, namespace string, childKind string, childName string, newRiders []riders.Rider, existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
+
+	numaLogger := logger.FromContext(ctx)
+
+	additionsRequired := unstructured.UnstructuredList{}
+	deletionsRequired := unstructured.UnstructuredList{}
+	modificationsRequired := unstructured.UnstructuredList{}
+	upgradeStrategy := apiv1.UpgradeStrategyNoOp
+
+	existingRiderMap := make(map[string]unstructured.Unstructured)
+	newRiderMap := make(map[string]unstructured.Unstructured)
+
+	// which upgrade strategy does user prefer for this type of Child Kind? find out if it's Progressive
+	// since some Riders, if changed, can invoke a Progressive strategy
+	dataLossUpgradeStrategy, err := getDataLossUpgradeStrategy(ctx, namespace, childKind)
+	if err != nil {
+		return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, err
+	}
+	userPrefersProgressive := (dataLossUpgradeStrategy == apiv1.UpgradeStrategyProgressive)
+
+	// Create a map of newRiders
+	for _, rider := range newRiders {
+		gvk := rider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + rider.Definition.GetName()
+		newRiderMap[key] = rider.Definition
+	}
+
+	// Create a map of existingRiders
+	for _, rider := range existingRiders.Items {
+		gvk := rider.GroupVersionKind()
+		key := gvk.String() + "/" + rider.GetName()
+		existingRiderMap[key] = rider
+	}
+
+	// Get the additionsRequired
+	// Find new riders not in existing
+	for _, newRider := range newRiders {
+		gvk := newRider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + newRider.Definition.GetName()
+
+		if _, found := existingRiderMap[key]; !found {
+			additionsRequired.Items = append(additionsRequired.Items, newRider.Definition)
+			upgradeStrategy = apiv1.UpgradeStrategyApply
+		}
+	}
+
+	// Get the deletionsRequired
+	// Find existing riders not in new
+	for _, existingRider := range existingRiders.Items {
+		gvk := existingRider.GroupVersionKind()
+		key := gvk.String() + "/" + existingRider.GetName()
+
+		if _, found := newRiderMap[key]; !found {
+			// riders.Rider is in newRiders but not in existingRiders
+			deletionsRequired.Items = append(deletionsRequired.Items, existingRider)
+			upgradeStrategy = apiv1.UpgradeStrategyApply
+		}
+	}
+
+	// Get the modificationsRequired
+	// Find the resources that are in both newRiders and existingRiders and determine which ones have changed
+	for _, newRider := range newRiders {
+		gvk := newRider.Definition.GroupVersionKind()
+		key := gvk.String() + "/" + newRider.Definition.GetName()
+
+		if existingRider, found := existingRiderMap[key]; found {
+			newHash, err := riders.CalculateHash(ctx, newRider.Definition)
+			if err != nil {
+				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to calculate hash annotation for rider %s: %s", newRider.Definition.GetName(), err)
+			}
+
+			existingHash := riders.GetExistingHashAnnotation(existingRider)
+			if newHash != existingHash {
+
+				// return progressive if user prefers progressive and it's required for this resource change
+				if newRider.RequiresProgressive && userPrefersProgressive {
+					upgradeStrategy = apiv1.UpgradeStrategyProgressive
+				} else {
+					if upgradeStrategy == apiv1.UpgradeStrategyNoOp {
+						upgradeStrategy = apiv1.UpgradeStrategyApply
+					}
+				}
+
+				newRider.Definition.SetResourceVersion(existingRider.GetResourceVersion())
+				modificationsRequired.Items = append(modificationsRequired.Items, newRider.Definition)
+			}
+		}
+	}
+
+	// log additionsRequired, modificationsRequired, deletionsRequired, as well as upgrade strategy
+	numaLogger.WithValues(
+		"child name", childName,
+		"additionsRequired", getNamesAndKinds(additionsRequired),
+		"modificationsRequired", getNamesAndKinds(modificationsRequired),
+		"deletionsRequired", getNamesAndKinds(deletionsRequired),
+	).Debug("rider changes")
+
+	requiresUpdate := upgradeStrategy == apiv1.UpgradeStrategyApply || upgradeStrategy == apiv1.UpgradeStrategyProgressive
+	return requiresUpdate, upgradeStrategy, additionsRequired, modificationsRequired, deletionsRequired, nil
+}
+
+func getNamesAndKinds(ulist unstructured.UnstructuredList) string {
+	namesAndKinds := ""
+	for _, u := range ulist.Items {
+		namesAndKinds = namesAndKinds + u.GetKind() + "/" + u.GetName() + "; "
+	}
+	return namesAndKinds
+}
+
 func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
 	tempMap1 := map1
 	if tempMap1 == nil {
@@ -254,7 +378,7 @@ func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss
-func getDataLossUpggradeStrategy(ctx context.Context, namespace, resourceKind string) (apiv1.UpgradeStrategy, error) {
+func getDataLossUpgradeStrategy(ctx context.Context, namespace, resourceKind string) (apiv1.UpgradeStrategy, error) {
 	userUpgradeStrategy, err := GetUserStrategy(ctx, namespace, resourceKind)
 	if err != nil {
 		return apiv1.UpgradeStrategyError, err

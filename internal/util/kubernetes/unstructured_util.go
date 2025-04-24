@@ -167,7 +167,8 @@ func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
 
 // CreateResource creates the resource in the kubernetes cluster
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
-	return c.Create(ctx, obj)
+	err := c.Create(ctx, obj)
+	return err
 }
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
@@ -207,4 +208,31 @@ func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersion
 // DeleteResource deletes the resource from the kubernetes cluster
 func DeleteResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Delete(ctx, obj)
+}
+
+func MetaGVKToSchemaGVK(metaGVK metav1.GroupVersionKind) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   metaGVK.Group,
+		Version: metaGVK.Version,
+		Kind:    metaGVK.Kind,
+	}
+}
+
+func SchemaGVKToMetaGVK(schemaGVK schema.GroupVersionKind) metav1.GroupVersionKind {
+	return metav1.GroupVersionKind{
+		Group:   schemaGVK.Group,
+		Version: schemaGVK.Version,
+		Kind:    schemaGVK.Kind,
+	}
+}
+
+func ApplyOwnerReference(child *unstructured.Unstructured, owner *unstructured.Unstructured) error {
+	ownerRef := metav1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
+	}
+	child.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
+	return nil
 }

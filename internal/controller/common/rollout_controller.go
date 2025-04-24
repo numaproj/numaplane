@@ -2,16 +2,15 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
-	fasttemplate "github.com/valyala/fasttemplate"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -26,6 +25,15 @@ type RolloutController interface {
 
 	// Recycle deletes child; returns true if it was in fact deleted
 	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child definition
+	GetDesiredRiders(rolloutObject RolloutObject, child *unstructured.Unstructured) ([]riders.Rider, error)
+
+	// GetExistingRiders gets the list of Riders that already exists, either for the Promoted child or the Upgrading child depending on the value of "upgrading"
+	GetExistingRiders(ctx context.Context, rolloutObject RolloutObject, upgrading bool) (unstructured.UnstructuredList, error)
+
+	// SetCurrentRiderList updates the list of Riders
+	SetCurrentRiderList(rolloutObject RolloutObject, riders []riders.Rider)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
@@ -259,28 +267,30 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	}
 }
 
-// resolves templated definitions of a resource with any arguments
-func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
+// Determine the list of Riders which are needed for the child and create them on the cluster
+func CreateRidersForNewChild(
+	ctx context.Context,
+	controller RolloutController,
+	rolloutObject RolloutObject,
+	child *unstructured.Unstructured,
+	c client.Client,
+) error {
 
-	// marshal data to cast as a string
-	dataBytes, err := json.Marshal(data)
+	// create definitions for riders by templating what's defined in the Rollout definition with the child definition
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, child)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("error getting desired Riders for child %s: %s", child.GetName(), err)
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	for _, rider := range newRiders {
+		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
 	}
 
-	// create and execute template with supplied arguments
-	tmpl, err := fasttemplate.NewTemplate(string(dataBytes), "{{", "}}")
-	if err != nil {
-		return nil, err
-	}
-	templatedSpec := tmpl.ExecuteString(args)
-
-	// unmarshal into map to be returned and used for resource spec
-	var resolvedTmpl map[string]interface{}
-	err = json.Unmarshal([]byte(templatedSpec), &resolvedTmpl)
-	if err != nil {
-		return nil, err
+	if err = riders.UpdateRidersInK8S(ctx, child, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+		return err
 	}
 
-	return resolvedTmpl, nil
+	// now reflect this in the Status
+	controller.SetCurrentRiderList(rolloutObject, newRiders)
+	return nil
 }

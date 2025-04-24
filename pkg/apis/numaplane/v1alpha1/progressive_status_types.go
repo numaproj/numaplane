@@ -36,20 +36,30 @@ const (
 type UpgradingChildStatus struct {
 	// Name of the upgrading child
 	Name string `json:"name"`
+
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
+
 	// AssessmentStartTime indicates the time at/after which the assessment result will be computed
 	AssessmentStartTime *metav1.Time `json:"assessmentStartTime,omitempty"`
+
 	// AssessmentEndTime indicates the time after which no more assessments will be performed
 	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
+
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
+
 	// FailureReason indicates the reason for the failure
 	FailureReason string `json:"failureReason,omitempty"`
+
 	// ChildStatus is the full dump of child status object
 	ChildStatus runtime.RawExtension `json:"childStatus,omitempty"`
+
 	// InitializationComplete determines if the upgrade process has completed (if it hasn't, we will come back and try it again)
 	InitializationComplete bool `json:"initializationComplete,omitempty"`
+
+	// Riders stores the list of Riders that have been deployed along with the "upgrading" child
+	Riders []RiderStatus `json:"riders,omitempty"`
 }
 
 type UpgradingPipelineTypeStatus struct {

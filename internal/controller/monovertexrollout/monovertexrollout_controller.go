@@ -46,6 +46,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
@@ -247,6 +248,10 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 				return ctrl.Result{}, err
 			}
 
+			if err := ctlrcommon.CreateRidersForNewChild(ctx, r, monoVertexRollout, newMonoVertexDef, r.client); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
+			}
+
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
@@ -302,22 +307,33 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
+	// get the list of Riders that we need based on the MonoVertexRollout definition
+	currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+	if err != nil {
+		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
+	}
+	// get the list of Riders that we have now (for promoted child)
+	existingRiderList, err := r.GetExistingRiders(ctx, monoVertexRollout, false)
+	if err != nil {
+		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
+	}
+
 	// determine if we're trying to update the MonoVertex spec
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	mvNeedsToUpdate, upgradeStrategyType, _, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef)
+	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, currentRiderList, existingRiderList)
 	if err != nil {
 		return 0, err
 	}
-	numaLogger.
-		WithValues("mvNeedsToUpdate", mvNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
-		Debug("Upgrade decision result")
+	numaLogger.WithValues(
+		"needsUpdate", needsUpdate,
+		"upgradeStrategyType", upgradeStrategyType).Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if mvNeedsToUpdate - this means there's a mismatch between the desired MonoVertex spec and actual MonoVertex spec
+	// if needsUpdate - this means we need to deploy a change
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
-	if mvNeedsToUpdate {
+	if needsUpdate {
 		monoVertexRollout.Status.MarkPending()
 	} else {
 		monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
@@ -352,11 +368,19 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 		}
 
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, mvNeedsToUpdate, r, r.client)
+		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, monoVertexRollout, existingMonoVertexDef, needsUpdate, r, r.client)
 		if err != nil {
 			return 0, err
 		}
 		if done {
+
+			// update the list of riders in the Status based on our child which was just promoted
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+			if err != nil {
+				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
+			}
+			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
+
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updateMonoVertexRolloutStatus(ctx, monoVertexRollout)
@@ -371,13 +395,20 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 
 	default:
-		if mvNeedsToUpdate {
+		if needsUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
+
+			// update the cluster to reflect the Rider additions, modifications, and deletions
+			if err := riders.UpdateRidersInK8S(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
+				return 0, err
+			}
 		}
+		// update the list of riders in the Status
+		r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 	}
 
 	return requeueDelay, nil
@@ -636,12 +667,12 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 		TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 	}
 
-	monoVertexSpec, err := ctlrcommon.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
+	monoVertexSpec, err := util.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -777,4 +808,59 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 	monoVertexRollout.SetGroupVersionKind(apiv1.MonoVertexRolloutGroupVersionKind)
 
 	return monoVertexRollout, err
+}
+
+// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the monoVertex child
+func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertex *unstructured.Unstructured) ([]riders.Rider, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	desiredRiders := []riders.Rider{}
+	for _, rider := range monoVertexRollout.Spec.Riders {
+		var asMap map[string]interface{}
+		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
+			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
+		}
+		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+			TemplateMonoVertexName:      monoVertex.GetName(),
+			TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
+		})
+		if err != nil {
+			return desiredRiders, err
+		}
+		unstruc := unstructured.Unstructured{}
+		unstruc.Object = resolvedMap
+		unstruc.SetNamespace(monoVertex.GetNamespace())
+		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertex.GetName()))
+		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+	}
+	return desiredRiders, nil
+}
+
+// Get the Riders that have been deployed
+// If "upgrading==true", return those which are associated with the Upgrading MonoVertex; otherwise return those which are associated with the Promoted one
+func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	ridersList := monoVertexRollout.Status.Riders // use the Riders for the promoted monovertex
+	if upgrading {
+		ridersList = monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Riders // use the Riders for the upgrading monovertex
+	}
+
+	return riders.GetRidersFromK8S(ctx, monoVertexRollout.GetNamespace(), ridersList, r.client)
+}
+
+// update Status to reflect the current Riders (for promoted monovertex)
+func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
+	rolloutObject ctlrcommon.RolloutObject,
+	riders []riders.Rider) {
+
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
+	for index, rider := range riders {
+		monoVertexRollout.Status.Riders[index] = apiv1.RiderStatus{
+			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+			Name:             rider.Definition.GetName(),
+		}
+	}
+
 }

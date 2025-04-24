@@ -44,6 +44,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -343,7 +344,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, _, _, _, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, []riders.Rider{}, unstructured.UnstructuredList{})
 	if err != nil {
 		return 0, err
 	}
@@ -856,12 +857,12 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 		TemplateISBServiceNamespace: isbServiceRollout.Namespace,
 	}
 
-	isbServiceSpec, err := ctlrcommon.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
+	isbServiceSpec, err := util.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := ctlrcommon.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -991,6 +992,17 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	return isbServiceRollout, err
 }
 
+func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvc *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	// TODO
+	return desiredRiders, nil
+}
+
+func (r *ISBServiceRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	// TODO
+	return unstructured.UnstructuredList{}, nil
+}
+
 // listAndDeleteChildISBServices lists all child ISBServices and deletes them
 // return true if we need to requeue
 func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (bool, error) {
@@ -1015,4 +1027,8 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 		return true, nil
 	}
 	return false, nil
+}
+
+func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
 }

@@ -10,6 +10,26 @@ spec:
     analysis:
       args:
       templates:
+  riders:
+    - definition:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: source-configmap
+        data:
+          something: something
+      progressive: true
+    - definition:
+        apiVersion: autoscaling.k8s.io/v1beta2
+        kind: VerticalPodAutoscaler
+        metadata: 
+          name: vpa
+        spec:
+          targetRef: 
+            apiVersion: numaproj.io/v1alpha1
+            kind: MonoVertex
+            name: '{{.monovertex-name}}'
+
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
@@ -24,6 +44,9 @@ spec:
         udsource:
           container:
             image: quay.io/numaio/numaflow-go/source-simple-source:stable
+            volumeMounts:
+              - name: source-cm-volume
+                mountPath: /etc/config
         transformer:
           container:
             image: docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable
@@ -31,3 +54,7 @@ spec:
         udsink:
           container:
             image: quay.io/numaio/numaflow-go/sink-log:stable
+      volumes:
+        - name: source-cm-volume
+          configMap:
+            name: source-configmap-{{.monovertex-name}}
