@@ -509,12 +509,12 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 	// get the list of Riders that we need based on the PipelineRollout definition
 	currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
 	if err != nil {
-		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingPipelineDef.GetName(), err)
+		return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", existingPipelineDef.GetName(), err)
 	}
 	// get the list of Riders that we have now (for promoted child)
 	existingRiderList, err := r.GetExistingRiders(ctx, pipelineRollout, false)
 	if err != nil {
-		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingPipelineDef.GetName(), err)
+		return 0, fmt.Errorf("error getting existing Riders for pipeline %s: %s", existingPipelineDef.GetName(), err)
 	}
 
 	// what is the preferred strategy for this namespace?
@@ -622,7 +622,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			// update the list of riders in the Status based on our child which was just promoted
 			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
 			if err != nil {
-				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newPipelineDef.GetName(), err)
+				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}
 			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
 
@@ -1360,9 +1360,17 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 	return desiredRiders, nil
 }
 
+// Get the Riders that have been deployed
+// If "upgrading==true", return those which are associated with the Upgrading Pipeline; otherwise return those which are associated with the Promoted one
 func (r *PipelineRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
-	// TODO
-	return unstructured.UnstructuredList{}, nil
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+
+	ridersList := pipelineRollout.Status.Riders // use the Riders for the promoted pipeline
+	if upgrading {
+		ridersList = pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Riders // use the Riders for the upgrading pipeline
+	}
+
+	return riders.GetRidersFromK8S(ctx, pipelineRollout.GetNamespace(), ridersList, r.client)
 }
 
 // listAndDeleteChildPipelines lists all child pipelines and deletes them
@@ -1391,6 +1399,15 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 	return false, nil
 }
 
+// update Status to reflect the current Riders (for promoted pipeline)
 func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
 
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+	pipelineRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
+	for index, rider := range riders {
+		pipelineRollout.Status.Riders[index] = apiv1.RiderStatus{
+			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+			Name:             rider.Definition.GetName(),
+		}
+	}
 }
