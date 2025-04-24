@@ -94,6 +94,13 @@ func UpdateRidersInK8S(
 		if err := kubernetes.CreateResource(ctx, c, &rider); err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				numaLogger.Warnf("rider %s already exists so updating instead of creating", rider.GetName())
+				// get latest version of resource so we can get its Resource Version before we try to update
+				current, err := kubernetes.GetResource(ctx, c, rider.GroupVersionKind(), k8stypes.NamespacedName{
+					Namespace: rider.GetNamespace(), Name: rider.GetName()})
+				if err != nil {
+					return fmt.Errorf("failed to get resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
+				}
+				rider.SetResourceVersion(current.GetResourceVersion())
 				if err := kubernetes.UpdateResource(ctx, c, &rider); err != nil {
 					return fmt.Errorf("failed to update resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)
 				}

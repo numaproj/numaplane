@@ -375,6 +375,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+			if err != nil {
+				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
+			}
 			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
