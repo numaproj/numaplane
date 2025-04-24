@@ -307,13 +307,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
-	// create newRiders by templating riders from MonoVertexRollout definition
-	newRiders, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
+	// get the list of Riders that we need based on the MonoVertexRollout definition
+	currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef)
 	if err != nil {
 		return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
-	// create existingRiders by using the Status list and finding each one that's in there - what if we don't find one?: don't include it in existingRiders then
-	existingRiders, err := r.GetExistingRiders(ctx, monoVertexRollout, false)
+	// get the list of Riders that we have now (for promoted child)
+	existingRiderList, err := r.GetExistingRiders(ctx, monoVertexRollout, false)
 	if err != nil {
 		return 0, fmt.Errorf("error getting existing Riders for MonoVertex %s: %s", existingMonoVertexDef.GetName(), err)
 	}
@@ -322,7 +322,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 	// if it's a simple change, direct apply
 	// if not and if user-preferred strategy is "Progressive", it will require Progressive rollout to perform the update with guaranteed no-downtime
 	// and capability to rollback an unhealthy one
-	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, newRiders, existingRiders)
+	needsUpdate, upgradeStrategyType, _, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newMonoVertexDef, existingMonoVertexDef, currentRiderList, existingRiderList)
 	if err != nil {
 		return 0, err
 	}
@@ -374,8 +374,8 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		}
 		if done {
 
-			// update the list of riders in the Status based on what's defined in newRiders
-			r.setCurrentRiderList(monoVertexRollout, newRiders)
+			// update the list of riders in the Status based on our child which was just promoted
+			r.setCurrentRiderList(monoVertexRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -398,13 +398,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 
-			// go through Rider Additions, modifications, and deletions
+			// update the cluster to reflect the Rider additions, modifications, and deletions
 			if err := riders.UpdateRiders(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
 		}
-		// update the list of riders in the Status based on what's defined in newRiders
-		r.setCurrentRiderList(monoVertexRollout, newRiders)
+		// update the list of riders in the Status
+		r.setCurrentRiderList(monoVertexRollout, currentRiderList)
 	}
 
 	return requeueDelay, nil
@@ -806,6 +806,7 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 	return monoVertexRollout, err
 }
 
+// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the monoVertex child
 func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertex *unstructured.Unstructured) ([]riders.Rider, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	desiredRiders := []riders.Rider{}
@@ -838,9 +839,9 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	existingRiders := unstructured.UnstructuredList{}
 
-	ridersList := monoVertexRollout.Status.Riders
+	ridersList := monoVertexRollout.Status.Riders // use the Riders for the promoted monovertex
 	if upgrading {
-		ridersList = monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Riders
+		ridersList = monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.Riders // use the Riders for the upgrading monovertex
 	}
 
 	// for each Rider defined in the Status, get the child and return it
@@ -857,7 +858,6 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 		} else {
 			if unstruc == nil {
 				// this shouldn't happen but just in case
-				//numaLogger.WithValues("GVK", existingRider.GroupVersionKind, "Name", existingRider.Name).Error(errors.New("Existing Rider nil"), "Existing Rider nil")
 				return existingRiders, fmt.Errorf("GetResource() returned nil Unstructured for Rider %s", existingRider.Name)
 			} else {
 				existingRiders.Items = append(existingRiders.Items, *unstruc)
@@ -869,6 +869,7 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 	return existingRiders, nil
 }
 
+// update Status to reflect the current Riders (for promoted monovertex)
 func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	riders []riders.Rider) {
@@ -883,6 +884,7 @@ func (r *MonoVertexRolloutReconciler) setCurrentRiderList(
 
 }
 
+// Determine the list of Riders which are needed for the MonoVertex and create them on the cluster
 func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
@@ -896,10 +898,6 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 	}
 	riderAdditions := unstructured.UnstructuredList{}
 	for _, rider := range newRiders {
-		/*rider.Definition, _, err = riders.WithHashAnnotation(ctx, rider.Definition)
-		if err != nil {
-			return err
-		}*/
 		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
 	}
 

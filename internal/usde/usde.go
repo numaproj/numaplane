@@ -27,7 +27,7 @@ var (
 
 // ResourceNeedsUpdating calculates the upgrade strategy to use during the
 // resource reconciliation process based on configuration and user preference (see design doc for details).
-// It returns the following parameters:
+// It returns the following values:
 // - bool: Indicates whether the resource needs an update.
 // - apiv1.UpgradeStrategy: The most conservative upgrade strategy to be used for updating the resource.
 // - bool: Indicates if the controller managed resources should be recreated (delete-recreate).

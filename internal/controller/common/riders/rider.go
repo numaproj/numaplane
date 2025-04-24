@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// have one of these per vertex for pipeline
+// definition of a Rider to apply
 type Rider struct {
 	// new definition
 	Definition unstructured.Unstructured
@@ -44,13 +44,6 @@ func WithHashAnnotation(ctx context.Context, resource unstructured.Unstructured)
 
 func CalculateHash(ctx context.Context, resource unstructured.Unstructured) (string, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	// Create a temporary resource to include just the fields we care about and hash that
-	/*reducedResource := unstructured.Unstructured{}
-	reducedResource.Object = map[string]interface{}{}
-	unstructured.SetNestedMap(reducedResource.Object, resource.Object["spec"].(map[string]interface{}), "spec")
-	reducedResource.SetLabels(resource.GetLabels())
-	reducedResource.SetAnnotations(resource.GetAnnotations())*/
 
 	// json serialize it and then hash that
 	asBytes, err := json.Marshal(resource)
@@ -90,12 +83,11 @@ func UpdateRiders(
 		"rider modifications", riderModifications,
 		"rider deletions", riderDeletions).Debug("updating riders")
 
+	// Create new Resources
 	for _, rider := range riderAdditions.Items {
 		if err := prepareRiderForDeployment(ctx, &rider, child); err != nil {
 			return err
 		}
-
-		// TODO: should we be setting hash annotation here? In the case of the first upgrading child are we instead setting it based on the "-0" value before we get here?
 
 		if err := kubernetes.CreateResource(ctx, c, &rider); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -109,6 +101,7 @@ func UpdateRiders(
 		}
 	}
 
+	// Update existing resources that need updating
 	for _, rider := range riderModifications.Items {
 
 		if err := prepareRiderForDeployment(ctx, &rider, child); err != nil {
@@ -120,6 +113,7 @@ func UpdateRiders(
 		}
 	}
 
+	// Delete resources that are no longer needed
 	for _, rider := range riderDeletions.Items {
 		if err := kubernetes.DeleteResource(ctx, c, &rider); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete resource %s/%s: %s", rider.GetNamespace(), rider.GetName(), err)

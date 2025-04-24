@@ -455,6 +455,8 @@ func processUpgradingChild(
 	}
 }
 
+// does our Rollout need updating? (used after case of Failure)
+// this could include either the main child definition or a Rider definition
 func rolloutNeedsUpdating(
 	ctx context.Context,
 	controller progressiveController,
@@ -481,6 +483,7 @@ func rolloutNeedsUpdating(
 	return needsUpdating, nil
 }
 
+// Do any Riders need updating? (including additions, modifications, or deletions)
 func ridersNeedUpdating(ctx context.Context, controller progressiveController, rolloutObject ctlrcommon.RolloutObject, existingChild *unstructured.Unstructured) (bool, error) {
 	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChild)
 	if err != nil {
