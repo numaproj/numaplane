@@ -891,7 +891,7 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 	monoVertex *unstructured.Unstructured,
 ) error {
 
-	// create definitions for by templating riders from MonoVertexRollout definition
+	// create definitions for riders by templating what's defined in the MonoVertexRollout definition with the monovertex name
 	newRiders, err := r.GetDesiredRiders(monoVertexRollout, monoVertex)
 	if err != nil {
 		return fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", monoVertex.GetName(), err)
