@@ -713,7 +713,7 @@ func startPostUpgradeProcess(
 	for index, rider := range newRiders {
 		riderAdditions.Items[index] = rider.Definition
 	}
-	if err = riders.UpdateRiders(ctx, newUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+	if err = riders.UpdateRidersInK8S(ctx, newUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
 		return false, err
 	}
 

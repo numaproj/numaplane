@@ -399,7 +399,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 
 			// update the cluster to reflect the Rider additions, modifications, and deletions
-			if err := riders.UpdateRiders(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
+			if err := riders.UpdateRidersInK8S(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
 		}
@@ -901,7 +901,7 @@ func (r *MonoVertexRolloutReconciler) createRidersForMonoVertex(
 		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
 	}
 
-	if err = riders.UpdateRiders(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
+	if err = riders.UpdateRidersInK8S(ctx, monoVertex, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, r.client); err != nil {
 		return err
 	}
 

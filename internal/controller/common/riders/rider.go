@@ -67,7 +67,7 @@ func GetExistingHashAnnotation(resource unstructured.Unstructured) string {
 }
 
 // update the cluster according to the desired modifications to the resources (additions, mods, deletions)
-func UpdateRiders(
+func UpdateRidersInK8S(
 	ctx context.Context,
 	child *unstructured.Unstructured,
 	riderAdditions unstructured.UnstructuredList,
