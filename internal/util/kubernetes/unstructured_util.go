@@ -166,7 +166,6 @@ func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
 }
 
 // CreateResource creates the resource in the kubernetes cluster
-// TODO: maybe we should pass in **unstructured.Unstructured
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	err := c.Create(ctx, obj)
 	return err
