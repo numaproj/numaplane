@@ -102,6 +102,9 @@ type GlobalConfig struct {
 	// TODO: remove when no longer needed
 	// FeatureFlagDisallowProgressiveForNonMonoVertex is a TEMPORARY feature flag to disable progressive upgrades for resources other than MonoVertex
 	FeatureFlagDisallowProgressiveForNonMonoVertex bool `json:"featureFlagDisallowProgressiveForNonMonoVertex" mapstructure:"featureFlagDisallowProgressiveForNonMonoVertex"`
+
+	// List of permitted Kinds for Riders
+	PermittedRiders []string `json:"permittedRiders" mapstructure:"permittedRiders"`
 }
 
 type ProgressiveConfig struct {

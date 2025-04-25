@@ -8,12 +8,14 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -171,4 +173,22 @@ func GetRidersFromK8S(ctx context.Context, namespace string, ridersList []apiv1.
 
 	}
 	return existingRiders, nil
+}
+
+func VerifyRiders(riders []Rider) error {
+
+	// get global configmap
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return err
+	}
+
+	// check that each rider is a permitted Kind set in the Numplane controller config
+	for _, rider := range riders {
+		if !slices.Contains(globalConfig.PermittedRiders, rider.Definition.GetKind()) {
+			return fmt.Errorf("Rider %s of kind %s is not a permitted Kind", rider.Definition.GetName(), rider.Definition.GetKind())
+		}
+	}
+
+	return nil
 }

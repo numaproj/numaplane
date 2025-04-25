@@ -833,6 +833,13 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), monoVertexName))
 		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 	}
+
+	// verify that desiredRiders are all permitted Kinds
+	err := riders.VerifyRiders(desiredRiders)
+	if err != nil {
+		return desiredRiders, err
+	}
+
 	return desiredRiders, nil
 }
 

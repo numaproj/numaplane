@@ -1363,6 +1363,13 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 		}
 	}
+
+	// TODO: verify riders are whitelisted
+	err := riders.VerifyRiders(desiredRiders)
+	if err != nil {
+		return desiredRiders, err
+	}
+
 	return desiredRiders, nil
 }
 
