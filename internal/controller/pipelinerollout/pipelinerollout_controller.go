@@ -1364,7 +1364,7 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 		}
 	}
 
-	// TODO: verify riders are whitelisted
+	// verify that desiredRiders are all permitted Kinds
 	err := riders.VerifyRiders(desiredRiders)
 	if err != nil {
 		return desiredRiders, err
