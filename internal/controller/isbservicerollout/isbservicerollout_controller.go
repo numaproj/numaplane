@@ -341,15 +341,15 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
-	// get the list of Riders that we need based on the PipelineRollout definition
+	// get the list of Riders that we need based on the ISBServiceRollout definition
 	currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, existingISBServiceDef.GetName(), newISBServiceDef)
 	if err != nil {
-		return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", existingISBServiceDef.GetName(), err)
+		return 0, fmt.Errorf("error getting desired Riders for isbsvc %s: %s", existingISBServiceDef.GetName(), err)
 	}
 	// get the list of Riders that we have now (for promoted child)
 	existingRiderList, err := r.GetExistingRiders(ctx, isbServiceRollout, false)
 	if err != nil {
-		return 0, fmt.Errorf("error getting existing Riders for pipeline %s: %s", existingISBServiceDef.GetName(), err)
+		return 0, fmt.Errorf("error getting existing Riders for isbsvc %s: %s", existingISBServiceDef.GetName(), err)
 	}
 
 	// update our Status with the ISBService's Status
@@ -1029,7 +1029,7 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	return isbServiceRollout, err
 }
 
-// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the isbsvc child's name
+// Get the list of Riders that we need based on what's defined in the ISBServiceRollout, templated according to the isbsvc child's name
 // (isbsvcDef is not used and comes from the RolloutController interface)
 
 func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvcName string, isbsvcDef *unstructured.Unstructured) ([]riders.Rider, error) {
