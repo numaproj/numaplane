@@ -7,6 +7,14 @@ spec:
   strategy:
     progressive:
       assessmentSchedule: "0,60,10"
+  riders:
+    - definition:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: source-configmap
+        data:
+          something: something
   interStepBufferService:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
