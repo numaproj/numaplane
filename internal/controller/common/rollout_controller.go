@@ -27,7 +27,11 @@ type RolloutController interface {
 	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
-	// based on the child definition
+	// based on the child definition.
+	// Note the child name can be different from child.GetName()
+	// The child name is what's used for templating the Rider definition, while the `child` is really only used by the PipelineRolloutReconciler
+	// in the case of "per-vertex" Riders. In this case, it's necessary to use the existing child's name to template in order to effectively compare whether the
+	// Rider has changed, but use the latest child definition to derive the current list of Vertices that need Riders.
 	GetDesiredRiders(rolloutObject RolloutObject, childName string, child *unstructured.Unstructured) ([]riders.Rider, error)
 
 	// GetExistingRiders gets the list of Riders that already exists, either for the Promoted child or the Upgrading child depending on the value of "upgrading"

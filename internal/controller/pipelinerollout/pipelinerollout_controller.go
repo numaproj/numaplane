@@ -1309,6 +1309,12 @@ func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1
 	return PipelineRollout, err
 }
 
+// GetDesiredRiders gets the list of Riders as specified in the PipelineRollout, templated for the specific pipeline name and
+// based on the pipeline definition.
+// Note the pipelineName can be different from pipelineDef.GetName().
+// The pipelineName is what's used for templating the Rider definition, while the pipelineDef is really only used in the case of "per-vertex" Riders.
+// In this case, it's necessary to use the existing pipeline's name to template in order to effectively compare whether the Rider has changed, but
+// use the latest pipeline definition to derive the current list of Vertices that need Riders.
 func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, pipelineName string, pipelineDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	desiredRiders := []riders.Rider{}

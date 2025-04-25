@@ -1029,6 +1029,9 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	return isbServiceRollout, err
 }
 
+// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the isbsvc child's name
+// (isbsvcDef is not used and comes from the RolloutController interface)
+
 func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvcName string, isbsvcDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	desiredRiders := []riders.Rider{}
@@ -1053,6 +1056,8 @@ func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 	return desiredRiders, nil
 }
 
+// Get the Riders that have been deployed
+// If "upgrading==true", return those which are associated with the Upgrading isbsvc; otherwise return those which are associated with the Promoted one
 func (r *ISBServiceRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 

@@ -810,7 +810,8 @@ func getLiveMonovertexRollout(ctx context.Context, name, namespace string) (*api
 	return monoVertexRollout, err
 }
 
-// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the monoVertex child
+// Get the list of Riders that we need based on what's defined in the MonoVertexRollout, templated according to the monoVertex child's name
+// (monoVertexDef is not used and comes from the RolloutController interface)
 func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, monoVertexName string, monoVertexDef *unstructured.Unstructured) ([]riders.Rider, error) {
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	desiredRiders := []riders.Rider{}
