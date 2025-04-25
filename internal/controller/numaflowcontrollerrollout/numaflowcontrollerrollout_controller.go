@@ -196,7 +196,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		// Check if dependent resources are deleted, if not then requeue and auto-heal numaflow-controller if deleted.
 		if ok, err := r.areDependentResourcesDeleted(ctx, nfcRollout.GetNamespace()); !ok || err != nil {
 			autoHealNumaflowController = true
-			numaLogger.Error(err, "checking dependent resources")
+			numaLogger.Warnf("checking dependent resources, err: %v", err)
 		} else {
 			numaLogger.Info("Deleting NumaflowControllerRollout")
 			r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
@@ -605,8 +605,11 @@ func generateNewNumaflowControllerDef(nfcRollout *apiv1.NumaflowControllerRollou
 }
 
 // areDependentResourcesDeleted checks if dependent resources are deleted.
+// note we only look for the resources whose Numaflow children have finalizers
+// (i.e. pipeline, isbsvc, not monovertex) since these are the ones for which Numaflow
+// Controller must be running in order to remove the finalizer
 func (r *NumaflowControllerRolloutReconciler) areDependentResourcesDeleted(ctx context.Context, namespace string) (bool, error) {
-	PipelineRolloutList, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespace).List(ctx, metav1.ListOptions{})
+	pipelineRolloutList, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return false, err
 	}
@@ -614,7 +617,7 @@ func (r *NumaflowControllerRolloutReconciler) areDependentResourcesDeleted(ctx c
 	if err != nil && !apierrors.IsNotFound(err) {
 		return false, err
 	}
-	if len(PipelineRolloutList.Items)+len(isbServiceRolloutList.Items) == 0 {
+	if len(pipelineRolloutList.Items)+len(isbServiceRolloutList.Items) == 0 {
 		return true, nil
 	}
 
