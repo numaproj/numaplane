@@ -11,6 +11,18 @@ spec:
       args:
       templates:
   riders:
+    - definition:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: map-configmap
+        data:
+          config.json: |
+            {
+              "allowData": true,
+              "anotherField": "something"
+            }
+      progressive: true
     - perVertex: true
       definition:
         apiVersion: autoscaling.k8s.io/v1beta2
@@ -23,19 +35,10 @@ spec:
             kind: Vertex
             name: '{{.pipeline-name}}-{{.vertex-name}}'
   pipeline:
-    #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
-    spec:
+   spec:
       interStepBufferServiceName: my-isbsvc
       vertices:
         - name: in
-          scale: 
-            #min: 3
-            #max: 5
-            loopbackSeconds: 180
-          
           source:
             # A self data generating source
             generator:
@@ -46,8 +49,15 @@ spec:
             min: 3
             max: 5
           udf:
-            builtin:
-              name: cat # A built-in UDF which simply cats the message
+            container:
+              image: quay.io/numaio/numaflow-go/map-maybe-cat:stable
+              volumeMounts:
+                - name: cm-volume
+                  mountPath: /etc/config
+          volumes:
+            - name: cm-volume
+              configMap:
+                name: map-configmap-{{.pipeline-name}}
         - name: out
           sink:
             # A simple log printing sink
