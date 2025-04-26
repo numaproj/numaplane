@@ -43,6 +43,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -191,6 +192,11 @@ func (r *NumaflowControllerReconciler) reconcile(
 	defer func() {
 		r.customMetrics.SetNumaflowControllersHealth(controller.Namespace, controller.Name, string(controller.Status.Phase))
 	}()
+
+	// Remove the finalizer if it still exists in the controller, as finalizer is no longer needed for the controller.
+	if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
+		controllerutil.RemoveFinalizer(controller, common.FinalizerName)
+	}
 
 	if !controller.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting NumaflowController")

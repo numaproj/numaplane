@@ -19,7 +19,6 @@ package monovertexrollout
 import (
 	"context"
 	"fmt"
-
 	"strings"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -175,6 +175,11 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	defer func() {
 		r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
 	}()
+
+	// Remove the finalizer if it still exists in the MonoVertexRollout, as finalizer is no longer needed for MonoVertexRollout
+	if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+		controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
+	}
 
 	// Update metrics if monoVertexRollout is being deleted
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
