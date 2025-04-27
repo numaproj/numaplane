@@ -127,7 +127,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	monoVertexRollout, err := getLiveMonovertexRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Info("MonoVertxRollout not found, %v", err)
+			numaLogger.Infof("MonoVertxRollout not found, %v", err)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
@@ -514,7 +514,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.
 		liveRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().MonoVertexRollouts(monoVertexRollout.Namespace).Get(ctx, monoVertexRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				numaLogger.Info("MonoVertxRollout not found, %v", err)
+				numaLogger.Infof("MonoVertxRollout not found, %v", err)
 				return nil
 			}
 			return fmt.Errorf("error getting the live MonoVertexRollout after attempting to update the MonoVertexRollout Status: %w", err)

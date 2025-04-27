@@ -128,7 +128,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	isbServiceRollout, err := getLiveISBServiceRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Info("ISBServiceRollout not found, %v", err)
+			numaLogger.Infof("ISBServiceRollout not found, %v", err)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live ISB Service rollout: %w", err)
@@ -792,7 +792,7 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatus(ctx context.
 		liveISBServiceRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(isbServiceRollout.Namespace).Get(ctx, isbServiceRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				numaLogger.Info("ISBServiceRollout not found, %v", err)
+				numaLogger.Infof("ISBServiceRollout not found, %v", err)
 				return nil
 			}
 			return fmt.Errorf("error getting the live ISBServiceRollout after attempting to update the ISBServiceRollout Status: %w", err)
