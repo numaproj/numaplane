@@ -23,6 +23,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -107,6 +108,7 @@ func NewMonoVertexRolloutReconciler(
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=monovertexrollouts/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -148,6 +150,18 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, statusUpdateErr
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Update the resource definition (everything except the Status subresource)
+	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
+		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
+			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
+			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
+				r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
+				return ctrl.Result{}, statusUpdateErr
+			}
+			return ctrl.Result{}, err
+		}
 	}
 
 	if monoVertexRollout.DeletionTimestamp.IsZero() {
@@ -505,6 +519,16 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, mono
 
 	monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 	return nil
+}
+
+func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
+	if old == nil {
+		return true
+	}
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+		return true
+	}
+	return false
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {

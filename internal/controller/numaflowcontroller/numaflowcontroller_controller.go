@@ -32,6 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -113,6 +114,7 @@ func NewNumaflowControllerReconciler(
 
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=numaplane.numaproj.io,resources=numaflowcontrollers/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -166,6 +168,18 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	// Update the resource definition (everything except the Status subresource)
+	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
+		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
+			r.ErrorHandler(ctx, numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
+			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
+				r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
+				return ctrl.Result{}, statusUpdateErr
+			}
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Update the Status subresource
 	if numaflowController.DeletionTimestamp.IsZero() { // would've already been deleted
 		statusUpdateErr := r.updateNumaflowControllerStatus(ctx, numaflowController)
@@ -178,6 +192,20 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	numaLogger.Debug("reconciliation successful")
 	r.recorder.Eventf(numaflowController, corev1.EventTypeNormal, "ReconcileSuccess", "Reconciliation successful")
 	return result, nil
+}
+
+func (r *NumaflowControllerReconciler) needsUpdate(old, new *apiv1.NumaflowController) bool {
+	if old == nil {
+		return true
+	}
+
+	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
+	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+		return true
+	}
+
+	return false
 }
 
 // reconcile does the real logic
