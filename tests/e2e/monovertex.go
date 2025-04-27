@@ -351,6 +351,8 @@ func DeleteMonoVertexRollout(name string) {
 		}
 		return false
 	}).WithTimeout(TestTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
+
+	time.Sleep(10 * time.Second)
 }
 
 func VerifyMonoVertexDeletion(name string) {

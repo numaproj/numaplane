@@ -176,8 +176,8 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 		}
 
 		// first make sure that the Progressive status indicates that scale down happened
-		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
-			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
+		// temporarily remove check due to need to support versions < 1.4.3:
+		return /*prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&*/ prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
 
 	}).Should(BeTrue())
 
