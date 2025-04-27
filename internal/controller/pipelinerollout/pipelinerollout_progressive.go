@@ -583,7 +583,11 @@ func scaleDownPipelineVertices(
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = false
 
-	return !promotedPipelineStatus.AreAllVerticesScaledDown(promotedPipelineDef.GetName()), nil
+	// TEMPORARY code:
+	// handle versions of numaflow < 1.4.3:
+	// For earlier versions, Numaflow won't scale down to 0 Pods
+	return false, nil
+	//return !promotedPipelineStatus.AreAllVerticesScaledDown(promotedPipelineDef.GetName()), nil
 }
 
 /*
