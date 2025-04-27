@@ -72,8 +72,8 @@ var (
 )
 
 const (
-	InitialNumaflowControllerVersion = "1.4.2"
-	UpdatedNumaflowControllerVersion = "1.4.3"
+	InitialNumaflowControllerVersion = "1.4.3"
+	UpdatedNumaflowControllerVersion = "1.4.4"
 
 	Namespace = "numaplane-system"
 
