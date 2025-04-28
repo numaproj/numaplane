@@ -375,12 +375,12 @@ func (c *liveStateCache) loadCacheSettings() (*cacheSettings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error on getting global config: %w", err)
 	}
-	includedResources, err := parseResourceFilter(globalConfig.IncludedResources)
+	includedResources, err := ParseResourceFilter(globalConfig.IncludedResources)
 	if err != nil {
 		return nil, fmt.Errorf("error on parsing resource filter rules: %w", err)
 	}
 	resourcesFilter := &ResourceFilter{
-		includedResources: *includedResources,
+		IncludedResources: *includedResources,
 	}
 	clusterSettings := clustercache.Settings{
 		ResourcesFilter: resourcesFilter,
@@ -389,13 +389,15 @@ func (c *liveStateCache) loadCacheSettings() (*cacheSettings, error) {
 	return &cacheSettings{clusterSettings, ignoreResourceUpdatesEnabled}, nil
 }
 
-// parseResourceFilter parse the given rules to generate the
+// TODO: move to shared package (util?) since we also use this for riders
+//
+// ParseResourceFilter parse the given rules to generate the
 // included resource to be watched during caching. The rules are
 // delimited by ';', and each rule is composed by both 'group'
 // and 'kind' which can be empty. For example,
 // 'group=apps,kind=Deployment;group=,kind=ConfigMap'. Note that
 // empty rule is valid.
-func parseResourceFilter(rules string) (*[]ResourceType, error) {
+func ParseResourceFilter(rules string) (*[]ResourceType, error) {
 	filteredResources := make([]ResourceType, 0)
 	if rules == "" {
 		return &filteredResources, nil
@@ -462,7 +464,7 @@ func NewNoopNormalizer() diff.Normalizer {
 
 // ResourceFilter filter resources based on allowed Resource Types
 type ResourceFilter struct {
-	includedResources []ResourceType
+	IncludedResources []ResourceType
 }
 
 type ResourceType struct {
@@ -471,9 +473,14 @@ type ResourceType struct {
 }
 
 func (n *ResourceFilter) IsExcludedResource(group, kind, _ string) bool {
-	for _, resource := range n.includedResources {
-		// When Kind is empty, we only check if Group matches
+	for _, resource := range n.IncludedResources {
 		if resource.Kind == "" {
+			// When Kind is empty, we only check if Group matches
+			if group == resource.Group {
+				return false
+			}
+		} else if resource.Group == "" {
+			// When Group is empty, we only check if Kind matches
 			if group == resource.Group {
 				return false
 			}

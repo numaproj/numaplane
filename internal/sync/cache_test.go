@@ -233,7 +233,7 @@ func TestParseResourceFilter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resources, err := parseResourceFilter(tc.rules)
+			resources, err := ParseResourceFilter(tc.rules)
 			if tc.hasErr {
 				assert.NotNil(t, err)
 				assert.Nil(t, resources)

@@ -104,7 +104,7 @@ type GlobalConfig struct {
 	FeatureFlagDisallowProgressiveForNonMonoVertex bool `json:"featureFlagDisallowProgressiveForNonMonoVertex" mapstructure:"featureFlagDisallowProgressiveForNonMonoVertex"`
 
 	// List of permitted Kinds for Riders
-	PermittedRiders []string `json:"permittedRiders" mapstructure:"permittedRiders"`
+	PermittedRiders string `json:"permittedRiders" mapstructure:"permittedRiders"`
 }
 
 type ProgressiveConfig struct {
