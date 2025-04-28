@@ -327,7 +327,8 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 // delete MonoVertexRollout and verify deletion
 func DeleteMonoVertexRollout(name string) {
 	By("Deleting MonoVertexRollout")
-	err := monoVertexRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	foregroundDeletion := metav1.DeletePropagationForeground
+	err := monoVertexRolloutClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
 	Expect(err).ShouldNot(HaveOccurred())
 
 	CheckEventually("Verifying MonoVertexRollout deletion", func() bool {
@@ -352,7 +353,7 @@ func DeleteMonoVertexRollout(name string) {
 		return false
 	}).WithTimeout(TestTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
 
-	time.Sleep(10 * time.Second)
+	//time.Sleep(10 * time.Second)
 }
 
 func VerifyMonoVertexDeletion(name string) {
