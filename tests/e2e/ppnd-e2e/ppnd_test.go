@@ -188,6 +188,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 	It("Should allow data loss in the Pipeline if requested - ISBService update", func() {
 		if UpgradeStrategy == config.PPNDStrategyID {
 
+			time.Sleep(10 * time.Second)
 			createSlowPipelineRollout()
 
 			By("Updating ISBService to cause a PPND change")
@@ -217,6 +218,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 	It("Should allow data loss in the Pipeline if requested - Numaflow Controller update", func() {
 		if UpgradeStrategy == config.PPNDStrategyID {
 
+			time.Sleep(10 * time.Second)
 			createSlowPipelineRollout()
 
 			By("Updating Numaflow controller to cause a PPND change")
