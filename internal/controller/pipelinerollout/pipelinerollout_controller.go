@@ -174,7 +174,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	pipelineRollout, err := getLivePipelineRollout(ctx, namespacedName.Name, namespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			numaLogger.Info("PipelineRollout not found, %v", err)
+			numaLogger.Infof("PipelineRollout not found, %v", err)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live PipelineRollout: %w", err)
@@ -857,7 +857,7 @@ func (r *PipelineRolloutReconciler) updatePipelineRolloutStatus(ctx context.Cont
 		livePipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(pipelineRollout.Namespace).Get(ctx, pipelineRollout.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				numaLogger.Info("PipelineRollout not found, %v", err)
+				numaLogger.Infof("PipelineRollout not found, %v", err)
 				return nil
 			}
 			return fmt.Errorf("error getting the live PipelineRollout after attempting to update the PipelineRollout Status: %w", err)
