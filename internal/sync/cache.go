@@ -481,7 +481,7 @@ func (n *ResourceFilter) IsExcludedResource(group, kind, _ string) bool {
 			}
 		} else if resource.Group == "" {
 			// When Group is empty, we only check if Kind matches
-			if group == resource.Group {
+			if group == resource.Kind {
 				return false
 			}
 		} else if group == resource.Group && kind == resource.Kind {
