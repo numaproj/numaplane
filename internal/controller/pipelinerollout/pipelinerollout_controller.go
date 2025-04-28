@@ -1365,7 +1365,6 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 	}
 
 	// verify that desiredRiders are all permitted Kinds
-	// err := riders.VerifyRiders(desiredRiders)
 	if !riders.VerifyRiders(desiredRiders) {
 		return desiredRiders, fmt.Errorf("rider definitions contained unpermitted Kind")
 	}
