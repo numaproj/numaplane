@@ -423,7 +423,8 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 func DeletePipelineRollout(name string) {
 
 	By("Deleting PipelineRollout")
-	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	foregroundDeletion := metav1.DeletePropagationForeground
+	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
 	Expect(err).ShouldNot(HaveOccurred())
 
 	CheckEventually("Verifying PipelineRollout deletion", func() bool {

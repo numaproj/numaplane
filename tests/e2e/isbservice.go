@@ -294,7 +294,8 @@ func createISBServiceRolloutSpec(name, namespace string, isbServiceSpec numaflow
 // delete ISBServiceRollout and verify deletion
 func DeleteISBServiceRollout(name string) {
 	By("Deleting ISBServiceRollout")
-	err := isbServiceRolloutClient.Delete(ctx, name, metav1.DeleteOptions{})
+	foregroundDeletion := metav1.DeletePropagationForeground
+	err := isbServiceRolloutClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
 	Expect(err).ShouldNot(HaveOccurred())
 
 	CheckEventually("Verifying ISBServiceRollout deletion", func() bool {

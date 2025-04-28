@@ -188,7 +188,8 @@ func createNumaflowControllerRolloutSpec(name, namespace, version string) *apiv1
 // delete NumaflowControllerRollout and verify deletion
 func DeleteNumaflowControllerRollout() {
 	By("Deleting NumaflowControllerRollout")
-	err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{})
+	foregroundDeletion := metav1.DeletePropagationForeground
+	err := numaflowControllerRolloutClient.Delete(ctx, numaflowControllerRolloutName, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
 	Expect(err).ShouldNot(HaveOccurred())
 
 	CheckEventually("Verifying NumaflowControllerRollout deletion", func() bool {
