@@ -835,9 +835,9 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 	}
 
 	// verify that desiredRiders are all permitted Kinds
-	err := riders.VerifyRiders(desiredRiders)
-	if err != nil {
-		return desiredRiders, err
+	// err := riders.VerifyRiders(desiredRiders)
+	if !riders.VerifyRiders(desiredRiders) {
+		return desiredRiders, fmt.Errorf("rider definitions contained unpermitted Kind")
 	}
 
 	return desiredRiders, nil

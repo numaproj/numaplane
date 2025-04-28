@@ -375,53 +375,18 @@ func (c *liveStateCache) loadCacheSettings() (*cacheSettings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error on getting global config: %w", err)
 	}
-	includedResources, err := ParseResourceFilter(globalConfig.IncludedResources)
+	includedResources, err := kubernetes.ParseResourceFilter(globalConfig.IncludedResources)
 	if err != nil {
 		return nil, fmt.Errorf("error on parsing resource filter rules: %w", err)
 	}
-	resourcesFilter := &ResourceFilter{
-		IncludedResources: *includedResources,
+	resourcesFilter := &kubernetes.ResourceFilter{
+		IncludedResources: includedResources,
 	}
 	clusterSettings := clustercache.Settings{
 		ResourcesFilter: resourcesFilter,
 	}
 
 	return &cacheSettings{clusterSettings, ignoreResourceUpdatesEnabled}, nil
-}
-
-// TODO: move to shared package (util?) since we also use this for riders
-//
-// ParseResourceFilter parse the given rules to generate the
-// included resource to be watched during caching. The rules are
-// delimited by ';', and each rule is composed by both 'group'
-// and 'kind' which can be empty. For example,
-// 'group=apps,kind=Deployment;group=,kind=ConfigMap'. Note that
-// empty rule is valid.
-func ParseResourceFilter(rules string) (*[]ResourceType, error) {
-	filteredResources := make([]ResourceType, 0)
-	if rules == "" {
-		return &filteredResources, nil
-	}
-	rulesArr := strings.Split(rules, ";")
-	err := fmt.Errorf("malformed resource filter rules %q", rules)
-	for _, rule := range rulesArr {
-		ruleArr := strings.Split(rule, ",")
-		if len(ruleArr) != 2 {
-			return nil, err
-		}
-		groupArr := strings.Split(ruleArr[0], "=")
-		kindArr := strings.Split(ruleArr[1], "=")
-		if !strings.EqualFold(groupArr[0], "group") || !strings.EqualFold(kindArr[0], "kind") {
-			return nil, err
-		}
-		filteredResource := ResourceType{
-			Group: groupArr[1],
-			Kind:  kindArr[1],
-		}
-		filteredResources = append(filteredResources, filteredResource)
-	}
-	return &filteredResources, nil
-
 }
 
 func (c *liveStateCache) GetClusterCache() (clustercache.ClusterCache, error) {
@@ -460,33 +425,4 @@ func (n *NoopNormalizer) Normalize(un *unstructured.Unstructured) error {
 // NewNoopNormalizer returns normalizer that does not apply any resource modifications
 func NewNoopNormalizer() diff.Normalizer {
 	return &NoopNormalizer{}
-}
-
-// ResourceFilter filter resources based on allowed Resource Types
-type ResourceFilter struct {
-	IncludedResources []ResourceType
-}
-
-type ResourceType struct {
-	Group string
-	Kind  string
-}
-
-func (n *ResourceFilter) IsExcludedResource(group, kind, _ string) bool {
-	for _, resource := range n.IncludedResources {
-		if resource.Kind == "" {
-			// When Kind is empty, we only check if Group matches
-			if group == resource.Group {
-				return false
-			}
-		} else if resource.Group == "" {
-			// When Group is empty, we only check if Kind matches
-			if group == resource.Kind {
-				return false
-			}
-		} else if group == resource.Group && kind == resource.Kind {
-			return false
-		}
-	}
-	return true
 }
