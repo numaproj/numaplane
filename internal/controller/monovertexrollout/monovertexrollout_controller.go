@@ -132,11 +132,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	monoVertexRollout, err := getLiveMonovertexRollout(ctx, req.NamespacedName.Name, req.NamespacedName.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-<<<<<<< HEAD
-			numaLogger.Info("MonoVertexRollout not found, %v", err)
-=======
 			numaLogger.Infof("MonoVertxRollout not found, %v", err)
->>>>>>> origin/main
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("error getting the live monoVertex rollout: %w", err)
