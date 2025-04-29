@@ -184,6 +184,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 ) (ctrl.Result, error) {
 	startTime := time.Now()
 	numaLogger := logger.FromContext(ctx)
+	// Auto Heal NumaflowController if it is deleted.
+	autoHealNumaflowController := false
 
 	defer func() {
 		r.customMetrics.SetNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
@@ -192,34 +194,24 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	controllerKey := ppnd.GetPauseModule().GetNumaflowControllerKey(namespace)
 
 	if !nfcRollout.DeletionTimestamp.IsZero() {
-		numaLogger.Info("Deleting NumaflowControllerRollout")
-		r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
-		if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
-			ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
-			// TODO: this is a temporary fix to delete the controller and its children
-			// Set the foreground deletion policy so that we will block for children to be cleaned up for any type of deletion action
-			//foreground := metav1.DeletePropagationForeground
-			//if err := r.client.Delete(ctx, nfcRollout, &client.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
-			//	return ctrl.Result{}, err
-			//}
-			//// Get the nfcRollout live resource
-			//liveControllerRollout, err := getLiveNumaflowControllerRollout(ctx, nfcRollout.Name, nfcRollout.Namespace)
-			//if err != nil {
-			//	if apierrors.IsNotFound(err) {
-			//		numaLogger.Info("NumaflowControllerRollout not found, %v", err)
-			//		return ctrl.Result{}, nil
-			//	}
-			//	return ctrl.Result{}, fmt.Errorf("error getting the live numaflow controller rollout: %w", err)
-			//}
-			//*nfcRollout = *liveControllerRollout
-			controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
-		}
+		// Check if dependent resources are deleted, if not then requeue and auto-heal numaflow-controller if deleted.
+		if ok, err := r.areDependentResourcesDeleted(ctx, nfcRollout.GetNamespace()); !ok || err != nil {
+			autoHealNumaflowController = true
+			numaLogger.Warnf("checking dependent resources, err: %v", err)
+		} else {
+			numaLogger.Info("Deleting NumaflowControllerRollout")
+			r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
+			if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
+				ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
+				controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
+			}
 
-		// generate the metrics for the numaflow controller rollout deletion.
-		r.customMetrics.NumaflowControllerRolloutsRunning.DeleteLabelValues(nfcRollout.Name, nfcRollout.Namespace, nfcRollout.Spec.Controller.Version)
-		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
-		r.customMetrics.DeleteNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name)
-		return ctrl.Result{}, nil
+			// generate the metrics for the numaflow controller rollout deletion.
+			r.customMetrics.NumaflowControllerRolloutsRunning.DeleteLabelValues(nfcRollout.Name, nfcRollout.Namespace, nfcRollout.Spec.Controller.Version)
+			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowControllerRollout, "delete").Observe(time.Since(startTime).Seconds())
+			r.customMetrics.DeleteNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
@@ -238,7 +230,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("error generating NumaflowController: %v", err)
 	}
 
-	// Using unstructured object since USDE needs unstructured type to extract paths and perform comparisons.
+	// Using an unstructured object since USDE needs unstructured type to extract paths and perform comparisons.
 	// Also, keeping the code consistent between ISBSvcRollout and NumaflowControllerRollout for easier maintainability
 	// and to be able to possibly reduce code duplication at some point.
 	existingNumaflowControllerDef, err := kubernetes.GetResource(ctx, r.client, newNumaflowControllerDef.GroupVersionKind(),
@@ -266,6 +258,10 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	needsRequeue, err := r.processExistingNumaflowController(ctx, nfcRollout, existingNumaflowControllerDef, newNumaflowControllerDef, syncStartTime)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error processing existing NumaflowController: %v", err)
+	}
+	// if the NumaflowController is being deleted, we need to auto-heal it.
+	if autoHealNumaflowController {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	if needsRequeue {
 		return ctrl.Result{RequeueAfter: common.DefaultRequeueDelay}, nil
@@ -613,4 +609,24 @@ func (r *NumaflowControllerRolloutReconciler) GetDesiredRiders(rolloutObject ctl
 	desiredRiders := []riders.Rider{}
 	// TODO
 	return desiredRiders, nil
+}
+
+// areDependentResourcesDeleted checks if dependent resources are deleted.
+// note we only look for the resources whose Numaflow children have finalizers
+// (i.e. pipeline, isbsvc, not monovertex) since these are the ones for which Numaflow
+// Controller must be running in order to remove the finalizer
+func (r *NumaflowControllerRolloutReconciler) areDependentResourcesDeleted(ctx context.Context, namespace string) (bool, error) {
+	pipelineRolloutList, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	isbServiceRolloutList, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().ISBServiceRollouts(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	if len(pipelineRolloutList.Items)+len(isbServiceRolloutList.Items) == 0 {
+		return true, nil
+	}
+
+	return false, fmt.Errorf("dependent resources are not deleted yet")
 }
