@@ -423,8 +423,12 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 func DeletePipelineRollout(name string) {
 
 	By("Deleting PipelineRollout")
-	foregroundDeletion := metav1.DeletePropagationForeground
-	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
+	// Foreground deletion somehow changes the timing of things to cause a race condition in the PPND test, in which the same pipeline deleted then re-created causes Numaflow's "Delete Buffers/Buckets" Job
+	// to sometimes run at the same time as its "Create Buffers/Buckets" Job, which causes expected buffers/buckets to not exist
+	// Therefore, changing to Background Deletion
+	//propagationPolicy := metav1.DeletePropagationForeground
+	propagationPolicy := metav1.DeletePropagationBackground
+	err := pipelineRolloutClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &propagationPolicy})
 	Expect(err).ShouldNot(HaveOccurred())
 
 	CheckEventually("Verifying PipelineRollout deletion", func() bool {
