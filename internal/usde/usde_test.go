@@ -18,6 +18,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -558,7 +559,8 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			}
 
 			// TODO: add some recreate test cases
-			needsUpdating, strategy, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition)
+			// TODO: test riders
+			needsUpdating, strategy, _, _, _, _, err := ResourceNeedsUpdating(ctx, &tc.newDefinition, &tc.existingDefinition, []riders.Rider{}, unstructured.UnstructuredList{})
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			assert.Equal(t, tc.expectedStrategy, strategy)

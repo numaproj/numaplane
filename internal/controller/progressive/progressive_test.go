@@ -12,6 +12,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -36,6 +37,14 @@ func (fpc fakeProgressiveController) IncrementChildCount(ctx context.Context, ro
 
 func (fpc fakeProgressiveController) Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
+}
+
+func (fpc fakeProgressiveController) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, name string, childDef *unstructured.Unstructured) ([]riders.Rider, error) {
+	desiredRiders := []riders.Rider{}
+	return desiredRiders, nil
+}
+func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	return unstructured.UnstructuredList{}, nil
 }
 
 func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
@@ -78,6 +87,10 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPreUpgrade(ctx context
 }
 func (fpc fakeProgressiveController) ProcessUpgradingChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error) {
 	return false, nil
+}
+
+func (fpc fakeProgressiveController) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
 }
 
 func Test_processUpgradingChild(t *testing.T) {

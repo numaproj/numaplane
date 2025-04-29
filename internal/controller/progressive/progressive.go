@@ -30,7 +30,9 @@ import (
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -375,7 +377,7 @@ func processUpgradingChild(
 			return false, 0, err
 		}
 
-		needsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
+		needsUpdating, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
 		if err != nil {
 			return false, 0, err
 		}
@@ -451,6 +453,59 @@ func processUpgradingChild(
 
 		return false, assessmentSchedule.Interval, nil
 	}
+}
+
+// does our Rollout need updating? (used after case of Failure)
+// this could include either the main child definition or a Rider definition
+func rolloutNeedsUpdating(
+	ctx context.Context,
+	controller progressiveController,
+	rolloutObject ctlrcommon.RolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+
+	needsUpdating := false
+
+	childNeedsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
+	if childNeedsUpdating {
+		needsUpdating = childNeedsUpdating
+	} else {
+		// if child doesn't need updating, let's see if any Riders do
+		// (additions, modifications, or deletions)
+		needsUpdating, err = ridersNeedUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+	}
+	return needsUpdating, nil
+}
+
+// Do any Riders need updating? (including additions, modifications, or deletions)
+func ridersNeedUpdating(
+	ctx context.Context,
+	controller progressiveController,
+	rolloutObject ctlrcommon.RolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingUpgradingChildDef.GetName(), newUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
+
+	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, true)
+	if err != nil {
+		return false, err
+	}
+
+	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetKind(), existingUpgradingChildDef.GetName(),
+		newRiders, existingRiders)
+	if err != nil {
+		return false, err
+	}
+	return needUpdating, nil
 }
 
 // AssessUpgradingPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
@@ -635,6 +690,7 @@ func startUpgradeProcess(
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+
 	return newUpgradingChildDef, false, err
 }
 
@@ -646,11 +702,25 @@ func startPostUpgradeProcess(
 	controller progressiveController,
 	c client.Client,
 ) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	numaLogger.WithValues(
+	numaLogger := logger.FromContext(ctx).WithValues(
 		"promoted child", existingPromotedChild.GetName(),
-		"upgading child", newUpgradingChild).Debug("starting post upgrade process")
+		"upgading child", newUpgradingChild.GetName())
+
+	numaLogger.Debug("starting post upgrade process")
+
+	// Create Riders for the new Upgrading child
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, newUpgradingChild.GetName(), newUpgradingChild)
+	if err != nil {
+		return false, err
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	riderAdditions.Items = make([]unstructured.Unstructured, len(newRiders))
+	for index, rider := range newRiders {
+		riderAdditions.Items[index] = rider.Definition
+	}
+	if err = riders.UpdateRidersInK8S(ctx, newUpgradingChild, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+		return false, err
+	}
 
 	requeue, err := controller.ProcessPromotedChildPostUpgrade(ctx, rolloutObject, existingPromotedChild, c)
 	if err != nil {
@@ -667,8 +737,16 @@ func startPostUpgradeProcess(
 		return true, nil
 	}
 
+	// set Upgrading Child Status
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 	childStatus.InitializationComplete = true
+	childStatus.Riders = make([]apiv1.RiderStatus, len(newRiders))
+	for i, rider := range newRiders {
+		childStatus.Riders[i] = apiv1.RiderStatus{
+			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+			Name:             rider.Definition.GetName(),
+		}
+	}
 	rolloutObject.SetUpgradingChildStatus(childStatus)
 
 	return false, err

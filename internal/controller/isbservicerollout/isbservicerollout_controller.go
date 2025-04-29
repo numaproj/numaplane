@@ -44,6 +44,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -56,7 +57,9 @@ import (
 )
 
 const (
-	ControllerISBSVCRollout = "isbsvc-rollout-controller"
+	ControllerISBSVCRollout     = "isbsvc-rollout-controller"
+	TemplateISBServiceName      = ".isbsvc-name"
+	TemplateISBServiceNamespace = ".isbsvc-namespace"
 )
 
 // ISBServiceRolloutReconciler reconciles an ISBServiceRollout object
@@ -263,6 +266,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				if err = r.applyPodDisruptionBudget(ctx, newISBServiceDef); err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", newISBServiceDef.GetName(), err)
 				}
+				if err := ctlrcommon.CreateRidersForNewChild(ctx, r, isbServiceRollout, newISBServiceDef, r.client); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
+				}
 
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
 				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
@@ -335,24 +341,35 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 	numaLogger := logger.FromContext(ctx)
 
+	// get the list of Riders that we need based on the ISBServiceRollout definition
+	currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, existingISBServiceDef.GetName(), newISBServiceDef)
+	if err != nil {
+		return 0, fmt.Errorf("error getting desired Riders for isbsvc %s: %s", existingISBServiceDef.GetName(), err)
+	}
+	// get the list of Riders that we have now (for promoted child)
+	existingRiderList, err := r.GetExistingRiders(ctx, isbServiceRollout, false)
+	if err != nil {
+		return 0, fmt.Errorf("error getting existing Riders for isbsvc %s: %s", existingISBServiceDef.GetName(), err)
+	}
+
 	// update our Status with the ISBService's Status
 	r.processISBServiceStatus(ctx, existingISBServiceDef, isbServiceRollout)
 
 	// determine if we're trying to update the ISBService spec
 	// if it's a simple change, direct apply
 	// if not, it will require PPND or Progressive
-	isbServiceNeedsToUpdate, upgradeStrategyType, needsRecreate, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef)
+	needsUpdate, upgradeStrategyType, needsRecreate, riderAdditions, riderModifications, riderDeletions, err := usde.ResourceNeedsUpdating(ctx, newISBServiceDef, existingISBServiceDef, currentRiderList, existingRiderList)
 	if err != nil {
 		return 0, err
 	}
 	numaLogger.
-		WithValues("isbserviceNeedsToUpdate", isbServiceNeedsToUpdate, "upgradeStrategyType", upgradeStrategyType).
+		WithValues("needsUpdate", needsUpdate, "upgradeStrategyType", upgradeStrategyType).
 		Debug("Upgrade decision result")
 
 	// set the Status appropriately to "Pending" or "Deployed"
-	// if isbServiceNeedsToUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
+	// if needsUpdate - this means there's a mismatch between the desired ISBService spec and actual ISBService spec
 	// Note that this will be reset to "Deployed" later on if a deployment occurs
-	if isbServiceNeedsToUpdate {
+	if needsUpdate {
 		isbServiceRollout.Status.MarkPending()
 	} else {
 		isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
@@ -391,6 +408,20 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		newISBServiceDef = r.merge(existingISBServiceDef, newISBServiceDef)
 	}
 
+	// Roll out any changes to Riders in K8S
+	// Note for Progressive we have special logic, since the update needs to be for the upgrading child
+	if inProgressStrategy != apiv1.UpgradeStrategyProgressive {
+		if inProgressStrategy != apiv1.UpgradeStrategyNoOp {
+			// update the cluster to reflect the Rider additions, modifications, and deletions
+			if err := riders.UpdateRidersInK8S(ctx, newISBServiceDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
+				return 0, err
+			}
+		}
+
+		// update the list of riders in the Status
+		r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+	}
+
 	switch inProgressStrategy {
 	case apiv1.UpgradeStrategyPPND:
 
@@ -399,7 +430,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			return 0, fmt.Errorf("error determining if ISBService is updating: %v", err)
 		}
 
-		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, isbServiceNeedsToUpdate, isbServiceIsUpdating, func() error {
+		done, err := ppnd.ProcessChildObjectWithPPND(ctx, r.client, isbServiceRollout, r, needsUpdate, isbServiceIsUpdating, func() error {
 			r.recorder.Eventf(isbServiceRollout, corev1.EventTypeNormal, "PipelinesPaused", "All Pipelines have paused for ISBService update")
 			err = r.updateISBService(ctx, isbServiceRollout, newISBServiceDef, needsRecreate)
 			if err != nil {
@@ -412,6 +443,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			return 0, err
 		}
+
 		if done {
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
@@ -421,11 +453,18 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing InterstepBufferService with Progressive")
 
-		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, isbServiceNeedsToUpdate, r, r.client)
+		done, progressiveRequeueDelay, err := progressive.ProcessResource(ctx, isbServiceRollout, existingISBServiceDef, needsUpdate, r, r.client)
 		if err != nil {
-			return 0, fmt.Errorf("Error processing isbsvc with progressive: %s", err.Error())
+			return 0, fmt.Errorf("error processing isbsvc with progressive: %s", err.Error())
 		}
 		if done {
+			// update the list of riders in the Status based on our child which was just promoted
+			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, existingISBServiceDef.GetName(), newISBServiceDef)
+			if err != nil {
+				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
+			}
+			r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
 
@@ -448,6 +487,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			return 0, fmt.Errorf("error updating ISBService, %s: %v", inProgressStrategy, err)
 		}
+
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "update").Observe(time.Since(syncStartTime).Seconds())
 	case apiv1.UpgradeStrategyNoOp:
 		break
@@ -470,7 +510,7 @@ func (r *ISBServiceRolloutReconciler) updateISBService(ctx context.Context, isbS
 		// enqueue Pipeline Rollouts because they will need to be marked "recyclable" as well
 		err = r.enqueueAllPipelineROsForChildISBSvc(ctx, newISBServiceDef)
 		if err != nil {
-			return fmt.Errorf("Failed to enqueue pipelines after marking isbservice as recyclable: %s", err.Error())
+			return fmt.Errorf("failed to enqueue pipelines after marking isbservice as recyclable: %s", err.Error())
 		}
 	} else {
 		if err := kubernetes.UpdateResource(ctx, r.client, newISBServiceDef); err != nil {
@@ -543,9 +583,9 @@ func (r *ISBServiceRolloutReconciler) isISBServiceUpdating(ctx context.Context, 
 		return false, false, err
 	}
 
-	isbServiceNeedsToUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
+	needsUpdate := !util.CompareStructNumTypeAgnostic(existingSpecAsMap, newSpecAsMap)
 
-	return isbServiceNeedsToUpdate, !isbServiceReconciled, nil
+	return needsUpdate, !isbServiceReconciled, nil
 }
 
 func (r *ISBServiceRolloutReconciler) getPipelineRolloutList(ctx context.Context, isbRolloutNamespace string, isbsvcRolloutName string) ([]apiv1.PipelineRollout, error) {
@@ -848,20 +888,30 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	isbsvcName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
+
+	args := map[string]interface{}{
+		TemplateISBServiceName:      isbsvcName,
+		TemplateISBServiceNamespace: isbServiceRollout.Namespace,
+	}
+
+	isbServiceSpec, err := util.ResolveTemplateSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
+	if err != nil {
+		return nil, err
+	}
+
 	newISBServiceDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	newISBServiceDef.Object["spec"] = isbServiceSpec
+	newISBServiceDef.Object["metadata"] = metadataResolved
 	newISBServiceDef.SetAPIVersion(common.NumaflowAPIGroup + "/" + common.NumaflowAPIVersion)
 	newISBServiceDef.SetKind(common.NumaflowISBServiceKind)
 	newISBServiceDef.SetName(isbsvcName)
 	newISBServiceDef.SetNamespace(isbServiceRollout.Namespace)
-	newISBServiceDef.SetLabels(metadata.Labels)
-	newISBServiceDef.SetAnnotations(metadata.Annotations)
 	newISBServiceDef.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(isbServiceRollout.GetObjectMeta(), apiv1.ISBServiceRolloutGroupVersionKind)})
-	// Update spec of ISBService to match the ISBServiceRollout spec
-	var isbServiceSpec map[string]interface{}
-	if err := util.StructToStruct(isbServiceRollout.Spec.InterStepBufferService.Spec, &isbServiceSpec); err != nil {
-		return nil, err
-	}
-	newISBServiceDef.Object["spec"] = isbServiceSpec
 
 	return newISBServiceDef, nil
 }
@@ -979,6 +1029,52 @@ func getLiveISBServiceRollout(ctx context.Context, name, namespace string) (*api
 	return isbServiceRollout, err
 }
 
+// Get the list of Riders that we need based on what's defined in the ISBServiceRollout, templated according to the isbsvc child's name
+// (isbsvcDef is not used and comes from the RolloutController interface)
+
+func (r *ISBServiceRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.RolloutObject, isbsvcName string, isbsvcDef *unstructured.Unstructured) ([]riders.Rider, error) {
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	desiredRiders := []riders.Rider{}
+	for _, rider := range isbServiceRollout.Spec.Riders {
+		var asMap map[string]interface{}
+		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
+			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
+		}
+		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+			TemplateISBServiceName:      isbsvcName,
+			TemplateISBServiceNamespace: isbServiceRollout.Namespace,
+		})
+		if err != nil {
+			return desiredRiders, err
+		}
+		unstruc := unstructured.Unstructured{}
+		unstruc.Object = resolvedMap
+		unstruc.SetNamespace(isbServiceRollout.Namespace)
+		unstruc.SetName(fmt.Sprintf("%s-%s", unstruc.GetName(), isbsvcName))
+		desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
+	}
+
+	// verify that desiredRiders are all permitted Kinds
+	if !riders.VerifyRidersPermitted(desiredRiders) {
+		return desiredRiders, fmt.Errorf("rider definitions contained unpermitted Kind")
+	}
+
+	return desiredRiders, nil
+}
+
+// Get the Riders that have been deployed
+// If "upgrading==true", return those which are associated with the Upgrading isbsvc; otherwise return those which are associated with the Promoted one
+func (r *ISBServiceRolloutReconciler) GetExistingRiders(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, upgrading bool) (unstructured.UnstructuredList, error) {
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+
+	ridersList := isbServiceRollout.Status.Riders // use the Riders for the promoted isbservice
+	if upgrading {
+		ridersList = isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.Riders // use the Riders for the upgrading isbservice
+	}
+
+	return riders.GetRidersFromK8S(ctx, isbServiceRollout.GetNamespace(), ridersList, r.client)
+}
+
 // listAndDeleteChildISBServices lists all child ISBServices and deletes them
 // return true if we need to requeue
 func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout) (bool, error) {
@@ -1003,4 +1099,16 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 		return true, nil
 	}
 	return false, nil
+}
+
+func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+	isbServiceRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
+	for index, rider := range riders {
+		isbServiceRollout.Status.Riders[index] = apiv1.RiderStatus{
+			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+			Name:             rider.Definition.GetName(),
+		}
+	}
 }

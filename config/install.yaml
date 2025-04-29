@@ -119,6 +119,21 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 properties:
                   progressive:
@@ -308,10 +323,70 @@ spec:
                       name:
                         description: Name of the upgrading child
                         type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
                     required:
                     - name
                     type: object
                 type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" InterstepBufferService
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -394,6 +469,21 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
@@ -706,11 +796,71 @@ spec:
                         description: OriginalScaleMinMax stores the original scale
                           min and max values as JSON string
                         type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
                     required:
                     - name
                     - originalScaleMinMax
                     type: object
                 type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" MonoVertex
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -1228,6 +1378,25 @@ spec:
                 required:
                 - spec
                 type: object
+              riders:
+                items:
+                  description: PipelineRider defines a resource that can be deployed
+                    along with the primary child of a PipelineRollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    perVertex:
+                      description: if set, rider resource should be created for each
+                        vertex of the pipeline
+                      type: boolean
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
               strategy:
                 description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
                   for fields shared by Pipeline and MonoVertex
@@ -1583,10 +1752,70 @@ spec:
                           - vertexName
                           type: object
                         type: array
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
                     required:
                     - name
                     type: object
                 type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" Pipeline
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
               upgradeInProgress:
                 description: UpgradeInProgress indicates the upgrade strategy currently
                   being used and affecting the resource state or empty if no upgrade
@@ -2178,6 +2407,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - autoscaling.k8s.io
+  resources:
+  - verticalpodautoscalers
+  verbs:
+  - '*'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -2282,6 +2517,7 @@ data:
         - kind: InterstepBufferService
           schedule: "0,0,10"
       analysisRunTimeout: 1200
+    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler"
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config

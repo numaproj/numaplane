@@ -134,6 +134,9 @@ const (
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
 	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"
 
+	// AnnotationKeyHash is used to maintain a hash of a Rider to know whether it's changed
+	AnnotationKeyHash = "numaplane.numaproj.io/hash"
+
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
 )

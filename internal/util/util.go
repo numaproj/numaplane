@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/valyala/fasttemplate"
 )
 
 // StructToStruct converts a struct type (src) into another (dst)
@@ -216,4 +217,30 @@ func OptionalString(ptr any) string {
 		return "nil"
 	}
 	return fmt.Sprintf("%v", val.Elem())
+}
+
+// resolves templated definitions of a resource with any arguments
+func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
+
+	// marshal data to cast as a string
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// create and execute template with supplied arguments
+	tmpl, err := fasttemplate.NewTemplate(string(dataBytes), "{{", "}}")
+	if err != nil {
+		return nil, err
+	}
+	templatedSpec := tmpl.ExecuteString(args)
+
+	// unmarshal into map to be returned and used for resource spec
+	var resolvedTmpl map[string]interface{}
+	err = json.Unmarshal([]byte(templatedSpec), &resolvedTmpl)
+	if err != nil {
+		return nil, err
+	}
+
+	return resolvedTmpl, nil
 }

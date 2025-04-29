@@ -2,6 +2,9 @@ package kubernetes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -207,4 +210,52 @@ func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersion
 // DeleteResource deletes the resource from the kubernetes cluster
 func DeleteResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
 	return c.Delete(ctx, obj)
+}
+
+func MetaGVKToSchemaGVK(metaGVK metav1.GroupVersionKind) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   metaGVK.Group,
+		Version: metaGVK.Version,
+		Kind:    metaGVK.Kind,
+	}
+}
+
+func SchemaGVKToMetaGVK(schemaGVK schema.GroupVersionKind) metav1.GroupVersionKind {
+	return metav1.GroupVersionKind{
+		Group:   schemaGVK.Group,
+		Version: schemaGVK.Version,
+		Kind:    schemaGVK.Kind,
+	}
+}
+
+func ApplyOwnerReference(child *unstructured.Unstructured, owner *unstructured.Unstructured) error {
+	ownerRef := metav1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
+	}
+	child.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
+	return nil
+}
+
+// Calculate the sha256 hash of a Resource's definition
+func CalculateHash(ctx context.Context, resource unstructured.Unstructured) (string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// json serialize it and then hash that
+	asBytes, err := json.Marshal(resource)
+	if err != nil {
+		return "", err
+	}
+
+	h := sha256.New()
+	_, err = h.Write(asBytes)
+	if err != nil {
+		return "", err
+	}
+
+	hashVal := hex.EncodeToString(h.Sum(nil))
+	numaLogger.WithValues("resource name", resource.GetName(), "hash", hashVal).Debugf("derived hash from resource: %+v", resource)
+	return hashVal, nil
 }

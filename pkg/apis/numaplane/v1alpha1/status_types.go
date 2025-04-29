@@ -98,6 +98,12 @@ type PauseStatus struct {
 	LastPauseEndTime metav1.Time `json:"lastPauseEndTime,omitempty"`
 }
 
+// Rider represents a Rider which has been deployed for a promoted child
+type RiderStatus struct {
+	GroupVersionKind metav1.GroupVersionKind `json:"groupVersionKind"`
+	Name             string                  `json:"name"`
+}
+
 func (status *Status) SetPhase(phase Phase, msg string) {
 	if phase == PhaseFailed {
 		status.LastFailureTime = metav1.NewTime(time.Now())

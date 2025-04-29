@@ -33,6 +33,7 @@ const (
 type MonoVertexRolloutSpec struct {
 	MonoVertex MonoVertex                   `json:"monoVertex"`
 	Strategy   *PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
+	Riders     []Rider                      `json:"riders,omitempty"`
 }
 
 // MonoVertex includes the spec of MonoVertex in Numaflow
@@ -51,6 +52,9 @@ type MonoVertexRolloutStatus struct {
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
 	ProgressiveStatus MonoVertexProgressiveStatus `json:"progressiveStatus,omitempty"`
+
+	// Riders stores the list of Riders that have been deployed along with the "promoted" MonoVertex
+	Riders []RiderStatus `json:"riders,omitempty"`
 }
 
 type MonoVertexProgressiveStatus struct {

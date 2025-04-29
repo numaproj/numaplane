@@ -10,6 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -24,6 +25,20 @@ type RolloutController interface {
 
 	// Recycle deletes child; returns true if it was in fact deleted
 	Recycle(ctx context.Context, childObject *unstructured.Unstructured, c client.Client) (bool, error)
+
+	// GetDesiredRiders gets the list of Riders as specified in the RolloutObject, templated for the specific child name and
+	// based on the child definition.
+	// Note the child name can be different from child.GetName()
+	// The child name is what's used for templating the Rider definition, while the `child` is really only used by the PipelineRolloutReconciler
+	// in the case of "per-vertex" Riders. In this case, it's necessary to use the existing child's name to template in order to effectively compare whether the
+	// Rider has changed, but use the latest child definition to derive the current list of Vertices that need Riders.
+	GetDesiredRiders(rolloutObject RolloutObject, childName string, child *unstructured.Unstructured) ([]riders.Rider, error)
+
+	// GetExistingRiders gets the list of Riders that already exists, either for the Promoted child or the Upgrading child depending on the value of "upgrading"
+	GetExistingRiders(ctx context.Context, rolloutObject RolloutObject, upgrading bool) (unstructured.UnstructuredList, error)
+
+	// SetCurrentRiderList updates the list of Riders
+	SetCurrentRiderList(rolloutObject RolloutObject, riders []riders.Rider)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
@@ -255,4 +270,32 @@ func GetChildName(ctx context.Context, rolloutObject RolloutObject, controller R
 	} else {
 		return existingChild.GetName(), nil
 	}
+}
+
+// Determine the list of Riders which are needed for the child and create them on the cluster
+func CreateRidersForNewChild(
+	ctx context.Context,
+	controller RolloutController,
+	rolloutObject RolloutObject,
+	child *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	// create definitions for riders by templating what's defined in the Rollout definition with the child definition
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, child.GetName(), child)
+	if err != nil {
+		return fmt.Errorf("error getting desired Riders for child %s: %s", child.GetName(), err)
+	}
+	riderAdditions := unstructured.UnstructuredList{}
+	for _, rider := range newRiders {
+		riderAdditions.Items = append(riderAdditions.Items, rider.Definition)
+	}
+
+	if err = riders.UpdateRidersInK8S(ctx, child, riderAdditions, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, c); err != nil {
+		return err
+	}
+
+	// now reflect this in the Status
+	controller.SetCurrentRiderList(rolloutObject, newRiders)
+	return nil
 }

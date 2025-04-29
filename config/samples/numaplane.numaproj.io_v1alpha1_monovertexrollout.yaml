@@ -10,6 +10,19 @@ spec:
     analysis:
       args:
       templates:
+  riders:
+    - definition:
+        apiVersion: autoscaling.k8s.io/v1beta2
+        kind: VerticalPodAutoscaler
+        metadata: 
+          name: vpa
+        spec:
+          targetRef: 
+            apiVersion: numaproj.io/v1alpha1
+            kind: MonoVertex
+            name: '{{.monovertex-name}}'
+          # todo: add more fields here...
+
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:

@@ -35,6 +35,15 @@ const (
 type PipelineRolloutSpec struct {
 	Pipeline Pipeline                     `json:"pipeline"`
 	Strategy *PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
+	Riders   []PipelineRider              `json:"riders,omitempty"`
+}
+
+// PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
+type PipelineRider struct {
+	Rider `json:",inline"`
+
+	// if set, rider resource should be created for each vertex of the pipeline
+	PerVertex bool `json:"perVertex,omitempty"`
 }
 
 // Pipeline includes the spec of Pipeline in Numaflow
@@ -55,6 +64,9 @@ type PipelineRolloutStatus struct {
 
 	// ProgressiveStatus stores fields related to the Progressive strategy
 	ProgressiveStatus PipelineProgressiveStatus `json:"progressiveStatus,omitempty"`
+
+	// Riders stores the list of Riders that have been deployed along with the "promoted" Pipeline
+	Riders []RiderStatus `json:"riders,omitempty"`
 }
 
 type PipelineProgressiveStatus struct {
