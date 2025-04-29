@@ -8,6 +8,7 @@
 
 BASE_DIR=../..
 TEST_MANIFEST_DIR=tests/manifests/default
+YQ_CMD=$GOPATH/bin/yq
 SCRIPT_DIR=$(dirname "$0")
 
 # Change working directory
@@ -47,7 +48,7 @@ echo "Generating Numaflow Controller definition file for Numaflow version v$NUMA
 kubectl kustomize . > tmp-kustomized-nfinstall.yaml
 
 # Install yq if not present
-if ! command -v yq 2>&1 >/dev/null
+if ! command -v $YQ_CMD 2>&1 >/dev/null
 then
   echo "yq not found, installing it..."
   go install github.com/mikefarah/yq/v4@latest
@@ -56,17 +57,17 @@ fi
 
 # Use yq to modify/add the instance field of the string literal yaml config of the numaflow-controller-config ConfigMap data field controller-config.yaml
 # This is not possible via Kustomize yet. Follow https://github.com/kubernetes-sigs/kustomize/issues/4517 and https://github.com/kubernetes-sigs/kustomize/pull/5679 for future Kustomize updates.
-export TMP_NFC_DEF_GEN=$(yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' tmp-kustomized-nfinstall.yaml)
-yq 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' tmp-kustomized-nfinstall.yaml > tmp-full-spec.yaml
+export TMP_NFC_DEF_GEN=$($YQ_CMD 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") | .data."controller-config.yaml" | fromyaml | .instance = "{{ .InstanceID }}"' tmp-kustomized-nfinstall.yaml)
+$YQ_CMD 'select(.kind == "ConfigMap" and .metadata.name == "numaflow-controller-config{{ .InstanceSuffix }}") |= .data."controller-config.yaml" = strenv(TMP_NFC_DEF_GEN)' tmp-kustomized-nfinstall.yaml > tmp-full-spec.yaml
 
 # Update the version on the base definitions configmap yaml
 export TMP_NFC_DEF_GEN_NUMAFLOW_VERSION=$NUMAFLOW_VERSION
 envsubst < def-configmap.yaml > tmp-versioned-def-cm.yaml
 
 # Using yq, append tmp-full-spec.yaml to tmp-versioned-def-cm.yaml as a string literal under the controllerDefinitions fullSpec field for the specified version
-export TMP_NFC_DEF_GEN_FULL_SPEC=$(cat tmp-full-spec.yaml | yq)
-export TMP_NFC_DEF_GEN_FULL_SPEC_PLUS=$(yq '.data."controller_definitions.yaml" | fromyaml | .controllerDefinitions[0].fullSpec = strenv(TMP_NFC_DEF_GEN_FULL_SPEC)' tmp-versioned-def-cm.yaml)
-yq '.data."controller_definitions.yaml" = strenv(TMP_NFC_DEF_GEN_FULL_SPEC_PLUS)' tmp-versioned-def-cm.yaml > $BASE_DIR/$OUTPUT_FILE
+export TMP_NFC_DEF_GEN_FULL_SPEC=$(cat tmp-full-spec.yaml | $YQ_CMD)
+export TMP_NFC_DEF_GEN_FULL_SPEC_PLUS=$($YQ_CMD '.data."controller_definitions.yaml" | fromyaml | .controllerDefinitions[0].fullSpec = strenv(TMP_NFC_DEF_GEN_FULL_SPEC)' tmp-versioned-def-cm.yaml)
+$YQ_CMD '.data."controller_definitions.yaml" = strenv(TMP_NFC_DEF_GEN_FULL_SPEC_PLUS)' tmp-versioned-def-cm.yaml > $BASE_DIR/$OUTPUT_FILE
 
 echo "Generated file $OUTPUT_FILE"
 
