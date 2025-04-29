@@ -12,6 +12,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -322,7 +323,7 @@ func RidersNeedUpdating(ctx context.Context, namespace string, childKind string,
 		key := gvk.String() + "/" + newRider.Definition.GetName()
 
 		if existingRider, found := existingRiderMap[key]; found {
-			newHash, err := riders.CalculateHash(ctx, newRider.Definition)
+			newHash, err := kubernetes.CalculateHash(ctx, newRider.Definition)
 			if err != nil {
 				return false, apiv1.UpgradeStrategyError, additionsRequired, modificationsRequired, deletionsRequired, fmt.Errorf("faied to calculate hash annotation for rider %s: %s", newRider.Definition.GetName(), err)
 			}
