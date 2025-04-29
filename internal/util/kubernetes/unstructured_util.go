@@ -2,6 +2,9 @@ package kubernetes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -167,8 +170,7 @@ func ExtractResourceNames(unstrucList *unstructured.UnstructuredList) []string {
 
 // CreateResource creates the resource in the kubernetes cluster
 func CreateResource(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
-	err := c.Create(ctx, obj)
-	return err
+	return c.Create(ctx, obj)
 }
 
 // GetResource retrieves the resource from the informer cache, if it's not found then it fetches from the API server.
@@ -235,4 +237,25 @@ func ApplyOwnerReference(child *unstructured.Unstructured, owner *unstructured.U
 	}
 	child.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 	return nil
+}
+
+// Calculate the sha256 hash of a Resource's definition
+func CalculateHash(ctx context.Context, resource unstructured.Unstructured) (string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// json serialize it and then hash that
+	asBytes, err := json.Marshal(resource)
+	if err != nil {
+		return "", err
+	}
+
+	h := sha256.New()
+	_, err = h.Write(asBytes)
+	if err != nil {
+		return "", err
+	}
+
+	hashVal := hex.EncodeToString(h.Sum(nil))
+	numaLogger.WithValues("resource name", resource.GetName(), "hash", hashVal).Debugf("derived hash from resource: %+v", resource)
+	return hashVal, nil
 }

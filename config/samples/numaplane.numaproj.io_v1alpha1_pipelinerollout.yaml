@@ -22,6 +22,7 @@ spec:
             apiVersion: numaproj.io/v1alpha1
             kind: Vertex
             name: '{{.pipeline-name}}-{{.vertex-name}}'
+          # todo: add more fields here...
   pipeline:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
