@@ -92,3 +92,68 @@ func TestIsValidKubernetesManifestFile(t *testing.T) {
 	}
 
 }
+
+func TestParseResourceFilter(t *testing.T) {
+	testCases := []struct {
+		name              string
+		rules             string
+		expectedResources []ResourceType
+		hasErr            bool
+	}{
+		{
+			name:              "valid empty rule",
+			rules:             "",
+			expectedResources: []ResourceType{},
+			hasErr:            false,
+		},
+		{
+			name:  "valid rules",
+			rules: "group=apps,kind=Deployment;group=rbac.authorization.k8s.io,kind=RoleBinding",
+			expectedResources: []ResourceType{
+				{
+					Group: "apps",
+					Kind:  "Deployment",
+				},
+				{
+					Group: "rbac.authorization.k8s.io",
+					Kind:  "RoleBinding",
+				},
+			},
+			hasErr: false,
+		},
+		{
+			name:  "valid rules with empty group",
+			rules: "group=apps,kind=Deployment;group=,kind=ConfigMap",
+			expectedResources: []ResourceType{
+				{
+					Group: "apps",
+					Kind:  "Deployment",
+				},
+				{
+					Group: "",
+					Kind:  "ConfigMap",
+				},
+			},
+			hasErr: false,
+		},
+		{
+			name:   "invalid rules",
+			rules:  "group=apps,kind=Deployment;grup=,kind=ConfigMap",
+			hasErr: true,
+		},
+	}
+	t.Parallel()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resources, err := ParseResourceFilter(tc.rules)
+			if tc.hasErr {
+				assert.NotNil(t, err)
+				assert.Nil(t, resources)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tc.expectedResources, resources)
+			}
+		})
+	}
+}

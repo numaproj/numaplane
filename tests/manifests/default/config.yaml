@@ -7,3 +7,4 @@ group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=
 group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
 defaultUpgradeStrategy: "pause-and-drain"
 childStatusAssessmentSchedule: "120,60,10"
+permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=,kind=ConfigMap"

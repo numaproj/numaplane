@@ -1363,6 +1363,12 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			desiredRiders = append(desiredRiders, riders.Rider{Definition: unstruc, RequiresProgressive: rider.Progressive})
 		}
 	}
+
+	// verify that desiredRiders are all permitted Kinds
+	if !riders.VerifyRiders(desiredRiders) {
+		return desiredRiders, fmt.Errorf("rider definitions contained unpermitted Kind")
+	}
+
 	return desiredRiders, nil
 }
 

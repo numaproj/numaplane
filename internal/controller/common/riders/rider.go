@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -171,4 +172,32 @@ func GetRidersFromK8S(ctx context.Context, namespace string, ridersList []apiv1.
 
 	}
 	return existingRiders, nil
+}
+
+func VerifyRiders(riders []Rider) bool {
+
+	// get global configmap
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return false
+	}
+
+	// parse permitted Riders and create resource filter
+	riderRules, err := kubernetes.ParseResourceFilter(globalConfig.PermittedRiders)
+	if err != nil {
+		return false
+	}
+	resourcesFilter := &kubernetes.ResourceFilter{
+		IncludedResources: riderRules,
+	}
+
+	// check that each rider is a permitted Group/Kind set in the Numplane controller config
+	for _, rider := range riders {
+		gvk := rider.Definition.GroupVersionKind()
+		if resourcesFilter.IsExcludedResource(gvk.Group, gvk.Kind, "") {
+			return false
+		}
+	}
+
+	return true
 }
