@@ -2,9 +2,6 @@ package riders
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -26,10 +23,10 @@ type Rider struct {
 	RequiresProgressive bool
 }
 
-// create an annotation to preserve a hash of the metadata and spec, so that we can compare the new value to the existing value
+// create an annotation to preserve a hash of the Rider's metadata and spec, so that we can compare the new value to the existing value
 // to know if there was a change
 func WithHashAnnotation(ctx context.Context, resource unstructured.Unstructured) (unstructured.Unstructured, string, error) {
-	hashVal, err := CalculateHash(ctx, resource)
+	hashVal, err := kubernetes.CalculateHash(ctx, resource)
 	if err != nil {
 		return unstructured.Unstructured{}, "", err
 	}
@@ -45,26 +42,7 @@ func WithHashAnnotation(ctx context.Context, resource unstructured.Unstructured)
 	return *unstrucWithAnnotation, hashVal, nil
 }
 
-func CalculateHash(ctx context.Context, resource unstructured.Unstructured) (string, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	// json serialize it and then hash that
-	asBytes, err := json.Marshal(resource)
-	if err != nil {
-		return "", err
-	}
-
-	h := sha256.New()
-	_, err = h.Write(asBytes)
-	if err != nil {
-		return "", err
-	}
-
-	hashVal := hex.EncodeToString(h.Sum(nil))
-	numaLogger.WithValues("resource name", resource.GetName(), "hash", hashVal).Debugf("derived hash from resource: %+v", resource)
-	return hashVal, nil
-}
-
+// get the current hash value from the annotation on the Rider resource
 func GetExistingHashAnnotation(resource unstructured.Unstructured) string {
 	return resource.GetAnnotations()[common.AnnotationKeyHash]
 }
@@ -145,6 +123,7 @@ func prepareRiderForDeployment(ctx context.Context, rider *unstructured.Unstruct
 	return nil
 }
 
+// Get the Rider Resources in K8S based on the resources named in []RiderStatus
 func GetRidersFromK8S(ctx context.Context, namespace string, ridersList []apiv1.RiderStatus, c client.Client) (unstructured.UnstructuredList, error) {
 
 	numaLogger := logger.FromContext(ctx)
@@ -174,7 +153,8 @@ func GetRidersFromK8S(ctx context.Context, namespace string, ridersList []apiv1.
 	return existingRiders, nil
 }
 
-func VerifyRiders(riders []Rider) bool {
+// Verify that the Riders' Groups/Kinds are permitted for deployment
+func VerifyRidersPermitted(riders []Rider) bool {
 
 	// get global configmap
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
