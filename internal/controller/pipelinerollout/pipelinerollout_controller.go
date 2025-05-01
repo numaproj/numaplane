@@ -384,6 +384,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	var existingPipelineDef *unstructured.Unstructured
 
+	// get current in progress strategy if there is one
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
+	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
+
 	if newPipelineDef == nil {
 		// we couldn't create the Pipeline definition: we need to check again later
 		requeueDelay = common.DefaultRequeueDelay
@@ -396,6 +400,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 			// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
 			// (i.e. if isbsvc or numaflow controller is requesting pause)
+			// TODO: can this look at "in progress strategy" instead? If so, the logic may be a little neater
 			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), numaflowv1.PipelineGroupVersionKind.Kind)
 			if err != nil {
 				return 0, nil, err
@@ -423,6 +428,15 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+
+			// if user somehow has no Promoted Pipeline and is in the middle of Progressive, this isn't right - user may have deleted the Promoted Pipeline
+			// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
+			if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, apiv1.UpgradeStrategyNoOp)
+				if err = progressive.Discontinue(ctx, pipelineRollout, r, r.client); err != nil {
+					return 0, nil, err
+				}
+			}
 		} else {
 
 			// "promoted" object already exists
@@ -450,9 +464,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 		}
 	}
-
-	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
-	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
 
 	// clean up recyclable pipelines
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
