@@ -979,6 +979,34 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 		})
 
+	defaultUpgradingPipelineDef := ctlrcommon.CreateTestPipelineOfSpec(
+		runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
+		numaflowv1.PipelinePhaseRunning,
+		numaflowv1.Status{
+			Conditions: []metav1.Condition{
+				{
+					Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+					Status: metav1.ConditionTrue,
+				},
+			},
+		},
+		false,
+		map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		},
+		map[string]string{})
+
+	defaultFailedUpgradingPipelineDef := defaultUpgradingPipelineDef.DeepCopy()
+	defaultFailedUpgradingPipelineDef.Status.Conditions = []metav1.Condition{
+		{
+			Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+			Status: metav1.ConditionFalse,
+		},
+	}
+
 	testCases := []struct {
 		name                        string
 		newPipelineSpec             numaflowv1.PipelineSpec
@@ -1018,28 +1046,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			name:                        "Progressive deployed successfully",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			existingUpgradePipelineDef:  defaultUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
@@ -1077,28 +1087,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			name:                        "Progressive deployment failed",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
@@ -1141,28 +1133,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			name:                        "Progressive deployment failed - going back to original spec",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
-				numaflowv1.PipelinePhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
@@ -1270,28 +1244,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
 			existingPromotedPipelineDef: nil,
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
 				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 					UpgradingChildStatus: apiv1.UpgradingChildStatus{
