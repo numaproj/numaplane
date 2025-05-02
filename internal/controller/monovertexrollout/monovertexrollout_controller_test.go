@@ -328,7 +328,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	testCases := []struct {
 		name                           string
 		newControllerInstanceID        string
-		existingOriginalMonoVertexDef  numaflowv1.MonoVertex
+		existingOriginalMonoVertexDef  *numaflowv1.MonoVertex
 		existingUpgradingMonoVertexDef *numaflowv1.MonoVertex
 		initialRolloutPhase            apiv1.Phase
 		initialRolloutNameCount        int
@@ -347,7 +347,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		{
 			name:                           "Instance annotation difference results in Progressive",
 			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  defaultOriginalMonoVertexDef,
+			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
 			existingUpgradingMonoVertexDef: nil,
 			initialRolloutPhase:            apiv1.PhaseDeployed,
 			initialRolloutNameCount:        1,
@@ -366,7 +366,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		{
 			name:                           "Progressive deployed successfully",
 			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  defaultOriginalMonoVertexDef,
+			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
 			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
 			initialRolloutPhase:            apiv1.PhasePending,
 			initialRolloutNameCount:        2,
@@ -389,7 +389,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		{
 			name:                          "Progressive deployment failed",
 			newControllerInstanceID:       "1",
-			existingOriginalMonoVertexDef: defaultOriginalMonoVertexDef,
+			existingOriginalMonoVertexDef: &defaultOriginalMonoVertexDef,
 			existingUpgradingMonoVertexDef: ctlrcommon.CreateTestMonoVertexOfSpec(
 				monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
 				numaflowv1.MonoVertexPhaseFailed,
@@ -424,7 +424,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		{
 			name:                           "AnalysisRun successful",
 			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  defaultOriginalMonoVertexDef,
+			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
 			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
 			initialRolloutPhase:            apiv1.PhasePending,
 			initialRolloutNameCount:        2,
@@ -453,7 +453,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		{
 			name:                           "AnalysisRun failed",
 			newControllerInstanceID:        "1",
-			existingOriginalMonoVertexDef:  defaultOriginalMonoVertexDef,
+			existingOriginalMonoVertexDef:  &defaultOriginalMonoVertexDef,
 			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
 			initialRolloutPhase:            apiv1.PhasePending,
 			initialRolloutNameCount:        2,
@@ -482,6 +482,28 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:                           "Handle user deletion of promoted monovertex during Progressive",
+			newControllerInstanceID:        "1",
+			existingOriginalMonoVertexDef:  nil,
+			existingUpgradingMonoVertexDef: defaultUpgradingMonoVertexDef,
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialRolloutNameCount:        2,
+			initialInProgressStrategy:      &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: &apiv1.UpgradingMonoVertexStatus{
+				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+					UpgradingChildStatus: unassessedUpgradingChildStatus,
+				},
+			},
+			initialPromotedChildStatus:   defaultPromotedChildStatus,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
+			expectedProgressiveCondition: metav1.ConditionTrue,
+			// original MonoVertex deleted, new one promoted
+			expectedMonoVertices: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestMonoVertexRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
 		},
 	}
@@ -544,19 +566,22 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 			// create the already-existing MonoVertex in Kubernetes
 			// this updates everything but the Status subresource
-			existingMonoVertexDef := &tc.existingOriginalMonoVertexDef
-			existingMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
-			monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingMonoVertexDef, metav1.CreateOptions{})
-			assert.NoError(t, err)
-			// update Status subresource
-			monoVertex.Status = tc.existingOriginalMonoVertexDef.Status
-			_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
-			assert.NoError(t, err)
+
+			existingMonoVertexDef := tc.existingOriginalMonoVertexDef
+			if existingMonoVertexDef != nil {
+				existingMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
+				monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingMonoVertexDef, metav1.CreateOptions{})
+				assert.NoError(t, err)
+				// update Status subresource
+				monoVertex.Status = tc.existingOriginalMonoVertexDef.Status
+				_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
+				assert.NoError(t, err)
+			}
 
 			if tc.existingUpgradingMonoVertexDef != nil {
 				existingUpgradeMonoVertexDef := tc.existingUpgradingMonoVertexDef
 				existingUpgradeMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
-				monoVertex, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingUpgradeMonoVertexDef, metav1.CreateOptions{})
+				monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingUpgradeMonoVertexDef, metav1.CreateOptions{})
 				assert.NoError(t, err)
 
 				// update Status subresource
