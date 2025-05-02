@@ -225,12 +225,8 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
 			monoVertexRollout.Status.MarkPending()
 
-			if err := kubernetes.CreateResource(ctx, r.client, newMonoVertexDef); err != nil {
+			if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {
 				return ctrl.Result{}, err
-			}
-
-			if err := ctlrcommon.CreateRidersForNewChild(ctx, r, monoVertexRollout, newMonoVertexDef, r.client); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
 			}
 
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
@@ -679,6 +675,29 @@ func getBaseMonoVertexMetadata(monoVertexRollout *apiv1.MonoVertexRollout) (apiv
 	labelMapping[common.LabelKeyParentRollout] = monoVertexRollout.Name
 
 	return apiv1.Metadata{Labels: labelMapping, Annotations: monoVertexRollout.Spec.MonoVertex.Annotations}, nil
+
+}
+
+func (r *MonoVertexRolloutReconciler) createPromotedMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) error {
+	if err := kubernetes.CreateResource(ctx, r.client, newMonoVertexDef); err != nil {
+		return err
+	}
+
+	if err := ctlrcommon.CreateRidersForNewChild(ctx, r, monoVertexRollout, newMonoVertexDef, r.client); err != nil {
+		return fmt.Errorf("error creating riders: %s", err)
+	}
+
+	// if user somehow has no Promoted MonoVertex and is in the middle of Progressive, this isn't right - user may have deleted the Promoted MonoVertex
+	// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, monoVertexRollout)
+
+	if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+		r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
+		if err := progressive.Discontinue(ctx, monoVertexRollout, r, r.client); err != nil {
+			return err
+		}
+	}
+	return nil
 
 }
 
