@@ -304,6 +304,15 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 		map[string]string{
 			common.AnnotationKeyNumaflowInstanceID: "1",
 		})
+	defaultPromotedChildStatus := &apiv1.PromotedMonoVertexStatus{
+		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+			},
+			AllVerticesScaledDown: true,
+			ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+		},
+	}
 
 	testCases := []struct {
 		name                           string
@@ -333,18 +342,11 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			initialRolloutNameCount:        1,
 			initialInProgressStrategy:      nil,
 			initialUpgradingChildStatus:    nil,
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-				},
-			},
-			analysisRun:                  false,
-			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:         apiv1.PhasePending,
-			expectedProgressiveCondition: metav1.ConditionUnknown,
+			initialPromotedChildStatus:     defaultPromotedChildStatus,
+			analysisRun:                    false,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:           apiv1.PhasePending,
+			expectedProgressiveCondition:   metav1.ConditionUnknown,
 			expectedMonoVertices: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestMonoVertexRolloutName + "-1": common.LabelValueUpgradeInProgress,
@@ -375,13 +377,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					},
 				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-					},
-				},
-			},
+			initialPromotedChildStatus:   defaultPromotedChildStatus,
 			analysisRun:                  true,
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:         apiv1.PhaseDeployed,
@@ -410,14 +406,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					},
 				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-				},
-			},
+			initialPromotedChildStatus:   defaultPromotedChildStatus,
 			analysisRun:                  false,
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:         apiv1.PhaseDeployed,
@@ -458,15 +447,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					},
 				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
-				},
-			},
+			initialPromotedChildStatus:   defaultPromotedChildStatus,
 			analysisRun:                  false,
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:         apiv1.PhasePending,
@@ -500,14 +481,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 					},
 				},
 			},
-			initialPromotedChildStatus: &apiv1.PromotedMonoVertexStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-					},
-					ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
-				},
-			},
+			initialPromotedChildStatus:   defaultPromotedChildStatus,
 			analysisRun:                  true,
 			expectedInProgressStrategy:   apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:         apiv1.PhasePending,
