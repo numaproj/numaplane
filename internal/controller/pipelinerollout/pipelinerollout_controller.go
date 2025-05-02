@@ -395,7 +395,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 		if promotedPipelines == nil || len(promotedPipelines.Items) == 0 {
 
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
 			pipelineRollout.Status.MarkPending()
 
 			if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {

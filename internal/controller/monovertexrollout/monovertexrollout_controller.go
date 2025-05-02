@@ -222,7 +222,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	if newMonoVertexDef != nil {
 		if promotedMonovertices == nil || len(promotedMonovertices.Items) == 0 {
 
-			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, monoVertexRollout.Name)
+			numaLogger.Debugf("MonoVertex %s/%s doesn't exist so creating", monoVertexRollout.Namespace, newMonoVertexDef.GetName())
 			monoVertexRollout.Status.MarkPending()
 
 			if err := r.createPromotedMonoVertex(ctx, monoVertexRollout, newMonoVertexDef); err != nil {

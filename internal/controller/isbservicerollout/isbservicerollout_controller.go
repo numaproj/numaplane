@@ -252,13 +252,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		} else {
 
 			// create an object as it doesn't exist
-			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
-			isbServiceRollout.Status.MarkPending()
-
 			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
+
+			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, newISBServiceDef.GetName())
+			isbServiceRollout.Status.MarkPending()
 			if newISBServiceDef != nil {
 
 				if err = r.createPromotedISBService(ctx, isbServiceRollout, newISBServiceDef); err != nil {
