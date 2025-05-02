@@ -344,6 +344,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("monoVertexDefinition", *existingMonoVertexDef).Warn("MonoVertex not found.")
+				return 0, nil
 			} else {
 				return 0, fmt.Errorf("error getting MonoVertex for status processing: %v", err)
 			}

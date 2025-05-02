@@ -401,6 +401,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("isbsvcDefinition", *newISBServiceDef).Warn("InterstepBufferService not found.")
+				return 0, nil
 			} else {
 				return 0, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
 			}

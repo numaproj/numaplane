@@ -400,7 +400,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 			// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
 			// (i.e. if isbsvc or numaflow controller is requesting pause)
-			// TODO: can this look at "in progress strategy" instead? If so, the logic may be a little neater
 			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), numaflowv1.PipelineGroupVersionKind.Kind)
 			if err != nil {
 				return 0, nil, err
@@ -432,7 +431,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			// if user somehow has no Promoted Pipeline and is in the middle of Progressive, this isn't right - user may have deleted the Promoted Pipeline
 			// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
 			if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
-				r.inProgressStrategyMgr.SetStrategy(ctx, pipelineRollout, apiv1.UpgradeStrategyNoOp)
+				r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 				if err = progressive.Discontinue(ctx, pipelineRollout, r, r.client); err != nil {
 					return 0, nil, err
 				}
@@ -591,6 +590,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
+				return 0, nil
 			} else {
 				return 0, fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
@@ -637,6 +637,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
 
+			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
+
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
@@ -644,7 +646,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
-			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
