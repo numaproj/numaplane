@@ -968,6 +968,17 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
+	defaultPromotedPipelineDef := createPipeline(
+		numaflowv1.PipelinePhaseRunning,
+		numaflowv1.Status{},
+		false,
+		map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		})
+
 	testCases := []struct {
 		name                        string
 		newPipelineSpec             numaflowv1.PipelineSpec
@@ -986,18 +997,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 	}{
 		{
-			name:            "spec difference results in Progressive",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "spec difference results in Progressive",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef:  nil,
 			initialRolloutPhase:         apiv1.PhaseDeployed,
 			initialRolloutNameCount:     1,
@@ -1013,18 +1015,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Progressive deployed successfully",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "Progressive deployed successfully",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseRunning,
@@ -1081,18 +1074,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Progressive deployment failed",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "Progressive deployment failed",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseFailed,
@@ -1154,18 +1138,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Progressive deployment failed - going back to original spec",
-			newPipelineSpec: pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "Progressive deployment failed - going back to original spec",
+			newPipelineSpec:             pipelineSpec, // this matches the original spec
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
 				numaflowv1.PipelinePhaseFailed,
@@ -1228,19 +1203,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Clean up after progressive upgrade",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhasePaused,
-				numaflowv1.Status{},
-				true,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "Clean up after progressive upgrade",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseRunning,
