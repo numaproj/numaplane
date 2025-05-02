@@ -1006,6 +1006,25 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			Status: metav1.ConditionFalse,
 		},
 	}
+	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
+		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+			UpgradingChildStatus: apiv1.UpgradingChildStatus{
+				Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+				AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+				AssessmentResult:       apiv1.AssessmentResultSuccess,
+				InitializationComplete: true,
+			},
+		},
+		OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
+			{VertexName: "in", ScaleDefinition: nil},
+			{VertexName: "cat", ScaleDefinition: nil},
+			{VertexName: "cat-2", ScaleDefinition: nil},
+			{VertexName: "out", ScaleDefinition: nil},
+		},
+	}
+	failedUpgradingChildStatus := successfulUpgradingChildStatus.DeepCopy()
+	failedUpgradingChildStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
 
 	testCases := []struct {
 		name                        string
@@ -1050,23 +1069,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultSuccess,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
+			initialUpgradingChildStatus: successfulUpgradingChildStatus,
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 					PromotedChildStatus: apiv1.PromotedChildStatus{
@@ -1091,23 +1094,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultFailure,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 					PromotedChildStatus: apiv1.PromotedChildStatus{
@@ -1137,23 +1124,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultFailure,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 					PromotedChildStatus: apiv1.PromotedChildStatus{
@@ -1248,23 +1219,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultFailure,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
 			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
 				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 					PromotedChildStatus: apiv1.PromotedChildStatus{
