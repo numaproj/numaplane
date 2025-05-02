@@ -1006,6 +1006,20 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			Status: metav1.ConditionFalse,
 		},
 	}
+	defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
+		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+			},
+			AllVerticesScaledDown: true,
+			ScaleValues: map[string]apiv1.ScaleValues{
+				"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+			},
+		},
+	}
+
 	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
 		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: apiv1.UpgradingChildStatus{
@@ -1070,16 +1084,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: successfulUpgradingChildStatus,
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
@@ -1095,21 +1102,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-					},
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:        apiv1.PhasePending,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
@@ -1125,21 +1120,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-					},
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
@@ -1220,21 +1203,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialRolloutNameCount:     2,
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: failedUpgradingChildStatus,
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-					},
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
