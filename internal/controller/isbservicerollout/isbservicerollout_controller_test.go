@@ -441,7 +441,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 	testCases := []struct {
 		name                           string
 		newISBSvcSpec                  numaflowv1.InterStepBufferServiceSpec
-		existingPromotedISBSvcDef      numaflowv1.InterStepBufferService
+		existingPromotedISBSvcDef      *numaflowv1.InterStepBufferService
 		existingPromotedStatefulSetDef appsv1.StatefulSet
 		existingUpgradingISBSvcDef     *numaflowv1.InterStepBufferService
 		existingPipelineRollout        *apiv1.PipelineRollout
@@ -463,7 +463,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			// that's a data loss field
 			name:                           "spec difference results in Progressive",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
-			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedISBSvcDef:      &defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     nil,
 			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
@@ -486,7 +486,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			// the original pipeline was deleted, so the isbsvc in turn can also be deleted
 			name:                           "Progressive succeeds",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
-			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedISBSvcDef:      &defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
 			// Because the PipelineRollout was successful, therefore the ISBServiceRollout should be as well
@@ -516,7 +516,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			// the "upgrading" isbsvc fails because the "upgrading" pipeline on it has failed
 			name:                           "Progressive fails",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
-			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedISBSvcDef:      &defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
 			existingPipelineRollout:        failedPipelineRollout,
@@ -538,7 +538,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			name: "Updated isbsvc spec after previous progressive failure",
 			// this version is different from our current upgrading isbsvc, which is using 2.10.11 - this will create a new isbsvc
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.12"),
-			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
+			existingPromotedISBSvcDef:      &defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
 			existingPipelineRollout:        failedPipelineRollout,
@@ -554,6 +554,26 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradeInProgress,
+			},
+		},
+		{
+			name:                           "Deleted promoted isbsvc during Progressive failure",
+			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
+			existingPromotedISBSvcDef:      nil,
+			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
+			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
+			existingPipelineRollout:        failedPipelineRollout,
+			existingPromotedPipelineDef:    defaultPromotedPipeline,
+			existingUpgradingPipelineDef:   defaultUpgradingPipeline,
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialRolloutNameCount:        2,
+			initialInProgressStrategy:      &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus:    failedUpgradingISBServiceStatus,
+			expectedInProgressStrategy:     apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:           apiv1.PhaseDeployed,
+			expectedISBServices: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestISBSvcRolloutName + "-2": common.LabelValueUpgradePromoted,
+				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
 			},
 		},
 	}
@@ -581,7 +601,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, rollout)
 
 			// create both "promoted" and "upgrading" interstepbufferservice (if it exists) in K8S
-			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, &tc.existingPromotedISBSvcDef)
+			if tc.existingPromotedISBSvcDef != nil {
+				ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, tc.existingPromotedISBSvcDef)
+			}
 			if tc.existingUpgradingISBSvcDef != nil {
 				ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, tc.existingUpgradingISBSvcDef)
 			}
