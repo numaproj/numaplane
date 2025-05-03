@@ -557,7 +557,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:                           "Deleted promoted isbsvc during Progressive failure",
+			name:                           "Handle user deletion of Promoted isbsvc during Progressive failure",
 			newISBSvcSpec:                  ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"),
 			existingPromotedISBSvcDef:      nil,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,

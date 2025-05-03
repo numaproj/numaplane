@@ -384,10 +384,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 	var existingPipelineDef *unstructured.Unstructured
 
-	// get current in progress strategy if there is one
-	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
-	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
-
 	if newPipelineDef == nil {
 		// we couldn't create the Pipeline definition: we need to check again later
 		requeueDelay = common.DefaultRequeueDelay
@@ -432,6 +428,10 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 		}
 	}
+
+	// get current in progress strategy if there is one
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
+	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
 
 	// clean up recyclable pipelines
 	allDeleted, err := r.garbageCollectChildren(ctx, pipelineRollout)
