@@ -404,6 +404,38 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
+	successfulPipelineRollout := ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
+		map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
+		&apiv1.PipelineRolloutStatus{
+			ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+				UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
+					InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
+					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+						UpgradingChildStatus: apiv1.UpgradingChildStatus{
+							Name:                   defaultUpgradingPipelineName,
+							AssessmentResult:       apiv1.AssessmentResultSuccess,
+							InitializationComplete: true,
+						},
+					},
+				},
+			},
+		},
+	)
+	failedPipelineRollout := successfulPipelineRollout.DeepCopy()
+	failedPipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingPipelineTypeStatus.AssessmentResult = apiv1.AssessmentResultFailure
+
+	successfulUpgradingISBServiceStatus := &apiv1.UpgradingISBServiceStatus{
+		UpgradingChildStatus: apiv1.UpgradingChildStatus{
+			Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+			AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+			AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+			AssessmentResult:       apiv1.AssessmentResultSuccess,
+			InitializationComplete: true,
+		},
+	}
+	failedUpgradingISBServiceStatus := successfulUpgradingISBServiceStatus.DeepCopy()
+	failedUpgradingISBServiceStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
+
 	pipelinerollout.PipelineROReconciler = &pipelinerollout.PipelineRolloutReconciler{Queue: util.NewWorkQueue("fake_queue")}
 
 	testCases := []struct {
@@ -458,23 +490,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
 			// Because the PipelineRollout was successful, therefore the ISBServiceRollout should be as well
-			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
-				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{
-					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
-						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
-							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:                   defaultUpgradingPipelineName,
-									AssessmentResult:       apiv1.AssessmentResultSuccess,
-									InitializationComplete: true,
-								},
-							},
-						},
-					},
-				},
-			),
+			existingPipelineRollout: successfulPipelineRollout,
 			// our previously "upgrading" pipeline has been "promoted" and our previously "promoted" one was already deleted
 			existingPromotedPipelineDef: createPipelineForISBSvc(defaultUpgradingPipelineName, defaultUpgradingISBSvcName,
 				numaflowv1.PipelinePhaseRunning, map[string]string{
@@ -488,17 +504,9 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			initialRolloutPhase:          apiv1.PhasePending,
 			initialRolloutNameCount:      2,
 			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:       apiv1.AssessmentResultSuccess,
-					InitializationComplete: true,
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
+			initialUpgradingChildStatus:  successfulUpgradingISBServiceStatus,
+			expectedInProgressStrategy:   apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:         apiv1.PhaseDeployed,
 			expectedISBServices: map[string]common.UpgradeState{
 				// note: the original isbsvc got garbage collected so it's no longer there
 				defaultUpgradingISBSvcName: common.LabelValueUpgradePromoted,
@@ -511,39 +519,15 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
-			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
-				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{
-					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
-						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
-							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:                   defaultUpgradingPipelineName,
-									AssessmentResult:       apiv1.AssessmentResultFailure,
-									InitializationComplete: true,
-								},
-							},
-						},
-					},
-				},
-			),
-			existingPromotedPipelineDef:  defaultPromotedPipeline,
-			existingUpgradingPipelineDef: defaultUpgradingPipeline,
-			initialRolloutPhase:          apiv1.PhasePending,
-			initialRolloutNameCount:      2,
-			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:       apiv1.AssessmentResultFailure,
-					InitializationComplete: true,
-				},
-			},
-			expectedInProgressStrategy: progressiveUpgradeStrategy,
-			expectedRolloutPhase:       apiv1.PhasePending,
+			existingPipelineRollout:        failedPipelineRollout,
+			existingPromotedPipelineDef:    defaultPromotedPipeline,
+			existingUpgradingPipelineDef:   defaultUpgradingPipeline,
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialRolloutNameCount:        2,
+			initialInProgressStrategy:      &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus:    failedUpgradingISBServiceStatus,
+			expectedInProgressStrategy:     progressiveUpgradeStrategy,
+			expectedRolloutPhase:           apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:  common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName: common.LabelValueUpgradeInProgress,
@@ -557,39 +541,15 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			existingPromotedISBSvcDef:      defaultPromotedISBSvc,
 			existingPromotedStatefulSetDef: defaultPromotedStatefulSet,
 			existingUpgradingISBSvcDef:     defaultUpgradingISBSvc,
-			existingPipelineRollout: ctlrcommon.CreateTestPipelineRollout(numaflowv1.PipelineSpec{InterStepBufferServiceName: ctlrcommon.DefaultTestISBSvcRolloutName},
-				map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{},
-				&apiv1.PipelineRolloutStatus{
-					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
-						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{
-							InterStepBufferServiceName: defaultUpgradingISBSvc.GetName(),
-							UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-								UpgradingChildStatus: apiv1.UpgradingChildStatus{
-									Name:                   defaultUpgradingPipelineName,
-									AssessmentResult:       apiv1.AssessmentResultFailure,
-									InitializationComplete: true,
-								},
-							},
-						},
-					},
-				},
-			),
-			existingPromotedPipelineDef:  defaultPromotedPipeline,
-			existingUpgradingPipelineDef: defaultUpgradingPipeline,
-			initialRolloutPhase:          apiv1.PhasePending,
-			initialRolloutNameCount:      2,
-			initialInProgressStrategy:    &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingISBServiceStatus{
-				UpgradingChildStatus: apiv1.UpgradingChildStatus{
-					Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-					AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-					AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-					AssessmentResult:       apiv1.AssessmentResultFailure,
-					InitializationComplete: true,
-				},
-			},
-			expectedInProgressStrategy: progressiveUpgradeStrategy,
-			expectedRolloutPhase:       apiv1.PhasePending,
+			existingPipelineRollout:        failedPipelineRollout,
+			existingPromotedPipelineDef:    defaultPromotedPipeline,
+			existingUpgradingPipelineDef:   defaultUpgradingPipeline,
+			initialRolloutPhase:            apiv1.PhasePending,
+			initialRolloutNameCount:        2,
+			initialInProgressStrategy:      &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus:    failedUpgradingISBServiceStatus,
+			expectedInProgressStrategy:     progressiveUpgradeStrategy,
+			expectedRolloutPhase:           apiv1.PhasePending,
 			expectedISBServices: map[string]common.UpgradeState{
 				defaultPromotedISBSvcName:                      common.LabelValueUpgradePromoted,
 				defaultUpgradingISBSvcName:                     common.LabelValueUpgradeRecyclable,
@@ -631,7 +591,8 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 			ctlrcommon.CreateStatefulSetInK8S(ctx, t, k8sClientSet, &tc.existingPromotedStatefulSetDef)
 
 			// create PipelineRollout in K8S
-			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, tc.existingPipelineRollout)
+			pipelineRollout := tc.existingPipelineRollout.DeepCopy()
+			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, pipelineRollout)
 
 			// create "promoted" as well as "upgrading" pipeline if they exist, in K8S
 			if tc.existingPromotedPipelineDef != nil {
