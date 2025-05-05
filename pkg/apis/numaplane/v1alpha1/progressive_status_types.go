@@ -103,8 +103,6 @@ type PromotedPipelineTypeStatus struct {
 	// ScaleValues is a map where the keys are the promoted child vertices names
 	// and the values are the scale values of the vertices
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
-	// AllVerticesScaledDown indicates if ALL the promoted child vertices have been scaled down
-	AllVerticesScaledDown bool `json:"allVerticesScaledDown,omitempty"`
 	// ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
 	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`

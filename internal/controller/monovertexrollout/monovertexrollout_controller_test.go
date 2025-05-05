@@ -309,8 +309,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			PromotedChildStatus: apiv1.PromotedChildStatus{
 				Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 			},
-			AllVerticesScaledDown: true,
-			ScaleValues:           map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+			ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 		},
 	}
 	unassessedUpgradingChildStatus := apiv1.UpgradingChildStatus{

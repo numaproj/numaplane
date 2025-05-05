@@ -124,8 +124,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			return false
 		}
 
-		return mvrProgressiveStatus.PromotedMonoVertexStatus.AllVerticesScaledDown &&
-			mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
+		return mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].ScaleTo == expectedScaleTo
@@ -173,9 +172,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 			return false
 		}
 
-		// first make sure that the Progressive status indicates that scale down happened
-		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
-			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
+		return prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
 
 	}).Should(BeTrue())
 

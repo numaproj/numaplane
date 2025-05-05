@@ -1011,7 +1011,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			PromotedChildStatus: apiv1.PromotedChildStatus{
 				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 			},
-			AllVerticesScaledDown: true,
 			ScaleValues: map[string]apiv1.ScaleValues{
 				"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
 				"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
@@ -2259,7 +2258,6 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						Name: ctlrcommon.DefaultTestPipelineName,
 					},
 
-					AllVerticesScaledDown: true,
 					ScaleValues: map[string]apiv1.ScaleValues{
 						"in": {
 							OriginalScaleMinMax: `{"max":5,"min":1}`,

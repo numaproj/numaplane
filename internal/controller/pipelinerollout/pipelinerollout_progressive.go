@@ -520,7 +520,7 @@ func scaleDownPipelineVertices(
 
 	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	if promotedPipelineStatus.ScaleValues != nil {
-		scaleValuesMap = promotedPipelineStatus.ScaleValues
+		return false, nil
 	}
 
 	for _, vertex := range vertices {
@@ -547,16 +547,6 @@ func scaleDownPipelineVertices(
 
 			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the vertex")
 
-			// If for the vertex we already set a ScaleTo value, we only need to update the current pods count
-			// to later verify that the pods were actually scaled down.
-			// We want to skip scaling down again.
-			if vertexScaleValues, exist := scaleValuesMap[vertexName]; exist {
-				scaleValuesMap[vertexName] = vertexScaleValues
-
-				numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debugf("updated scaleValues map for vertex '%s' with running pods count, skipping scaling down for this vertex since it has already been done", vertexName)
-				continue
-			}
-
 			originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
@@ -576,7 +566,7 @@ func scaleDownPipelineVertices(
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
 				OriginalScaleMinMax: originalScaleMinMax,
-				ScaleTo:             newMax,
+				ScaleTo:             scaleTo,
 				Initial:             currentPodsCount,
 			}
 		}
@@ -587,7 +577,10 @@ func scaleDownPipelineVertices(
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = false
 
-	return false, nil
+	// Requeue if it is the first time that ScaleValues is set for the vertices so that the reconciliation process will store these
+	// values in the rollout status in case of failure with the rest of the progressive operations.
+	// This will ensure to always calculate the scaleTo values based on the correct number of pods before actually scaling down.
+	return true, nil
 }
 
 /*
@@ -689,7 +682,6 @@ func scalePipelineVerticesToOriginalValues(
 	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline vertices with the original scale configuration")
 
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = true
-	promotedPipelineStatus.AllVerticesScaledDown = false
 	promotedPipelineStatus.ScaleValues = nil
 
 	return false, nil
