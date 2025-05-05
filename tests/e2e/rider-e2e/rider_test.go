@@ -65,6 +65,10 @@ var (
 	monoVertexSpecWithRider numaflowv1.MonoVertexSpec
 
 	defaultConfigMap = v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "my-configmap",
 		},
@@ -125,11 +129,10 @@ var _ = Describe("Rider E2E", Serial, func() {
 		})
 
 		// verify Rider is created
-		monoVertexName := fmt.Sprintf("%s-1", monoVertexRolloutName)
+		monoVertexName := fmt.Sprintf("%s-0", monoVertexRolloutName)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		_, err = GetResource(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, Namespace, configMapName)
-		Expect(err).ShouldNot(HaveOccurred())
+		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
 	})
 
 })

@@ -454,8 +454,24 @@ func closeAllFiles() error {
 	return nil
 }
 
+func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
+	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s exists", gvr, name), func() bool {
+		resource, err := GetResource(gvr, Namespace, name)
+		if resource == nil || err != nil {
+			return false
+		}
+		return true
+	}).WithTimeout(TestTimeout).Should(BeTrue())
+}
+
 func GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
-	return dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	u, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		printStr := fmt.Sprintf("Get for GVR %+v and namespace=%q and name=%q returned err: %s", gvr, namespace, name, err.Error())
+		By(printStr)
+		fmt.Println(printStr)
+	}
+	return u, err
 }
 
 func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.Unstructured, error) {
