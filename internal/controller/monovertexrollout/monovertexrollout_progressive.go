@@ -94,7 +94,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 /*
 ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted monovertex.
 It performs the following pre-upgrade operations:
-- it ensures that the promoted monovertex is scaled down before proceeding with a progressive upgrade.
+- it calculates how to scale down the promoted monovertex before proceeding with a progressive upgrade.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -126,11 +126,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// scaleDownMonoVertex either updates the promoted monovertex to scale down the pods or
-	// retrieves the currently running pods to update the PromotedMonoVertexStatus scaleValues.
-	// This serves to make sure that the pods have been really scaled down before proceeding
-	// with the progressive upgrade.
-	requeue, err := scaleDownPromotedMonoVertex(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
+	requeue, err := computePromotedMonoVertexScaleValues(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -440,11 +436,9 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 }
 
 /*
-scaleDownPromotedMonoVertex scales down the pods of a monovertex to half of the current count if not already scaled down.
-It checks if the monovertex was already scaled down and skips the operation if true.
-The function updates the scale values in the rollout status and adjusts the scale configuration
-of the promoted monovertex definition. It ensures that the scale.min does not exceed the new scale.max.
-Returns a boolean indicating if scaling was performed and an error if any operation fails.
+computePromotedMonoVertexScaleValues creates the apiv1.ScaleValues to be stored in the MonoVertexRollout
+before performing the actually scaling down of the promoted monovertex.
+It checks if the ScaleValues have been already stored and skips the operation if true.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
@@ -453,17 +447,17 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error, or if the pods count has changed, or if the monovertex has not been scaled down yet.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or to store the computed ScaleValues.
 - error: an error if any operation fails during the scaling process.
 */
-func scaleDownPromotedMonoVertex(
+func computePromotedMonoVertexScaleValues(
 	ctx context.Context,
 	promotedMVStatus *apiv1.PromotedMonoVertexStatus,
 	promotedMonoVertexDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scaleDownPromotedMonoVertex").
+	numaLogger := logger.FromContext(ctx).WithName("computePromotedMonoVertexScaleValues").
 		WithValues("promotedMonoVertexNamespace", promotedMonoVertexDef.GetNamespace(), "promotedMonoVertexName", promotedMonoVertexDef.GetName())
 
 	if promotedMVStatus.ScaleValues != nil {

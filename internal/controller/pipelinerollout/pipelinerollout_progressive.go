@@ -143,7 +143,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 /*
 ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted pipeline.
 It performs the following pre-upgrade operations:
-- it ensures that the promoted pipeline vertices are scaled down before proceeding with a progressive upgrade.
+- it calculates how to scale down the promoted pipeline vertices before proceeding with a progressive upgrade.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -175,11 +175,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// scaleDownPipelineVertices retrieves the currently running pods to update the PromotedPipelineStatus scaleValues,
-	// or if already retrieved, updates the promoted pipeline to scale down the vertex pods.
-	// This serves to make sure that the vertex pods have been really scaled down before proceeding
-	// with the progressive upgrade.
-	requeue, err := scaleDownPipelineVertices(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
+	requeue, err := computePipelineVerticesScaleValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -485,11 +481,9 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 }
 
 /*
-scaleDownPipelineVertices scales down the vertices pods of a pipeline to half of the current count if not already scaled down.
-It checks if all vertices are already scaled down and skips the operation if true.
-
-The function updates the scale values in the rollout status and adjusts the scale configuration
-of the promoted pipeline definition.
+computePipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
+for all vertices before performing the actually scaling down of the promoted pipeline.
+It checks if the ScaleValues have been already stored and skips the operation if true.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
@@ -498,17 +492,17 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error or if not all vertices have been scaled down.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or or to store the computed ScaleValues.
 - error: an error if any operation fails during the scaling process.
 */
-func scaleDownPipelineVertices(
+func computePipelineVerticesScaleValues(
 	ctx context.Context,
 	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scaleDownPipelineVertices").
+	numaLogger := logger.FromContext(ctx).WithName("computePipelineVerticesScaleValues").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
