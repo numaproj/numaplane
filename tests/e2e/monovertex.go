@@ -386,7 +386,6 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 
 		// Verify that the MonoVertex is set to scale down
 		VerifyMonoVertexRolloutScaledDownForProgressive(name, expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name,
-			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].Current,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].OriginalScaleMinMax,
 			expectedPipelineTypeProgressiveStatusInProgress.Promoted.ScaleValues[expectedPipelineTypeProgressiveStatusInProgress.Promoted.Name].ScaleTo)
 

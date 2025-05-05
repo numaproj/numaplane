@@ -2114,19 +2114,16 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						"in": {
 							OriginalScaleMinMax: `{"max":5,"min":1}`,
 							ScaleTo:             2,
-							Current:             5,
 							Initial:             5,
 						},
 						"cat": {
 							OriginalScaleMinMax: `{"max":null,"min":null}`,
 							ScaleTo:             0,
-							Current:             1,
 							Initial:             1,
 						},
 						"out": {
 							OriginalScaleMinMax: `null`,
 							ScaleTo:             0,
-							Current:             1,
 							Initial:             1,
 						},
 					},
@@ -2191,19 +2188,16 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						"in": {
 							OriginalScaleMinMax: `{"max":5,"min":1}`,
 							ScaleTo:             2,
-							Current:             5,
 							Initial:             5,
 						},
 						"cat": {
 							OriginalScaleMinMax: `{"max":null,"min":null}`,
 							ScaleTo:             0,
-							Current:             1,
 							Initial:             1,
 						},
 						"out": {
 							OriginalScaleMinMax: `null`,
 							ScaleTo:             0,
-							Current:             1,
 							Initial:             1,
 						},
 					},
@@ -2270,19 +2264,16 @@ func Test_scaleDownPipelineVertices(t *testing.T) {
 						"in": {
 							OriginalScaleMinMax: `{"max":5,"min":1}`,
 							ScaleTo:             2,
-							Current:             2,
 							Initial:             5,
 						},
 						"cat": {
 							OriginalScaleMinMax: `{"max":null,"min":null}`,
 							ScaleTo:             0,
-							Current:             0,
 							Initial:             1,
 						},
 						"out": {
 							OriginalScaleMinMax: `null`,
 							ScaleTo:             0,
-							Current:             0,
 							Initial:             1,
 						},
 					},

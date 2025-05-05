@@ -111,7 +111,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
-			monoVertexScaleTo, monoVertexScaleTo,
+			monoVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
 		)
