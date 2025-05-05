@@ -681,10 +681,6 @@ spec:
                     description: PromotedMonoVertexStatus stores information regarding
                       the current "promoted" MonoVertex
                     properties:
-                      allVerticesScaledDown:
-                        description: AllVerticesScaledDown indicates if ALL the promoted
-                          child vertices have been scaled down
-                        type: boolean
                       name:
                         description: Name of the promoted child
                         type: string
@@ -1606,10 +1602,6 @@ spec:
                     description: PromotedPipelineStatus stores information regarding
                       the current "promoted" pipeline
                     properties:
-                      allVerticesScaledDown:
-                        description: AllVerticesScaledDown indicates if ALL the promoted
-                          child vertices have been scaled down
-                        type: boolean
                       name:
                         description: Name of the promoted child
                         type: string
