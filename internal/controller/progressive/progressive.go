@@ -854,3 +854,26 @@ func AreVertexReplicasReady(existingUpgradingChildDef *unstructured.Unstructured
 
 	return false, fmt.Sprintf("readyReplicas=%d is less than desiredReplicas=%d", readyReplicas, desiredReplicas), nil
 }
+
+// For a given Rollout, stop the Progressive upgrade
+// Essentially, this just means removing any Upgrading children
+func Discontinue(ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	c client.Client,
+) error {
+
+	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
+	if err != nil {
+		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
+	}
+	// TODO: is there a reason I need to return a pointer to UnstructuredList?
+	for _, child := range upgradingChildren.Items {
+		reason := common.LabelValueDiscontinueProgressive
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, &child)
+		if err != nil {
+			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
+		}
+	}
+	return nil
+}
