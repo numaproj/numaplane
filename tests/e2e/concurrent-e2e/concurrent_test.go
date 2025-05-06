@@ -164,11 +164,22 @@ var (
 			},
 		},
 	}
+
+	dataLossISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: updatedJetstreamVersion,
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &volSize,
+			},
+		},
+	}
+
 	updatedMemLimit, _            = apiresource.ParseQuantity("2Gi")
 	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: updatedJetstreamVersion,
+			Version: initialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -184,7 +195,7 @@ var (
 	ISBServiceSpecRecreateField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: updatedJetstreamVersion,
+			Version: initialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &revisedVolSize,
 			},
@@ -194,6 +205,18 @@ var (
 				},
 			},
 		},
+	}
+
+	pipelineDataLossFunc = func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return len(retrievedPipelineSpec.Vertices) == 3
+	}
+
+	isbServiceDataLossFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+	}
+
+	isbServiceRecreateFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 	}
 )
 
@@ -214,105 +237,111 @@ func TestConcurrentE2E(t *testing.T) {
 	RunSpecs(t, "Concurrent updates E2E Suite")
 }
 
-var _ = Describe("Pause and drain e2e", Serial, func() {
+var _ = Describe("Concurrent e2e", Serial, func() {
 
-	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
-		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
-	})
+	testCases := []struct {
+		combination          string
+		pipelineSpec         numaflowv1.PipelineSpec
+		isbServiceSpec       numaflowv1.InterStepBufferServiceSpec
+		pipelineVerifyFunc   func(numaflowv1.PipelineSpec) bool
+		isbServiceVerifyFunc func(numaflowv1.InterStepBufferServiceSpec) bool
+	}{
+		{
+			combination:          "Data Loss: Pipeline, ISBService, NumaflowController",
+			pipelineSpec:         dataLossPipelineSpec,
+			isbServiceSpec:       dataLossISBServiceSpec,
+			pipelineVerifyFunc:   pipelineDataLossFunc,
+			isbServiceVerifyFunc: isbServiceDataLossFunc,
+		},
+		{
+			combination:          "Data Loss: Pipeline, NumaflowController; Recreate: ISBService",
+			pipelineSpec:         dataLossPipelineSpec,
+			isbServiceSpec:       ISBServiceSpecRecreateField,
+			pipelineVerifyFunc:   pipelineDataLossFunc,
+			isbServiceVerifyFunc: isbServiceRecreateFunc,
+		},
+	}
 
-	// current: testing first scenario
-	// goal: loop this logic to test each scenario
-	It("Should update all rollouts concurrently with data loss", func() {
+	for _, tc := range testCases {
 
-		// TODO: consolidate in each individual file
-		// update each rollout
+		It("Should update all rollouts concurrently", func() {
 
-		By("Updating PipelineRollout - data loss")
-		rawSpec, err := json.Marshal(dataLossPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		// update the PipelineRollout
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			rollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return rollout, nil
+			By(tc.combination)
+			// create initial objects
+			CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+			CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
+			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
+			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+
+			// update each rollout
+			By("Updating PipelineRollout")
+			rawSpec, err := json.Marshal(tc.pipelineSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+			UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+				rollout.Spec.Pipeline.Spec.Raw = rawSpec
+				return rollout, nil
+			})
+
+			By("Updating MonoVertexRollout")
+			updatedMonoVertexSpec := initialMonoVertexSpec
+			updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-java/source-simple-source:stable"
+			rawSpec, err = json.Marshal(updatedMonoVertexSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+			UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+				rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+				return rollout, nil
+			})
+
+			By("Updating ISBServiceRollout")
+			rawSpec, err = json.Marshal(tc.isbServiceSpec)
+			Expect(err).ShouldNot(HaveOccurred())
+			UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+				rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+				return rollout, nil
+			})
+
+			By("Updating NumaflowControllerRollout")
+			UpdateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
+				rollout.Spec = apiv1.NumaflowControllerRolloutSpec{
+					Controller: apiv1.Controller{Version: UpdatedNumaflowControllerVersion},
+				}
+				return rollout, nil
+			})
+
+			time.Sleep(10 * time.Second)
+
+			By("Verifying NumaflowController got updated")
+			VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+				colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+UpdatedNumaflowControllerVersion
+			})
+			VerifyNumaflowControllerRolloutReady()
+
+			By("Verifying ISBService got updated")
+			VerifyISBServiceSpec(Namespace, isbServiceRolloutName, tc.isbServiceVerifyFunc)
+			VerifyISBSvcRolloutReady(isbServiceRolloutName)
+			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
+			By("Verifying Pipeline got updated")
+			VerifyPipelineSpec(Namespace, pipelineRolloutName, tc.pipelineVerifyFunc)
+			VerifyPipelineRolloutDeployed(pipelineRolloutName)
+			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+			By("Verifying MonoVertexRollout got updated")
+			VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+				return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:stable"
+			})
+			VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
+			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+
+			// case cleanup
+			DeleteMonoVertexRollout(monoVertexRolloutName)
+			DeletePipelineRollout(pipelineRolloutName)
+			DeleteISBServiceRollout(isbServiceRolloutName)
+			DeleteNumaflowControllerRollout()
+
 		})
 
-		By("Updating MonoVertexRollout - image")
-		updatedMonoVertexSpec := initialMonoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-java/source-simple-source:stable"
-		rawSpec, err = json.Marshal(updatedMonoVertexSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		// update the MonoVertexRollout
-		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			rollout.Spec.MonoVertex.Spec.Raw = rawSpec
-			return rollout, nil
-		})
-
-		By("Updating ISBServiceRollout - data loss")
-		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		// update the ISBServiceRollout
-		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-			rollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-			return rollout, nil
-		})
-
-		By("Updating NumaflowControllerRollout - data loss")
-		UpdateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
-			rollout.Spec = apiv1.NumaflowControllerRolloutSpec{
-				Controller: apiv1.Controller{Version: UpdatedNumaflowControllerVersion},
-			}
-			return rollout, nil
-		})
-
-		time.Sleep(10 * time.Second)
-
-		// TODO: verify that each resource eventually has correct spec and is deployed/running
-		// TODO: verify in progress strategy is no-strategy
-
-		By("Verifying NumaflowController got updated")
-		VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
-			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
-			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+UpdatedNumaflowControllerVersion
-		})
-		VerifyNumaflowControllerRolloutReady()
-
-		By("Verifying ISBService got updated")
-		VerifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
-		})
-		VerifyISBSvcRolloutReady(isbServiceRolloutName)
-
-		By("Verifying Pipeline got updated")
-		// get Pipeline to check that spec has been updated to correct spec
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(retrievedPipelineSpec.Vertices) == 3
-		})
-		VerifyPipelineRolloutDeployed(pipelineRolloutName)
-
-		By("Verifying MonoVertexRollout got updated")
-		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:stable"
-		})
-		VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
-
-		// case cleanup
-		DeleteMonoVertexRollout(monoVertexRolloutName)
-		DeletePipelineRollout(pipelineRolloutName)
-		DeleteISBServiceRollout(isbServiceRolloutName)
-		DeleteNumaflowControllerRollout()
-
-	})
-
-	// It("Should delete all rollout objects", func() {
-	// 	DeleteMonoVertexRollout(monoVertexRolloutName)
-	// 	DeletePipelineRollout(pipelineRolloutName)
-	// 	DeleteISBServiceRollout(isbServiceRolloutName)
-	// 	DeleteNumaflowControllerRollout()
-	// })
+	}
 
 })
