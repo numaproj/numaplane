@@ -48,6 +48,7 @@ const (
 )
 
 var (
+	monoVertexIndex            = 0
 	monoVertexSpecWithoutRider = numaflowv1.MonoVertexSpec{
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
@@ -129,10 +130,38 @@ var _ = Describe("Rider E2E", Serial, func() {
 		})
 
 		// verify Rider is created
-		monoVertexName := fmt.Sprintf("%s-0", monoVertexRolloutName)
+		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+	})
+
+	It("Should update the ConfigMap Rider", func() {
+		// Update ConfigMap to add a new key/value pair
+		updatedConfigMap := defaultConfigMap.DeepCopy()
+		updatedConfigMap.Data["my-key-2"] = "my-value-2"
+		rawConfigMapSpec, err := json.Marshal(updatedConfigMap)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.Riders[0].Definition = runtime.RawExtension{Raw: rawConfigMapSpec}
+			return rollout, nil
+		})
+
+		monoVertexIndex++
+
+		// Verify that this caused a Progressive upgrade and generated a new ConfigMap
+		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
+		// ConfigMap is named with the monovertex name as the suffix
+		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
+		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+
+		// Now verify that with the Progressive upgrade, the original MonoVertex and
+		// ConfigMap get cleaned up
+		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
+		originalConfigMap := fmt.Sprintf("my-configmap-%s", monoVertexName)
+		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
+		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
 	})
 
 })

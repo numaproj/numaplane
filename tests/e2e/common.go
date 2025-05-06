@@ -464,14 +464,15 @@ func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
 	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
 
+func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
+	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
+		resource, _ := GetResource(gvr, Namespace, name)
+		return resource != nil
+	}).WithTimeout(TestTimeout).Should(BeTrue())
+}
+
 func GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
-	u, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		printStr := fmt.Sprintf("Get for GVR %+v and namespace=%q and name=%q returned err: %s", gvr, namespace, name, err.Error())
-		By(printStr)
-		fmt.Println(printStr)
-	}
-	return u, err
+	return dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.Unstructured, error) {
