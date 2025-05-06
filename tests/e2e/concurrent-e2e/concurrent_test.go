@@ -133,7 +133,6 @@ var (
 
 	monoVertexScaleMin = int32(4)
 	monoVertexScaleMax = int32(5)
-	monoVertexScaleTo  = int64(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
