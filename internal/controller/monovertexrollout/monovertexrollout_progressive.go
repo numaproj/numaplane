@@ -94,7 +94,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 /*
 ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted monovertex.
 It performs the following pre-upgrade operations:
-- it ensures that the promoted monovertex is scaled down before proceeding with a progressive upgrade.
+- it calculates how to scale down the promoted monovertex before proceeding with a progressive upgrade.
 
 Parameters:
   - ctx: the context for managing request-scoped values.
@@ -126,11 +126,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	// scaleDownMonoVertex either updates the promoted monovertex to scale down the pods or
-	// retrieves the currently running pods to update the PromotedMonoVertexStatus scaleValues.
-	// This serves to make sure that the pods have been really scaled down before proceeding
-	// with the progressive upgrade.
-	requeue, err := scaleDownPromotedMonoVertex(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
+	requeue, err := computePromotedMonoVertexScaleValues(ctx, monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus, promotedMonoVertexDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -146,6 +142,32 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	promotedMonoVertexDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostUpgrade").WithName("MonoVertexRollout").
+		WithValues("promotedMonoVertexNamespace", promotedMonoVertexDef.GetNamespace(), "promotedMonoVertexName", promotedMonoVertexDef.GetName())
+
+	numaLogger.Debug("started post-upgrade processing of promoted monovertex")
+
+	monoVertexRollout, ok := rolloutObject.(*apiv1.MonoVertexRollout)
+	if !ok {
+		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted monovertex post-upgrade", rolloutObject)
+	}
+
+	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
+		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
+	}
+
+	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
+	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
+		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo}, c); err != nil {
+			return true, fmt.Errorf("error scaling the existing promoted monovertex to the desired scale values: %w", err)
+		}
+
+		numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef, "scaleTo", scaleValue.ScaleTo).Debug("patched the promoted monovertex with the new scale configuration")
+	}
+
+	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
+
 	return false, nil
 }
 
@@ -414,11 +436,9 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 }
 
 /*
-scaleDownPromotedMonoVertex scales down the pods of a monovertex to half of the current count if not already scaled down.
-It checks if the monovertex was already scaled down and skips the operation if true.
-The function updates the scale values in the rollout status and adjusts the scale configuration
-of the promoted monovertex definition. It ensures that the scale.min does not exceed the new scale.max.
-Returns a boolean indicating if scaling was performed and an error if any operation fails.
+computePromotedMonoVertexScaleValues creates the apiv1.ScaleValues to be stored in the MonoVertexRollout
+before performing the actually scaling down of the promoted monovertex.
+It checks if the ScaleValues have been already stored and skips the operation if true.
 
 Parameters:
 - ctx: the context for managing request-scoped values.
@@ -427,27 +447,21 @@ Parameters:
 - c: the Kubernetes client for resource operations.
 
 Returns:
-- bool: true if should requeue, false otherwise. Should requeue in case of error, or if the pods count has changed, or if the monovertex has not been scaled down yet.
+- bool: true if should requeue, false otherwise. Should requeue in case of error or to store the computed ScaleValues.
 - error: an error if any operation fails during the scaling process.
 */
-func scaleDownPromotedMonoVertex(
+func computePromotedMonoVertexScaleValues(
 	ctx context.Context,
 	promotedMVStatus *apiv1.PromotedMonoVertexStatus,
 	promotedMonoVertexDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
-	numaLogger := logger.FromContext(ctx).WithName("scaleDownPromotedMonoVertex").
+	numaLogger := logger.FromContext(ctx).WithName("computePromotedMonoVertexScaleValues").
 		WithValues("promotedMonoVertexNamespace", promotedMonoVertexDef.GetNamespace(), "promotedMonoVertexName", promotedMonoVertexDef.GetName())
 
-	// If the monovertex has been scaled down already, do not perform scaling down operations
-	if promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()) {
-		return false, nil
-	}
-
-	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	if promotedMVStatus.ScaleValues != nil {
-		scaleValuesMap = promotedMVStatus.ScaleValues
+		return false, nil
 	}
 
 	podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedMonoVertexDef.GetNamespace(), fmt.Sprintf(
@@ -462,20 +476,6 @@ func scaleDownPromotedMonoVertex(
 
 	currentPodsCount := int64(len(podsList.Items))
 
-	// If for the vertex we already set a ScaleTo value, we only need to update the current pods count
-	// to later verify that the pods were actually scaled down.
-	// We want to skip scaling down again.
-	if vertexScaleValues, exist := scaleValuesMap[promotedMonoVertexDef.GetName()]; exist {
-		vertexScaleValues.Current = currentPodsCount
-		scaleValuesMap[promotedMonoVertexDef.GetName()] = vertexScaleValues
-
-		promotedMVStatus.ScaleValues = scaleValuesMap
-		promotedMVStatus.MarkAllVerticesScaledDown()
-
-		numaLogger.WithValues("scaleValuesMap", scaleValuesMap).Debug("updated scaleValues map with running pods count, skipping scaling down since it has already been done")
-		return true, nil
-	}
-
 	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(promotedMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return true, fmt.Errorf("cannot extract the scale min and max values from the promoted monovertex: %w", err)
@@ -487,32 +487,27 @@ func scaleDownPromotedMonoVertex(
 
 	numaLogger.WithValues(
 		"promotedChildName", promotedMonoVertexDef.GetName(),
-		"currentPodsCount", currentPodsCount,
 		"newMin", newMin,
 		"newMax", newMax,
 		"originalScaleMinMax", originalScaleMinMax,
 	).Debugf("found %d pod(s) for the monovertex, scaling down to %d", currentPodsCount, newMax)
 
+	scaleValuesMap := map[string]apiv1.ScaleValues{}
 	scaleValuesMap[promotedMonoVertexDef.GetName()] = apiv1.ScaleValues{
 		OriginalScaleMinMax: originalScaleMinMax,
-		ScaleTo:             newMax,
-		Current:             currentPodsCount,
+		ScaleTo:             scaleTo,
 		Initial:             currentPodsCount,
 	}
 
-	if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &newMin, Max: &newMax}, c); err != nil {
-		return true, fmt.Errorf("error scaling the existing promoted monovertex to the original scale values: %w", err)
-	}
-
-	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef, "scaleValuesMap", scaleValuesMap).Debug("patched the promoted monovertex with the new scale configuration")
-
 	promotedMVStatus.ScaleValues = scaleValuesMap
-	promotedMVStatus.MarkAllVerticesScaledDown()
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedMVStatus.ScaleValuesRestoredToOriginal = false
 
-	return !promotedMVStatus.AreAllVerticesScaledDown(promotedMonoVertexDef.GetName()), nil
+	// Requeue if it is the first time that ScaleValues is set so that the reconciliation process will store these
+	// values in the rollout status in case of failure with the rest of the progressive operations.
+	// This will ensure to always calculate the scaleTo value based on the correct number of pods before actually scaling down.
+	return true, nil
 }
 
 /*
@@ -558,7 +553,6 @@ func scalePromotedMonoVertexToOriginalValues(
 	numaLogger.WithValues("promotedMonoVertexDef", promotedMonoVertexDef).Debug("patched the promoted monovertex with the original scale configuration")
 
 	promotedMVStatus.ScaleValuesRestoredToOriginal = true
-	promotedMVStatus.AllVerticesScaledDown = false
 	promotedMVStatus.ScaleValues = nil
 
 	return false, nil

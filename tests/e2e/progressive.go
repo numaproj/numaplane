@@ -110,7 +110,6 @@ func VerifyPipelineRolloutProgressiveStatus(
 func VerifyMonoVertexRolloutScaledDownForProgressive(
 	monoVertexRolloutName string,
 	expectedPromotedName string,
-	expectedCurrent int64,
 	expectedOriginalScaleMinMaxAsJSONString string,
 	expectedScaleTo int64,
 ) {
@@ -125,10 +124,8 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			return false
 		}
 
-		return mvrProgressiveStatus.PromotedMonoVertexStatus.AllVerticesScaledDown &&
-			mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
+		return mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
-			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].Current == expectedCurrent &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].ScaleTo == expectedScaleTo
 	}).Should(BeTrue())
@@ -175,9 +172,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 			return false
 		}
 
-		// first make sure that the Progressive status indicates that scale down happened
-		return prProgressiveStatus.PromotedPipelineStatus.AllVerticesScaledDown &&
-			prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
+		return prProgressiveStatus.PromotedPipelineStatus.Name == expectedPromotedPipelineName
 
 	}).Should(BeTrue())
 
@@ -385,7 +380,7 @@ func VerifyPromotedPipelineScaledUpForProgressive(
 
 func MakeExpectedPipelineTypeProgressiveStatus(
 	promotedName, upgradingName, sourceVertexName string,
-	current, scaleTo int64,
+	scaleTo int64,
 	originalScaleMinMax string,
 	assessmentResultInProgress, assessmentResultOnDone apiv1.AssessmentResult,
 ) (ExpectedPipelineTypeProgressiveStatus, ExpectedPipelineTypeProgressiveStatus) {
@@ -396,7 +391,6 @@ func MakeExpectedPipelineTypeProgressiveStatus(
 			},
 			ScaleValues: map[string]apiv1.ScaleValues{
 				sourceVertexName: {
-					Current:             current,
 					OriginalScaleMinMax: originalScaleMinMax,
 					ScaleTo:             scaleTo,
 				},
