@@ -180,7 +180,7 @@ jobs:
         run: |
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
           nohup kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1 &
-          sleep 20s
+          sleep 60s
 
       - name: Run e2e tests
         env:
