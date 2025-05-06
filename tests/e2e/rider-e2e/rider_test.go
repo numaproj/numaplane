@@ -77,6 +77,7 @@ var (
 			"my-key": "my-value",
 		},
 	}
+	currentConfigMap = &defaultConfigMap
 )
 
 func init() {
@@ -138,9 +139,9 @@ var _ = Describe("Rider E2E", Serial, func() {
 
 	It("Should update the ConfigMap Rider", func() {
 		// Update ConfigMap to add a new key/value pair
-		updatedConfigMap := defaultConfigMap.DeepCopy()
-		updatedConfigMap.Data["my-key-2"] = "my-value-2"
-		rawConfigMapSpec, err := json.Marshal(updatedConfigMap)
+		currentConfigMap = currentConfigMap.DeepCopy()
+		currentConfigMap.Data["my-key-2"] = "my-value-2"
+		rawConfigMapSpec, err := json.Marshal(currentConfigMap)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
@@ -162,6 +163,23 @@ var _ = Describe("Rider E2E", Serial, func() {
 		originalConfigMap := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
+	})
+
+	It("Should delete the ConfigMap Rider", func() {
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.Riders = []apiv1.Rider{}
+			return rollout, nil
+		})
+
+		// Confirm the ConfigMap was deleted (but the monovertex is still present)
+		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
+		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
+		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
+	})
+
+	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
+		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
 })
