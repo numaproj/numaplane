@@ -233,32 +233,32 @@ var _ = Describe("Rider E2E", Serial, func() {
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
 	})
-	/*
-		It("Should delete the ConfigMap Rider", func() {
-			UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-				rollout.Spec.Riders = []apiv1.Rider{}
-				return rollout, nil
-			})
 
-			// Confirm the ConfigMap was deleted (but the monovertex is still present)
-			monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
-			configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-			VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
+	It("Should delete the ConfigMap Rider", func() {
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			rollout.Spec.Riders = []apiv1.Rider{}
+			return rollout, nil
 		})
 
-		It("Should delete the MonoVertexRollout and child MonoVertex", func() {
-			DeleteMonoVertexRollout(monoVertexRolloutName)
-		})
+		// Confirm the ConfigMap was deleted (but the monovertex is still present)
+		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
+		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
+		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
+	})
 
-		It("Should create the ISBServiceRollout", func() {
-			CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
-		})
+	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+	})
 
-		It("Should create the PipelineRollout", func() {
-			CreatePipelineRollout(pipelineRolloutName, Namespace, pipelineSpecWithoutRider, false)
-		})
-	*/
+	It("Should create the ISBServiceRollout", func() {
+		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
+	})
+
+	It("Should create the PipelineRollout", func() {
+		CreatePipelineRollout(pipelineRolloutName, Namespace, pipelineSpecWithoutRider, false)
+	})
+
 	It("Should add VPA Rider to PipelineRollout", func() {
 		/*UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			rollout.Spec.Riders = []apiv1.PipelineRider{
