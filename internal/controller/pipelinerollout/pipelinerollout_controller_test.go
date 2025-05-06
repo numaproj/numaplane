@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -968,10 +967,81 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
+	defaultPromotedPipelineDef := createPipeline(
+		numaflowv1.PipelinePhaseRunning,
+		numaflowv1.Status{},
+		false,
+		map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		})
+
+	defaultUpgradingPipelineDef := ctlrcommon.CreateTestPipelineOfSpec(
+		runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
+		numaflowv1.PipelinePhaseRunning,
+		numaflowv1.Status{
+			Conditions: []metav1.Condition{
+				{
+					Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+					Status: metav1.ConditionTrue,
+				},
+			},
+		},
+		false,
+		map[string]string{
+			common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
+			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
+			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		},
+		map[string]string{})
+
+	defaultFailedUpgradingPipelineDef := defaultUpgradingPipelineDef.DeepCopy()
+	defaultFailedUpgradingPipelineDef.Status.Conditions = []metav1.Condition{
+		{
+			Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+			Status: metav1.ConditionFalse,
+		},
+	}
+	defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
+		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
+			},
+			ScaleValues: map[string]apiv1.ScaleValues{
+				"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+			},
+		},
+	}
+
+	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
+		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+			UpgradingChildStatus: apiv1.UpgradingChildStatus{
+				Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
+				AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+				AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+				AssessmentResult:       apiv1.AssessmentResultSuccess,
+				InitializationComplete: true,
+			},
+		},
+		OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
+			{VertexName: "in", ScaleDefinition: nil},
+			{VertexName: "cat", ScaleDefinition: nil},
+			{VertexName: "cat-2", ScaleDefinition: nil},
+			{VertexName: "out", ScaleDefinition: nil},
+		},
+	}
+	failedUpgradingChildStatus := successfulUpgradingChildStatus.DeepCopy()
+	failedUpgradingChildStatus.UpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultFailure
+
 	testCases := []struct {
 		name                        string
 		newPipelineSpec             numaflowv1.PipelineSpec
-		existingPromotedPipelineDef numaflowv1.Pipeline
+		existingPromotedPipelineDef *numaflowv1.Pipeline
 		existingUpgradePipelineDef  *numaflowv1.Pipeline
 		initialRolloutPhase         apiv1.Phase
 		initialRolloutNameCount     int
@@ -986,24 +1056,33 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 	}{
 		{
-			name:            "spec difference results in Progressive",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
-			existingUpgradePipelineDef:  nil,
-			initialRolloutPhase:         apiv1.PhaseDeployed,
-			initialRolloutNameCount:     1,
-			initialInProgressStrategy:   nil,
-			initialUpgradingChildStatus: nil,
-			initialPromotedChildStatus:  nil,
+			name:                        "Progressive deployed successfully",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
+			existingUpgradePipelineDef:  defaultUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: successfulUpgradingChildStatus,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
+
+			expectedPipelines: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+		},
+		{
+			name:                        "Progressive deployment failed",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:        apiv1.PhasePending,
 
@@ -1013,213 +1092,17 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Progressive deployed successfully",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				pipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultSuccess,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-		},
-		{
-			name:            "Progressive deployment failed",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultFailure,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-					},
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhasePending,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeInProgress,
-			},
-		},
-		{
-			name:            "Progressive deployment failed - going back to original spec",
-			newPipelineSpec: pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1", // the one that's currently "upgrading" is the one with the topology change
-				numaflowv1.PipelinePhaseFailed,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:   string(numaflowv1.PipelineConditionDaemonServiceHealthy),
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:       apiv1.PhasePending,
-			initialRolloutNameCount:   2,
-			initialInProgressStrategy: &progressiveUpgradeStrategy,
-			initialUpgradingChildStatus: &apiv1.UpgradingPipelineStatus{
-				UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
-					UpgradingChildStatus: apiv1.UpgradingChildStatus{
-						Name:                   ctlrcommon.DefaultTestPipelineRolloutName + "-1",
-						AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-						AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-						AssessmentResult:       apiv1.AssessmentResultFailure,
-						InitializationComplete: true,
-					},
-				},
-				OriginalScaleMinMax: []apiv1.VertexScaleDefinition{
-					{VertexName: "in", ScaleDefinition: nil},
-					{VertexName: "cat", ScaleDefinition: nil},
-					{VertexName: "cat-2", ScaleDefinition: nil},
-					{VertexName: "out", ScaleDefinition: nil},
-				},
-			},
-			initialPromotedChildStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
-					},
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-						"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-					},
-				},
-			},
-			expectedInProgressStrategy: apiv1.UpgradeStrategyProgressive,
-			expectedRolloutPhase:       apiv1.PhaseDeployed,
+			name:                        "Progressive deployment failed - going back to original spec",
+			newPipelineSpec:             pipelineSpec, // this matches the original spec
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
@@ -1228,19 +1111,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			},
 		},
 		{
-			name:            "Clean up after progressive upgrade",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: *createPipeline(
-				numaflowv1.PipelinePhasePaused,
-				numaflowv1.Status{},
-				true,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
+			name:                        "Clean up after progressive upgrade",
+			newPipelineSpec:             pipelineSpecWithTopologyChange,
+			existingPromotedPipelineDef: defaultPromotedPipelineDef,
 			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
 				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
 				numaflowv1.PipelinePhaseRunning,
@@ -1266,7 +1139,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:            "Clean up after progressive upgrade: pipeline still pausing",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: *createPipeline(
+			existingPromotedPipelineDef: createPipeline(
 				numaflowv1.PipelinePhasePausing,
 				numaflowv1.Status{},
 				false,
@@ -1299,6 +1172,24 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
+			},
+		},
+		{
+			name:                        "Handle user deletion of promoted pipeline during Progressive",
+			newPipelineSpec:             pipelineSpec, // this matches the original spec
+			existingPromotedPipelineDef: nil,
+			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
+			initialRolloutPhase:         apiv1.PhasePending,
+			initialRolloutNameCount:     2,
+			initialInProgressStrategy:   &progressiveUpgradeStrategy,
+			initialUpgradingChildStatus: failedUpgradingChildStatus,
+			initialPromotedChildStatus:  defaultPromotedChildStatus,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
+			expectedRolloutPhase:        apiv1.PhaseDeployed,
+
+			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
+			expectedPipelines: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
 		},
 	}
@@ -1338,9 +1229,11 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			}
 
 			// create the already-existing Pipeline in Kubernetes
-			existingPipelineDef := &tc.existingPromotedPipelineDef
-			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
-			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
+			if tc.existingPromotedPipelineDef != nil {
+				existingPipelineDef := tc.existingPromotedPipelineDef
+				existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
+				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
+			}
 
 			if tc.existingUpgradePipelineDef != nil {
 				existingUpgradePipelineDef := tc.existingUpgradePipelineDef
@@ -2113,380 +2006,6 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 				assert.NoError(t, err)
 				assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, pipeline.Object["spec"]))
 			}
-		})
-	}
-}
-
-func Test_scaleDownPipelineVertices(t *testing.T) {
-
-	_, numaflowClientSet, client, k8sclientset, err := commontest.PrepareK8SEnvironment()
-	assert.Nil(t, err)
-
-	kubernetes.KubernetesClient = k8sclientset
-	assert.Nil(t, err)
-
-	ctx := context.Background()
-
-	testCases := []struct {
-		name string
-
-		initialPromotedPipelineStatus *apiv1.PromotedPipelineStatus
-		initialPromotedPipelineSpec   string
-		// number of Pods that initially exist for each Vertex
-		initialPodsPerVertex           map[string]int
-		expectedPromotedPipelineStatus *apiv1.PromotedPipelineStatus
-		expectedPromotedPipelineSpec   string
-		expectedRequeue                bool // whether we expect this to cause a requeue or not
-	}{
-		{
-			name: "variety of vertices, not yet scaled down",
-			initialPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineName,
-					},
-				},
-			},
-			initialPromotedPipelineSpec: `
-
-			{
-				  "vertices": [
-					{
-						"name": "in",
-						"scale": {
-							"lookbackSeconds": 1,
-							"min": 1,
-							"max": 5
-						},
-						"source": {
-						"generator": {
-							"rpu": 5,
-							"duration": "1s"
-							}
-						}
-					},
-					{
-						"name": "cat",
-						"scale": {
-							"lookbackSeconds": 1
-						},
-						"udf": {
-							"builtin": {
-								"name": "cat"
-							}
-						}
-					},
-					{
-						"name": "out",
-						"sink": {
-							"log": {}
-						}
-					}
-				  ]
-
-			}
-				  `,
-			initialPodsPerVertex: map[string]int{
-				"in":  5,
-				"cat": 1,
-				"out": 1,
-			},
-			expectedPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineName,
-					},
-
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in": {
-							OriginalScaleMinMax: `{"max":5,"min":1}`,
-							ScaleTo:             2,
-							Current:             5,
-							Initial:             5,
-						},
-						"cat": {
-							OriginalScaleMinMax: `{"max":null,"min":null}`,
-							ScaleTo:             0,
-							Current:             1,
-							Initial:             1,
-						},
-						"out": {
-							OriginalScaleMinMax: `null`,
-							ScaleTo:             0,
-							Current:             1,
-							Initial:             1,
-						},
-					},
-				},
-			},
-			expectedPromotedPipelineSpec: `
-
-			{
-				  "vertices": [
-					{
-						"name": "in",
-						"scale": {
-							"lookbackSeconds": 1,
-							"min": 2,
-							"max": 2
-						},
-						"source": {
-						"generator": {
-							"rpu": 5,
-							"duration": "1s"
-							}
-						}
-					},
-					{
-						"name": "cat",
-						"scale": {
-							"lookbackSeconds": 1,
-							"min": 0,
-							"max": 0
-						},
-						"udf": {
-							"builtin": {
-								"name": "cat"
-							}
-						}
-					},
-					{
-						"name": "out",
-						"scale": {
-							"min": 0,
-							"max": 0
-						},
-						"sink": {
-							"log": {}
-						}
-					}
-				  ]
-
-			}
-				  `,
-			expectedRequeue: true,
-		},
-		{
-			name: "vertices already scaled down",
-			initialPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineName,
-					},
-
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in": {
-							OriginalScaleMinMax: `{"max":5,"min":1}`,
-							ScaleTo:             2,
-							Current:             5,
-							Initial:             5,
-						},
-						"cat": {
-							OriginalScaleMinMax: `{"max":null,"min":null}`,
-							ScaleTo:             0,
-							Current:             1,
-							Initial:             1,
-						},
-						"out": {
-							OriginalScaleMinMax: `null`,
-							ScaleTo:             0,
-							Current:             1,
-							Initial:             1,
-						},
-					},
-				},
-			},
-			initialPromotedPipelineSpec: `
-
-			{
-				  "vertices": [
-					{
-						"name": "in",
-						"scale": {
-							"lookbackSeconds": 1,
-							"min": 2,
-							"max": 2
-						},
-						"source": {
-						"generator": {
-							"rpu": 5,
-							"duration": "1s"
-							}
-						}
-					},
-					{
-						"name": "cat",
-						"scale": {
-							"lookbackSeconds": 1,
-							"min": 0,
-							"max": 0
-						},
-						"udf": {
-							"builtin": {
-								"name": "cat"
-							}
-						}
-					},
-					{
-						"name": "out",
-						"scale": {
-							"min": 0,
-							"max": 0
-						},
-						"sink": {
-							"log": {}
-						}
-					}
-				  ]
-
-			}
-				  `,
-			initialPodsPerVertex: map[string]int{
-				"in":  2,
-				"cat": 0,
-				"out": 0,
-			},
-			expectedPromotedPipelineStatus: &apiv1.PromotedPipelineStatus{
-				PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-					PromotedChildStatus: apiv1.PromotedChildStatus{
-						Name: ctlrcommon.DefaultTestPipelineName,
-					},
-
-					AllVerticesScaledDown: true,
-					ScaleValues: map[string]apiv1.ScaleValues{
-						"in": {
-							OriginalScaleMinMax: `{"max":5,"min":1}`,
-							ScaleTo:             2,
-							Current:             2,
-							Initial:             5,
-						},
-						"cat": {
-							OriginalScaleMinMax: `{"max":null,"min":null}`,
-							ScaleTo:             0,
-							Current:             0,
-							Initial:             1,
-						},
-						"out": {
-							OriginalScaleMinMax: `null`,
-							ScaleTo:             0,
-							Current:             0,
-							Initial:             1,
-						},
-					},
-				},
-			},
-			expectedPromotedPipelineSpec: `
-	  
-				  {
-						"vertices": [
-						  {
-							  "name": "in",
-							  "scale": {
-								  "lookbackSeconds": 1,
-								  "min": 2,
-								  "max": 2
-							  },
-							  "source": {
-							  "generator": {
-								  "rpu": 5,
-								  "duration": "1s"
-								  }
-							  }
-						  },
-						  {
-							  "name": "cat",
-							  "scale": {
-								  "lookbackSeconds": 1,
-								  "min": 0,
-								  "max": 0
-							  },
-							  "udf": {
-								  "builtin": {
-									  "name": "cat"
-								  }
-							  }
-						  },
-						  {
-							  "name": "out",
-							  "scale": {
-								  "min": 0,
-								  "max": 0
-							  },
-							  "sink": {
-								  "log": {}
-							  }
-						  }
-						]
-	  
-				  }
-						`,
-			expectedRequeue: false,
-		},
-	}
-
-	for _, tc := range testCases {
-
-		t.Run(tc.name, func(t *testing.T) {
-			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-			_ = k8sclientset.CoreV1().Pods(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-
-			// Create an Unstructured Pipeline based on our spec in K8S
-			pipelineDef, err := ctlrcommon.CreateTestPipelineUnstructured(ctlrcommon.DefaultTestPipelineName, tc.initialPromotedPipelineSpec)
-			assert.NoError(t, err)
-
-			err = kubernetes.CreateResource(ctx, client, pipelineDef)
-			assert.NoError(t, err)
-
-			// Create the Pods
-			for vertexName, numPods := range tc.initialPodsPerVertex {
-				labels := map[string]string{
-					common.LabelKeyNumaflowPodPipelineName:       pipelineDef.GetName(),
-					common.LabelKeyNumaflowPodPipelineVertexName: vertexName,
-				}
-				for i := 0; i < numPods; i++ {
-					podName := fmt.Sprintf("%s-%s-%d", ctlrcommon.DefaultTestPipelineName, vertexName, i)
-					_, err := k8sclientset.CoreV1().Pods(ctlrcommon.DefaultTestNamespace).Create(ctx, &corev1.Pod{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   podName,
-							Labels: labels,
-						},
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								{
-									Name:  "numa",
-									Image: "quay.io/numaproj/numaflow:v1.4.4",
-								},
-							},
-						},
-					}, metav1.CreateOptions{})
-					assert.NoError(t, err)
-				}
-
-			}
-
-			// get live Pipeline
-			pipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
-				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
-			assert.NoError(t, err)
-
-			// Call scaleDownPipelineVertices()
-			promotedPipelineStatus := tc.initialPromotedPipelineStatus.DeepCopy()
-			requeueRequired, err := scaleDownPipelineVertices(ctx, promotedPipelineStatus, pipeline, client)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expectedRequeue, requeueRequired) // this will require requeue because the Pods won't be scaled down yet
-
-			// Get Pipeline and confirm its spec is as expected
-			resultPipeline, err := kubernetes.GetResource(ctx, client, numaflowv1.PipelineGroupVersionKind,
-				k8stypes.NamespacedName{Name: ctlrcommon.DefaultTestPipelineName, Namespace: ctlrcommon.DefaultTestNamespace})
-			assert.NoError(t, err)
-
-			expectedSpecMap := map[string]interface{}{}
-			err = json.Unmarshal([]byte(tc.expectedPromotedPipelineSpec), &expectedSpecMap)
-			assert.NoError(t, err)
-			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
-
-			// Compare result Status to expected
-			assert.Equal(t, tc.expectedPromotedPipelineStatus, promotedPipelineStatus)
 		})
 	}
 }

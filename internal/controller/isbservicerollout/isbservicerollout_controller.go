@@ -252,22 +252,17 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		} else {
 
 			// create an object as it doesn't exist
-			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, isbServiceRollout.Name)
-			isbServiceRollout.Status.MarkPending()
-
 			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
 			}
+
+			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, newISBServiceDef.GetName())
+			isbServiceRollout.Status.MarkPending()
 			if newISBServiceDef != nil {
-				if err = kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error creating ISBService: %v", err)
-				}
-				if err = r.applyPodDisruptionBudget(ctx, newISBServiceDef); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", newISBServiceDef.GetName(), err)
-				}
-				if err := ctlrcommon.CreateRidersForNewChild(ctx, r, isbServiceRollout, newISBServiceDef, r.client); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error creating riders: %s", err)
+
+				if err = r.createPromotedISBService(ctx, isbServiceRollout, newISBServiceDef); err != nil {
+					return ctrl.Result{}, err
 				}
 
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
@@ -401,6 +396,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("isbsvcDefinition", *newISBServiceDef).Warn("InterstepBufferService not found.")
+				return 0, nil
 			} else {
 				return 0, fmt.Errorf("error getting InterstepBufferService for status processing: %v", err)
 			}
@@ -787,6 +783,31 @@ func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRoll
 		return true
 	}
 	return false
+}
+
+func (r *ISBServiceRolloutReconciler) createPromotedISBService(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured) error {
+	if err := kubernetes.CreateResource(ctx, r.client, newISBServiceDef); err != nil {
+		return fmt.Errorf("error creating ISBService: %v", err)
+	}
+	if err := r.applyPodDisruptionBudget(ctx, newISBServiceDef); err != nil {
+		return fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", newISBServiceDef.GetName(), err)
+	}
+	if err := ctlrcommon.CreateRidersForNewChild(ctx, r, isbServiceRollout, newISBServiceDef, r.client); err != nil {
+		return fmt.Errorf("error creating riders: %s", err)
+	}
+
+	// if user somehow has no Promoted ISBService and is in the middle of Progressive, this isn't right - user may have deleted the Promoted one
+	// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, isbServiceRollout)
+
+	if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+		r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+		if err := progressive.Discontinue(ctx, isbServiceRollout, r, r.client); err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 // SetupWithManager sets up the controller with the Manager.

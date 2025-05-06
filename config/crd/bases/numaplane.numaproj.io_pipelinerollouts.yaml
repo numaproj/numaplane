@@ -306,10 +306,6 @@ spec:
                     description: PromotedPipelineStatus stores information regarding
                       the current "promoted" pipeline
                     properties:
-                      allVerticesScaledDown:
-                        description: AllVerticesScaledDown indicates if ALL the promoted
-                          child vertices have been scaled down
-                        type: boolean
                       name:
                         description: Name of the promoted child
                         type: string
@@ -319,11 +315,6 @@ spec:
                             max values, scaleTo value, and actual scale value of a
                             pipeline or monovertex vertex
                           properties:
-                            current:
-                              description: Current indicates how many pods are currently
-                                running for the vertex
-                              format: int64
-                              type: integer
                             initial:
                               description: Initial indicates how many pods were initially
                                 running for the vertex at the beginning of the upgrade
@@ -340,7 +331,6 @@ spec:
                               format: int64
                               type: integer
                           required:
-                          - current
                           - initial
                           - originalScaleMinMax
                           - scaleTo

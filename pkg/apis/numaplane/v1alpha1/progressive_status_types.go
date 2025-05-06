@@ -85,8 +85,6 @@ type ScaleValues struct {
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
-	// Current indicates how many pods are currently running for the vertex
-	Current int64 `json:"current"`
 	// Initial indicates how many pods were initially running for the vertex at the beginning of the upgrade process
 	Initial int64 `json:"initial"`
 }
@@ -105,8 +103,6 @@ type PromotedPipelineTypeStatus struct {
 	// ScaleValues is a map where the keys are the promoted child vertices names
 	// and the values are the scale values of the vertices
 	ScaleValues map[string]ScaleValues `json:"scaleValues,omitempty"`
-	// AllVerticesScaledDown indicates if ALL the promoted child vertices have been scaled down
-	AllVerticesScaledDown bool `json:"allVerticesScaledDown,omitempty"`
 	// ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
 	// This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
 	ScaleValuesRestoredToOriginal bool `json:"scaleValuesRestoredToOriginal,omitempty"`
@@ -140,32 +136,7 @@ func (ucs *UpgradingChildStatus) IsFailed() bool {
 	return ucs != nil && ucs.AssessmentResult == AssessmentResultFailure
 }
 
-// AreAllVerticesScaledDown checks if all vertices have been scaled down for the named child.
-func (pcs *PromotedPipelineTypeStatus) AreAllVerticesScaledDown(name string) bool {
-	return pcs != nil && pcs.Name == name && pcs.AllVerticesScaledDown
-}
-
 // AreScaleValuesRestoredToOriginal checks if all vertices have been restored to the original scale values.
 func (pcs *PromotedPipelineTypeStatus) AreScaleValuesRestoredToOriginal(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToOriginal
-}
-
-// MarkAllVerticesScaledDown checks if all vertices in the PromotedChildStatus
-// have been scaled down by comparing their Actual and ScaleTo scale values.
-// It updates the AllVerticesScaledDown field to true if all vertices
-// are scaled down, otherwise sets it to false.
-func (pcs *PromotedPipelineTypeStatus) MarkAllVerticesScaledDown() {
-	if pcs == nil || len(pcs.ScaleValues) == 0 {
-		return
-	}
-
-	allScaledDown := true
-	for _, sv := range pcs.ScaleValues {
-		if sv.Current > sv.ScaleTo {
-			allScaledDown = false
-			break
-		}
-	}
-
-	pcs.AllVerticesScaledDown = allScaledDown
 }

@@ -391,38 +391,16 @@ func (r *PipelineRolloutReconciler) reconcile(
 
 		if promotedPipelines == nil || len(promotedPipelines.Items) == 0 {
 
-			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, pipelineRollout.Name)
+			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
 			pipelineRollout.Status.MarkPending()
 
-			// need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
-			// (i.e. if isbsvc or numaflow controller is requesting pause)
-			userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), numaflowv1.PipelineGroupVersionKind.Kind)
-			if err != nil {
+			if err = r.createPromotedPipeline(ctx, pipelineRollout, newPipelineDef); err != nil {
 				return 0, nil, err
 			}
-			if userPreferredStrategy == config.PPNDStrategyID {
-				needsPaused, _, err := r.shouldBePaused(ctx, pipelineRollout, nil, newPipelineDef, false)
-				if err != nil {
-					return 0, nil, err
-				}
-				if needsPaused != nil && *needsPaused {
-					err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
-					if err != nil {
-						return 0, nil, err
-					}
-				}
 
-			}
-
-			err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
-			if err != nil {
-				return 0, nil, err
-			}
-			if err := ctlrcommon.CreateRidersForNewChild(ctx, r, pipelineRollout, newPipelineDef, r.client); err != nil {
-				return 0, nil, fmt.Errorf("error creating riders: %s", err)
-			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
+
 		} else {
 
 			// "promoted" object already exists
@@ -451,6 +429,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
+	// get current in progress strategy if there is one
 	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
 	inProgressStrategySet := inProgressStrategy != apiv1.UpgradeStrategyNoOp
 
@@ -580,6 +559,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				numaLogger.WithValues("pipelineDefinition", *newPipelineDef).Warn("Pipeline not found.")
+				return 0, nil
 			} else {
 				return 0, fmt.Errorf("error getting Pipeline for status processing: %v", err)
 			}
@@ -626,6 +606,8 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
 
+			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
+
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
@@ -633,7 +615,6 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
-			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
@@ -661,6 +642,54 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	return requeueDelay, nil
 }
+
+// Create the Promoted Pipeline (as well as any Riders)
+func (r *PipelineRolloutReconciler) createPromotedPipeline(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured) error {
+
+	// first need to know if the pipeline needs to be created with "desiredPhase" = "Paused" or not
+	// (i.e. if isbsvc or numaflow controller is requesting pause)
+	// this can happen during delete/recreate of pipeline
+	userPreferredStrategy, err := usde.GetUserStrategy(ctx, newPipelineDef.GetNamespace(), numaflowv1.PipelineGroupVersionKind.Kind)
+	if err != nil {
+		return err
+	}
+	if userPreferredStrategy == config.PPNDStrategyID {
+		needsPaused, _, err := r.shouldBePaused(ctx, pipelineRollout, nil, newPipelineDef, false)
+		if err != nil {
+			return err
+		}
+		if needsPaused != nil && *needsPaused {
+			err = numaflowtypes.PipelineWithDesiredPhase(newPipelineDef, "Paused")
+			if err != nil {
+				return err
+			}
+		}
+
+	}
+
+	// Create the Pipeline
+	err = kubernetes.CreateResource(ctx, r.client, newPipelineDef)
+	if err != nil {
+		return err
+	}
+	// Create any Riders if they exist
+	if err := ctlrcommon.CreateRidersForNewChild(ctx, r, pipelineRollout, newPipelineDef, r.client); err != nil {
+		return fmt.Errorf("error creating riders: %s", err)
+	}
+
+	// if user somehow has no Promoted Pipeline and is in the middle of Progressive, this isn't right - user may have deleted the Promoted Pipeline
+	// if this happens, we need to stop the Progressive upgrade and remove any Upgrading children
+	inProgressStrategy := r.inProgressStrategyMgr.GetStrategy(ctx, pipelineRollout)
+
+	if inProgressStrategy == apiv1.UpgradeStrategyProgressive {
+		r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+		if err = progressive.Discontinue(ctx, pipelineRollout, r, r.client); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func pipelineObservedGenerationCurrent(generation int64, observedGeneration int64) bool {
 	return generation <= observedGeneration
 }
