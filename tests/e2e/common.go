@@ -467,7 +467,7 @@ func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
 func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
 		resource, _ := GetResource(gvr, Namespace, name)
-		return resource != nil
+		return resource == nil
 	}).WithTimeout(TestTimeout).Should(BeTrue())
 }
 
