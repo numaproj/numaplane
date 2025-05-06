@@ -24,12 +24,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+
+	//autoscalingv1 "k8s.io/api/autoscaling/v1"
 	v1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	autoscalingk8siov1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
+
+	//autoscalingk8siov1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -130,7 +132,7 @@ var (
 		},
 	}
 
-	defaultVertexVPA = autoscalingk8siov1.VerticalPodAutoscaler{
+	/*defaultVertexVPA = autoscalingk8siov1.VerticalPodAutoscaler{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "VerticalPodAutoscaler",
 			APIVersion: "autoscaling.k8s.io/v1beta2",
@@ -145,7 +147,7 @@ var (
 				Name:       "{{.vertex-name}}",
 			},
 		},
-	}
+	}*/
 )
 
 func init() {
