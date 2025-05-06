@@ -72,7 +72,7 @@ func VerifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func
 		}
 
 		return f(retrievedISBServiceSpec)
-	}).WithTimeout(10 * time.Minute).Should(BeTrue())
+	}).WithTimeout(8 * time.Minute).Should(BeTrue())
 }
 
 func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
