@@ -37,11 +37,9 @@ import (
 )
 
 const (
-	isbServiceRolloutName   = "test-isbservice-rollout"
-	pipelineRolloutName     = "test-pipeline-rollout"
-	monoVertexRolloutName   = "test-monovertex-rollout"
-	initialJetstreamVersion = "2.10.17"
-	updatedJetstreamVersion = "2.10.11"
+	isbServiceRolloutName = "test-isbservice-rollout"
+	pipelineRolloutName   = "test-pipeline-rollout"
+	monoVertexRolloutName = "test-monovertex-rollout"
 )
 
 var (
@@ -177,7 +175,7 @@ var (
 	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
+			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -187,7 +185,7 @@ var (
 	dataLossISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: updatedJetstreamVersion,
+			Version: UpdatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -214,7 +212,7 @@ var (
 	recreateFieldISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
+			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &revisedVolSize,
 			},
@@ -231,7 +229,7 @@ var (
 	}
 
 	isbServiceDataLossFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-		return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+		return retrievedISBServiceSpec.JetStream.Version == UpdatedJetstreamVersion
 	}
 
 	isbServiceRecreateFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
