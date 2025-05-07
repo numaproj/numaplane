@@ -225,7 +225,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, monoVertexSpecWithoutRider, nil)
 	})
 
-	/*It("Should add ConfigMap Rider to MonoVertexRollout", func() {
+	It("Should add ConfigMap Rider to MonoVertexRollout", func() {
 
 		// Add ConfigMap Rider and update MonoVertex spec to use it
 		rawMVSpec, err := json.Marshal(monoVertexSpecWithRider)
@@ -292,7 +292,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
 		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
-	})*/
+	})
 
 	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
