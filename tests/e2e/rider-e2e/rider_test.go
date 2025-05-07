@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -102,7 +103,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	pipelineSpecWithoutRider = numaflowv1.PipelineSpec{
+	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -130,8 +131,8 @@ var (
 			},
 		},
 	}
-	defaultVertexVPA = `
-
+	updatedPipelineSpec numaflowv1.PipelineSpec
+	defaultVertexVPA    = `
 	{
 		"apiVersion": "autoscaling.k8s.io/v1",
 		"kind": "VerticalPodAutoscaler",
@@ -150,6 +151,32 @@ var (
 	}
 	
 `
+
+/*
+updatedVertexVPA = `
+
+	{
+		"apiVersion": "autoscaling.k8s.io/v1",
+		"kind": "VerticalPodAutoscaler",
+	 	"metadata":
+		{
+	 		"name": "my-vpa"
+	 	},
+	 	"spec":
+		{
+	 		"targetRef": {
+	 			"apiVersion": "numaproj.io/v1alpha1",
+	 			"kind": "Vertex",
+	 			"name": "{{.pipeline-name}}-{{.vertex-name}}"
+	 		},
+			"updatePolicy": {
+				"updateMode": "Auto"
+			}
+	 	}
+	}
+
+`
+*/
 )
 
 func init() {
@@ -172,6 +199,18 @@ func init() {
 			MountPath: "/etc/config",
 		},
 	}
+
+	updatedPipelineSpec = *initialPipelineSpec.DeepCopy()
+	outVertex := updatedPipelineSpec.Vertices[1]
+	updatedPipelineSpec.Vertices[1] = numaflowv1.AbstractVertex{
+		Name: "cat",
+		UDF: &numaflowv1.UDF{
+			Builtin: &numaflowv1.Function{
+				Name: "cat",
+			},
+		},
+	}
+	updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, outVertex)
 
 }
 
@@ -260,31 +299,10 @@ var _ = Describe("Rider E2E", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, pipelineSpecWithoutRider, false)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
 	})
 
 	It("Should add VPA Rider to PipelineRollout", func() {
-
-		// json marshal the vpa resource into a RawExtension
-		//var vpaRawExtension runtime.RawExtension
-		//err := json.Unmarshal([]byte(defaultVertexVPA), &vpaRawExtension)
-
-		/*var data map[string]interface{}
-		err := yaml.Unmarshal([]byte(defaultVertexVPA), &data)
-		if err != nil {
-			printStr := "yaml unmarshal:" + err.Error()
-			By(printStr)
-			fmt.Println(printStr)
-		}
-		Expect(err).ShouldNot(HaveOccurred())
-		//jsonBytes, err := json.Marshal(vpaRawExtension)
-		jsonBytes, err := json.Marshal(&data)
-		if err != nil {
-			printStr := fmt.Sprintf("json marshal of %+v: %s", data, err.Error())
-			By(printStr)
-			fmt.Println(printStr)
-		}
-		Expect(err).ShouldNot(HaveOccurred())*/
 
 		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			rollout.Spec.Riders = []apiv1.PipelineRider{
@@ -301,10 +319,44 @@ var _ = Describe("Rider E2E", Serial, func() {
 		// verify VPAs are created
 		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0)
 
+		vertices := []string{"in", "out"}
+		for _, vertex := range vertices {
+			// VPA is named with the pipeline name and vertex name as the suffix
+			vpaName := fmt.Sprintf("my-vpa-%s-%s", pipelineName, vertex)
+			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+		}
+
 		// VPA is named with the pipeline name and vertex name as the suffix
 		vpaName := fmt.Sprintf("my-vpa-%s-in", pipelineName)
 		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
 		vpaName = fmt.Sprintf("my-vpa-%s-out", pipelineName)
 		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+	})
+
+	It("Should update Pipeline Topology in PipelineRollout", func() {
+		rawPipelineSpec, err := json.Marshal(updatedPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Pipeline.Spec.Raw = rawPipelineSpec
+			return rollout, nil
+		})
+
+		// make sure we created VPAs for all 3 vertices and still have the original VPAs as well
+		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0) // TODO: can we create a variable at the top and update it instead of repeating?
+		vertices := []string{"in", "out"}
+		for _, vertex := range vertices {
+			// VPA is named with the pipeline name and vertex name as the suffix
+			vpaName := fmt.Sprintf("my-vpa-%s-%s", originalPipelineName, vertex)
+			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+		}
+		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 1)
+		vertices = []string{"in", "cat", "out"}
+		for _, vertex := range vertices {
+			// VPA is named with the pipeline name and vertex name as the suffix
+			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
+			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+		}
+
 	})
 })
