@@ -454,6 +454,27 @@ func closeAllFiles() error {
 	return nil
 }
 
+func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
+	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s exists", gvr, name), func() bool {
+		resource, err := GetResource(gvr, Namespace, name)
+		if resource == nil || err != nil {
+			return false
+		}
+		return true
+	}).WithTimeout(TestTimeout).Should(BeTrue())
+}
+
+func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
+	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
+		resource, _ := GetResource(gvr, Namespace, name)
+		return resource == nil
+	}).WithTimeout(TestTimeout).Should(BeTrue())
+}
+
+func GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	return dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
 func getChildResource(gvr schema.GroupVersionResource, namespace, rolloutName string) (*unstructured.Unstructured, error) {
 
 	label := fmt.Sprintf("%s,%s=%s", UpgradeStateLabelSelector, ParentRolloutLabel, rolloutName)

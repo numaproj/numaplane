@@ -589,7 +589,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+		r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
@@ -600,11 +600,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
+			promotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, promotedPipeline.GetName(), promotedPipeline)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 
@@ -630,10 +634,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			if err := riders.UpdateRidersInK8S(ctx, newPipelineDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
-		}
 
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
+		}
 	}
 
 	if needsUpdate {
@@ -1441,7 +1445,9 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 }
 
 // update Status to reflect the current Riders (for promoted pipeline)
-func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+func (r *PipelineRolloutReconciler) SetCurrentRiderList(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -1451,4 +1457,5 @@ func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting PipelineRollout.Status.Riders=%+v", pipelineRollout.Status.Riders)
 }
