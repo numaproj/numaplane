@@ -840,8 +840,11 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 
 // update Status to reflect the current Riders (for promoted monovertex)
 func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
+	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -851,5 +854,6 @@ func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting monoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
 
 }
