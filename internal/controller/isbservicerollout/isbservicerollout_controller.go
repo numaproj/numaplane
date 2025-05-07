@@ -416,10 +416,10 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			if err := riders.UpdateRidersInK8S(ctx, newISBServiceDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
-		}
 
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+		}
 	}
 
 	switch inProgressStrategy {
@@ -459,7 +459,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, existingISBServiceDef.GetName(), newISBServiceDef)
+			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, newISBServiceDef.GetName(), newISBServiceDef)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
 			}

@@ -620,7 +620,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
+			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, newPipelineDef.GetName(), newPipelineDef)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}
@@ -649,10 +649,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			if err := riders.UpdateRidersInK8S(ctx, newPipelineDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
-		}
 
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+		}
 	}
 
 	if needsUpdate {

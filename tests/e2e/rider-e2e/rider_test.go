@@ -144,10 +144,21 @@ var (
 			TargetRef: &autoscalingv1.CrossVersionObjectReference{
 				Kind:       "Vertex",
 				APIVersion: "numaproj.io/v1alpha1",
-				Name:       "{{.vertex-name}}",
+				Name:       "{{.pipeline-name}}-{{.vertex-name}}",
 			},
 		},
 	}*/
+	defaultVertexVPA = `
+		apiVersion: autoscaling.k8s.io/v1beta2
+        kind: VerticalPodAutoscaler
+        metadata: 
+          name: vpa
+        spec:
+          targetRef: 
+            apiVersion: numaproj.io/v1alpha1
+            kind: Vertex
+            name: '{{.pipeline-name}}-{{.vertex-name}}'
+	`
 )
 
 func init() {
@@ -201,7 +212,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 			return rollout, nil
 		})
 
-		// verify Rider is created
+		// verify ConfigMap is created
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
@@ -262,13 +273,36 @@ var _ = Describe("Rider E2E", Serial, func() {
 	})
 
 	It("Should add VPA Rider to PipelineRollout", func() {
-		/*UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+
+		// json marshal the vpa resource into a RawExtension
+		var vpaRawExtension runtime.RawExtension
+		err := json.Unmarshal([]byte(defaultVertexVPA), &vpaRawExtension)
+		printStr := err.Error()
+		By(printStr)
+		fmt.Println(printStr)
+		Expect(err).ShouldNot(HaveOccurred())
+		jsonBytes, err := json.Marshal(vpaRawExtension)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			rollout.Spec.Riders = []apiv1.PipelineRider{
 				{
 					PerVertex: true,
-					Rider:     apiv1.Rider{},
+					Rider: apiv1.Rider{
+						Definition: runtime.RawExtension{Raw: jsonBytes},
+					},
 				},
 			}
-		})*/
+			return rollout, nil
+		})
+
+		// verify VPAs are created
+		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0)
+
+		// VPA is named with the pipeline name and vertex name as the suffix
+		vpaName := fmt.Sprintf("my-vpa-%s-in", pipelineName)
+		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1beta2", Resource: "verticalpodautoscalers"}, vpaName)
+		vpaName = fmt.Sprintf("my-vpa-%s-out", pipelineName)
+		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1beta2", Resource: "verticalpodautoscalers"}, vpaName)
 	})
 })

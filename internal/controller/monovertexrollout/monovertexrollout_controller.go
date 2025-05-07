@@ -356,7 +356,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName(), newMonoVertexDef)
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, newMonoVertexDef.GetName(), newMonoVertexDef)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
 			}
@@ -387,9 +387,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if err := riders.UpdateRidersInK8S(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
+
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 		}
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 	}
 
 	return requeueDelay, nil
