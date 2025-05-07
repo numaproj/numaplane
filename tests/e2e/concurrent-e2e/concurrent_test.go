@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -153,8 +154,27 @@ var (
 		},
 	}
 
-	volSize, _     = apiresource.ParseQuantity("10Mi")
-	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	updatedMonoVertexSpec = numaflowv1.MonoVertexSpec{
+		Scale: numaflowv1.Scale{
+			Min: &monoVertexScaleMin,
+			Max: &monoVertexScaleMax,
+		},
+		Source: &numaflowv1.Source{
+			UDSource: &numaflowv1.UDSource{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
+				},
+			},
+		},
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				Blackhole: &numaflowv1.Blackhole{},
+			},
+		},
+	}
+
+	volSize, _            = apiresource.ParseQuantity("10Mi")
+	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
@@ -174,8 +194,8 @@ var (
 		},
 	}
 
-	updatedMemLimit, _            = apiresource.ParseQuantity("2Gi")
-	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
+	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
+	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
@@ -191,7 +211,7 @@ var (
 	}
 
 	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
-	ISBServiceSpecRecreateField = numaflowv1.InterStepBufferServiceSpec{
+	recreateFieldISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
 			Version: initialJetstreamVersion,
@@ -216,6 +236,10 @@ var (
 
 	isbServiceRecreateFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 		return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
+	}
+
+	monoVertexImageFunc = func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:stable"
 	}
 )
 
@@ -242,33 +266,38 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 		combination          string
 		pipelineSpec         numaflowv1.PipelineSpec
 		isbServiceSpec       numaflowv1.InterStepBufferServiceSpec
+		monovertexSpec       numaflowv1.MonoVertexSpec
 		pipelineVerifyFunc   func(numaflowv1.PipelineSpec) bool
 		isbServiceVerifyFunc func(numaflowv1.InterStepBufferServiceSpec) bool
+		monoVertexVerifyFunc func(numaflowv1.MonoVertexSpec) bool
 	}{
 		{
 			combination:          "Data Loss: Pipeline, ISBService, NumaflowController",
 			pipelineSpec:         dataLossPipelineSpec,
 			isbServiceSpec:       dataLossISBServiceSpec,
+			monovertexSpec:       updatedMonoVertexSpec,
 			pipelineVerifyFunc:   pipelineDataLossFunc,
 			isbServiceVerifyFunc: isbServiceDataLossFunc,
+			monoVertexVerifyFunc: monoVertexImageFunc,
 		},
 		{
 			combination:          "Data Loss: Pipeline, NumaflowController; Recreate: ISBService",
 			pipelineSpec:         dataLossPipelineSpec,
-			isbServiceSpec:       ISBServiceSpecRecreateField,
+			isbServiceSpec:       recreateFieldISBServiceSpec,
+			monovertexSpec:       updatedMonoVertexSpec,
 			pipelineVerifyFunc:   pipelineDataLossFunc,
 			isbServiceVerifyFunc: isbServiceRecreateFunc,
+			monoVertexVerifyFunc: monoVertexImageFunc,
 		},
 	}
 
 	for _, tc := range testCases {
 
-		It("Should update all rollouts concurrently", func() {
+		It(fmt.Sprintf("Should update all rollouts concurrently\nCOMBINATION: %s", tc.combination), func() {
 
-			By(tc.combination)
 			// create initial objects
 			CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
-			CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
+			CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
 			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
@@ -282,9 +311,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			})
 
 			By("Updating MonoVertexRollout")
-			updatedMonoVertexSpec := initialMonoVertexSpec
-			updatedMonoVertexSpec.Source.UDSource.Container.Image = "quay.io/numaio/numaflow-java/source-simple-source:stable"
-			rawSpec, err = json.Marshal(updatedMonoVertexSpec)
+			rawSpec, err = json.Marshal(tc.monovertexSpec)
 			Expect(err).ShouldNot(HaveOccurred())
 			UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 				rollout.Spec.MonoVertex.Spec.Raw = rawSpec
@@ -327,9 +354,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying MonoVertexRollout got updated")
-			VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-				return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:stable"
-			})
+			VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, tc.monoVertexVerifyFunc)
 			VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
