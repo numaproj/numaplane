@@ -25,13 +25,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	//autoscalingv1 "k8s.io/api/autoscaling/v1"
 	v1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	//autoscalingk8siov1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -57,21 +54,9 @@ const (
 
 var (
 	monoVertexIndex            = 0
-	monoVertexSpecWithoutRider = numaflowv1.MonoVertexSpec{
-		Source: &numaflowv1.Source{
-			UDSource: &numaflowv1.UDSource{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/simple-source:stable",
-				},
-			},
-		},
-		Sink: &numaflowv1.Sink{
-			AbstractSink: numaflowv1.AbstractSink{
-				Blackhole: &numaflowv1.Blackhole{},
-			},
-		},
-	}
-	monoVertexSpecWithRider numaflowv1.MonoVertexSpec
+	pipelineIndex              = 0
+	monoVertexSpecWithoutRider numaflowv1.MonoVertexSpec
+	monoVertexSpecWithRider    numaflowv1.MonoVertexSpec
 
 	defaultConfigMap = v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -103,6 +88,65 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	initialPipelineSpec numaflowv1.PipelineSpec
+	updatedPipelineSpec numaflowv1.PipelineSpec
+	defaultVertexVPA    = `
+	{
+		"apiVersion": "autoscaling.k8s.io/v1",
+		"kind": "VerticalPodAutoscaler",
+	 	"metadata": 
+		{
+	 		"name": "my-vpa"
+	 	},
+	 	"spec": 
+		{
+	 		"targetRef": {
+	 			"apiVersion": "numaproj.io/v1alpha1",
+	 			"kind": "Vertex",
+	 			"name": "{{.pipeline-name}}-{{.vertex-name}}"
+	 		}
+	 	}
+	}
+	
+`
+)
+
+func init() {
+	monoVertexSpecWithoutRider = numaflowv1.MonoVertexSpec{
+		Source: &numaflowv1.Source{
+			UDSource: &numaflowv1.UDSource{
+				Container: &numaflowv1.Container{
+					Image: "quay.io/numaio/numaflow-rs/simple-source:stable",
+				},
+			},
+		},
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				Blackhole: &numaflowv1.Blackhole{},
+			},
+		},
+	}
+
+	monoVertexSpecWithRider = *monoVertexSpecWithoutRider.DeepCopy()
+	monoVertexSpecWithRider.Volumes = []v1.Volume{
+		{
+			Name: "volume",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: "my-configmap-{{.monovertex-name}}",
+					},
+				},
+			},
+		},
+	}
+	monoVertexSpecWithRider.Source.UDSource.Container.VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      "volume",
+			MountPath: "/etc/config",
+		},
+	}
+
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
@@ -131,49 +175,6 @@ var (
 			},
 		},
 	}
-	updatedPipelineSpec numaflowv1.PipelineSpec
-	defaultVertexVPA    = `
-	{
-		"apiVersion": "autoscaling.k8s.io/v1",
-		"kind": "VerticalPodAutoscaler",
-	 	"metadata": 
-		{
-	 		"name": "my-vpa"
-	 	},
-	 	"spec": 
-		{
-	 		"targetRef": {
-	 			"apiVersion": "numaproj.io/v1alpha1",
-	 			"kind": "Vertex",
-	 			"name": "{{.pipeline-name}}-{{.vertex-name}}"
-	 		}
-	 	}
-	}
-	
-`
-)
-
-func init() {
-	monoVertexSpecWithRider = *monoVertexSpecWithoutRider.DeepCopy()
-	monoVertexSpecWithRider.Volumes = []v1.Volume{
-		{
-			Name: "volume",
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: "my-configmap-{{.monovertex-name}}",
-					},
-				},
-			},
-		},
-	}
-	monoVertexSpecWithRider.Source.UDSource.Container.VolumeMounts = []v1.VolumeMount{
-		{
-			Name:      "volume",
-			MountPath: "/etc/config",
-		},
-	}
-
 	updatedPipelineSpec = *initialPipelineSpec.DeepCopy()
 	outVertex := updatedPipelineSpec.Vertices[1]
 	updatedPipelineSpec.Vertices[1] = numaflowv1.AbstractVertex{
@@ -249,7 +250,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 
 		// Now verify that with the Progressive upgrade, the original MonoVertex and
 		// ConfigMap get cleaned up
-		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, 0)
+		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex-1)
 		originalConfigMap := fmt.Sprintf("my-configmap-%s", mvOriginalName)
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
@@ -295,7 +296,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		})
 
 		// verify VPAs are created
-		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0)
+		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex)
 
 		vertices := []string{"in", "out"}
 		for _, vertex := range vertices {
@@ -320,8 +321,10 @@ var _ = Describe("Rider E2E", Serial, func() {
 			return rollout, nil
 		})
 
+		pipelineIndex++
+
 		// make sure we created VPAs for all 3 vertices
-		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 1)
+		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex)
 		vertices := []string{"in", "cat", "out"}
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
@@ -330,7 +333,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		}
 
 		// make sure the original VPAs are removed once the pipeline is deleted
-		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0) // TODO: can we create a variable at the top and update it instead of repeating?
+		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex-1) // TODO: can we create a variable at the top and update it instead of repeating?
 		vertices = []string{"in", "out"}
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
@@ -347,7 +350,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		})
 
 		// Confirm the VPAs were deleted
-		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 1)
+		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex)
 		vertices := []string{"in", "cat", "out"}
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
