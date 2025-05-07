@@ -83,6 +83,7 @@ var (
 		},
 	}
 
+	// topology change
 	dataLossPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Lifecycle: numaflowv1.Lifecycle{
@@ -152,6 +153,7 @@ var (
 		},
 	}
 
+	// image change
 	updatedMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &monoVertexScaleMin,
@@ -182,6 +184,7 @@ var (
 		},
 	}
 
+	// new jetstream version
 	dataLossISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
@@ -192,22 +195,24 @@ var (
 		},
 	}
 
-	updatedMemLimit, _ = apiresource.ParseQuantity("2Gi")
-	// directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-	// 	Redis: nil,
-	// 	JetStream: &numaflowv1.JetStreamBufferService{
-	// 		Version: initialJetstreamVersion,
-	// 		Persistence: &numaflowv1.PersistenceStrategy{
-	// 			VolumeSize: &volSize,
-	// 		},
-	// 		ContainerTemplate: &numaflowv1.ContainerTemplate{
-	// 			Resources: v1.ResourceRequirements{
-	// 				Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
-	// 			},
-	// 		},
-	// 	},
-	// }
+	// updating Resources.Limits will not cause data loss or require recreating ISBService
+	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
+	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+		Redis: nil,
+		JetStream: &numaflowv1.JetStreamBufferService{
+			Version: InitialJetstreamVersion,
+			Persistence: &numaflowv1.PersistenceStrategy{
+				VolumeSize: &volSize,
+			},
+			ContainerTemplate: &numaflowv1.ContainerTemplate{
+				Resources: v1.ResourceRequirements{
+					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+				},
+			},
+		},
+	}
 
+	// change to "Persistence" causes ISBService (and its Pipelines) to be recreated
 	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
 	recreateFieldISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
@@ -236,15 +241,19 @@ var (
 		return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 	}
 
+	isbServiceDirectApplyFunc = func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+		return retrievedISBServiceSpec.JetStream != nil &&
+			retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
+			retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
+			*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
+	}
+
 	monoVertexImageFunc = func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Source.UDSource.Container.Image == "quay.io/numaio/numaflow-java/source-simple-source:stable"
 	}
 )
 
-// TODO: test some of these scenarios of a concurrent update - should run for all 3 strategies
-// PipelineRollout data loss, ISBService data loss, Numaflow Controller data loss (version), MonoVertex image
-// PipelineRollout data loss, ISBService recreate, Numaflow Controller data loss (version), MonoVertex image
-// PipelineRollout data loss, ISBService direct apply, Numaflow Controller data loss (version), MonoVertex image
+// TODO: add remaining combinations
 // PipelineRollout direct apply, ISBService recreate, Numaflow Controller data loss (version), MonoVertex image
 // PipelineRollout direct apply, ISBService data loss, Numaflow Controller data loss (version), MonoVertex image
 
@@ -285,6 +294,15 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			monovertexSpec:       updatedMonoVertexSpec,
 			pipelineVerifyFunc:   pipelineDataLossFunc,
 			isbServiceVerifyFunc: isbServiceRecreateFunc,
+			monoVertexVerifyFunc: monoVertexImageFunc,
+		},
+		{
+			combination:          "Data Loss: Pipeline, NumaflowController; Direct Apply: ISBService",
+			pipelineSpec:         dataLossPipelineSpec,
+			isbServiceSpec:       directApplyISBServiceSpec,
+			monovertexSpec:       updatedMonoVertexSpec,
+			pipelineVerifyFunc:   pipelineDataLossFunc,
+			isbServiceVerifyFunc: isbServiceDirectApplyFunc,
 			monoVertexVerifyFunc: monoVertexImageFunc,
 		},
 	}
