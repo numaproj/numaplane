@@ -115,6 +115,21 @@ func ProcessResource(
 	c client.Client,
 ) (bool, time.Duration, error) {
 
+	// Log progressive objects if the related flag is enabled
+	logObjects, err := getConfigLogObjects()
+	if err != nil {
+		return false, 0, err
+	}
+	if logObjects {
+		// Add the rolloutObject and promotedChild to the logger in context and set the name
+		progressiveLogger := logger.FromContext(ctx).WithName("ProgressiveUpgrade").
+			WithValues(
+				"rolloutObject", rolloutObject,
+				"promotedChild", existingPromotedChild,
+			)
+		ctx = logger.WithLogger(ctx, progressiveLogger)
+	}
+
 	// Make sure that our Promoted Child Status reflects the current promoted child
 	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
 	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
@@ -158,6 +173,11 @@ func ProcessResource(
 	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildGVR().Resource)
 	if err != nil {
 		return false, 0, err
+	}
+
+	// Add the upgradingChild to the logger in context (only if the related flag is enabled)
+	if logObjects {
+		ctx = logger.WithLogger(ctx, logger.FromContext(ctx).WithValues("upgradingChild", currentUpgradingChildDef))
 	}
 
 	// get UpgradingChildStatus and reset it if necessary
@@ -272,6 +292,15 @@ func getChildStatusAssessmentSchedule(
 	}
 
 	return schedule, nil
+}
+
+func getConfigLogObjects() (bool, error) {
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return false, fmt.Errorf("error getting the global config to retrieve logObjects: %w", err)
+	}
+
+	return globalConfig.Progressive.LogObjects, nil
 }
 
 /*
