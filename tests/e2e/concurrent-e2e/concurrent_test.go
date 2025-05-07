@@ -194,21 +194,21 @@ var (
 		},
 	}
 
-	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
-	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
-		Redis: nil,
-		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
-			Persistence: &numaflowv1.PersistenceStrategy{
-				VolumeSize: &volSize,
-			},
-			ContainerTemplate: &numaflowv1.ContainerTemplate{
-				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
-				},
-			},
-		},
-	}
+	updatedMemLimit, _ = apiresource.ParseQuantity("2Gi")
+	// directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
+	// 	Redis: nil,
+	// 	JetStream: &numaflowv1.JetStreamBufferService{
+	// 		Version: initialJetstreamVersion,
+	// 		Persistence: &numaflowv1.PersistenceStrategy{
+	// 			VolumeSize: &volSize,
+	// 		},
+	// 		ContainerTemplate: &numaflowv1.ContainerTemplate{
+	// 			Resources: v1.ResourceRequirements{
+	// 				Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+	// 			},
+	// 		},
+	// 	},
+	// }
 
 	revisedVolSize, _           = apiresource.ParseQuantity("20Mi")
 	recreateFieldISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
