@@ -151,32 +151,6 @@ var (
 	}
 	
 `
-
-/*
-updatedVertexVPA = `
-
-	{
-		"apiVersion": "autoscaling.k8s.io/v1",
-		"kind": "VerticalPodAutoscaler",
-	 	"metadata":
-		{
-	 		"name": "my-vpa"
-	 	},
-	 	"spec":
-		{
-	 		"targetRef": {
-	 			"apiVersion": "numaproj.io/v1alpha1",
-	 			"kind": "Vertex",
-	 			"name": "{{.pipeline-name}}-{{.vertex-name}}"
-	 		},
-			"updatePolicy": {
-				"updateMode": "Auto"
-			}
-	 	}
-	}
-
-`
-*/
 )
 
 func init() {
@@ -382,7 +356,12 @@ var _ = Describe("Rider E2E", Serial, func() {
 		}
 	})
 
-	It("Should delete the Pipeline and child Pipeline", func() {
+	It("Should delete the PipelineRollout and ISBServiceRollout", func() {
 		DeletePipelineRollout(pipelineRolloutName)
+		DeleteISBServiceRollout(isbServiceRolloutName)
+	})
+
+	It("Should delete the NumaflowControllerRollout", func() {
+		DeleteNumaflowControllerRollout()
 	})
 })

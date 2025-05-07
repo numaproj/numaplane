@@ -121,7 +121,9 @@ jobs:
           - strategy: "pause-and-drain"
             case: "ppnd"
           - strategy: "progressive"
-            case: ["progressive", "rider"]
+            case: "progressive"
+          - strategy: "progressive"
+            case: "rider"
 
     steps:
       - name: Checkout code
