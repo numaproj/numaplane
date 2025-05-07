@@ -609,7 +609,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+		r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
@@ -624,7 +624,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -651,7 +651,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			}
 
 			// update the list of riders in the Status
-			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 		}
 	}
 
@@ -1412,7 +1412,9 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 }
 
 // update Status to reflect the current Riders (for promoted pipeline)
-func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+func (r *PipelineRolloutReconciler) SetCurrentRiderList(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -1422,4 +1424,5 @@ func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting PipelineRollout.Status.Riders=%+v", pipelineRollout.Status.Riders)
 }

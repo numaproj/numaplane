@@ -360,7 +360,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -389,7 +389,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			}
 
 			// update the list of riders in the Status
-			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
 		}
 	}
 

@@ -38,7 +38,7 @@ type RolloutController interface {
 	GetExistingRiders(ctx context.Context, rolloutObject RolloutObject, upgrading bool) (unstructured.UnstructuredList, error)
 
 	// SetCurrentRiderList updates the list of Riders
-	SetCurrentRiderList(rolloutObject RolloutObject, riders []riders.Rider)
+	SetCurrentRiderList(ctx context.Context, rolloutObject RolloutObject, riders []riders.Rider)
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
@@ -296,6 +296,6 @@ func CreateRidersForNewChild(
 	}
 
 	// now reflect this in the Status
-	controller.SetCurrentRiderList(rolloutObject, newRiders)
+	controller.SetCurrentRiderList(ctx, rolloutObject, newRiders)
 	return nil
 }

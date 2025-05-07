@@ -418,7 +418,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			}
 
 			// update the list of riders in the Status
-			r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
 		}
 	}
 
@@ -463,7 +463,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(isbServiceRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
 		} else {
@@ -1101,7 +1101,9 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 	return false, nil
 }
 
-func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 	isbServiceRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -1111,4 +1113,5 @@ func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcomm
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting ISBServiceRollout.Status.Riders=%+v", isbServiceRollout.Status.Riders)
 }
