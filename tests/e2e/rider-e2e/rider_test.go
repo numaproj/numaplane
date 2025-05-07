@@ -211,6 +211,10 @@ func init() {
 		},
 	}
 	updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, outVertex)
+	updatedPipelineSpec.Edges = []numaflowv1.Edge{
+		{From: "in", To: "cat"},
+		{From: "cat", To: "out"},
+	}
 
 }
 
@@ -342,21 +346,43 @@ var _ = Describe("Rider E2E", Serial, func() {
 			return rollout, nil
 		})
 
-		// make sure we created VPAs for all 3 vertices and still have the original VPAs as well
-		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0) // TODO: can we create a variable at the top and update it instead of repeating?
-		vertices := []string{"in", "out"}
-		for _, vertex := range vertices {
-			// VPA is named with the pipeline name and vertex name as the suffix
-			vpaName := fmt.Sprintf("my-vpa-%s-%s", originalPipelineName, vertex)
-			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
-		}
+		// make sure we created VPAs for all 3 vertices
 		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 1)
-		vertices = []string{"in", "cat", "out"}
+		vertices := []string{"in", "cat", "out"}
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
 			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
 		}
 
+		// make sure the original VPAs are removed once the pipeline is deleted
+		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 0) // TODO: can we create a variable at the top and update it instead of repeating?
+		vertices = []string{"in", "out"}
+		for _, vertex := range vertices {
+			// VPA is named with the pipeline name and vertex name as the suffix
+			vpaName := fmt.Sprintf("my-vpa-%s-%s", originalPipelineName, vertex)
+			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+		}
+
+	})
+
+	It("Should delete the VPA Rider", func() {
+		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Riders = []apiv1.PipelineRider{}
+			return rollout, nil
+		})
+
+		// Confirm the VPAs were deleted
+		newPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, 1)
+		vertices := []string{"in", "cat", "out"}
+		for _, vertex := range vertices {
+			// VPA is named with the pipeline name and vertex name as the suffix
+			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
+			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+		}
+	})
+
+	It("Should delete the Pipeline and child Pipeline", func() {
+		DeletePipelineRollout(pipelineRolloutName)
 	})
 })
