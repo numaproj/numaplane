@@ -459,7 +459,12 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, newISBServiceDef.GetName(), newISBServiceDef)
+			promotedISBService, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, isbServiceRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+
+			currentRiderList, err := r.GetDesiredRiders(isbServiceRollout, promotedISBService.GetName(), promotedISBService)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newISBServiceDef.GetName(), err)
 			}

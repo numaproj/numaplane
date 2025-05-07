@@ -620,7 +620,11 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, newPipelineDef.GetName(), newPipelineDef)
+			promotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, promotedPipeline.GetName(), promotedPipeline)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}

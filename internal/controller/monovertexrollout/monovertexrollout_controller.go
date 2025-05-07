@@ -356,7 +356,11 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, newMonoVertexDef.GetName(), newMonoVertexDef)
+			promotedMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, promotedMonoVertex.GetName(), promotedMonoVertex)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
 			}
@@ -854,6 +858,6 @@ func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
 			Name:             rider.Definition.GetName(),
 		}
 	}
-	numaLogger.Debugf("setting monoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
+	numaLogger.Debugf("setting MonoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
 
 }
