@@ -122,6 +122,8 @@ jobs:
             case: "ppnd"
           - strategy: "progressive"
             case: "progressive"
+          - strategy: "progressive"
+            case: "rider"
 
     steps:
       - name: Checkout code

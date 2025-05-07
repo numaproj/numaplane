@@ -353,11 +353,15 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 		if done {
 
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, existingMonoVertexDef.GetName(), newMonoVertexDef)
+			promotedMonoVertex, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, monoVertexRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+			currentRiderList, err := r.GetDesiredRiders(monoVertexRollout, promotedMonoVertex.GetName(), promotedMonoVertex)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for MonoVertex %s: %s", newMonoVertexDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
 
 			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
@@ -384,9 +388,10 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			if err := riders.UpdateRidersInK8S(ctx, newMonoVertexDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
+
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(ctx, monoVertexRollout, currentRiderList)
 		}
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(monoVertexRollout, currentRiderList)
 	}
 
 	return requeueDelay, nil
@@ -859,8 +864,11 @@ func (r *MonoVertexRolloutReconciler) GetExistingRiders(ctx context.Context, rol
 
 // update Status to reflect the current Riders (for promoted monovertex)
 func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
+	ctx context.Context,
 	rolloutObject ctlrcommon.RolloutObject,
 	riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	monoVertexRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -870,5 +878,6 @@ func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting MonoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
 
 }
