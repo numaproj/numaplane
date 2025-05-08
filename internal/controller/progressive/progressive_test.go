@@ -89,7 +89,7 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPostUpgrade(ctx contex
 	return false, nil
 }
 
-func (fpc fakeProgressiveController) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
 
 }
 

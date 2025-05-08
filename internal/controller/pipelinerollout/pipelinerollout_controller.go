@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -79,7 +80,7 @@ var (
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
 	client client.Client
-	scheme *runtime.Scheme
+	scheme *k8sRuntime.Scheme
 
 	// Queue contains the list of PipelineRollouts that currently need to be reconciled
 	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this Queue to be processed as needed
@@ -98,7 +99,7 @@ type PipelineRolloutReconciler struct {
 
 func NewPipelineRolloutReconciler(
 	c client.Client,
-	s *runtime.Scheme,
+	s *k8sRuntime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *PipelineRolloutReconciler {
@@ -218,8 +219,8 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
-		if err := r.client.Patch(ctx, pipelineRollout, client.MergeFrom(pipelineRolloutOrig)); err != nil {
-			r.ErrorHandler(ctx, pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
+		if err := r.client.Update(ctx, pipelineRollout); err != nil {
+			r.ErrorHandler(ctx, pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
 				r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
@@ -589,7 +590,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+		r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 	case apiv1.UpgradeStrategyProgressive:
 		numaLogger.Debug("processing pipeline with Progressive")
@@ -600,11 +601,15 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 		if done {
 			// update the list of riders in the Status based on our child which was just promoted
-			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, existingPipelineDef.GetName(), newPipelineDef)
+			promotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
+			if err != nil {
+				return 0, err
+			}
+			currentRiderList, err := r.GetDesiredRiders(pipelineRollout, promotedPipeline.GetName(), promotedPipeline)
 			if err != nil {
 				return 0, fmt.Errorf("error getting desired Riders for pipeline %s: %s", newPipelineDef.GetName(), err)
 			}
-			r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 
 			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 
@@ -630,10 +635,10 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			if err := riders.UpdateRidersInK8S(ctx, newPipelineDef, riderAdditions, riderModifications, riderDeletions, r.client); err != nil {
 				return 0, err
 			}
-		}
 
-		// update the list of riders in the Status
-		r.SetCurrentRiderList(pipelineRollout, currentRiderList)
+			// update the list of riders in the Status
+			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
+		}
 	}
 
 	if needsUpdate {
@@ -1247,7 +1252,8 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 
 func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Error(err, "ErrorHandler")
+	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
+	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
@@ -1441,7 +1447,9 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 }
 
 // update Status to reflect the current Riders (for promoted pipeline)
-func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+func (r *PipelineRolloutReconciler) SetCurrentRiderList(ctx context.Context, rolloutObject ctlrcommon.RolloutObject, riders []riders.Rider) {
+
+	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	pipelineRollout.Status.Riders = make([]apiv1.RiderStatus, len(riders))
@@ -1451,4 +1459,5 @@ func (r *PipelineRolloutReconciler) SetCurrentRiderList(rolloutObject ctlrcommon
 			Name:             rider.Definition.GetName(),
 		}
 	}
+	numaLogger.Debugf("setting PipelineRollout.Status.Riders=%+v", pipelineRollout.Status.Riders)
 }
