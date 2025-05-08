@@ -158,7 +158,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
 		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
-			r.ErrorHandler(ctx, isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
+			r.ErrorHandler(ctx, isbServiceRollout, err, "UpdateFailed", "Failed to update isb service rollout")
 			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
 				return ctrl.Result{}, statusUpdateErr

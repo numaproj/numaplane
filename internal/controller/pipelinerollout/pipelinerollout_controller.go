@@ -220,7 +220,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
 		if err := r.client.Update(ctx, pipelineRollout); err != nil {
-			r.ErrorHandler(ctx, pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
+			r.ErrorHandler(ctx, pipelineRollout, err, "UpdateFailed", "Failed to update PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
 				r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")

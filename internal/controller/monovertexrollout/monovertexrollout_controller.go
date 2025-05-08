@@ -159,7 +159,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
 		if err := r.client.Update(ctx, monoVertexRollout); err != nil {
-			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
+			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to update MonoVertexRollout")
 			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
 				return ctrl.Result{}, statusUpdateErr
