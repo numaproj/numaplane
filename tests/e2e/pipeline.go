@@ -415,7 +415,7 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 			Strategy: &apiv1.PipelineTypeRolloutStrategy{
 				PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 					Progressive: apiv1.ProgressiveStrategy{
-						AssessmentSchedule: "300,60,10",
+						AssessmentSchedule: "240,60,10",
 					},
 				},
 			},
