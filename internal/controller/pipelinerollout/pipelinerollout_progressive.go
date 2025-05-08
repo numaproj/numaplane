@@ -86,7 +86,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 
 			if !areVertexReplicasReady {
 				areAllVerticesReplicasReady = false
-				replicasFailureReason = failureReason
+				replicasFailureReason = fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName())
 				break
 			}
 		}
