@@ -19,6 +19,7 @@ package monovertexrollout
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -64,7 +65,7 @@ const (
 // MonoVertexRolloutReconciler reconciles a MonoVertexRollout object
 type MonoVertexRolloutReconciler struct {
 	client        client.Client
-	scheme        *runtime.Scheme
+	scheme        *k8sRuntime.Scheme
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -75,7 +76,7 @@ type MonoVertexRolloutReconciler struct {
 
 func NewMonoVertexRolloutReconciler(
 	c client.Client,
-	s *runtime.Scheme,
+	s *k8sRuntime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *MonoVertexRolloutReconciler {
@@ -157,7 +158,7 @@ func (r *MonoVertexRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(monoVertexRolloutOrig, monoVertexRollout) {
-		if err := r.client.Patch(ctx, monoVertexRollout, client.MergeFrom(monoVertexRolloutOrig)); err != nil {
+		if err := r.client.Update(ctx, monoVertexRollout); err != nil {
 			r.ErrorHandler(ctx, monoVertexRollout, err, "UpdateFailed", "Failed to patch MonoVertexRollout")
 			if statusUpdateErr := r.updateMonoVertexRolloutStatusToFailed(ctx, monoVertexRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, monoVertexRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update MonoVertexRollout status")
@@ -603,7 +604,8 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatusToFailed(ctx 
 
 func (r *MonoVertexRolloutReconciler) ErrorHandler(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Error(err, "ErrorHandler")
+	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
+	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.MonoVertexROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(monoVertexRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

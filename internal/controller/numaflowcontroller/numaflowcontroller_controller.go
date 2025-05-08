@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"runtime"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -69,7 +70,7 @@ const (
 // NumaflowControllerReconciler reconciles a NumaflowController object
 type NumaflowControllerReconciler struct {
 	client        client.Client
-	scheme        *runtime.Scheme
+	scheme        *k8sRuntime.Scheme
 	restConfig    *rest.Config
 	rawConfig     *rest.Config
 	kubectl       kubeUtil.Kubectl
@@ -81,7 +82,7 @@ type NumaflowControllerReconciler struct {
 
 func NewNumaflowControllerReconciler(
 	client client.Client,
-	scheme *runtime.Scheme,
+	scheme *k8sRuntime.Scheme,
 	rawConfig *rest.Config,
 	kubectl kubeUtil.Kubectl,
 	customMetrics *metrics.CustomMetrics,
@@ -170,7 +171,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(numaflowControllerOrig, numaflowController) {
-		if err := r.client.Patch(ctx, numaflowController, client.MergeFrom(numaflowControllerOrig)); err != nil {
+		if err := r.client.Update(ctx, numaflowController); err != nil {
 			r.ErrorHandler(ctx, numaflowController, err, "UpdateFailed", "Failed to update NumaflowController")
 			if statusUpdateErr := r.updateNumaflowControllerStatusToFailed(ctx, numaflowController, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, numaflowController, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowController")
@@ -655,7 +656,7 @@ func SplitYAMLToString(yamlData []byte) ([]string, error) {
 	d := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(yamlData), 4096)
 	var objs []string
 	for {
-		ext := runtime.RawExtension{}
+		ext := k8sRuntime.RawExtension{}
 		if err := d.Decode(&ext); err != nil {
 			if err == io.EOF {
 				break
@@ -700,7 +701,8 @@ func (r *NumaflowControllerReconciler) updateNumaflowControllerStatusToFailed(ct
 
 func (r *NumaflowControllerReconciler) ErrorHandler(ctx context.Context, numaflowController *apiv1.NumaflowController, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Error(err, "ErrorHandler")
+	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
+	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.NumaflowControllerSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(numaflowController, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

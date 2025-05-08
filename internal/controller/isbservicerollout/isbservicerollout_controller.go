@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -65,7 +66,7 @@ const (
 // ISBServiceRolloutReconciler reconciles an ISBServiceRollout object
 type ISBServiceRolloutReconciler struct {
 	client        client.Client
-	scheme        *runtime.Scheme
+	scheme        *k8sRuntime.Scheme
 	customMetrics *metrics.CustomMetrics
 	// the recorder is used to record events
 	recorder record.EventRecorder
@@ -76,7 +77,7 @@ type ISBServiceRolloutReconciler struct {
 
 func NewISBServiceRolloutReconciler(
 	c client.Client,
-	s *runtime.Scheme,
+	s *k8sRuntime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *ISBServiceRolloutReconciler {
@@ -156,7 +157,7 @@ func (r *ISBServiceRolloutReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(isbServiceRolloutOrig, isbServiceRollout) {
-		if err := r.client.Patch(ctx, isbServiceRollout, client.MergeFrom(isbServiceRolloutOrig)); err != nil {
+		if err := r.client.Update(ctx, isbServiceRollout); err != nil {
 			r.ErrorHandler(ctx, isbServiceRollout, err, "UpdateFailed", "Failed to patch isb service rollout")
 			if statusUpdateErr := r.updateISBServiceRolloutStatusToFailed(ctx, isbServiceRollout, err); statusUpdateErr != nil {
 				r.ErrorHandler(ctx, isbServiceRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update isb service rollout status")
@@ -883,7 +884,9 @@ func (r *ISBServiceRolloutReconciler) updateISBServiceRolloutStatusToFailed(ctx 
 
 func (r *ISBServiceRolloutReconciler) ErrorHandler(ctx context.Context, isbServiceRollout *apiv1.ISBServiceRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Error(err, "ErrorHandler")
+	// Retrieve caller info using runtime.Caller
+	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
+	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.ISBServicesROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(isbServiceRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }

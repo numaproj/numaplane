@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -79,7 +80,7 @@ var (
 // PipelineRolloutReconciler reconciles a PipelineRollout object
 type PipelineRolloutReconciler struct {
 	client client.Client
-	scheme *runtime.Scheme
+	scheme *k8sRuntime.Scheme
 
 	// Queue contains the list of PipelineRollouts that currently need to be reconciled
 	// both PipelineRolloutReconciler.Reconcile() and other Rollout reconcilers can add PipelineRollouts to this Queue to be processed as needed
@@ -98,7 +99,7 @@ type PipelineRolloutReconciler struct {
 
 func NewPipelineRolloutReconciler(
 	c client.Client,
-	s *runtime.Scheme,
+	s *k8sRuntime.Scheme,
 	customMetrics *metrics.CustomMetrics,
 	recorder record.EventRecorder,
 ) *PipelineRolloutReconciler {
@@ -218,7 +219,7 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 
 	// Update the resource definition (everything except the Status subresource)
 	if r.needsUpdate(pipelineRolloutOrig, pipelineRollout) {
-		if err := r.client.Patch(ctx, pipelineRollout, client.MergeFrom(pipelineRolloutOrig)); err != nil {
+		if err := r.client.Update(ctx, pipelineRollout); err != nil {
 			r.ErrorHandler(ctx, pipelineRollout, err, "PatchFailed", "Failed to patch PipelineRollout")
 			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
 			if statusUpdateErr != nil {
@@ -1251,7 +1252,8 @@ func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Con
 
 func (r *PipelineRolloutReconciler) ErrorHandler(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, err error, reason, msg string) {
 	numaLogger := logger.FromContext(ctx)
-	numaLogger.Error(err, "ErrorHandler")
+	_, file, line, _ := runtime.Caller(1) // '1' goes back one level in the stack to get the caller of ErrorHandler
+	numaLogger.Error(err, "ErrorHandler", "failedAt:", fmt.Sprintf("%s:%d", file, line))
 	r.customMetrics.PipelineROSyncErrors.WithLabelValues().Inc()
 	r.recorder.Eventf(pipelineRollout, corev1.EventTypeWarning, reason, msg+" %v", err.Error())
 }
