@@ -34,10 +34,8 @@ import (
 )
 
 const (
-	isbServiceRolloutName   = "test-isbservice-rollout"
-	pipelineRolloutName     = "test-pipeline-rollout"
-	initialJetstreamVersion = "2.10.17"
-	updatedJetstreamVersion = "2.10.11"
+	isbServiceRolloutName = "test-isbservice-rollout"
+	pipelineRolloutName   = "test-pipeline-rollout"
 
 	// anotherPipelineRolloutName = "another-pipeline-rollout"
 )
@@ -134,7 +132,7 @@ var (
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
+			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -144,7 +142,7 @@ var (
 	ISBServiceSpecNoDataLossField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: updatedJetstreamVersion,
+			Version: UpdatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -160,7 +158,7 @@ var (
 	ISBServiceSpecRecreateField = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: updatedJetstreamVersion,
+			Version: UpdatedJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &revisedVolSize,
 			},
@@ -263,10 +261,10 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
 		// new ISBService spec
 		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
+		updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
 
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+			return retrievedISBServiceSpec.JetStream.Version == UpdatedJetstreamVersion
 		}, true, false, true)
 
 	})
