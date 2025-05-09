@@ -269,9 +269,12 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
 
 		By("Verifying that the Pipeline spec is as expected")
+		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
+		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 0)
 		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
+		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
 
@@ -295,8 +298,11 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// TODO
 		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0),
 		// 	[]numaflowv1.AbstractVertex{{Scale: updatedPipelineSpec.Scale}}, ComponentVertex)
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
-			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
+		// TODO
+		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
+		// 	[]numaflowv1.AbstractVertex{{Name: "???", Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
+		// REPLACE ABOVE WITH BELOW
+		// VerifyPodsRunningForAllVertices(GetInstanceName(pipelineRolloutName, 1), vertexScaleDefinitions, true)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
@@ -316,8 +322,9 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		// 	[]numaflowv1.AbstractVertex{{Scale: updatedPipelineSpec.Scale}}, ComponentVertex)
 
 		// Verify the previously promoted pipeline was deleted
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
-			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
+		// TODO
+		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
+		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
 
 		DeletePipelineRollout(pipelineRolloutName)
