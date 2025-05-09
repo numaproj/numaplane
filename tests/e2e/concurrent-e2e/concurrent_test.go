@@ -322,6 +322,13 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			rawSpec, err := json.Marshal(tc.pipelineSpec)
 			Expect(err).ShouldNot(HaveOccurred())
 			UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
+					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+						Progressive: apiv1.ProgressiveStrategy{
+							AssessmentSchedule: "240,60,10",
+						},
+					},
+				}
 				rollout.Spec.Pipeline.Spec.Raw = rawSpec
 				return rollout, nil
 			})
