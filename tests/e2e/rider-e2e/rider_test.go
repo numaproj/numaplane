@@ -278,7 +278,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
 	})
 
 	It("Should add VPA Rider to PipelineRollout", func() {
