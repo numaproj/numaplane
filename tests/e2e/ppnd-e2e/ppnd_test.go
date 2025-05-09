@@ -39,8 +39,6 @@ const (
 	isbServiceRolloutName     = "test-isbservice-rollout"
 	slowPipelineRolloutName   = "slow-pipeline-rollout"
 	failedPipelineRolloutName = "failed-pipeline-rollout"
-	initialJetstreamVersion   = "2.10.17"
-	updatedJetstreamVersion   = "2.10.11"
 )
 
 var (
@@ -131,7 +129,7 @@ var (
 	isbServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
-			Version: initialJetstreamVersion,
+			Version: InitialJetstreamVersion,
 			Persistence: &numaflowv1.PersistenceStrategy{
 				VolumeSize: &volSize,
 			},
@@ -194,7 +192,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			By("Updating ISBService to cause a PPND change")
 			updatedISBServiceSpec := isbServiceSpec
-			updatedISBServiceSpec.JetStream.Version = updatedJetstreamVersion
+			updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
 			rawSpec, err := json.Marshal(updatedISBServiceSpec)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -210,7 +208,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			// confirm update
 			VerifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-				return retrievedISBServiceSpec.JetStream.Version == updatedJetstreamVersion
+				return retrievedISBServiceSpec.JetStream.Version == UpdatedJetstreamVersion
 			})
 
 		}
@@ -281,12 +279,12 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update ISBService to have data loss update
 		By("Updating ISBService to cause a PPND change")
 		updatedISBServiceSpec := isbServiceSpec
-		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
+		updatedISBServiceSpec.JetStream.Version = InitialJetstreamVersion
 
 		// need to update function
 		// update would normally cause data loss
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: failedPipelineRolloutName, PipelineIsFailed: true}}, updatedISBServiceSpec, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
-			return retrievedISBServiceSpec.JetStream.Version == initialJetstreamVersion
+			return retrievedISBServiceSpec.JetStream.Version == InitialJetstreamVersion
 		}, true, false, false)
 
 		time.Sleep(5 * time.Second)
