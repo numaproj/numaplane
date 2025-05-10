@@ -25,7 +25,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -33,6 +32,7 @@ import (
 
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -259,11 +259,6 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	// ==================================================================================================
-	// ==================================================================================================
-	// ==================================================================================================
-	// TODO: tests for pipeline
-
 	It("Should validate Pipeline upgrade using Progressive strategy", func() {
 		By("Creating a PipelineRollout")
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
@@ -295,14 +290,16 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
 
 		// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
-		// TODO
-		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0),
-		// 	[]numaflowv1.AbstractVertex{{Scale: updatedPipelineSpec.Scale}}, ComponentVertex)
-		// TODO
-		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
-		// 	[]numaflowv1.AbstractVertex{{Name: "???", Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
-		// REPLACE ABOVE WITH BELOW
-		// VerifyPodsRunningForAllVertices(GetInstanceName(pipelineRolloutName, 1), vertexScaleDefinitions, true)
+		initialPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+		for _, vertex := range initialPipelineSpec.Vertices {
+			initialPipelineSpecVertices = append(initialPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+		}
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVertices, ComponentVertex)
+		initialPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
+		for _, vertex := range initialPipelineSpec.Vertices {
+			initialPipelineSpecVerticesZero = append(initialPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
+		}
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
@@ -317,22 +314,14 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
 		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
-		// TODO
-		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2),
-		// 	[]numaflowv1.AbstractVertex{{Scale: updatedPipelineSpec.Scale}}, ComponentVertex)
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), initialPipelineSpecVertices, ComponentVertex)
 
 		// Verify the previously promoted pipeline was deleted
-		// TODO
-		// VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1),
-		// 	[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentVertex)
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
-
-	// ==================================================================================================
-	// ==================================================================================================
-	// ==================================================================================================
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteISBServiceRollout(isbServiceRolloutName)
