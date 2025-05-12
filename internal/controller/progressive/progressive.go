@@ -28,8 +28,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -573,13 +575,18 @@ func AssessUpgradingPipelineType(
 		return apiv1.AssessmentResultFailure, failureReason, nil
 	}
 
+	phaseHealthy, err := IsPipelineTypePhaseHealthy(ctx, existingUpgradingChildDef)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+
 	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, "", err
 	}
 
 	// conduct standard health assessment first
-	if upgradingObjectStatus.Phase == "Running" && healthyConditions && healthyReplicas {
+	if phaseHealthy && healthyConditions && healthyReplicas {
 		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
 		if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
 			numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
@@ -601,6 +608,27 @@ func AssessUpgradingPipelineType(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+func IsPipelineTypePhaseHealthy(ctx context.Context, existingUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+
+	upgradingObjectStatus, err := kubernetes.ParseStatus(existingUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
+
+	// if the desired phase is Paused, it's fine for the phase to be Paused or Pausing
+	desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(existingUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
+	if desiredPhaseSetting == string(numaflowv1.PipelinePhasePaused) &&
+		(upgradingObjectStatus.Phase == string(numaflowv1.PipelinePhasePaused) || upgradingObjectStatus.Phase == string(numaflowv1.PipelinePhasePausing)) {
+		return true, nil
+	}
+
+	return upgradingObjectStatus.Phase == string(numaflowv1.PipelinePhaseRunning), nil
+
 }
 
 // CalculateFailureReason issues a reason for failure; if there are multiple reasons, it returns one of them
