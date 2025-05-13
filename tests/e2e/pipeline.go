@@ -366,9 +366,9 @@ func startPipelineRolloutWatches() {
 // shared functions
 
 // create a PipelineRollout of a given spec/name and make sure it's running
-func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool) {
+func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineTypeRolloutStrategy) {
 
-	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec)
+	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy)
 	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -392,7 +392,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	}
 }
 
-func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec) *apiv1.PipelineRollout {
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineTypeRolloutStrategy) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -407,6 +407,7 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 			Name:      name,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
+			Strategy: strategy,
 			Pipeline: apiv1.Pipeline{
 				Spec: runtime.RawExtension{
 					Raw: pipelineSpecRaw,
