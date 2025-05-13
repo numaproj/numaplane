@@ -249,7 +249,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -271,7 +271,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -299,7 +299,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
 		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -334,7 +334,7 @@ func createSlowPipelineRollout() {
 		Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
 	}}
 
-	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false)
+	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil)
 
 	By("Verifying that the slow pipeline was created")
 	VerifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {

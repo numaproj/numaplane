@@ -192,7 +192,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
