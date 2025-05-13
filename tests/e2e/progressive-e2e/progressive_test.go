@@ -406,7 +406,7 @@ var _ = Describe("Progressive E2E", Serial, func() {
 
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 0)
+		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
 		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
@@ -444,13 +444,13 @@ var _ = Describe("Progressive E2E", Serial, func() {
 		})
 
 		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
+		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), initialPipelineSpecVertices, ComponentVertex)
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVertices, ComponentVertex)
 
 		// Verify the previously promoted pipeline was deleted
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVerticesZero, ComponentVertex)
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
