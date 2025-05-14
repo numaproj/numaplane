@@ -179,15 +179,17 @@ jobs:
       - name: Start numaplane process
         run: |
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
-          nohup kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1 &
-          sleep 60s
+          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1 &
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+        run: |
+          sleep 100s
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
 
       - name: Stop numaplane process
+        if: always()
         run: |
           sleep 60s
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
@@ -201,6 +203,15 @@ jobs:
           mkdir -p tests/e2e/output/resources/coverage/
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
           kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
+
+      - name: Archive code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{matrix.strategy}}-${{matrix.case}}
+          path: |
+            tests/e2e/output/resources/coverage/
+          retention-days: 7
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
