@@ -390,6 +390,10 @@ func createScaledDownUpgradingPipelineDef(
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
 		vertexName := vertexAsMap["name"].(string)
+		originalScaleMinMax, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+		if err != nil {
+			return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
+		}
 		scaleValue, vertexFound := pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.ScaleValues[vertexName]
 		var upgradingVertexScaleTo int64
 		if !vertexFound {
@@ -400,8 +404,11 @@ func createScaledDownUpgradingPipelineDef(
 			numaLogger.WithValues("vertex", vertexName).Debugf("vertex not found previously; scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
 		} else {
 			// nominal case: found the same vertex from the "promoted" pipeline: set min and max to the number of Pods that were removed from the "promoted" one
+			// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
+			// then we don't want to set our Pods to 0 so set to 1 at least
 			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
-			if upgradingVertexScaleTo <= 0 { // if for some reason the Initial value was 0, we don't want to set our Pods to 0
+			maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
+			if upgradingVertexScaleTo <= 0 && !maxZero {
 				upgradingVertexScaleTo = 1
 			}
 			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
