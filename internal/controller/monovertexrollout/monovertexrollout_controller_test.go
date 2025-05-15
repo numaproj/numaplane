@@ -73,34 +73,34 @@ var (
 	}
 
 	// TODO: will use in AnalysisRun test later
-	// testTemplate = argorolloutsv1.AnalysisTemplate{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      "test",
-	// 		Namespace: ctlrcommon.DefaultTestNamespace,
-	// 	},
-	// 	TypeMeta: metav1.TypeMeta{
-	// 		Kind:       "AnalysisTemplate",
-	// 		APIVersion: "argoproj.io/v1alpha1",
-	// 	},
-	// 	Spec: argorolloutsv1.AnalysisTemplateSpec{
-	// 		Args: []argorolloutsv1.Argument{
-	// 			{Name: "monovertex-name"},
-	// 			{Name: "monovertex-namespace"},
-	// 		},
-	// 		Metrics: []argorolloutsv1.Metric{
-	// 			{
-	// 				Name: "return-true",
-	// 				Provider: argorolloutsv1.MetricProvider{
-	// 					Prometheus: &argorolloutsv1.PrometheusMetric{
-	// 						Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-	// 						Query:   "vector(1) == vector(2)",
-	// 					},
-	// 				},
-	// 				SuccessCondition: "true",
-	// 			},
-	// 		},
-	// 	},
-	// }
+	testTemplate = argorolloutsv1.AnalysisTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisTemplate",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisTemplateSpec{
+			Args: []argorolloutsv1.Argument{
+				{Name: "monovertex-name"},
+				{Name: "monovertex-namespace"},
+			},
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-true",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "vector(1) == vector(2)",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+		},
+	}
 
 	analysisRunName = "monovertexrollout-test-1"
 	testAnalysisRun = argorolloutsv1.AnalysisRun{
@@ -617,6 +617,65 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			}
 		})
 	}
+}
+
+// process an existing monoVertex's progressive upgrade and check that AnalysisRun with correct spec is created
+func Test_generateAnalysisRun(t *testing.T) {
+
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// other tests may call this, but it fails if called more than once
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	// good template
+	err = client.Create(ctx, &testTemplate)
+	assert.NoError(t, err)
+
+	r := NewMonoVertexRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			// first delete MonoVertex and MonoVertexRollout in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+
+			monoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, monoVertexList.Items, 0)
+
+			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
+				map[string]string{common.AnnotationKeyNumaflowInstanceID: tc.newControllerInstanceID}, map[string]string{},
+				&apiv1.MonoVertexRolloutStatus{ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+					UpgradingMonoVertexStatus: tc.initialUpgradingChildStatus,
+					PromotedMonoVertexStatus:  tc.initialPromotedChildStatus,
+				}})
+			_ = client.Delete(ctx, rollout)
+
+		})
+	}
+
 }
 
 func TestChildNeedsUpdating(t *testing.T) {
