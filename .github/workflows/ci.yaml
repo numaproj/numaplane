@@ -123,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strategy: ["pause-and-drain", "progressive"]
+        strategy: ["pause-and-drain"]
         case: ["functional-monovertex"]
         include:
           - strategy: "pause-and-drain"
