@@ -352,7 +352,8 @@ func scaleDownUpgradingMonoVertex(
 		upgradingChildScaleTo := scaleValue.Initial - scaleValue.ScaleTo
 		// if for some reason there were no Pods running in the promoted MonoVertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
 		// then we don't want to set our Pods to 0 so set to 1 at least
-		if upgradingChildScaleTo <= 0 && originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max != 0 {
+		maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
+		if upgradingChildScaleTo <= 0 && !maxZero {
 			upgradingChildScaleTo = 1
 		}
 
