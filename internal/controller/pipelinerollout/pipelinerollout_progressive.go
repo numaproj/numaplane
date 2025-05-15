@@ -407,7 +407,7 @@ func createScaledDownUpgradingPipelineDef(
 			// if for some reason there were no Pods running in the promoted Pipeline's vertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
 			// then we don't want to set our Pods to 0 so set to 1 at least
 			upgradingVertexScaleTo = scaleValue.Initial - scaleValue.ScaleTo
-			if upgradingVertexScaleTo <= 0 && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max != 0 {
+			if upgradingVertexScaleTo <= 0 && originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max != 0 {
 				upgradingVertexScaleTo = 1
 			}
 			numaLogger.WithValues("vertex", vertexName).Debugf("scaling upgrading pipeline vertex to min=max=%d", upgradingVertexScaleTo)
