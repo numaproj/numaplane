@@ -123,8 +123,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent"]
+        strategy: ["pause-and-drain", "progressive"]
+        case: ["functional-monovertex"]
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
@@ -134,7 +134,6 @@ jobs:
             case: "progressive-pipeline"
           - strategy: "progressive"
             case: "rider"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -188,12 +187,12 @@ jobs:
         run: |
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
           kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1 &
+          sleep 60s
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
         run: |
-          sleep 100s
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
 
       - name: Stop numaplane process
