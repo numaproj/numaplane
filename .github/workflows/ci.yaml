@@ -98,7 +98,7 @@ jobs:
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: "4f686ba0-0dd1-483f-8f6f-69e3bab58565"
           slug: numaproj/numaplane
 
       - name: Archive unit test code coverage
@@ -124,7 +124,7 @@ jobs:
       fail-fast: false
       matrix:
         strategy: ["pause-and-drain"]
-        case: ["functional-monovertex"]
+        case: ["functional-pipeline"]
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
@@ -176,6 +176,7 @@ jobs:
         run: |
           echo 'Waiting for the controller-manager to be ready...'
           kubectl wait --for=condition=available --timeout=60s deployment/numaplane-controller-manager -n numaplane-system
+          sleep 60s
 
       - name: Start numaplane process
         run: |
@@ -246,13 +247,35 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
 
+      - name: Setup Golang
+        uses: actions/setup-go@v4.0.0
+        with:
+          go-version: '1.23'
+
+      - name: Install gocovmerge
+        run: go install github.com/bookerzzz/gocovmerge@latest
+
       - name: Copy all e2e coverage files in a single directory
         run: |
           mkdir -p merged-coverage
           find . -type f -path "./coverage-*" -exec cp {} merged-coverage \;
-          echo "Merged coverage files:"
+          echo "################# Merged e2e coverage files: #################"
           ls -l merged-coverage
+          echo "##################################"
           go tool covdata percent -i=merged-coverage/ -o=merged-coverage/coverage-e2e.out
+          ## cp unit-tests-coverage/coverage.out merged-coverage/.
+          ## gocovmerge merged-coverage/coverage.out merged-coverage/coverage-e2e.out > merged-coverage/merged_coverage.out
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.0.1
+        with:
+          token: "4f686ba0-0dd1-483f-8f6f-69e3bab58565"
+          disable_search: true
+          fail_ci_if_error: true
+          flags: unittests
+          name: codecov-umbrella
+          verbose: true
+          files: merged-coverage/coverage-e2e.out
 
       - name: Archive merged code coverage
         uses: actions/upload-artifact@v4

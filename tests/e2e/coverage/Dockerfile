@@ -3,7 +3,7 @@ FROM golang:1.23 as builder
 ARG TARGETOS
 ARG TARGETARCH
 
-WORKDIR /workspace
+WORKDIR github.com/numaproj/numaplane
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target="/root/.cache/go-build" CGO_ENABLED=0 GOOS=${TARGE
 ## Use alpine as minimal base image to package the manager binary
 FROM golang:1.23
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /go/github.com/numaproj/numaplane/manager .
 RUN mkdir coverage
 ENV GOCOVERDIR=coverage
 
