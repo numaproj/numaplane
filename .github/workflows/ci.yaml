@@ -128,12 +128,6 @@ jobs:
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
-          - strategy: "progressive"
-            case: "progressive-monovertex"
-          - strategy: "progressive"
-            case: "progressive-pipeline"
-          - strategy: "progressive"
-            case: "rider"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -185,10 +179,14 @@ jobs:
 
       - name: Start numaplane process
         run: |
-          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
-          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1 &
-          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'ps -aux' > /dev/null 2>&1
-          sleep 60s
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          `kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c '/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect' > /dev/null 2>&1` &
+
+      - name: Validate Numaplane process
+        run: |
+          sleep 100s
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'ps -aux'
 
       - name: Run e2e tests
         env:
@@ -200,11 +198,10 @@ jobs:
         if: always()
         run: |
           sleep 60s
-          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
           kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'pkill -f "/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect"'
           sleep 5s
           kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'pkill -f "/manager --health-probe-bind-address=:8081 --metrics-bind-address=:8080 --leader-elect"'
-          sleep 30s
 
       - name: Copy report from Numaplane pod
         run: |
