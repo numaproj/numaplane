@@ -101,6 +101,14 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: numaproj/numaplane
 
+      - name: Archive unit test code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-tests-coverage
+          path: coverage.out
+          retention-days: 7
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -229,4 +237,30 @@ jobs:
           name: pod-logs-${{matrix.strategy}}-${{matrix.case}}
           path: |
             tests/e2e/output/logs/
+          retention-days: 7
+
+  coverage:
+    name: Generate coverage report
+    runs-on: ubuntu-latest
+    needs:
+      - e2e-tests
+      - unit-tests
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Copy all e2e coverage files in a single directory
+        run: |
+          mkdir -p merged-coverage
+          find . -type f -path "./coverage-*" -exec cp {} merged-coverage \;
+          echo "Merged coverage files:"
+          ls -l merged-coverage
+          go tool covdata percent -i=merged-coverage/ -o=merged-coverage/coverage-e2e.out
+
+      - name: Archive merged code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merged-coverage
+          path: merged-coverage
           retention-days: 7
