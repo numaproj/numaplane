@@ -142,18 +142,14 @@ func ProcessResource(
 	}
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, false, c)
+	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return false, 0, err
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
-		// Create it, first making sure one doesn't already exist by checking the live K8S API
-		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
-		if err != nil {
-			return false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
-		}
+		// Create it
 		if currentUpgradingChildDef == nil {
 			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 			if needRequeue {
@@ -170,12 +166,6 @@ func ProcessResource(
 	}
 
 	// There's already an Upgrading child, now process it
-
-	// Get the live resource so we don't have issues with an outdated cache
-	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildGVR().Resource)
-	if err != nil {
-		return false, 0, err
-	}
 
 	// Add the upgradingChild to the logger in context (only if the related flag is enabled)
 	if logObjects {
