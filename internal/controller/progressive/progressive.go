@@ -142,18 +142,13 @@ func ProcessResource(
 	}
 
 	// is there currently an "upgrading" child?
-	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, false, c)
+	currentUpgradingChildDef, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return false, 0, err
 	}
 
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
-	if promotedDifference && currentUpgradingChildDef == nil {
-		// Create it, first making sure one doesn't already exist by checking the live K8S API
-		currentUpgradingChildDef, err = ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
-		if err != nil {
-			return false, 0, fmt.Errorf("error getting %s: %v", currentUpgradingChildDef.GetKind(), err)
-		}
+	if promotedDifference {
 		if currentUpgradingChildDef == nil {
 			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 			if needRequeue {
@@ -161,49 +156,42 @@ func ProcessResource(
 			} else {
 				return false, 0, err
 			}
-		}
-	}
 
-	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
-	if currentUpgradingChildDef == nil {
-		return true, 0, err
-	}
-
-	// There's already an Upgrading child, now process it
-
-	// Get the live resource so we don't have issues with an outdated cache
-	currentUpgradingChildDef, err = kubernetes.GetLiveResource(ctx, currentUpgradingChildDef, rolloutObject.GetChildGVR().Resource)
-	if err != nil {
-		return false, 0, err
-	}
-
-	// Add the upgradingChild to the logger in context (only if the related flag is enabled)
-	if logObjects {
-		ctx = logger.WithLogger(ctx, logger.FromContext(ctx).WithValues("upgradingChild", currentUpgradingChildDef))
-	}
-
-	// get UpgradingChildStatus and reset it if necessary
-	childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
-	if err != nil {
-		return false, 0, err
-	}
-
-	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
-	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
-		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
-		if needsRequeue {
-			return false, common.DefaultRequeueDelay, err
 		} else {
-			return false, 0, err
+			// There's already an Upgrading child, now process it
+
+			// Add the upgradingChild to the logger in context (only if the related flag is enabled)
+			if logObjects {
+				ctx = logger.WithLogger(ctx, logger.FromContext(ctx).WithValues("upgradingChild", currentUpgradingChildDef))
+			}
+
+			// get UpgradingChildStatus and reset it if necessary
+			childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
+			if err != nil {
+				return false, 0, err
+			}
+
+			// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
+			if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
+				needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
+				if needsRequeue {
+					return false, common.DefaultRequeueDelay, err
+				} else {
+					return false, 0, err
+				}
+			}
+
+			done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+			if err != nil {
+				return false, 0, err
+			}
+
+			return done, requeueDelay, nil
 		}
 	}
 
-	done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
-	if err != nil {
-		return false, 0, err
-	}
+	return true, 0, err
 
-	return done, requeueDelay, nil
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
