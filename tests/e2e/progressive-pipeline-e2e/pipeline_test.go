@@ -326,7 +326,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure,
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure,
 			fmt.Sprintf("Pipeline %s failed while upgrading", GetInstanceName(pipelineRolloutName, 1)))
 
 		DeletePipelineRollout(pipelineRolloutName)
