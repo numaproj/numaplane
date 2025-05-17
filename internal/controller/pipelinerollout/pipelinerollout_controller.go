@@ -1181,7 +1181,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
 			requireDrain = true
 
-		case common.LabelValueProgressiveFailure:
+		case common.LabelValueProgressiveFailureReplaced:
 			// this is the case of a previously failed "upgrading" pipeline which was replaced with a new one
 			// no need to pause since it's unhealthy
 		}

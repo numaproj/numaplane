@@ -445,6 +445,8 @@ func checkForUpgradeReplacement(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+
 	// check if there are any new incoming changes to the desired spec
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
 	if err != nil {
@@ -470,14 +472,17 @@ func checkForUpgradeReplacement(
 		}
 
 		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-		reasonFailure := common.LabelValueProgressiveFailure
+		reason := common.LabelValueProgressiveReplaced
+		if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
+			reason = common.LabelValueProgressiveFailureReplaced
+		}
 		// mark recyclable the existing upgrading child
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 		if err != nil {
 			return false, err
 		}
+		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 	}
-	childStatus := rolloutObject.GetUpgradingChildStatus()
 
 	// After creating the new Upgradng child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
 	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {

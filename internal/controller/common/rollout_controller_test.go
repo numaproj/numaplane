@@ -32,7 +32,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 	checkLive := false
 
 	reasonProgressiveSuccess := common.LabelValueProgressiveSuccess
-	reasonProgressiveFailure := common.LabelValueProgressiveFailure
+	reasonProgressiveFailure := common.LabelValueProgressiveFailureReplaced
 
 	tests := []struct {
 		name               string
