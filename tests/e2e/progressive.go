@@ -107,6 +107,31 @@ func VerifyPipelineRolloutProgressiveStatus(
 	}).Should(BeTrue())
 }
 
+func VerifyISBServiceRolloutProgressiveStatus(
+	isbServiceRolloutName string,
+	expectedPromotedName string,
+	expectedUpgradingName string,
+	expectedAssessmentResult apiv1.AssessmentResult,
+	expectedFailureReason string,
+) {
+	CheckEventually(fmt.Sprintf("verifying the ISBServiceRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
+		isbSvcRolloutProgressiveStatus := GetISBServiceRolloutProgressiveStatus(isbServiceRolloutName)
+
+		if isbSvcRolloutProgressiveStatus.UpgradingISBServiceStatus == nil {
+			return false
+		}
+
+		promotedStatus := isbSvcRolloutProgressiveStatus.PromotedISBServiceStatus
+		upgradingStatus := isbSvcRolloutProgressiveStatus.UpgradingISBServiceStatus
+
+		return promotedStatus.Name == expectedPromotedName &&
+			upgradingStatus.Name == expectedUpgradingName &&
+			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+			upgradingStatus.AssessmentEndTime != nil &&
+			upgradingStatus.FailureReason == expectedFailureReason
+	}).Should(BeTrue())
+}
+
 func VerifyMonoVertexRolloutScaledDownForProgressive(
 	monoVertexRolloutName string,
 	expectedPromotedName string,
@@ -478,4 +503,15 @@ func GetPipelineRolloutProgressiveStatus(pipelineRolloutName string) apiv1.Pipel
 	}
 
 	return apiv1.PipelineProgressiveStatus{}
+}
+
+func GetISBServiceRolloutProgressiveStatus(isbSvcRolloutName string) apiv1.ISBServiceProgressiveStatus {
+	isbSvcRollout, err := isbServiceRolloutClient.Get(ctx, isbSvcRolloutName, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred())
+
+	if isbSvcRollout != nil {
+		return isbSvcRollout.Status.ProgressiveStatus
+	}
+
+	return apiv1.ISBServiceProgressiveStatus{}
 }
