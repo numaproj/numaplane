@@ -1,0 +1,6 @@
+ignore:
+  - "pkg/client/.*"
+  - "tests/.*"
+  - "**/*generated.deepcopy.go"
+  - "internal/controller/common/test_common.go"
+  - "vendor/.*"

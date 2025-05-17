@@ -132,7 +132,12 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: codegen fmt vet envtest ## Run unit tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e) 
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -covermode=atomic -coverprofile=coverage.out -coverpkg=./... -p 1 -race -short -v $$(go list ./... | grep -v /tests/e2e | grep -v /pkg/client/ | grep -v /vendor/)
+
+test-with-coverage: test
+	grep -v "github.com/numaproj/numaplane/pkg/client" coverage.out | grep -v "github.com/numaproj/numaplane/tests/" | grep -v "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1/zz_generated.deepcopy.go" | grep -v "github.com/numaproj/numaplane/internal/controller/common/test_common.go" > filtered_coverage.out
+	go tool cover -func=filtered_coverage.out
+	go tool cover -html=filtered_coverage.out -o coverage.html
 
 test-functional-nc:
 test-functional-monovertex:
@@ -183,6 +188,13 @@ ifdef IMAGE_IMPORT_CMD
 	$(IMAGE_IMPORT_CMD) ${IMAGE_FULL_PATH}
 endif
 
+.PHONY: image-e2e
+image-e2e: ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} -f tests/e2e/coverage/Dockerfile .
+ifdef IMAGE_IMPORT_CMD
+	$(IMAGE_IMPORT_CMD) ${IMAGE_FULL_PATH}
+endif
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMAGE_FULL_PATH}
@@ -226,6 +238,12 @@ start: image prometheus rollouts
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
 	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 
+.PHONY: start-e2e
+start-e2e: image-e2e prometheus rollouts
+	./hack/numaflow-controller-def-generator/numaflow-controller-def-generator.sh
+	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/numaplane-ns.yaml
+	$(KUBECTL) kustomize $(TEST_MANIFEST_DIR) | sed 's@quay.io/numaproj/@$(IMAGE_NAMESPACE)/@' | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
+	cat tests/e2e/coverage/controller-manager.yaml | sed 's/$(IMG):$(BASE_VERSION)/$(IMG):$(VERSION)/' | $(KUBECTL) apply -f -
 
 ##@ Build Dependencies
 
