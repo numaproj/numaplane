@@ -490,8 +490,6 @@ func checkForUpgradeReplacement(
 		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return true, err
-		} else {
-			return false, err
 		}
 	}
 
@@ -774,7 +772,7 @@ func startPostUpgradeProcess(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues(
 		"promoted child", existingPromotedChild.GetName(),
-		"upgading child", newUpgradingChild.GetName())
+		"upgrading child", newUpgradingChild.GetName())
 
 	numaLogger.Debug("starting post upgrade process")
 
