@@ -327,11 +327,15 @@ func scaleDownUpgradingMonoVertex(
 	upgradingMonoVertexDef *unstructured.Unstructured,
 ) error {
 	// Update the scale values of the Upgrading Child, but first save the original scale values
-	originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	originalScaleMinMaxString, err := progressive.ExtractScaleMinMaxAsJSONString(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	if err != nil {
+		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex as string: %w", err)
+	}
+	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMaxString
+	originalScaleMinMax, err := progressive.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
-	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMax
 
 	if monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus == nil {
 		return errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
@@ -346,7 +350,10 @@ func scaleDownUpgradingMonoVertex(
 		// which is necessary when performing the health check for "ready replicas >= desired replicas"
 		// 2. that the total number of Pods (between the 2 monovertices) before and during upgrade remains the same
 		upgradingChildScaleTo := scaleValue.Initial - scaleValue.ScaleTo
-		if upgradingChildScaleTo <= 0 { // if for some reason the Initial value was 0, we don't want to set our Pods to 0
+		// if for some reason there were no Pods running in the promoted MonoVertex at the time (i.e. maybe some failure) and the Max was not set to 0 explicitly,
+		// then we don't want to set our Pods to 0 so set to 1 at least
+		maxZero := originalScaleMinMax != nil && originalScaleMinMax.Max != nil && *originalScaleMinMax.Max == 0
+		if upgradingChildScaleTo <= 0 && !maxZero {
 			upgradingChildScaleTo = 1
 		}
 
