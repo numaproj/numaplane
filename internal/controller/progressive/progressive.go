@@ -436,6 +436,8 @@ func processUpgradingChild(
 	}
 }
 
+// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
+// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
 func checkForUpgradeReplacement(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
@@ -458,9 +460,7 @@ func checkForUpgradeReplacement(
 		return false, err
 	}
 
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	if needsUpdating {
 		needRequeue := false
 		newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
@@ -481,7 +481,7 @@ func checkForUpgradeReplacement(
 		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 	}
 
-	// After creating the new Upgradng child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
+	// After creating the new Upgrading child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
 	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
 
 		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
