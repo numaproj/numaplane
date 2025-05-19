@@ -248,9 +248,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("error processing existing MonoVertex: %v", err)
 			}
-			if requeueDelay > 0 {
-				return ctrl.Result{RequeueAfter: requeueDelay}, nil
-			}
 			// process status
 			r.processMonoVertexStatus(ctx, existingMonoVertexDef, monoVertexRollout)
 		}
