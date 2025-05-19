@@ -179,13 +179,20 @@ func ProcessResource(
 	}
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
-	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
+	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown
+	if initializationIncomplete {
 		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChild, currentUpgradingChildDef, controller, c)
 		if needsRequeue {
 			return false, common.DefaultRequeueDelay, err
 		} else {
 			return false, 0, err
 		}
+	}
+
+	// determine if we need to replace the Upgrading child with a newer one
+	needsRequeue, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	if needsRequeue {
+		return false, common.DefaultRequeueDelay, err
 	}
 
 	done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
@@ -392,53 +399,6 @@ func processUpgradingChild(
 		childStatus.ChildStatus.Raw = childSts
 		rolloutObject.SetUpgradingChildStatus(childStatus)
 
-		// check if there are any new incoming changes to the desired spec
-		newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
-		if err != nil {
-			return false, 0, err
-		}
-
-		needsUpdating, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
-		if err != nil {
-			return false, 0, err
-		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Replace existing Upgrading child with new one and mark the existing one for garbage collection
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		if needsUpdating {
-			needRequeue := false
-			newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
-			if err != nil {
-				return false, 0, err
-			}
-			if needRequeue {
-				return false, common.DefaultRequeueDelay, nil
-			}
-
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-			reasonFailure := common.LabelValueProgressiveFailure
-			// mark recyclable the existing upgrading child
-			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonFailure, existingUpgradingChildDef)
-			if err != nil {
-				return false, 0, err
-			}
-		}
-		childStatus = rolloutObject.GetUpgradingChildStatus()
-
-		// After creating the new Upgradng child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
-		if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
-
-			needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
-			if needsRequeue {
-				return false, common.DefaultRequeueDelay, err
-			} else {
-				return false, 0, err
-			}
-		}
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-		// if we didn't return above, we are just handling standard failure case with no new Upgrading child to replace the old one
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
 			return false, 0, err
@@ -474,6 +434,64 @@ func processUpgradingChild(
 
 		return false, assessmentSchedule.Interval, nil
 	}
+}
+
+// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
+// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+func checkForUpgradeReplacement(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+
+	// check if there are any new incoming changes to the desired spec
+	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
+	if err != nil {
+		return false, err
+	}
+
+	needsUpdating, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
+	if err != nil {
+		return false, err
+	}
+
+	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
+	if needsUpdating {
+		needRequeue := false
+		newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
+		if err != nil {
+			return false, err
+		}
+		if needRequeue {
+			return true, nil
+		}
+
+		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
+		reason := common.LabelValueProgressiveReplaced
+		// mark recyclable the existing upgrading child
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
+	}
+
+	// After creating the new Upgrading child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
+	if !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown {
+
+		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
+		if needsRequeue {
+			return true, err
+		}
+	}
+
+	// if we just created a new upgrading child, we should requeue
+	return needsUpdating, nil
 }
 
 // does our Rollout need updating? (used after case of Failure)
@@ -751,7 +769,7 @@ func startPostUpgradeProcess(
 ) (bool, error) {
 	numaLogger := logger.FromContext(ctx).WithValues(
 		"promoted child", existingPromotedChild.GetName(),
-		"upgading child", newUpgradingChild.GetName())
+		"upgrading child", newUpgradingChild.GetName())
 
 	numaLogger.Debug("starting post upgrade process")
 

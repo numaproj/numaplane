@@ -1104,9 +1104,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
-			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
 			},
 		},
