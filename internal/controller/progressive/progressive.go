@@ -473,9 +473,6 @@ func checkForUpgradeReplacement(
 
 		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 		reason := common.LabelValueProgressiveReplaced
-		if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
-			reason = common.LabelValueProgressiveFailureReplaced
-		}
 		// mark recyclable the existing upgrading child
 		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 		if err != nil {

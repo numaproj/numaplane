@@ -109,9 +109,6 @@ const (
 	// LabelValueProgressiveReplaced is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child having been replaced
 	LabelValueProgressiveReplaced UpgradeStateReason = "progressive-replaced"
 
-	// LabelValueProgressiveFailureReplaced is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Failed Progressive child having been replaced
-	LabelValueProgressiveFailureReplaced UpgradeStateReason = "progressive-failure-replaced"
-
 	// LabelValueDeleteRecreateChild is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to a child being deleted and recreated
 	LabelValueDeleteRecreateChild UpgradeStateReason = "delete-recreate"
 

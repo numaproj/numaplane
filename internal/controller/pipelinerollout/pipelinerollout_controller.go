@@ -1174,17 +1174,15 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
 			// which required that.
 			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess:
-			// this is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
+		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced:
+			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
+			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
 			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
 			pause = true
 			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
-			requireDrain = true
-
-		case common.LabelValueProgressiveFailureReplaced:
-			// this is the case of a previously failed "upgrading" pipeline which was replaced with a new one
-			// no need to pause since it's unhealthy
+			requireDrain = false
 		}
+
 	}
 
 	if requireDrain {
