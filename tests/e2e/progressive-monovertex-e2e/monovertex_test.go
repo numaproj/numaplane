@@ -80,7 +80,7 @@ func TestProgressiveE2E(t *testing.T) {
 		BeforeSuiteSetup()
 	})
 
-	RunSpecs(t, "Progressive E2E Suite")
+	RunSpecs(t, "Progressive MonoVertex E2E Suite")
 }
 
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
