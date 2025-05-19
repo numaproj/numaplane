@@ -32,7 +32,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 	checkLive := false
 
 	reasonProgressiveSuccess := common.LabelValueProgressiveSuccess
-	reasonProgressiveFailure := common.LabelValueProgressiveFailureReplaced
+	reasonUpgradingReplaced := common.LabelValueProgressiveReplaced
 
 	tests := []struct {
 		name               string
@@ -57,13 +57,13 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "Multiple children with valid indices - upgrade strategy reason specified",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveFailure),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveFailure),
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
 				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess),
 				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
-			upgradeStateReason: &reasonProgressiveFailure,
+			upgradeStateReason: &reasonUpgradingReplaced,
 			expectedName:       "my-pipeline-2",
 			expectedError:      nil,
 		},
