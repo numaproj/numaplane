@@ -171,7 +171,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	return false, nil
 }
 
-// ProcessPromotedChildPreRecycle process the Promoted child directly prior to it being recycled
+// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
 // (due to being replaced by a new Promoted child)
 func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreRecycle(
 	ctx context.Context,
@@ -453,7 +453,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 	return false, nil
 }
 
-// ProcessUpgradingChildPreRecycle process the Upgrading child directly prior to it being recycled
+// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
 // (due to being replaced by a new Upgrading child)
 func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreRecycle(
 	ctx context.Context,
