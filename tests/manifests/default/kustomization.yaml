@@ -6,7 +6,6 @@ resources:
   - ./controller_def_1.4.2.yaml
   - ./controller_def_1.4.3.yaml
   - ./controller_def_1.4.4.yaml
-  - ./controller_def_1.5.0-rc1.yaml
   - ./prometheus-monitors.yaml
   - https://raw.githubusercontent.com/kubernetes/autoscaler/vpa-release-1.0/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
 

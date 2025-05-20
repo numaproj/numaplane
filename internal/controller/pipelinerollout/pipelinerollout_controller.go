@@ -1185,17 +1185,6 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 
 	}
 
-	if requireDrain {
-		modified, err := r.ensurePipelineIsDrainable(ctx, pipeline)
-		if err != nil {
-			return false, err
-		}
-		if modified {
-			// since we just changed the pipeline, give numaflow a chance to reconcile it and then pause it, so requeue
-			return false, nil
-		}
-	}
-
 	if pause {
 		// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
 		pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, requireDrain)
@@ -1298,38 +1287,6 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	}
 
 	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
-}
-
-// In order to be "drainable", a Pipeline must not have any Vertices other than Source Vertex which have min=max=0,
-// since in order to drain, we need to be able to process messages from source through sink.
-// If it does have min=max=0, we need to patch it
-// return whether a modification was made to the pipeline
-func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
-	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipeline.GetName())
-
-	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
-	if err != nil {
-		return false, err
-	}
-	modified := false
-	for i, vertexScaleDef := range vertexScaleDefinitions {
-		if vertexScaleDef.ScaleDefinition != nil && vertexScaleDef.ScaleDefinition.Max != nil && *vertexScaleDef.ScaleDefinition.Max == 0 {
-			// TODO: ideally we would only do this for non-source vertices; effect is that when this is called as part of recycling pipeline,
-			// we briefly resume the Source but then take it back down to 0 Pods during the pause which is unnnecessary
-			numaLogger.WithValues("vertex", vertexScaleDef.VertexName).Debugf("vertex has scale.max=0; need to increase to 1 in order to drain before deletion")
-			one := int64(1)
-			vertexScaleDef.ScaleDefinition.Min = &one
-			vertexScaleDef.ScaleDefinition.Max = &one
-			vertexScaleDefinitions[i] = vertexScaleDef
-			modified = true
-		}
-	}
-	if modified {
-		if err = applyScaleValuesToLivePipeline(ctx, pipeline, vertexScaleDefinitions, r.client); err != nil {
-			return false, err
-		}
-	}
-	return modified, nil
 }
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {
