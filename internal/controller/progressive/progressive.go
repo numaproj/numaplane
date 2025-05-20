@@ -469,7 +469,7 @@ func checkForUpgradeReplacement(
 	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
 	if needsUpdating {
 		// mark recyclable the existing upgrading child
-		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
+		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
 		if err != nil {
 			return false, err
 		}
