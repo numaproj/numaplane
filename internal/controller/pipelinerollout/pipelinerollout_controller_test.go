@@ -1851,6 +1851,7 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 	}
 }
 
+/*
 func Test_ensurePipelineIsDrainable(t *testing.T) {
 
 	_, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
@@ -1903,7 +1904,7 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 							}
 						}
 					  ]
-	
+
 				}
 					  `,
 			shouldBeModified: true,
@@ -1936,7 +1937,7 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 							}
 						}
 					  ]
-	
+
 				}
 					  `,
 		},
@@ -1971,7 +1972,7 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 							}
 						}
 					  ]
-	
+
 				}
 					  `,
 			shouldBeModified: false,
@@ -2009,3 +2010,4 @@ func Test_ensurePipelineIsDrainable(t *testing.T) {
 		})
 	}
 }
+*/

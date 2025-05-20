@@ -1300,6 +1300,7 @@ func (r *PipelineRolloutReconciler) garbageCollectChildren(
 	return ctlrcommon.GarbageCollectChildren(ctx, pipelineRollout, r, r.client)
 }
 
+/*
 // In order to be "drainable", a Pipeline must not have any Vertices other than Source Vertex which have min=max=0,
 // since in order to drain, we need to be able to process messages from source through sink.
 // If it does have min=max=0, we need to patch it
@@ -1330,7 +1331,7 @@ func (r *PipelineRolloutReconciler) ensurePipelineIsDrainable(ctx context.Contex
 		}
 	}
 	return modified, nil
-}
+}*/
 
 func getLivePipelineRollout(ctx context.Context, name, namespace string) (*apiv1.PipelineRollout, error) {
 	PipelineRollout, err := kubernetes.NumaplaneClient.NumaplaneV1alpha1().PipelineRollouts(namespace).Get(ctx, name, metav1.GetOptions{})
