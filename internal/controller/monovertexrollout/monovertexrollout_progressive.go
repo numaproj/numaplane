@@ -419,7 +419,7 @@ Parameters:
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:
-  - A boolean indicating whether we should requeue (this is ignored if error != nil)
+  - A boolean indicating whether we should requeue
   - An error if any issues occur during processing.
 */
 func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
