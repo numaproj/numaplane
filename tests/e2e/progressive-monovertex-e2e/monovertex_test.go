@@ -86,7 +86,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 	})
 
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {

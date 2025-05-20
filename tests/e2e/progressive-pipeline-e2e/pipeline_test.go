@@ -129,7 +129,7 @@ func TestProgressiveE2E(t *testing.T) {
 var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("Should create initial rollout objects", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
