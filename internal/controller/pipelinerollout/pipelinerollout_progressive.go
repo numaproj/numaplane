@@ -529,18 +529,26 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
 	upgradingPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) error {
+	numaLogger := logger.FromContext(ctx)
 
-	/*numaLogger.Debug("started pre-recycle processing of upgrading pipeline")
+	numaLogger.Debug("started pre-recycle processing of upgrading pipeline")
 	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
+	if !ok {
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-recycle", rolloutObject)
+	}
 
 	// For each Pipeline vertex, patch to the original scale definition
-	// The reason we do this is to enable the Pipeline to drain.
+	// This enables the Pipeline to drain faster than it otherwise would. (Note that draining will immediately take the Source down to 0)
 	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
 	if upgradingPipelineStatus == nil {
 		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
 	}
 
-	return applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)*/
+	err := applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
+	if err != nil {
+		numaLogger.Error(err, "failed to perform pre-recycle processing of upgrading pipeline")
+	}
+	numaLogger.Debug("completed pre-recycle processing of upgrading pipeline")
 	return nil
 }
 
