@@ -100,6 +100,16 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: numaproj/numaplane
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Archive unit test code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-tests-coverage
+          path: coverage.out
+          retention-days: 7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -126,7 +136,6 @@ jobs:
             case: "progressive-pipeline"
           - strategy: "progressive"
             case: "rider"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -168,13 +177,44 @@ jobs:
       - name: Install Numaplane
         env:
           GOPATH: /home/runner/go
-        run:
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} make start
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} TEST_TYPE=e2e make start
+
+      - name: Wait for Numaplane to be ready
+        run: |
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          echo 'Waiting for the numaplane-controller-manager to be ready...'
+          kubectl get po -n numaplane-system
+          kubectl wait --for=condition=Ready --timeout=5m pod/$POD_NAME -n numaplane-system
 
       - name: Run e2e tests
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+        run: |
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+
+      ## This is a temporary solution to kill the process twice, until we have fix for a stuck process after initial kill.
+      - name: Stop numaplane process
+        if: always()
+        run: |
+          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
+          sleep 10s
+          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
+
+      - name: Copy report from Numaplane pod
+        run: |
+          mkdir -p tests/e2e/output/resources/coverage/
+          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+          kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
+
+      - name: Archive code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{matrix.strategy}}-${{matrix.case}}
+          path: |
+            tests/e2e/output/resources/coverage/
+          retention-days: 7
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
@@ -192,4 +232,53 @@ jobs:
           name: pod-logs-${{matrix.strategy}}-${{matrix.case}}
           path: |
             tests/e2e/output/logs/
+          retention-days: 7
+
+  coverage:
+    name: Generate coverage report
+    runs-on: ubuntu-latest
+    needs:
+      - e2e-tests
+      - unit-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Setup Golang
+        uses: actions/setup-go@v4.0.0
+        with:
+          go-version: '1.23'
+
+      - name: Install gocovmerge
+        run: go install github.com/bookerzzz/gocovmerge@latest
+
+      - name: Copy all e2e coverage files in a single directory
+        run: |
+          mkdir -p merged-coverage
+          find . -type f -path "./coverage-*" -exec cp {} merged-coverage \;
+          echo "################# Merged e2e coverage files: #################"
+          ls -l merged-coverage
+          echo "##################################"
+          go tool covdata percent -i=merged-coverage/ -o=coverage-e2e.out
+          cp unit-tests-coverage/coverage.out .
+          gocovmerge coverage.out coverage-e2e.out > merged_coverage.out
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          disable_search: true
+          fail_ci_if_error: true
+          verbose: true
+          files: merged_coverage.out
+
+      - name: Archive merged code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merged-coverage
+          path: merged-coverage
           retention-days: 7
