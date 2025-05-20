@@ -81,6 +81,12 @@ type progressiveController interface {
 
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessPromotedChildPreRecycle performs operations on the promoted child prior to its being recycled
+	ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
+	ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -462,6 +468,18 @@ func checkForUpgradeReplacement(
 
 	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
 	if needsUpdating {
+		// mark recyclable the existing upgrading child
+		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
+		if err != nil {
+			return false, err
+		}
+
+		reason := common.LabelValueProgressiveReplaced
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+
 		needRequeue := false
 		newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 		if err != nil {
@@ -472,12 +490,6 @@ func checkForUpgradeReplacement(
 		}
 
 		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-		reason := common.LabelValueProgressiveReplaced
-		// mark recyclable the existing upgrading child
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
-		if err != nil {
-			return false, err
-		}
 		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 	}
 
@@ -690,6 +702,10 @@ func declareSuccess(
 		return false, err
 	}
 
+	err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
+	if err != nil {
+		return false, err
+	}
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err
