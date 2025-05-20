@@ -1185,7 +1185,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 
 	}
 
-	if requireDrain {
+	/*if requireDrain {
 		modified, err := r.ensurePipelineIsDrainable(ctx, pipeline)
 		if err != nil {
 			return false, err
@@ -1194,7 +1194,7 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 			// since we just changed the pipeline, give numaflow a chance to reconcile it and then pause it, so requeue
 			return false, nil
 		}
-	}
+	}*/
 
 	if pause {
 		// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
