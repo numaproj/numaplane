@@ -133,7 +133,7 @@ var (
 		},
 		Spec: argorolloutsv1.AnalysisTemplateSpec{
 			Args: []argorolloutsv1.Argument{
-				{Name: "monovertex-name"},
+				{Name: "upgrading-monovertex-name"},
 				{Name: "monovertex-namespace"},
 			},
 			Metrics: []argorolloutsv1.Metric{
@@ -162,7 +162,7 @@ var (
 		},
 		Spec: argorolloutsv1.AnalysisTemplateSpec{
 			Args: []argorolloutsv1.Argument{
-				{Name: "monovertex-name"},
+				{Name: "upgrading-monovertex-name"},
 				{Name: "monovertex-namespace"},
 			},
 			Metrics: []argorolloutsv1.Metric{
@@ -204,7 +204,7 @@ var (
 				},
 			},
 			Args: []argorolloutsv1.Argument{
-				{Name: "monovertex-name", Value: &analysisRunName},
+				{Name: "upgrading-monovertex-name", Value: &analysisRunName},
 				{Name: "monovertex-namespace", Value: &ctlrcommon.DefaultTestNamespace},
 			},
 		},
