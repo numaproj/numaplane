@@ -70,7 +70,7 @@ func TestFunctionalE2E(t *testing.T) {
 var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should create the NumaflowControllerRollout if it doesn't exist", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 	})
 
 	It("Should create the MonoVertexRollout if it does not exist", func() {
