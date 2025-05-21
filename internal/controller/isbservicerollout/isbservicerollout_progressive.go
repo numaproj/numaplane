@@ -109,6 +109,17 @@ func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPostFailure(
 	return false, nil
 }
 
+// ProcessPromotedChildPreRecycle process the Promoted child directly prior to it being recycled
+// (due to being replaced by a new Promoted child)
+func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreRecycle(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	promotedChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return nil
+}
+
 func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -148,4 +159,15 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 		return false, fmt.Errorf("failed to apply PodDisruptionBudget for ISBService %s, err: %v", upgradingChildDef.GetName(), err)
 	}
 	return false, nil
+}
+
+// ProcessUpgradingChildPreRecycle process the Upgrading child directly prior to it being recycled
+// (due to being replaced by a new Upgrading child)
+func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreRecycle(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	return nil
 }
