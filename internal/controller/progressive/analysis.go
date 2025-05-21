@@ -93,11 +93,12 @@ Parameters:
   - existingUpgradingChildDef: the definition of the upgrading child as an unstructured object.
   - ownerReference: reference to the upgrading child this AnalysisRun is associated with - ensures cleanup
   - client: the client used for interacting with the Kubernetes API.
+  - promotedChildName - argument we support in templates.
 
 Returns:
   - An error if any issues occur during processing.
 */
-func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client) error {
+func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) error {
 
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
@@ -111,10 +112,12 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 
 	switch existingUpgradingChildDef.GetKind() {
 	case "MonoVertex":
-		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "monovertex-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "upgrading-monovertex-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "promoted-monovertex-name", Value: &promotedChildName})
 		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "monovertex-namespace", Value: &childNamespace})
 	case "Pipeline":
-		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "upgrading-pipeline-name", Value: &childName})
+		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "promoted-pipeline-name", Value: &promotedChildName})
 		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-namespace", Value: &childNamespace})
 	}
 

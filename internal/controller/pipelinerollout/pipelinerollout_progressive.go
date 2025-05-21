@@ -104,7 +104,12 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 			if apierrors.IsNotFound(err) {
 				// analysisRun is created the first time the upgrading child is assessed
 				ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace(), UID: existingUpgradingChildDef.GetUID()}, numaflowv1.PipelineGroupVersionKind)
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client)
+				promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+				var promotedChildName string
+				if promotedChildStatus != nil {
+					promotedChildName = promotedChildStatus.Name
+				}
+				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client, promotedChildName)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
