@@ -80,8 +80,8 @@ const (
 	InitialNumaflowControllerVersion = "1.4.3"
 	UpdatedNumaflowControllerVersion = "1.4.6"
 
-	InitialJetstreamVersion = "2.10.11"
-	UpdatedJetstreamVersion = "2.10.17"
+	InitialJetstreamVersion = "2.10.17"
+	UpdatedJetstreamVersion = "2.10.11"
 
 	Namespace = "numaplane-system"
 
