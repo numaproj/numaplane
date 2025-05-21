@@ -269,14 +269,48 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 		return true, errors.New("unable to perform post-upgrade operations because the rollout does not have promotedChildStatus set")
 	}
 
-	requeue, err := scalePipelineVerticesToOriginalValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
-	if err != nil {
+	if err := scalePromotedPipelineToOriginalScale(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c); err != nil {
 		return true, err
 	}
 
 	numaLogger.Debug("completed post-failure processing of promoted pipeline")
 
-	return requeue, nil
+	return false, nil
+}
+
+// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
+// (due to being replaced by a new Promoted child)
+func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
+	ctx context.Context,
+	pipelineRollout progressive.ProgressiveRolloutObject,
+	promotedPipelineDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostFailure").WithName("PipelineRollout").
+		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
+
+	numaLogger.Debug("started pre-recycle processing of promoted pipeline")
+
+	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
+	if !ok {
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline post-upgrade", pipelineRollout)
+	}
+
+	// Prior to draining the Pipeline, which we do during recycling, we need to make sure we scale it back up to original scale
+	// Original scale can help us to drain it faster.
+	// Moreover, if a Vertex was scaled to 0 pods, we need to scale it back up in order for it to drain at all
+
+	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
+		numaLogger.Error(errors.New("rollout does not have promotedChildStatus set"), "Can't scale Promoted Pipeline back to original scale prior to draining")
+	} else {
+		if err := scalePromotedPipelineToOriginalScale(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c); err != nil {
+			numaLogger.Error(err, "Can't scale Promoted Pipeline back to original scale prior to draining")
+		}
+	}
+
+	numaLogger.Debug("completed pre-recycle processing of promoted pipeline")
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
@@ -492,6 +526,37 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
+// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
+// (due to being replaced by a new Upgrading child)
+func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	upgradingPipelineDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+	numaLogger := logger.FromContext(ctx)
+
+	numaLogger.Debug("started pre-recycle processing of upgrading pipeline")
+	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
+	if !ok {
+		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-recycle", rolloutObject)
+	}
+
+	// For each Pipeline vertex, patch to the original scale definition
+	// This enables the Pipeline to drain faster than it otherwise would. (Note that draining will immediately take the Source down to 0)
+	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+	if upgradingPipelineStatus == nil {
+		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
+	}
+
+	err := applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
+	if err != nil {
+		numaLogger.Error(err, "failed to perform pre-recycle processing of upgrading pipeline")
+	}
+	numaLogger.Debug("completed pre-recycle processing of upgrading pipeline")
+	return nil
+}
+
 /*
 computePipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
 for all vertices before performing the actually scaling down of the promoted pipeline.
@@ -590,7 +655,7 @@ func computePipelineVerticesScaleValues(
 }
 
 /*
-scalePipelineVerticesToOriginalValues scales the vertices of a pipeline to their original values based on the rollout status.
+scalePromotedPipelineToOriginalScale scales the vertices of a pipeline to their original values based on the rollout status.
 This function checks if the pipeline vertices have already been scaled to the original values. If not, it restores the scale values
 from the rollout's promoted pipeline status and updates the Kubernetes resource accordingly.
 
@@ -604,28 +669,28 @@ Returns:
 - bool: true if should requeue, false otherwise. Should requeue in case of error or if not all vertices have been scaled back to the original values.
 - An error if any issues occur during the scaling process.
 */
-func scalePipelineVerticesToOriginalValues(
+func scalePromotedPipelineToOriginalScale(
 	ctx context.Context,
 	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
-) (bool, error) {
+) error {
 
 	numaLogger := logger.FromContext(ctx).WithName("scalePipelineVerticesToOriginalValues").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	// If all the pipeline vertices have been scaled back to the original values already, do not restore scaling values again
 	if promotedPipelineStatus.AreScaleValuesRestoredToOriginal(promotedPipelineDef.GetName()) {
-		return false, nil
+		return nil
 	}
 
 	if promotedPipelineStatus.ScaleValues == nil {
-		return true, errors.New("unable to restore scale values for the promoted pipeline vertices because the rollout does not have promotedChildStatus set")
+		return errors.New("unable to restore scale values for the promoted pipeline vertices because the rollout does not have promotedChildStatus set")
 	}
 
 	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
 	if err != nil {
-		return true, fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
+		return fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
 	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
 
@@ -634,15 +699,15 @@ func scalePipelineVerticesToOriginalValues(
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
-				return true, err
+				return err
 			}
 			if !found {
-				return true, errors.New("a vertex must have a name")
+				return errors.New("a vertex must have a name")
 			}
 
 			vertexScaleValues, exists := promotedPipelineStatus.ScaleValues[vertexName]
 			if !exists {
-				return true, fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
+				return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
 			if vertexScaleValues.OriginalScaleMinMax == "null" {
@@ -657,7 +722,7 @@ func scalePipelineVerticesToOriginalValues(
 				scaleAsMap := map[string]any{}
 				err = json.Unmarshal([]byte(vertexScaleValues.OriginalScaleMinMax), &scaleAsMap)
 				if err != nil {
-					return true, fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
+					return fmt.Errorf("failed to unmarshal OriginalScaleMinMax: %w", err)
 				}
 
 				var min, max *int64
@@ -682,7 +747,7 @@ func scalePipelineVerticesToOriginalValues(
 	}
 
 	if err := applyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
-		return true, fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
+		return fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
 	}
 
 	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline vertices with the original scale configuration")
@@ -690,7 +755,7 @@ func scalePipelineVerticesToOriginalValues(
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = true
 	promotedPipelineStatus.ScaleValues = nil
 
-	return false, nil
+	return nil
 }
 
 func applyScaleValuesToPipelineDefinition(

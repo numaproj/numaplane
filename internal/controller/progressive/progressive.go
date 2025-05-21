@@ -56,31 +56,37 @@ type progressiveController interface {
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessPromotedChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostUpgrade performs operations on the promoted child after the creation of the Upgrading child in K8S (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessPromotedChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessPromotedChildPostFailure performs operations on the promoted child after the upgrade fails (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessPromotedChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPreUpgrade performs operations on the upgrading child definition prior to its creation in K8S (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPreUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostUpgrade performs operations on the upgrading child after its creation in K8S (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPostUpgrade(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostFailure performs operations on the upgrading child after the upgrade fails (just the operations which are unique to this Kind)
-	// return true if requeue is needed
+	// return true if requeue is needed (note this is ignored if error != nil)
 	ProcessUpgradingChildPostFailure(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) (bool, error)
 
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessPromotedChildPreRecycle performs operations on the promoted child prior to its being recycled
+	ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
+	ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -462,6 +468,18 @@ func checkForUpgradeReplacement(
 
 	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
 	if needsUpdating {
+		// mark recyclable the existing upgrading child
+		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
+		if err != nil {
+			return false, err
+		}
+
+		reason := common.LabelValueProgressiveReplaced
+		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
+		if err != nil {
+			return false, err
+		}
+
 		needRequeue := false
 		newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 		if err != nil {
@@ -472,12 +490,6 @@ func checkForUpgradeReplacement(
 		}
 
 		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-		reason := common.LabelValueProgressiveReplaced
-		// mark recyclable the existing upgrading child
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
-		if err != nil {
-			return false, err
-		}
 		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 	}
 
@@ -690,6 +702,10 @@ func declareSuccess(
 		return false, err
 	}
 
+	err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
+	if err != nil {
+		return false, err
+	}
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err

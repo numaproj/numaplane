@@ -31,6 +31,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	"k8s.io/utils/strings/slices"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -72,38 +73,115 @@ var (
 		},
 	}
 
-	// TODO: will use in AnalysisRun test later
-	// testTemplate = argorolloutsv1.AnalysisTemplate{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      "test",
-	// 		Namespace: ctlrcommon.DefaultTestNamespace,
-	// 	},
-	// 	TypeMeta: metav1.TypeMeta{
-	// 		Kind:       "AnalysisTemplate",
-	// 		APIVersion: "argoproj.io/v1alpha1",
-	// 	},
-	// 	Spec: argorolloutsv1.AnalysisTemplateSpec{
-	// 		Args: []argorolloutsv1.Argument{
-	// 			{Name: "monovertex-name"},
-	// 			{Name: "monovertex-namespace"},
-	// 		},
-	// 		Metrics: []argorolloutsv1.Metric{
-	// 			{
-	// 				Name: "return-true",
-	// 				Provider: argorolloutsv1.MetricProvider{
-	// 					Prometheus: &argorolloutsv1.PrometheusMetric{
-	// 						Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
-	// 						Query:   "vector(1) == vector(2)",
-	// 					},
-	// 				},
-	// 				SuccessCondition: "true",
-	// 			},
-	// 		},
-	// 	},
-	// }
+	defaultOriginalMonoVertexDef = *createMonoVertex(
+		numaflowv1.MonoVertexPhaseRunning,
+		numaflowv1.Status{},
+		map[string]string{
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
+			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+		},
+		map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "0",
+		})
 
-	analysisRunName = "monovertexrollout-test-1"
-	testAnalysisRun = argorolloutsv1.AnalysisRun{
+	defaultUpgradingMonoVertexDef = ctlrcommon.CreateTestMonoVertexOfSpec(
+		monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
+		numaflowv1.MonoVertexPhaseRunning,
+		numaflowv1.Status{
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+					Status:             metav1.ConditionTrue,
+					Reason:             "healthy",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+			},
+		},
+		map[string]string{
+			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
+		},
+		map[string]string{
+			common.AnnotationKeyNumaflowInstanceID: "1",
+		})
+
+	defaultPromotedChildStatus = &apiv1.PromotedMonoVertexStatus{
+		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
+			PromotedChildStatus: apiv1.PromotedChildStatus{
+				Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
+			},
+			ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+		},
+	}
+
+	unassessedUpgradingChildStatus = apiv1.UpgradingChildStatus{
+		Name:                   ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
+		AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+		AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+		AssessmentResult:       apiv1.AssessmentResultUnknown,
+		InitializationComplete: true,
+	}
+
+	vectorTemplate = argorolloutsv1.AnalysisTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vector",
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisTemplate",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisTemplateSpec{
+			Args: []argorolloutsv1.Argument{
+				{Name: "monovertex-name"},
+				{Name: "monovertex-namespace"},
+			},
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-vector",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "vector(1) == vector(2)",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+		},
+	}
+
+	resultTemplate = argorolloutsv1.AnalysisTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "result",
+			Namespace: ctlrcommon.DefaultTestNamespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AnalysisTemplate",
+			APIVersion: "argoproj.io/v1alpha1",
+		},
+		Spec: argorolloutsv1.AnalysisTemplateSpec{
+			Args: []argorolloutsv1.Argument{
+				{Name: "monovertex-name"},
+				{Name: "monovertex-namespace"},
+			},
+			Metrics: []argorolloutsv1.Metric{
+				{
+					Name: "return-result",
+					Provider: argorolloutsv1.MetricProvider{
+						Prometheus: &argorolloutsv1.PrometheusMetric{
+							Address: " http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090",
+							Query:   "result[0] == 1",
+						},
+					},
+					SuccessCondition: "true",
+				},
+			},
+		},
+	}
+
+	analysisRunName       = "monovertexrollout-test-1"
+	successfulAnalysisRun = argorolloutsv1.AnalysisRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      analysisRunName,
 			Namespace: ctlrcommon.DefaultTestNamespace,
@@ -241,6 +319,166 @@ func createMonoVertex(phase numaflowv1.MonoVertexPhase, status numaflowv1.Status
 	return ctlrcommon.CreateTestMonoVertexOfSpec(monoVertexSpec, ctlrcommon.DefaultTestMonoVertexName, phase, status, labels, annotations)
 }
 
+// process an existing monoVertex's progressive upgrade and check that AnalysisRun with correct spec is created
+func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
+
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	if ctlrcommon.TestCustomMetrics == nil {
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+	}
+
+	recorder := record.NewFakeRecorder(64)
+
+	err = client.Create(ctx, &vectorTemplate)
+	assert.NoError(t, err)
+	err = client.Create(ctx, &resultTemplate)
+	assert.NoError(t, err)
+
+	r := NewMonoVertexRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+
+	testCases := []struct {
+		name         string
+		templateRefs []argorolloutsv1.AnalysisTemplateRef
+		queries      []string
+	}{
+		{
+			name: "vector template",
+			templateRefs: []argorolloutsv1.AnalysisTemplateRef{
+				{TemplateName: "vector", ClusterScope: false},
+			},
+			queries: []string{"vector(1) == vector(2)"},
+		},
+		{
+			name: "result template",
+			templateRefs: []argorolloutsv1.AnalysisTemplateRef{
+				{TemplateName: "result", ClusterScope: false},
+			},
+			queries: []string{"result[0] == 1"},
+		},
+		{
+			name: "multiple templates",
+			templateRefs: []argorolloutsv1.AnalysisTemplateRef{
+				{TemplateName: "result", ClusterScope: false},
+				{TemplateName: "vector", ClusterScope: false},
+			},
+			queries: []string{"result[0] == 1", "vector(1) == vector(2)"},
+		},
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			// first delete MonoVertex MonoVertexRollout and AnalysisRun in case they already exist, in Kubernetes
+			_ = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = client.Delete(ctx, &argorolloutsv1.AnalysisRun{ObjectMeta: metav1.ObjectMeta{Namespace: ctlrcommon.DefaultTestNamespace, Name: analysisRunName}})
+
+			monoVertexList, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).List(ctx, metav1.ListOptions{})
+			assert.NoError(t, err)
+			assert.Len(t, monoVertexList.Items, 0)
+
+			rollout := ctlrcommon.CreateTestMVRollout(monoVertexSpec, map[string]string{}, map[string]string{},
+				map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"}, map[string]string{},
+				&apiv1.MonoVertexRolloutStatus{ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+					UpgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{
+						UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
+							UpgradingChildStatus: unassessedUpgradingChildStatus,
+							Analysis:             apiv1.AnalysisStatus{},
+						},
+					},
+					PromotedMonoVertexStatus: defaultPromotedChildStatus,
+				}})
+			_ = client.Delete(ctx, rollout)
+
+			rollout.Status.Phase = apiv1.PhasePending
+			if rollout.Status.NameCount == nil {
+				rollout.Status.NameCount = new(int32)
+			}
+			*rollout.Status.NameCount = int32(2)
+
+			rollout.Status.UpgradeInProgress = progressiveUpgradeStrategy
+			r.inProgressStrategyMgr.Store.SetStrategy(k8stypes.NamespacedName{Namespace: ctlrcommon.DefaultTestNamespace, Name: ctlrcommon.DefaultTestMonoVertexRolloutName}, progressiveUpgradeStrategy)
+
+			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
+			rollout.Status.Init(rollout.Generation)
+
+			// reference templates in rollout spec
+			rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
+				PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+					Analysis: apiv1.Analysis{
+						Templates: tc.templateRefs,
+					},
+				},
+			}
+
+			rolloutCopy := *rollout
+			err = client.Create(ctx, rollout)
+			assert.NoError(t, err)
+			// update Status subresource
+			rollout.Status = rolloutCopy.Status
+			err = client.Status().Update(ctx, rollout)
+			assert.NoError(t, err)
+
+			// create the already-existing MonoVertex in Kubernetes
+			// this updates everything but the Status subresource
+			existingMonoVertexDef := &defaultOriginalMonoVertexDef
+			existingMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
+			monoVertex, err := numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingMonoVertexDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+			// update Status subresource
+			monoVertex.Status = defaultOriginalMonoVertexDef.Status
+			_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			existingUpgradeMonoVertexDef := defaultUpgradingMonoVertexDef
+			existingUpgradeMonoVertexDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.MonoVertexRolloutGroupVersionKind)}
+			monoVertex, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).Create(ctx, existingUpgradeMonoVertexDef, metav1.CreateOptions{})
+			assert.NoError(t, err)
+
+			// update Status subresource
+			monoVertex.Status = defaultUpgradingMonoVertexDef.Status
+			_, err = numaflowClientSet.NumaflowV1alpha1().MonoVertices(ctlrcommon.DefaultTestNamespace).UpdateStatus(ctx, monoVertex, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+
+			_, err = r.reconcile(context.Background(), rollout, time.Now())
+			assert.NoError(t, err)
+
+			// verify AnalysisRun generation
+			analysisRun := &argorolloutsv1.AnalysisRun{}
+			err = client.Get(ctx, k8stypes.NamespacedName{Name: analysisRunName, Namespace: rollout.Namespace}, analysisRun)
+			assert.NoError(t, err)
+
+			// verify correct number of metrics in AnalysisRun
+			assert.Equal(t, len(tc.templateRefs), len(analysisRun.Spec.Metrics))
+
+			// verify correct query is set
+			for _, metric := range analysisRun.Spec.Metrics {
+				query := metric.Provider.Prometheus.Query
+				assert.True(t, slices.Contains(tc.queries, query))
+			}
+
+		})
+	}
+}
+
 // process an existing monoVertex in this test, the user preferred strategy is Progressive
 func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
@@ -263,7 +501,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 	recorder := record.NewFakeRecorder(64)
 
-	err = client.Create(ctx, &testAnalysisRun)
+	err = client.Create(ctx, &successfulAnalysisRun)
 	assert.NoError(t, err)
 
 	r := NewMonoVertexRolloutReconciler(
@@ -274,51 +512,6 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
-	defaultOriginalMonoVertexDef := *createMonoVertex(
-		numaflowv1.MonoVertexPhaseRunning,
-		numaflowv1.Status{},
-		map[string]string{
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradePromoted),
-			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
-		},
-		map[string]string{
-			common.AnnotationKeyNumaflowInstanceID: "0",
-		})
-	defaultUpgradingMonoVertexDef := ctlrcommon.CreateTestMonoVertexOfSpec(
-		monoVertexSpec, ctlrcommon.DefaultTestMonoVertexRolloutName+"-1",
-		numaflowv1.MonoVertexPhaseRunning,
-		numaflowv1.Status{
-			Conditions: []metav1.Condition{
-				{
-					Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
-					Status:             metav1.ConditionTrue,
-					Reason:             "healthy",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				},
-			},
-		},
-		map[string]string{
-			common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
-			common.LabelKeyParentRollout: ctlrcommon.DefaultTestMonoVertexRolloutName,
-		},
-		map[string]string{
-			common.AnnotationKeyNumaflowInstanceID: "1",
-		})
-	defaultPromotedChildStatus := &apiv1.PromotedMonoVertexStatus{
-		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
-			PromotedChildStatus: apiv1.PromotedChildStatus{
-				Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
-			},
-			ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
-		},
-	}
-	unassessedUpgradingChildStatus := apiv1.UpgradingChildStatus{
-		Name:                   ctlrcommon.DefaultTestMonoVertexRolloutName + "-1",
-		AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-		AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-		AssessmentResult:       apiv1.AssessmentResultUnknown,
-		InitializationComplete: true,
-	}
 	successfulUpgradingChildStatus := *unassessedUpgradingChildStatus.DeepCopy()
 	successfulUpgradingChildStatus.AssessmentResult = apiv1.AssessmentResultSuccess
 	failedUpgradingChildStatus := *unassessedUpgradingChildStatus.DeepCopy()
@@ -543,6 +736,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 			// the Reconcile() function does this, so we need to do it before calling reconcile() as well
 			rollout.Status.Init(rollout.Generation)
 
+			// AnalysisRun related case
 			if tc.analysisRun {
 				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{

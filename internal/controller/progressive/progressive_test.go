@@ -93,6 +93,14 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 }
 
+func (fpc fakeProgressiveController) ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
+	return nil
+}
+
+func (fpc fakeProgressiveController) ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error {
+	return nil
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

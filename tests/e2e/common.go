@@ -72,8 +72,13 @@ var (
 )
 
 const (
-	InitialNumaflowControllerVersion = "1.4.4"
-	UpdatedNumaflowControllerVersion = "1.4.3"
+	// For tests that use just one Numaflow Controller Version:
+	PrimaryNumaflowControllerVersion = "1.4.6"
+
+	// For tests that transition from one Numaflow Controller Version to another:
+	// (generally these are consecutive versions, but not always)
+	InitialNumaflowControllerVersion = "1.4.3"
+	UpdatedNumaflowControllerVersion = "1.4.6"
 
 	InitialJetstreamVersion = "2.10.17"
 	UpdatedJetstreamVersion = "2.10.11"
