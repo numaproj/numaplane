@@ -33,7 +33,7 @@ import (
 // PauseRequester interface manages the safe update of Rollouts by requesting Pipelines to pause
 type PauseRequester interface {
 	// get the list of Pipelines corresponding to a Rollout
-	GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error)
+	GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (unstructured.UnstructuredList, error)
 
 	// get the unique key corresponding to this Rollout
 	GetRolloutKey(rolloutNamespace string, rolloutName string) string

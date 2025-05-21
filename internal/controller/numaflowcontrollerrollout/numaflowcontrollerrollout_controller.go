@@ -276,7 +276,7 @@ func (r *NumaflowControllerRolloutReconciler) GetChildTypeString() string {
 	return "numaflowcontroller"
 }
 
-func (r *NumaflowControllerRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
+func (r *NumaflowControllerRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	// List all the pipelines since they are all managed by the same single NumaplaneController
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace)

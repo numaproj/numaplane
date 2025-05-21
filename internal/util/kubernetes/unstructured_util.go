@@ -72,13 +72,17 @@ func ListLiveResource(
 	namespace string,
 	labelSelector string, // set to empty string if none
 	fieldSelector string, // set to empty string if none
-) (*unstructured.UnstructuredList, error) {
+) (unstructured.UnstructuredList, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    apiGroup,
 		Version:  version,
 		Resource: pluralName,
 	}
-	return DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	ul, err := DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector})
+	if err != nil || ul == nil {
+		return unstructured.UnstructuredList{}, err
+	}
+	return *ul, nil
 }
 
 func PatchResource(
@@ -193,15 +197,15 @@ func UpdateResource(ctx context.Context, c client.Client, obj *unstructured.Unst
 }
 
 // ListResources retrieves the list of resources from the informer cache, if it's not found then it fetches from the API server.
-func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespace string, opts ...client.ListOption) (*unstructured.UnstructuredList, error) {
-	unstructuredList := &unstructured.UnstructuredList{}
+func ListResources(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, namespace string, opts ...client.ListOption) (unstructured.UnstructuredList, error) {
+	unstructuredList := unstructured.UnstructuredList{}
 	unstructuredList.SetGroupVersionKind(gvk)
 
 	listOptions := []client.ListOption{client.InNamespace(namespace)}
 	listOptions = append(listOptions, opts...)
 
-	if err := c.List(ctx, unstructuredList, listOptions...); err != nil {
-		return nil, err
+	if err := c.List(ctx, &unstructuredList, listOptions...); err != nil {
+		return unstructured.UnstructuredList{}, err
 	}
 
 	return unstructuredList, nil

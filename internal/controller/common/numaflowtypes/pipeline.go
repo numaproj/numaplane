@@ -91,7 +91,7 @@ func GetRolloutForPipeline(ctx context.Context, c client.Client, pipeline *unstr
 	return pipelineRollout, nil
 }
 
-func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollout *apiv1.PipelineRollout, live bool) (*unstructured.UnstructuredList, error) {
+func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollout *apiv1.PipelineRollout, live bool) (unstructured.UnstructuredList, error) {
 	if live {
 		return kubernetes.ListLiveResource(ctx, common.PipelineGVR.Group, common.PipelineGVR.Version, "pipelines", pipelineRollout.GetNamespace(), fmt.Sprintf("%s=%s", common.LabelKeyParentRollout, pipelineRollout.GetName()), "")
 	} else {

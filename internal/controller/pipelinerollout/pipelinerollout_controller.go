@@ -390,7 +390,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		requeueDelay = common.DefaultRequeueDelay
 	} else {
 
-		if promotedPipelines == nil || len(promotedPipelines.Items) == 0 {
+		if len(promotedPipelines.Items) == 0 {
 
 			numaLogger.Debugf("Pipeline %s/%s doesn't exist so creating", pipelineRollout.Namespace, newPipelineDef.GetName())
 			pipelineRollout.Status.MarkPending()
@@ -1228,10 +1228,10 @@ func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollo
 }
 
 // get all isbsvc children of ISBServiceRollout with the given upgrading state label
-func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.UnstructuredList, error) {
+func (r *PipelineRolloutReconciler) getISBServicesByUpgradeState(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (unstructured.UnstructuredList, error) {
 	isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 	if err != nil || isbsvcRollout == nil {
-		return nil, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
+		return unstructured.UnstructuredList{}, fmt.Errorf("unable to find ISBServiceRollout, err=%v", err)
 	}
 
 	return ctlrcommon.FindChildrenOfUpgradeState(ctx, isbsvcRollout, upgradeState, nil, false, r.client)
@@ -1388,7 +1388,7 @@ func (r *PipelineRolloutReconciler) listAndDeleteChildPipelines(ctx context.Cont
 		}
 		return false, err
 	}
-	if pipelineList != nil && len(pipelineList.Items) > 0 {
+	if len(pipelineList.Items) > 0 {
 		// Delete all pipelines that are children of this PipelineRollout
 		numaLogger.Infof("Deleting pipeline %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 		for _, pipeline := range pipelineList.Items {

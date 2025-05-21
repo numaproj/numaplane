@@ -238,7 +238,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
 
-	if promotedISBSvcs == nil || len(promotedISBSvcs.Items) == 0 {
+	if len(promotedISBSvcs.Items) == 0 {
 
 		deleteRecreateLabel := common.LabelValueDeleteRecreateChild
 
@@ -247,7 +247,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error looking for recyclable ISBServices: %v", err)
 		}
-		if recyclableISBSvcs != nil && len(recyclableISBSvcs.Items) > 0 {
+		if len(recyclableISBSvcs.Items) > 0 {
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
@@ -647,7 +647,7 @@ func (r *ISBServiceRolloutReconciler) enqueueAllPipelineROsForISBServiceRO(ctx c
 	return nil
 }
 
-func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (*unstructured.UnstructuredList, error) {
+func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rolloutNamespace string, rolloutName string) (unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, rolloutNamespace,
 		client.MatchingLabels{common.LabelKeyISBServiceRONameForPipeline: rolloutName},
@@ -655,7 +655,7 @@ func (r *ISBServiceRolloutReconciler) GetPipelineList(ctx context.Context, rollo
 	)
 }
 
-func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.Context, namespace string, isbsvcName string) (*unstructured.UnstructuredList, error) {
+func (r *ISBServiceRolloutReconciler) getPipelineListForChildISBSvc(ctx context.Context, namespace string, isbsvcName string) (unstructured.UnstructuredList, error) {
 	gvk := schema.GroupVersionKind{Group: common.NumaflowAPIGroup, Version: common.NumaflowAPIVersion, Kind: common.NumaflowPipelineKind}
 	return kubernetes.ListResources(ctx, r.client, gvk, namespace,
 		client.MatchingLabels{common.LabelKeyISBServiceChildNameForPipeline: isbsvcName},
@@ -1035,7 +1035,7 @@ func (r *ISBServiceRolloutReconciler) Recycle(ctx context.Context, isbsvc *unstr
 	if err != nil {
 		return false, fmt.Errorf("can't recycle isbsvc %s/%s; got error retrieving pipelines using it: %s", isbsvc.GetNamespace(), isbsvc.GetName(), err)
 	}
-	if pipelines != nil && len(pipelines.Items) > 0 {
+	if len(pipelines.Items) > 0 {
 		numaLogger.Debugf("can't recycle isbsvc; there are still %d pipelines using it", len(pipelines.Items))
 		return false, nil
 	}
@@ -1117,7 +1117,7 @@ func (r *ISBServiceRolloutReconciler) listAndDeleteChildISBServices(ctx context.
 		}
 		return false, err
 	}
-	if isbServiceList != nil && len(isbServiceList.Items) > 0 {
+	if len(isbServiceList.Items) > 0 {
 		// Delete all isbServices that are children of this ISBServiceRollout
 		numaLogger.Infof("Deleting ISBService %s/%s", isbServiceRollout.Namespace, isbServiceRollout.Name)
 		for _, isbService := range isbServiceList.Items {
