@@ -72,10 +72,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(ctx context.Context, ro
 			return false, "", err
 		}
 
-		if verticesList == nil {
-			return false, "", errors.New("the pipeline vertices list is nil, this should not occur")
-		}
-
 		areAllVerticesReplicasReady := true
 		var replicasFailureReason string
 		for _, vertex := range verticesList.Items {

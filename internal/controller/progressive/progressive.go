@@ -948,7 +948,7 @@ func Discontinue(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
 	}
-	// TODO: is there a reason I need to return a pointer to UnstructuredList?
+
 	for _, child := range upgradingChildren.Items {
 		reason := common.LabelValueDiscontinueProgressive
 		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, &child)

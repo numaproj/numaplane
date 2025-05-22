@@ -72,7 +72,7 @@ func getRecyclableObjects(
 	ctx context.Context,
 	rolloutObject RolloutObject,
 	c client.Client,
-) (*unstructured.UnstructuredList, error) {
+) (unstructured.UnstructuredList, error) {
 	return kubernetes.ListResources(ctx, c, rolloutObject.GetChildGVK(),
 		rolloutObject.GetRolloutObjectMeta().Namespace,
 		client.MatchingLabels{
@@ -83,10 +83,10 @@ func getRecyclableObjects(
 }
 
 // Find the children of a given Rollout of specified UpgradeState (plus optional UpgradeStateReason)
-func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (*unstructured.UnstructuredList, error) {
+func FindChildrenOfUpgradeState(ctx context.Context, rolloutObject RolloutObject, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, checkLive bool, c client.Client) (unstructured.UnstructuredList, error) {
 	childGVR := rolloutObject.GetChildGVR()
 
-	var children *unstructured.UnstructuredList
+	var children unstructured.UnstructuredList
 	var err error
 	if checkLive {
 		var labelSelector string
@@ -135,7 +135,7 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 	}
 
 	numaLogger.Debugf("looking for children of Rollout %s/%s of upgrade state=%v, upgrade state reason=%v, found: %s",
-		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, util.OptionalString(upgradeStateReason), kubernetes.ExtractResourceNames(children))
+		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, util.OptionalString(upgradeStateReason), kubernetes.ExtractResourceNames(&children))
 
 	if len(children.Items) > 1 {
 		var mostCurrentChild *unstructured.Unstructured
