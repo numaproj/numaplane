@@ -41,30 +41,25 @@ GCFLAGS="all=-N -l"
 ENVTEST_K8S_VERSION = 1.28.0
 
 TEST_MANIFEST_DIR_DEFAULT ?= tests/manifests/default
-TEST_MANIFEST_DIR_E2E ?= tests/manifests/e2e/default
+TEST_MANIFEST_DIR_E2E_DEFAULT ?= tests/manifests/e2e/default
 TEST_NOSTRATEGY_MANIFEST_DIR ?= tests/manifests/e2e/special-cases/no-strategy
-TEST_PROGRESSIVE_MANIFEST_DIR ?= tests/manifests/e2e/special-cases/progressive
+TEST_PAUSE_AND_DRAIN_MANIFEST_DIR ?= tests/manifests/e2e/special-cases/pause-and-drain
 
 TEST_MANIFEST_DIR := $(TEST_NOSTRATEGY_MANIFEST_DIR)
 
-ifeq ($(TEST_TYPE), e2e)
-TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E)
+ifeq ($(STRATEGY), progressive)
+TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E_DEFAULT)
 endif
 
 ifeq ($(STRATEGY), pause-and-drain)
-TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E)
-endif
-
-ifeq ($(STRATEGY), progressive)
-TEST_MANIFEST_DIR := $(TEST_PROGRESSIVE_MANIFEST_DIR)
+TEST_MANIFEST_DIR := $(TEST_PAUSE_AND_DRAIN_MANIFEST_DIR)
 endif
 
 # Set the Dockerfile path based on the condition
 DOCKERFILE := Dockerfile
 ifeq ($(TEST_TYPE), e2e)
-# Set the Dockerfile path for e2e tests
+# Set the Dockerfile and image version for e2e tests
 DOCKERFILE := tests/e2e/coverage/Dockerfile
-# Set the image version for e2e tests
 VERSION = e2e
 endif
 
