@@ -45,10 +45,10 @@ TEST_MANIFEST_DIR_E2E_DEFAULT ?= tests/manifests/e2e/default
 TEST_NOSTRATEGY_MANIFEST_DIR ?= tests/manifests/e2e/special-cases/no-strategy
 TEST_PAUSE_AND_DRAIN_MANIFEST_DIR ?= tests/manifests/e2e/special-cases/pause-and-drain
 
-TEST_MANIFEST_DIR := $(TEST_NOSTRATEGY_MANIFEST_DIR)
-
-ifeq ($(STRATEGY), progressive)
 TEST_MANIFEST_DIR := $(TEST_MANIFEST_DIR_E2E_DEFAULT)
+
+ifeq ($(STRATEGY), no-strategy)
+TEST_MANIFEST_DIR := $(TEST_NOSTRATEGY_MANIFEST_DIR)
 endif
 
 ifeq ($(STRATEGY), pause-and-drain)
