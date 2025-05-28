@@ -73,12 +73,12 @@ var (
 
 const (
 	// For tests that use just one Numaflow Controller Version:
-	PrimaryNumaflowControllerVersion = "1.4.6"
+	PrimaryNumaflowControllerVersion = "1.5.0-rc5"
 
 	// For tests that transition from one Numaflow Controller Version to another:
 	// (generally these are consecutive versions, but not always)
-	InitialNumaflowControllerVersion = "1.4.3"
-	UpdatedNumaflowControllerVersion = "1.4.6"
+	InitialNumaflowControllerVersion = "1.4.6"
+	UpdatedNumaflowControllerVersion = "1.5.0-rc5"
 
 	InitialJetstreamVersion = "2.10.17"
 	UpdatedJetstreamVersion = "2.10.11"
@@ -162,7 +162,11 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 		msg = "for the MonoVertex"
 	}
 
-	for _, vtx := range specVertices {
+	for i, vtx := range specVertices {
+
+		logMsg := fmt.Sprintf("about to check vertex %d of %d", i, len(specVertices))
+		fmt.Println(logMsg)
+		By(logMsg)
 
 		min := vtx.Scale.Min
 		if min == nil {

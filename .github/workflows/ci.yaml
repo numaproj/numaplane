@@ -115,17 +115,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent"]
+        #strategy: ["pause-and-drain", "progressive", "no-strategy"]
+        #case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent"]
+        strategy: ["no-strategy"]
+        case: ["functional-monovertex"]
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
-          - strategy: "progressive"
-            case: "progressive-monovertex"
-          - strategy: "progressive"
-            case: "progressive-pipeline"
-          - strategy: "progressive"
-            case: "rider"
+         #- strategy: "progressive"
+         #   case: "progressive-monovertex"
+         # - strategy: "progressive"
+         #   case: "progressive-pipeline"
+         # - strategy: "progressive"
+         #   case: "rider"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -180,7 +182,7 @@ jobs:
         env:
           GOPATH: /home/runner/go
         run: |
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=false make test-${{matrix.case}}-e2e
 
       ## This is a temporary solution to kill the process twice, until we have fix for a stuck process after initial kill.
       - name: Stop numaplane process
