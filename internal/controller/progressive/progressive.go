@@ -571,7 +571,6 @@ func ridersNeedUpdating(
 // Unknown: neither of the above if met
 func PerformResourceHealthCheckForPipelineType(
 	ctx context.Context,
-	analysisStatus *apiv1.AnalysisStatus,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
 ) (apiv1.AssessmentResult, string, error) {
@@ -604,30 +603,8 @@ func PerformResourceHealthCheckForPipelineType(
 		return apiv1.AssessmentResultUnknown, "", err
 	}
 
-	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
-	}
-
 	// conduct standard health assessment first
 	if phaseHealthy && healthyConditions && healthyReplicas {
-		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
-		if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
-			numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-				Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
-			switch analysisStatus.Phase {
-			case argorolloutsv1.AnalysisPhaseSuccessful:
-				return apiv1.AssessmentResultSuccess, "", nil
-			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
-				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
-			default:
-				// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
-				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
-					return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
-				}
-				return apiv1.AssessmentResultUnknown, "", nil
-			}
-		}
 		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
@@ -671,8 +648,13 @@ func PerformAnalysis(
 	existingUpgradingChildDef *unstructured.Unstructured,
 	rolloutObject ProgressiveRolloutObject,
 	analysis apiv1.Analysis,
+	analysisStatus *apiv1.AnalysisStatus,
 	c client.Client,
-) (apiv1.AssessmentResult, error) {
+) (*apiv1.AnalysisStatus, error) {
+	if analysisStatus == nil {
+		return analysisStatus, errors.New("analysisStatus not set")
+	}
+
 	analysisRun := &argorolloutsv1.AnalysisRun{}
 	// check if analysisRun has already been created
 	if err := c.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
@@ -684,25 +666,63 @@ func PerformAnalysis(
 			if promotedChildStatus != nil {
 				promotedChildName = promotedChildStatus.Name
 			}
-			err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client, promotedChildName)
+			err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, c, promotedChildName)
 			if err != nil {
-				return apiv1.AssessmentResultUnknown, err
+				return analysisStatus, err
 			}
-			analysisStatus := mvtxRollout.GetAnalysisStatus()
-			if analysisStatus == nil {
-				return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
-			}
+
 			// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
 			// and start time for its assessment
 			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
 			timeNow := metav1.NewTime(time.Now())
 			analysisStatus.StartTime = &timeNow
-			mvtxRollout.SetAnalysisStatus(analysisStatus)
+			return analysisStatus, nil
 		} else {
-			return apiv1.AssessmentResultUnknown, err
+			return analysisStatus, err
 		}
 	}
 
+	// assess analysisRun status and set endTime if completed
+	if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+		analysisStatus.EndTime = analysisRun.Status.CompletedAt
+	}
+	analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+	analysisStatus.Phase = analysisRun.Status.Phase
+	return analysisStatus, nil
+
+}
+
+func AssessAnalysisStatus(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+
+	// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
+	if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
+		numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+			Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
+		switch analysisStatus.Phase {
+		case argorolloutsv1.AnalysisPhaseSuccessful:
+			return apiv1.AssessmentResultSuccess, "", nil
+		case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
+			return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+		default:
+			// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
+			if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
+				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+			}
+			return apiv1.AssessmentResultUnknown, "", nil
+		}
+	}
+
+	// no AnalysisRun so by default we can mark this successful
+	return apiv1.AssessmentResultSuccess, "", nil
 }
 
 /*
