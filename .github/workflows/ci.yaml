@@ -182,7 +182,7 @@ jobs:
         env:
           GOPATH: /home/runner/go
         run: |
-          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
+          KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=false make test-${{matrix.case}}-e2e
 
       ## This is a temporary solution to kill the process twice, until we have fix for a stuck process after initial kill.
       - name: Stop numaplane process
