@@ -93,6 +93,14 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Archive unit test code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-tests-coverage
+          path: coverage.out
+          retention-days: 7
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -189,6 +197,14 @@ jobs:
           POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
           kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
 
+      - name: Archive code coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{matrix.strategy}}-${{matrix.case}}
+          path: |
+            tests/e2e/output/resources/coverage/
+          retention-days: 7
 
       - name: Archive resource changes
         uses: actions/upload-artifact@v4
