@@ -117,8 +117,8 @@ jobs:
       matrix:
         #strategy: ["pause-and-drain", "progressive", "no-strategy"]
         #case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent"]
-        strategy: []
-        case: []
+        strategy: ["no-strategy"]
+        case: ["functional-monovertex"]
         include:
           - strategy: "pause-and-drain"
             case: "ppnd"
