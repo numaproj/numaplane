@@ -162,7 +162,11 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 		msg = "for the MonoVertex"
 	}
 
-	for _, vtx := range specVertices {
+	for i, vtx := range specVertices {
+
+		logMsg := fmt.Sprintf("about to check vertex %d of %d", i, len(specVertices))
+		fmt.Println(logMsg)
+		By(logMsg)
 
 		min := vtx.Scale.Min
 		if min == nil {
