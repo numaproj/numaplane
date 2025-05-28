@@ -374,7 +374,7 @@ func processUpgradingChild(
 	failureReason := childStatus.FailureReason
 	childSts := childStatus.ChildStatus.Raw
 	if childStatus.CanAssess() {
-		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
+		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, childStatus.AssessmentEndTime)
 		if err != nil {
 			return false, 0, err
 		}
@@ -561,7 +561,9 @@ func ridersNeedUpdating(
 
 // AssessUpgradingPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
 // if it was successful, failed, or still not known
-// Assessment:
+// Return assessment result along with reason (string) if it failed
+//
+// Assessment result:
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
 // Unknown: neither of the above if met
