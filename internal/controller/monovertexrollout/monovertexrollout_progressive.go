@@ -7,6 +7,7 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -44,8 +45,46 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+
+	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, mvtxRollout.GetAnalysisStatus(), existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+	if err != nil {
+		return assessment, reasonFailure, err
+	}
+	if assessment == apiv1.AssessmentResultFailure {
+		return assessment, reasonFailure, nil
+	}
+	if assessment == apiv1.AssessmentResultSuccess {
+		// has AssessmentEndTime been set? if not, set it - now we can start our interval
+		if !childStatus.IsAssessmentEndTimeSet() {
+			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
+			childStatus.BasicAssessmentEndTime = &assessmentEndTime
+			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
+		}
+
+		// if end time has arrived, we can make sure we launch any AnalysisTemplates, or if there aren't any, we can declare success
+		if childStatus.BasicAssessmentEndTimeArrived() {
+			analysis := mvtxRollout.GetAnalysis()
+			// only check for and create AnalysisRuns if templates are specified
+			if len(analysis.Templates) > 0 {
+				analysisResult, err = progressive.PerformAnalysis(ctx, existingUpgradingChildDef, rolloutObject, mvtxRollout.GetAnalysis(), r.client)
+				switch analysisResult {
+
+				}
+			} else {
+
+			}
+		}
+
+	}
+
 	analysis := mvtxRollout.GetAnalysis()
 	// only check for and create AnalysisRuns if templates are specified
 	if len(analysis.Templates) > 0 {
@@ -92,7 +131,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 
 	}
 
-	return progressive.AssessUpgradingPipelineType(ctx, mvtxRollout.GetAnalysisStatus(), existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+	return
 
 }
 

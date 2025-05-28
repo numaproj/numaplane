@@ -138,11 +138,11 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                   "test-success",
-							AssessmentResult:       apiv1.AssessmentResultUnknown,
-							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
-							InitializationComplete: true,
+							Name:                     "test-success",
+							AssessmentResult:         apiv1.AssessmentResultUnknown,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							BasicAssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							InitializationComplete:   true,
 						},
 					},
 				},
@@ -160,10 +160,10 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                   "test-failure",
-							AssessmentResult:       apiv1.AssessmentResultFailure,
-							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							InitializationComplete: true,
+							Name:                     "test-failure",
+							AssessmentResult:         apiv1.AssessmentResultFailure,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete:   true,
 						},
 					},
 				},
@@ -188,10 +188,10 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                   "test-force-promote",
-							AssessmentResult:       apiv1.AssessmentResultFailure,
-							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							InitializationComplete: true,
+							Name:                     "test-force-promote",
+							AssessmentResult:         apiv1.AssessmentResultFailure,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							InitializationComplete:   true,
 						},
 					},
 				},
@@ -216,11 +216,11 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                   "test-analysis-success",
-							AssessmentResult:       apiv1.AssessmentResultUnknown,
-							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
-							InitializationComplete: true,
+							Name:                     "test-analysis-success",
+							AssessmentResult:         apiv1.AssessmentResultUnknown,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							BasicAssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							InitializationComplete:   true,
 						},
 						Analysis: apiv1.AnalysisStatus{
 							AnalysisRunName: "test-analysis-success",
@@ -244,11 +244,11 @@ func Test_processUpgradingChild(t *testing.T) {
 				&apiv1.UpgradingMonoVertexStatus{
 					UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
 						UpgradingChildStatus: apiv1.UpgradingChildStatus{
-							Name:                   "test-analysis-failure",
-							AssessmentResult:       apiv1.AssessmentResultUnknown,
-							AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-							AssessmentEndTime:      &metav1.Time{Time: time.Now()},
-							InitializationComplete: true,
+							Name:                     "test-analysis-failure",
+							AssessmentResult:         apiv1.AssessmentResultUnknown,
+							BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+							BasicAssessmentEndTime:   &metav1.Time{Time: time.Now()},
+							InitializationComplete:   true,
 						},
 						Analysis: apiv1.AnalysisStatus{
 							AnalysisRunName: "test-analysis-failure",
