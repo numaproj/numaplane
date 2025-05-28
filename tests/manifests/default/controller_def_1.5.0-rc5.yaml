@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: numaflow-controller-definitions-1.5.0-rc4
+  name: numaflow-controller-definitions-1.5.0-rc5
   namespace: numaplane-system
   labels:
     "numaplane.numaproj.io/config": numaflow-controller-definitions
 data:
   controller_definitions.yaml: |-
     controllerDefinitions:
-      - version: "1.5.0-rc4"
+      - version: "1.5.0-rc5"
         fullSpec: |-
           apiVersion: v1
           kind: ServiceAccount
@@ -633,7 +633,7 @@ data:
                       - controller
                     env:
                       - name: NUMAFLOW_IMAGE
-                        value: quay.io/numaproj/numaflow:v1.5.0-rc4
+                        value: quay.io/numaproj/numaflow:v1.5.0-rc5
                       - name: NAMESPACE
                         valueFrom:
                           fieldRef:
@@ -674,7 +674,7 @@ data:
                             key: controller.leader.election.lease.renew.period
                             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                             optional: true
-                    image: quay.io/numaproj/numaflow:v1.5.0-rc4
+                    image: quay.io/numaproj/numaflow:v1.5.0-rc5
                     imagePullPolicy: Always
                     livenessProbe:
                       httpGet:
@@ -779,7 +779,7 @@ data:
                             key: server.base.href
                             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                             optional: true
-                    image: quay.io/numaproj/numaflow:v1.5.0-rc4
+                    image: quay.io/numaproj/numaflow:v1.5.0-rc5
                     imagePullPolicy: Always
                     name: dex-init
                     volumeMounts:
@@ -898,7 +898,7 @@ data:
                             key: server.daemon.client.protocol
                             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                             optional: true
-                    image: quay.io/numaproj/numaflow:v1.5.0-rc4
+                    image: quay.io/numaproj/numaflow:v1.5.0-rc5
                     imagePullPolicy: Always
                     livenessProbe:
                       httpGet:
@@ -936,7 +936,7 @@ data:
                             key: server.base.href
                             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                             optional: true
-                    image: quay.io/numaproj/numaflow:v1.5.0-rc4
+                    image: quay.io/numaproj/numaflow:v1.5.0-rc5
                     imagePullPolicy: Always
                     name: server-init
                     volumeMounts:
@@ -955,7 +955,7 @@ data:
                             key: server.disable.auth
                             name: numaflow-cmd-params-config{{ .InstanceSuffix }}
                             optional: true
-                    image: quay.io/numaproj/numaflow:v1.5.0-rc4
+                    image: quay.io/numaproj/numaflow:v1.5.0-rc5
                     imagePullPolicy: Always
                     name: server-secrets-init
                 securityContext:
