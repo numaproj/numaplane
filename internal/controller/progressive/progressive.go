@@ -333,6 +333,7 @@ func processUpgradingChild(
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, time.Duration, error) {
+
 	numaLogger := logger.FromContext(ctx)
 
 	assessmentSchedule, err := getChildStatusAssessmentSchedule(ctx, rolloutObject)
