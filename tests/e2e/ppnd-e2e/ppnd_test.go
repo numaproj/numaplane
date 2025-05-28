@@ -238,9 +238,9 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 				colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
 				return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+UpdatedNumaflowControllerVersion
 			})
-			DeletePipelineRollout(slowPipelineRolloutName)
 			By("Verifying that Pipeline has stopped trying to pause")
 			VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+			DeletePipelineRollout(slowPipelineRolloutName)
 
 		}
 	})
