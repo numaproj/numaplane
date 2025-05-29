@@ -241,20 +241,37 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Generate the manifest for the NumaflowController based on the version specified in the controller spec. Which is used for
+	// creating the Deployment and other resources.
 	newVersion := controller.Spec.Version
 	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion, namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
-
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
 
-	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
+	// Generate the manifest for the old version of the NumaflowController, which is used for calculating the diff between the old and new versions.
+	oldVersion := controller.Status.LastAppliedVersion
+
+	// TODO: This is temporary logic to handle the case where the controller is being created for the first time.
+	// Will remove this code once we have LastAppliedVersion set in the controller.
+	if oldVersion == "" {
+		numaLogger.Debug("No previous version found, assuming this is the first reconciliation")
+		oldVersion = newVersion // if no previous version, assume it's the same as the new version
+	}
+
+	oldVersionTargetObjs, err := determineTargetObjects(controller, oldVersion, namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the old version %s: %w", oldVersion, err)
+	}
+	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(oldVersionTargetObjs), oldVersion)
+
+	// apply controller - this handles syncing in the cases in which our Controller isn't updating
 	// (note that the cases above in which it is updating have a 'return' statement):
 	// - new Controller
 	// - auto healing
 	// - somebody changed the manifest associated with the Controller version (shouldn't happen but could)
-	phase, err := r.sync(controller, namespace, numaLogger, newVersionTargetObjs)
+	phase, err := r.sync(controller, namespace, numaLogger, oldVersionTargetObjs, newVersionTargetObjs)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -434,10 +451,10 @@ func (r *NumaflowControllerReconciler) sync(
 	controller *apiv1.NumaflowController,
 	namespace string,
 	numaLogger *logger.NumaLogger,
-	targetObjs []*unstructured.Unstructured,
+	oldObjs, targetObjs []*unstructured.Unstructured,
 ) (gitopsSyncCommon.OperationPhase, error) {
 
-	reconciliationResult, diffResults, err := r.compareState(controller, namespace, targetObjs, numaLogger)
+	reconciliationResult, diffResults, err := r.compareState(controller, namespace, oldObjs, targetObjs, numaLogger)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
 	}
@@ -475,6 +492,7 @@ func (r *NumaflowControllerReconciler) sync(
 	syncCtx.Sync()
 
 	controller.Status.MarkDeployed(controller.Generation)
+	controller.Status.LastAppliedVersion = controller.Spec.Version
 
 	phase, _, _ := syncCtx.GetState()
 	return phase, nil
@@ -485,7 +503,7 @@ func (r *NumaflowControllerReconciler) sync(
 func (r *NumaflowControllerReconciler) compareState(
 	controller *apiv1.NumaflowController,
 	namespace string,
-	targetObjs []*unstructured.Unstructured,
+	oldObjs, targetObjs []*unstructured.Unstructured,
 	numaLogger *logger.NumaLogger,
 ) (gitopsSync.ReconciliationResult, *diff.DiffResultList, error) {
 	var infoProvider kubeUtil.ResourceInfoProvider
@@ -494,7 +512,7 @@ func (r *NumaflowControllerReconciler) compareState(
 		return gitopsSync.ReconciliationResult{}, nil, err
 	}
 	infoProvider = clusterCache
-	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, targetObjs)
+	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, oldObjs)
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, err
 	}

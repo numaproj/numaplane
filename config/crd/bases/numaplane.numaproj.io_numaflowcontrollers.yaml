@@ -133,6 +133,8 @@ spec:
                   - type
                   type: object
                 type: array
+              lastAppliedVersion:
+                type: string
               lastFailureTime:
                 description: LastFailureTime records the timestamp of the Last Failure
                   (PhaseFailed)

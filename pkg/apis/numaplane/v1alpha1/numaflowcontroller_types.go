@@ -31,7 +31,8 @@ type NumaflowControllerSpec struct {
 
 // NumaflowControllerStatus defines the observed state of NumaflowController
 type NumaflowControllerStatus struct {
-	Status `json:",inline"`
+	Status             `json:",inline"`
+	LastAppliedVersion string `json:"lastAppliedVersion,omitempty"`
 }
 
 // +genclient
