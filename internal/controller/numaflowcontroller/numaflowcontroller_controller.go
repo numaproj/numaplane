@@ -241,7 +241,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Generate the manifest for the NumaflowController based on the version specified in the controller spec. Which is used for
+	// Generate the manifest for the NumaflowController based on the version specified in the controller spec, Which is used for
 	// creating the Deployment and other resources.
 	newVersion := controller.Spec.Version
 	newVersionTargetObjs, err := determineTargetObjects(controller, newVersion, namespace)
@@ -262,7 +262,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 
 	oldVersionTargetObjs, err := determineTargetObjects(controller, oldVersion, namespace)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the old version %s: %w", oldVersion, err)
+		numaLogger.Warnf("unable to determine the target objects for the old version %s: %v", oldVersion, err)
 	}
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(oldVersionTargetObjs), oldVersion)
 
