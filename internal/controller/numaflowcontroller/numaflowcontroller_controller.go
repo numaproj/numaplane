@@ -37,6 +37,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -246,15 +247,19 @@ func (r *NumaflowControllerReconciler) reconcile(
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
-
 	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
+
+	existingClusterResources, err := r.determineExistingManagedResourceInCluster(ctx, namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to determine existing managed resources in cluster: %w", err)
+	}
 
 	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
 	// (note that the cases above in which it is updating have a 'return' statement):
 	// - new Controller
 	// - auto healing
 	// - somebody changed the manifest associated with the Controller version (shouldn't happen but could)
-	phase, err := r.sync(controller, namespace, numaLogger, newVersionTargetObjs)
+	phase, err := r.sync(controller, namespace, numaLogger, newVersionTargetObjs, existingClusterResources)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -269,6 +274,39 @@ func (r *NumaflowControllerReconciler) reconcile(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// Determine the existing managed resources in the cluster, whose owner references API VERSION is Numaplane.
+// It is used to compute the diff between the desired state and the live state in the cluster.
+func (r *NumaflowControllerReconciler) determineExistingManagedResourceInCluster(ctx context.Context, namespace string) ([]*unstructured.Unstructured, error) {
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error on getting global config: %w", err)
+	}
+
+	includedResources, err := kubernetes.ParseResourceFilter(globalConfig.IncludedResources)
+	if err != nil {
+		return nil, fmt.Errorf("error on parsing resource filter rules: %w", err)
+	}
+
+	var targetObjs []*unstructured.Unstructured
+	for _, resource := range includedResources {
+		gvk := schema.GroupVersionKind{Group: resource.Group, Version: "v1", Kind: resource.Kind}
+
+		resourceList, err := kubernetes.ListResources(ctx, r.client, gvk, namespace)
+		if err != nil {
+			return targetObjs, fmt.Errorf("error on listing resources for GVK %s: %w", gvk.String(), err)
+		}
+		for _, item := range resourceList.Items {
+			for _, owner := range item.GetOwnerReferences() {
+				if owner.APIVersion == fmt.Sprintf("%s/%s", apiv1.SchemeGroupVersion.Group, apiv1.SchemeGroupVersion.Version) {
+					targetObjs = append(targetObjs, &item)
+				}
+			}
+		}
+	}
+
+	return targetObjs, nil
 }
 
 // applyOwnershipToManifests Applies NumaflowController ownership to
@@ -434,10 +472,10 @@ func (r *NumaflowControllerReconciler) sync(
 	controller *apiv1.NumaflowController,
 	namespace string,
 	numaLogger *logger.NumaLogger,
-	targetObjs []*unstructured.Unstructured,
+	targetObjs, existingClusterResources []*unstructured.Unstructured,
 ) (gitopsSyncCommon.OperationPhase, error) {
 
-	reconciliationResult, diffResults, err := r.compareState(controller, namespace, targetObjs, numaLogger)
+	reconciliationResult, diffResults, err := r.compareState(controller, namespace, targetObjs, existingClusterResources, numaLogger)
 	if err != nil {
 		return gitopsSyncCommon.OperationError, err
 	}
@@ -485,7 +523,7 @@ func (r *NumaflowControllerReconciler) sync(
 func (r *NumaflowControllerReconciler) compareState(
 	controller *apiv1.NumaflowController,
 	namespace string,
-	targetObjs []*unstructured.Unstructured,
+	targetObjs, existingClusterResources []*unstructured.Unstructured,
 	numaLogger *logger.NumaLogger,
 ) (gitopsSync.ReconciliationResult, *diff.DiffResultList, error) {
 	var infoProvider kubeUtil.ResourceInfoProvider
@@ -494,7 +532,7 @@ func (r *NumaflowControllerReconciler) compareState(
 		return gitopsSync.ReconciliationResult{}, nil, err
 	}
 	infoProvider = clusterCache
-	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, targetObjs)
+	liveObjByKey, err := r.stateCache.GetManagedLiveObjs(controller.Name, namespace, existingClusterResources)
 	if err != nil {
 		return gitopsSync.ReconciliationResult{}, nil, err
 	}
