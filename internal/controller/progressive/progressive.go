@@ -368,6 +368,8 @@ func processUpgradingChild(
 		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
 		childStatus.BasicAssessmentStartTime = &nextAssessmentTime
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
+		rolloutObject.SetUpgradingChildStatus(childStatus)
+		fmt.Printf("deletethis: rollout status=%+v\n", rolloutObject.GetRolloutStatus())
 	}
 
 	// Assess the upgrading child status only if within the assessment time window and if not previously failed.

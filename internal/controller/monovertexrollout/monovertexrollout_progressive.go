@@ -41,7 +41,8 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context,
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
+	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
@@ -61,10 +62,12 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context,
 	if assessment == apiv1.AssessmentResultSuccess {
 		// has AssessmentEndTime been set? if not, set it - now we can start our interval
 		if !childStatus.IsAssessmentEndTimeSet() {
+			fmt.Printf("deletethis: prior to setting end time: %+v\n", mvtxRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.BasicAssessmentStartTime)
 			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
 			childStatus.BasicAssessmentEndTime = &assessmentEndTime
 			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
 			mvtxRollout.SetUpgradingChildStatus(childStatus)
+			fmt.Printf("deletethis: after setting end time: %+v\n", mvtxRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.BasicAssessmentStartTime)
 		}
 
 		// if end time has arrived, we can make sure we launch the AnalysisRun if we need to, or if not we can declare success

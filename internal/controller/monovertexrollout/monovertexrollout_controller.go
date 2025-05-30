@@ -581,6 +581,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.
 			}
 			return fmt.Errorf("error getting the live MonoVertexRollout after attempting to update the MonoVertexRollout Status: %w", err)
 		}
+		fmt.Printf("deletethis: updateMonoVertexRolloutStatus BasicAssessmentStartTime:%+v\n", monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.BasicAssessmentStartTime)
 		status := monoVertexRollout.Status // save off the Status
 		*monoVertexRollout = *liveRollout
 		numaLogger.Debug("resource version conflict error after getting latest MonoVertexRollout Status: try again with latest resource version")
