@@ -62,12 +62,10 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	if assessment == apiv1.AssessmentResultSuccess {
 		// has AssessmentEndTime been set? if not, set it - now we can start our interval
 		if !childStatus.IsAssessmentEndTimeSet() {
-			fmt.Printf("deletethis: prior to setting end time: %+v\n", mvtxRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.BasicAssessmentStartTime)
 			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
 			childStatus.BasicAssessmentEndTime = &assessmentEndTime
 			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
 			mvtxRollout.SetUpgradingChildStatus(childStatus)
-			fmt.Printf("deletethis: after setting end time: %+v\n", mvtxRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.BasicAssessmentStartTime)
 		}
 
 		// if end time has arrived, we can make sure we launch the AnalysisRun if we need to, or if not we can declare success

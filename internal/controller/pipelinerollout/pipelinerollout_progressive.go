@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,8 +67,79 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	existingUpgradingChildDef *unstructured.Unstructured,
 	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
 
-	// create function to check that all of the Vertices are ready
-	/*verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+
+	childStatus := pipelineRollout.GetUpgradingChildStatus()
+
+	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
+		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
+			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
+			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
+		if err != nil {
+			return false, "", err
+		}
+
+		areAllVerticesReplicasReady := true
+		var replicasFailureReason string
+		for _, vertex := range verticesList.Items {
+			areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
+			if err != nil {
+				return false, "", err
+			}
+
+			if !areVertexReplicasReady {
+				areAllVerticesReplicasReady = false
+				replicasFailureReason = fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName())
+				break
+			}
+		}
+
+		return areAllVerticesReplicasReady, replicasFailureReason, nil
+	}
+
+	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
+	if err != nil {
+		return assessment, reasonFailure, err
+	}
+	if assessment == apiv1.AssessmentResultFailure {
+		return assessment, reasonFailure, nil
+	}
+
+	if assessment == apiv1.AssessmentResultSuccess {
+		// has AssessmentEndTime been set? if not, set it - now we can start our interval
+		if !childStatus.IsAssessmentEndTimeSet() {
+			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
+			childStatus.BasicAssessmentEndTime = &assessmentEndTime
+			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
+			pipelineRollout.SetUpgradingChildStatus(childStatus)
+		}
+
+		// if end time has arrived, we can make sure we launch the AnalysisRun if we need to, or if not we can declare success
+		if childStatus.BasicAssessmentEndTimeArrived() {
+			analysis := pipelineRollout.GetAnalysis()
+			// only check for and create AnalysisRun if templates are specified
+			if len(analysis.Templates) > 0 {
+				// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
+				analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, pipelineRollout, pipelineRollout.GetAnalysis(), pipelineRollout.GetAnalysisStatus(), r.client)
+				if err != nil {
+					return apiv1.AssessmentResultUnknown, "", err
+				}
+				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
+			} else {
+				return apiv1.AssessmentResultSuccess, "", nil
+			}
+		}
+
+	}
+
+	return apiv1.AssessmentResultUnknown, "", nil
+
+}
+
+// create function to check that all of the Vertices are ready
+/*verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
 			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
@@ -140,9 +214,9 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return progressive.PerformResourceHealthCheckForPipelineType(ctx, pipelineRollout.GetAnalysisStatus(), existingUpgradingChildDef, verifyReplicasFunc)
-	*/
+
 	return apiv1.AssessmentResultUnknown, "", nil
-}
+}*/
 
 /*
 ProcessPromotedChildPreUpgrade handles the pre-upgrade processing of a promoted pipeline.
@@ -508,8 +582,8 @@ ProcessUpgradingChildPostUpgrade handles the processing of an upgrading pipeline
 
 Parameters:
   - ctx: the context for managing request-scoped values.
-  - rolloutObject: the MonoVertexRollout instance
-  - upgradingMonoVertexDef: the definition of the upgrading monovertex as an unstructured object.
+  - rolloutObject: the PipelineRollout instance
+  - upgradingPipelineDef: the definition of the upgrading pipeline as an unstructured object.
   - c: the client used for interacting with the Kubernetes API.
 
 Returns:

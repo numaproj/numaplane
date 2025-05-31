@@ -18,6 +18,9 @@ package progressive
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
@@ -25,7 +28,8 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	errors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -42,7 +46,7 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 			template := &argorolloutsv1.ClusterAnalysisTemplate{}
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: "default"}, template)
 			if err != nil {
-				if errors.IsNotFound(err) {
+				if k8serrors.IsNotFound(err) {
 					numaLogger.Warnf("ClusterAnalysisTemplate '%s' not found", templateRef.TemplateName)
 				}
 				return nil, nil, err
@@ -61,7 +65,7 @@ func GetAnalysisTemplatesFromRefs(ctx context.Context, templateRefs *[]argorollo
 			template := &argorolloutsv1.AnalysisTemplate{}
 			err := c.Get(ctx, client.ObjectKey{Name: templateRef.TemplateName, Namespace: namespace}, template)
 			if err != nil {
-				if errors.IsNotFound(err) {
+				if k8serrors.IsNotFound(err) {
 					numaLogger.Warnf("AnalysisTemplate '%s' not found", templateRef.TemplateName)
 				}
 				return nil, nil, err
@@ -100,6 +104,8 @@ Returns:
 */
 func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) error {
 
+	numaLogger := logger.FromContext(ctx)
+
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
 	if err != nil {
@@ -134,5 +140,92 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 		return err
 	}
 
+	numaLogger.WithValues("AnalysisRunName", analysisRun.Name).Debug("Successfully created AnalysisRun")
+
 	return nil
+}
+
+func PerformAnalysis(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	rolloutObject ProgressiveRolloutObject,
+	analysis apiv1.Analysis,
+	analysisStatus *apiv1.AnalysisStatus,
+	c client.Client,
+) (*apiv1.AnalysisStatus, error) {
+	if analysisStatus == nil {
+		return analysisStatus, errors.New("analysisStatus not set")
+	}
+
+	analysisRun := &argorolloutsv1.AnalysisRun{}
+	// check if analysisRun has already been created
+	if err := c.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+		if apierrors.IsNotFound(err) {
+			// analysisRun is created the first time the upgrading child is assessed
+			ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(),
+				Namespace: existingUpgradingChildDef.GetNamespace(),
+				UID:       existingUpgradingChildDef.GetUID()},
+				existingUpgradingChildDef.GroupVersionKind())
+			promotedChildStatus := rolloutObject.GetPromotedChildStatus()
+			var promotedChildName string
+			if promotedChildStatus != nil {
+				promotedChildName = promotedChildStatus.Name
+			}
+			err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, c, promotedChildName)
+			if err != nil {
+				return analysisStatus, err
+			}
+
+			// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
+			// and start time for its assessment
+			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+			timeNow := metav1.NewTime(time.Now())
+			analysisStatus.StartTime = &timeNow
+			return analysisStatus, nil
+		} else {
+			return analysisStatus, err
+		}
+	}
+
+	// assess analysisRun status and set endTime if completed
+	if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
+		analysisStatus.EndTime = analysisRun.Status.CompletedAt
+	}
+	analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+	analysisStatus.Phase = analysisRun.Status.Phase
+	return analysisStatus, nil
+
+}
+
+func AssessAnalysisStatus(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", err
+	}
+
+	// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
+	if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
+		numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
+			Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
+		switch analysisStatus.Phase {
+		case argorolloutsv1.AnalysisPhaseSuccessful:
+			return apiv1.AssessmentResultSuccess, "", nil
+		case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
+			return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+		default:
+			// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
+			if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
+				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
+			}
+			return apiv1.AssessmentResultUnknown, "", nil
+		}
+	}
+
+	// no AnalysisRun so by default we can mark this successful
+	return apiv1.AssessmentResultSuccess, "", nil
 }
