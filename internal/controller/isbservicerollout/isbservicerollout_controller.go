@@ -476,7 +476,7 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 				return 0, fmt.Errorf("error getting PipelineRollouts; can't enqueue pipelines: %s", err.Error())
 			}
 			for _, pipelineRollout := range pipelineRollouts {
-				numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Created new upgrading isbsvc; now enqueueing pipeline rollout")
+				numaLogger.WithValues("pipeline rollout", pipelineRollout.Name).Debugf("Not done processing upgrading isbsvc; now enqueueing pipeline rollout")
 				pipelinerollout.PipelineROReconciler.EnqueuePipeline(k8stypes.NamespacedName{Namespace: pipelineRollout.Namespace, Name: pipelineRollout.Name})
 			}
 
