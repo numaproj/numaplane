@@ -96,7 +96,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		updatedMonoVertexSpec = updateMonoVertexRolloutForSuccess()
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 2, true)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 2, true)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 1))
@@ -112,7 +112,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 1, false)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, false)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
@@ -190,9 +190,9 @@ func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
 	return updatedMonoVertexSpec
 }
 
-func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, updatedMonoVertexIndex int, checkRunningVertices bool) {
-	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
+func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex int, updatedMonoVertexIndex int, checkRunningVertices bool) {
+	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
 	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
 		GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex): updatedMonoVertexSpec.Scale,
