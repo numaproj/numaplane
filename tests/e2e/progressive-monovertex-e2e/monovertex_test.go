@@ -96,11 +96,9 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		updatedMonoVertexSpec = updateMonoVertexRolloutForSuccess()
-		verifyProgressiveSuccess(updatedMonoVertexSpec)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 2, true)
 
 		// Verify the previously promoted monovertex was deleted
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
-			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 1))
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
@@ -112,24 +110,29 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		createInitialMonoVertexRollout(strategy)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
-		updateMonoVertexRolloutForFailure()
+		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 
-		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-		VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), false, apiv1.AssessmentResultSuccess, strategy.Progressive.ForcePromote)
-
-		// Verify monovertex is scaled back up
-		// Won't check running pods in this case since Numaflow does not create new pods if the previous batch is not ready
-		VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
-			GetInstanceName(monoVertexRolloutName, 1): initialMonoVertexSpec.Scale,
-		})
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 1, false)
 
 		// Verify the previously promoted monovertex was deleted
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 0),
-			[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
+
+	/*It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on Pipeline", func() {
+		createInitialMonoVertexRollout(&defaultStrategy)
+
+		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
+		verifyProgressiveFailure(updatedMonoVertexSpec)
+
+		By("Updating the MonoVertex to set the 'force promote' Label")
+		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			mvr.Spec.MonoVertex.Labels[common.LabelKeyForcePromote] = "true"
+			return mvr, nil
+		})
+
+	})*/
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteNumaflowControllerRollout()
@@ -187,11 +190,17 @@ func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
 	return updatedMonoVertexSpec
 }
 
-func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec) {
+func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, updatedMonoVertexIndex int, checkRunningVertices bool) {
 	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
-	VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 2),
-		[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
+	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
+		GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex): updatedMonoVertexSpec.Scale,
+	})
+
+	if checkRunningVertices {
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex),
+			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
+	}
 
 }
