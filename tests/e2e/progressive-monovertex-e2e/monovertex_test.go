@@ -90,7 +90,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
-		createInitialMonoVertexRollout()
+		createInitialMonoVertexRollout(&defaultStrategy)
 
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 		verifyProgressiveFailure(updatedMonoVertexSpec)
@@ -106,10 +106,12 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on PipelineRollout - Failure case", func() {
-		createInitialMonoVertexRollout()
+	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on PipelineRollout Failure case", func() {
+		strategy := defaultStrategy.DeepCopy()
+		strategy.Progressive.ForcePromote = true
+		createInitialMonoVertexRollout(strategy)
 
-		By("Updating the MonoVertex Topology to cause a Progressive change - Force promoted failure into success")
+		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updateMonoVertexRolloutForFailure()
 
 		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
@@ -134,9 +136,9 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 })
 
-func createInitialMonoVertexRollout() {
+func createInitialMonoVertexRollout(strategy *apiv1.PipelineTypeRolloutStrategy) {
 	By("Creating a MonoVertexRollout")
-	CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, &defaultStrategy)
+	CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy)
 
 	By("Verifying that the MonoVertex spec is as expected")
 	VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
@@ -147,7 +149,7 @@ func createInitialMonoVertexRollout() {
 }
 
 func updateMonoVertexRolloutForFailure() *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
+	By("Updating the MonoVertex Topology to cause a Progressive change Failure case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
@@ -172,7 +174,7 @@ func verifyProgressiveFailure(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec) 
 }
 
 func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
+	By("Updating the MonoVertex Topology to cause a Progressive change Successful case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
