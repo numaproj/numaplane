@@ -205,7 +205,9 @@ func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
 }
 
 func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex int, updatedMonoVertexIndex int, forcedSuccess bool, checkRunningVertices bool) {
-	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+	if !forcedSuccess {
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+	}
 	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), false, apiv1.AssessmentResultSuccess, forcedSuccess)
 
 	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
