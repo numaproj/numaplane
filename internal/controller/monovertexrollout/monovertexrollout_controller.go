@@ -743,12 +743,12 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
 	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
 		specsEqual, fromNew, toNew)
-	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
-	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	//labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	//numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
 	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual || /*!labelsEqual ||*/ !annotationsEqual, nil
 
 }
 
