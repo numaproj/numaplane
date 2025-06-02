@@ -96,7 +96,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		updatedMonoVertexSpec = updateMonoVertexRolloutForSuccess()
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 2, true)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 2, &defaultStrategy, true)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 1))
@@ -112,7 +112,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, false)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, strategy, false)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
