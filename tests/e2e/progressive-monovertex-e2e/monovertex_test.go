@@ -129,6 +129,9 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 		By("Updating the MonoVertex to set the 'force promote' Label")
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+			if mvr.Spec.MonoVertex.Labels == nil {
+				mvr.Spec.MonoVertex.Labels = make(map[string]string)
+			}
 			mvr.Spec.MonoVertex.Labels[common.LabelKeyForcePromote] = "true"
 			return mvr, nil
 		})
