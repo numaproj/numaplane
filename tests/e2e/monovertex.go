@@ -215,23 +215,29 @@ func watchMonoVertex() {
 
 }
 
-func VerifyMonoVertexPaused(namespace string, monoVertexRolloutName string) {
+func VerifyMonoVertexPaused(namespace string, monoVertexName string) {
 	CheckEventually("Verify that MonoVertex Rollout condition is Pausing/Paused", func() metav1.ConditionStatus {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused)
 	}).Should(Equal(metav1.ConditionTrue))
 
-	VerifyMonoVertexStatusEventually(namespace, monoVertexRolloutName,
-		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus) bool {
+	VerifyMonoVertexEventually(namespace, monoVertexName,
+		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool {
 			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused
 		})
 }
 
-func VerifyMonoVertexStatusEventually(namespace string, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus) bool) {
-	CheckEventually("Verify that MonoVertex is paused", func() bool {
-		_, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetMonoVertexFromK8S(namespace, monoVertexRolloutName)
-		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus)
+func VerifyMonoVertexEventually(namespace string, monoVertexName string, f func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool) {
+	CheckEventually("Verify MonoVertex value", func() bool {
+		unstruc, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetMonoVertexFromK8S(namespace, monoVertexName)
+		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus, unstruc.GetLabels(), unstruc.GetAnnotations())
 	}).Should(BeTrue())
+}
+
+func VerifyMonoVertexUpgradeState(namespace string, monoVertexName string, upgradeState common.UpgradeState) {
+	VerifyMonoVertexEventually(namespace, monoVertexName, func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool {
+		return labels != nil && labels[common.LabelKeyUpgradeState] == string(upgradeState)
+	})
 }
 
 func GetMonoVertexFromK8S(namespace string, monoVertexRolloutName string) (*unstructured.Unstructured, numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus, error) {

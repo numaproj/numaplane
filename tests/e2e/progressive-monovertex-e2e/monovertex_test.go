@@ -106,7 +106,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on PipelineRollout Failure case", func() {
+	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on MonoVertexRollout Failure case", func() {
 		strategy := defaultStrategy.DeepCopy()
 		strategy.Progressive.ForcePromote = true
 		createInitialMonoVertexRollout(strategy)
@@ -122,7 +122,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on Pipeline", func() {
+	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on MonoVertex", func() {
 		createInitialMonoVertexRollout(&defaultStrategy)
 
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
@@ -213,6 +213,8 @@ func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, 
 	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
 		GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex): updatedMonoVertexSpec.Scale,
 	})
+
+	VerifyMonoVertexUpgradeState(Namespace, GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), common.LabelValueUpgradePromoted)
 
 	if checkRunningVertices {
 		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex),
