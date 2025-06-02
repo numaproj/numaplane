@@ -247,14 +247,16 @@ func (r *NumaflowControllerReconciler) reconcile(
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine the target objects for the new version %s: %w", newVersion, err)
 	}
-	numaLogger.Debugf("found %d target objects associated with NumaflowController version %s", len(newVersionTargetObjs), newVersion)
+	// log the target objects associated with the new version
+	logResourceInfo(numaLogger, newVersionTargetObjs, false, newVersion)
 
+	// Determine existing managed resources in the cluster, which is used to compute the diff between the desired state and the live state.
 	existingClusterResources, err := r.determineExistingManagedResourceInCluster(ctx, namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to determine existing managed resources in cluster: %w", err)
 	}
-
-	numaLogger.Debugf("found %d existing managed resources in cluster associated with Numaplane API", len(existingClusterResources))
+	// log the existing managed resources in the cluster
+	logResourceInfo(numaLogger, newVersionTargetObjs, true, "")
 
 	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
 	// (note that the cases above in which it is updating have a 'return' statement):
@@ -278,8 +280,21 @@ func (r *NumaflowControllerReconciler) reconcile(
 	return ctrl.Result{}, nil
 }
 
+// debug logs the resource information for the target objects and existing managed resources in the cluster.
+func logResourceInfo(numaLogger *logger.NumaLogger, obj []*unstructured.Unstructured, liveResource bool, version string) {
+	resources := make([]unstructured.Unstructured, len(obj))
+	for i, item := range obj {
+		resources[i] = *item
+	}
+
+	if liveResource {
+		numaLogger.Debugf("found %d existing managed resources in cluster associated with Numaplane API with objects: %v", len(obj), resources)
+	} else {
+		numaLogger.Debugf("found %d target objects associated with NumaflowController version %s with objects: %v", len(obj), version, resources)
+	}
+}
+
 // Determine the existing managed resources in the cluster, whose owner references API VERSION is Numaplane.
-// It is used to compute the diff between the desired state and the live state in the cluster.
 func (r *NumaflowControllerReconciler) determineExistingManagedResourceInCluster(ctx context.Context, namespace string) ([]*unstructured.Unstructured, error) {
 	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
 	if err != nil {
