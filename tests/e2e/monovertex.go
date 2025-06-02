@@ -147,6 +147,25 @@ func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (
 	})
 	Expect(err).ShouldNot(HaveOccurred())
 }
+func UpdateMonoVertexInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
+	By("updating MonoVertex")
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		monovertex, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		updatedMonoVertex, err := f(monovertex)
+		if err != nil {
+			return err
+		}
+
+		_, err = dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).Update(ctx, updatedMonoVertex, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
 
 func watchMonoVertexRollout() {
 

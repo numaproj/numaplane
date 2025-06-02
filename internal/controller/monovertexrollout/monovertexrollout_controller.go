@@ -743,12 +743,17 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
 	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
 		specsEqual, fromNew, toNew)
+	_, metadataUpgradeStrategy, err := usde.ResourceMetadataNeedsUpdating(ctx, from, to)
+	if err != nil {
+		return false, fmt.Errorf("error checking if resource metadata needs updating: %s", err.Error())
+	}
+	numaLogger.WithValues("metadata upgrade strategy", metadataUpgradeStrategy).Debug("checked metadata difference")
 	//labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
 	//numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
-	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	//annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
+	//numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
-	return !specsEqual || /*!labelsEqual ||*/ !annotationsEqual, nil
+	return !specsEqual || /*!labelsEqual ||*/ metadataUpgradeStrategy == apiv1.UpgradeStrategyProgressive, nil
 
 }
 

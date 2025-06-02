@@ -30,6 +30,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
 
@@ -128,12 +129,14 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		By("Updating the MonoVertex to set the 'force promote' Label")
-		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			if mvr.Spec.MonoVertex.Labels == nil {
-				mvr.Spec.MonoVertex.Labels = make(map[string]string)
+		UpdateMonoVertexInK8S(monoVertexRolloutName, func(monovertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			labels := monovertex.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string)
 			}
-			mvr.Spec.MonoVertex.Labels[common.LabelKeyForcePromote] = "true"
-			return mvr, nil
+			labels[common.LabelKeyForcePromote] = "true"
+			monovertex.SetLabels(labels)
+			return monovertex, nil
 		})
 
 		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, true, false)

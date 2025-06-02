@@ -43,7 +43,7 @@ func ResourceNeedsUpdating(
 	existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, bool, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
+	metadataNeedsUpdating, metadataUpgradeStrategy, err := ResourceMetadataNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
 	}
@@ -226,7 +226,7 @@ func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.Upgra
 	return strategy
 }
 
-func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
+func ResourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	upgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
