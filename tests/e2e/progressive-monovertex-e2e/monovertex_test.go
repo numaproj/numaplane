@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 
@@ -96,7 +97,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		updatedMonoVertexSpec = updateMonoVertexRolloutForSuccess()
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 2, &defaultStrategy, true)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 2, false, true)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 1))
@@ -112,7 +113,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 
-		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, strategy, false)
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, true, false)
 
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
@@ -120,7 +121,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
-	/*It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on Pipeline", func() {
+	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on Pipeline", func() {
 		createInitialMonoVertexRollout(&defaultStrategy)
 
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
@@ -132,7 +133,14 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 			return mvr, nil
 		})
 
-	})*/
+		verifyProgressiveSuccess(updatedMonoVertexSpec, 0, 1, true, false)
+
+		// Verify the previously promoted monovertex was deleted
+		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+
+	})
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteNumaflowControllerRollout()
@@ -190,9 +198,9 @@ func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
 	return updatedMonoVertexSpec
 }
 
-func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex int, updatedMonoVertexIndex int, strategy *apiv1.PipelineTypeRolloutStrategy, checkRunningVertices bool) {
+func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex int, updatedMonoVertexIndex int, forcedSuccess bool, checkRunningVertices bool) {
 	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), false, apiv1.AssessmentResultSuccess, strategy.Progressive.ForcePromote)
+	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), false, apiv1.AssessmentResultSuccess, forcedSuccess)
 
 	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
 		GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex): updatedMonoVertexSpec.Scale,
