@@ -129,7 +129,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		By("Updating the MonoVertex to set the 'force promote' Label")
-		UpdateMonoVertexInK8S(monoVertexRolloutName, func(monovertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		UpdateMonoVertexInK8S(GetInstanceName(monoVertexRolloutName, 1), func(monovertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			labels := monovertex.GetLabels()
 			if labels == nil {
 				labels = make(map[string]string)
