@@ -51,15 +51,18 @@ const (
 	// NumaflowISBServiceKind is the kind of the Numaflow ISB Service
 	NumaflowISBServiceKind = "InterStepBufferService"
 
-	FinalizerName = "numaplane.numaproj.io/numaplane-controller"
+	FinalizerName = LabelKeyNumaplanePrefix + "numaplane-controller"
 
 	// LABELS:
 
+	LabelKeyNumaplanePrefix = "numaplane.numaproj.io/"
+	LabelKeyNumaflowPrefix  = "numaflow.numaproj.io/"
+
 	// LabelKeyNumaplaneInstance Resource metadata labels (keys and values) used for tracking
-	LabelKeyNumaplaneInstance = "numaplane.numaproj.io/tracking-id"
+	LabelKeyNumaplaneInstance = LabelKeyNumaplanePrefix + "tracking-id"
 
 	// LabelKeyNumaplaneControllerConfig is the label key used to identify additional Numaplane ConfigMaps (ex: Numaflow Controller definitions, USDE, etc.)
-	LabelKeyNumaplaneControllerConfig = "numaplane.numaproj.io/config"
+	LabelKeyNumaplaneControllerConfig = LabelKeyNumaplanePrefix + "config"
 
 	// LabelValueNumaflowControllerDefinitions is the label value used to identify the Numaplane ConfigMap for the Numaflow Controller definitions
 	LabelValueNumaflowControllerDefinitions = "numaflow-controller-definitions"
@@ -71,25 +74,25 @@ const (
 	LabelValueNamespaceConfig = "namespace-level-config"
 
 	// LabelKeyISBServiceRONameForPipeline is the label key used to identify the ISBServiceRollout that a Pipeline is associated with
-	LabelKeyISBServiceRONameForPipeline = "numaplane.numaproj.io/isbsvc-name" // TODO: this is still named "isbsvc-name" instead of "isbsvc-rollout-name" - consider deprecating this and creating a separate label for isbsvc-rollout-name?
+	LabelKeyISBServiceRONameForPipeline = LabelKeyNumaplanePrefix + "isbsvc-name" // TODO: this is still named "isbsvc-name" instead of "isbsvc-rollout-name" - consider deprecating this and creating a separate label for isbsvc-rollout-name?
 
 	// LabelKeyISBServiceChildNameForPipeline is the label key used to identify the InterstepBufferService that a Pipeline is associated with
-	LabelKeyISBServiceChildNameForPipeline = "numaplane.numaproj.io/isbsvc-child-name"
+	LabelKeyISBServiceChildNameForPipeline = LabelKeyNumaplanePrefix + "isbsvc-child-name"
 
 	// LabelKeyParentRollout is the label key used to identify the Rollout that a child Resource is managed by
 	// This is useful as a Label to quickly locate all children of a given Rollout
-	LabelKeyParentRollout = "numaplane.numaproj.io/parent-rollout-name"
+	LabelKeyParentRollout = LabelKeyNumaplanePrefix + "parent-rollout-name"
 
 	// LabelKeyAllowDataLoss is the label key on a Pipeline to indicate that PPND strategy can skip the usual pausing required
 	// this includes both the case of pausing for Pipeline updating as well as for NumaflowController and isbsvc updating
-	LabelKeyAllowDataLoss = "numaplane.numaproj.io/allow-data-loss"
+	LabelKeyAllowDataLoss = LabelKeyNumaplanePrefix + "allow-data-loss"
 
 	// LabelKeyUpgradeState is the label key used to identify the upgrade state of a resource that is managed by
 	// a NumaRollout.
-	LabelKeyUpgradeState = "numaplane.numaproj.io/upgrade-state"
+	LabelKeyUpgradeState = LabelKeyNumaplanePrefix + "upgrade-state"
 
 	// LabelKeyUpgradeStateReason is an optional label to provide more information on top of the LabelKeyUpgradeState
-	LabelKeyUpgradeStateReason = "numaplane.numaproj.io/upgrade-state-reason"
+	LabelKeyUpgradeStateReason = LabelKeyNumaplanePrefix + "upgrade-state-reason"
 
 	// LabelValueUpgradePromoted is the label value indicating that the resource managed by a NumaRollout is promoted
 	// after an upgrade.
@@ -120,25 +123,25 @@ const (
 	// TODO: reevaluate if we really need that
 	LabelValuePurgeOld UpgradeStateReason = "purge"
 	// LabelKeyNumaflowPodPipelineName is the label key used to identify the pod associated to a specific pipeline
-	LabelKeyNumaflowPodPipelineName = "numaflow.numaproj.io/pipeline-name"
+	LabelKeyNumaflowPodPipelineName = LabelKeyNumaflowPrefix + "pipeline-name"
 
 	// LabelKeyNumaflowPodMonoVertexName is the label key used to identify the pod associated to a specific monovertex
 	LabelKeyNumaflowPodMonoVertexName = "app.kubernetes.io/name"
 
 	// LabelKeyNumaflowPodPipelineVertexName is the label key used to identify the pod associated to a specific pipeline vertex
-	LabelKeyNumaflowPodPipelineVertexName = "numaflow.numaproj.io/vertex-name"
+	LabelKeyNumaflowPodPipelineVertexName = LabelKeyNumaflowPrefix + "vertex-name"
 
 	// LabelKeyNumaflowPodMonoVertexVertexName is the label key used to identify the pod associated to a specific monovertex vertex
-	LabelKeyNumaflowPodMonoVertexVertexName = "numaflow.numaproj.io/mono-vertex-name"
+	LabelKeyNumaflowPodMonoVertexVertexName = LabelKeyNumaflowPrefix + "mono-vertex-name"
 
 	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade
-	LabelKeyForcePromote = "numaplane.numaproj.io/force-promote"
+	LabelKeyForcePromote = LabelKeyNumaplanePrefix + "force-promote"
 
 	// AnnotationKeyNumaflowInstanceID is the annotation passed to Numaflow Controller so it knows whether it should reconcile the resource
-	AnnotationKeyNumaflowInstanceID = "numaflow.numaproj.io/instance"
+	AnnotationKeyNumaflowInstanceID = LabelKeyNumaflowPrefix + "instance"
 
 	// AnnotationKeyHash is used to maintain a hash of a Rider to know whether it's changed
-	AnnotationKeyHash = "numaplane.numaproj.io/hash"
+	AnnotationKeyHash = LabelKeyNumaplanePrefix + "hash"
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"

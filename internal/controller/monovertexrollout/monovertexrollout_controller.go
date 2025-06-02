@@ -706,7 +706,11 @@ func (r *MonoVertexRolloutReconciler) createPromotedMonoVertex(ctx context.Conte
 }
 
 // ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
-// This implements a function of the progressiveController interface
+// This implements a function of the progressiveController interface, used to determine if a previously Upgrading MonoVertex
+// should be replaced with a new one.
+// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
+// configured as "progressive", in the off chance that changing one of those fixes a problem.
+// However, we need to exclude any field that Numaplane itself changes.
 func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -743,17 +747,21 @@ func (r *MonoVertexRolloutReconciler) ChildNeedsUpdating(ctx context.Context, fr
 	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
 	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
 		specsEqual, fromNew, toNew)
-	_, metadataUpgradeStrategy, err := usde.ResourceMetadataNeedsUpdating(ctx, from, to)
+	/*_, metadataUpgradeStrategy, err := usde.ResourceMetadataNeedsUpdating(ctx, from, to)
 	if err != nil {
 		return false, fmt.Errorf("error checking if resource metadata needs updating: %s", err.Error())
 	}
-	numaLogger.WithValues("metadata upgrade strategy", metadataUpgradeStrategy).Debug("checked metadata difference")
-	//labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
-	//numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	//annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
-	//numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.WithValues("metadata upgrade strategy", metadataUpgradeStrategy).Debug("checked metadata difference")*/
 
-	return !specsEqual || /*!labelsEqual ||*/ metadataUpgradeStrategy == apiv1.UpgradeStrategyProgressive, nil
+	// compare Labels and Annotations, excluding any that Numaplane itself applies
+	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.LabelKeyNumaplanePrefix)
+
+	//labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
+	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.LabelKeyNumaplanePrefix)
+	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 
 }
 
