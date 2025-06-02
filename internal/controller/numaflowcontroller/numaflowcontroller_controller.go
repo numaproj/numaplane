@@ -254,6 +254,8 @@ func (r *NumaflowControllerReconciler) reconcile(
 		return ctrl.Result{}, fmt.Errorf("unable to determine existing managed resources in cluster: %w", err)
 	}
 
+	numaLogger.Debugf("found %d existing managed resources in cluster associated with Numaplane API", len(existingClusterResources))
+
 	// apply controller - this handles syncing in the cases in which our Controller  isn't updating
 	// (note that the cases above in which it is updating have a 'return' statement):
 	// - new Controller
