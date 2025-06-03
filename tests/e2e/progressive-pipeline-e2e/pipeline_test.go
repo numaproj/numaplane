@@ -247,7 +247,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the ISBService to cause a Progressive change - Valid change")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
-		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
+		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
 		rawSpec, err = json.Marshal(updatedISBServiceSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
