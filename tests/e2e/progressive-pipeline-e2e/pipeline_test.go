@@ -382,4 +382,4 @@ func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName st
 	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 }
 
-func verifyPipelineFailure
+//func verifyPipelineFailure
