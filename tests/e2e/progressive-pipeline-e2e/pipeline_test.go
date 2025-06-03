@@ -313,7 +313,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
+		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 4)
 		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
@@ -347,7 +347,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure,
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure,
 			fmt.Sprintf("Pipeline %s failed while upgrading", GetInstanceName(pipelineRolloutName, 1)))
 
 		DeletePipelineRollout(pipelineRolloutName)
