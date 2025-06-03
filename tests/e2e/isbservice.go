@@ -152,6 +152,26 @@ func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
+func UpdateISBServiceInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
+	By("updating ISBService")
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		isbservice, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		updatedISBService, err := f(isbservice)
+		if err != nil {
+			return err
+		}
+
+		_, err = dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Update(ctx, updatedISBService, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
 func VerifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
 	CheckEventually("Verifying InProgressStrategy for ISBService", func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
@@ -502,4 +522,15 @@ func VerifyPDBForISBService(namespace string, isbServiceName string) {
 		return false
 
 	}).Should(BeTrue())
+}
+
+func VerifyISBServiceDeletion(isbsvcName string) {
+	CheckEventually(fmt.Sprintf("Verifying that the InterstepBufferService was deleted (%s)", isbsvcName), func() bool {
+		pipeline, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
+		if err != nil {
+			return errors.IsNotFound(err)
+		}
+
+		return pipeline == nil
+	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
 }

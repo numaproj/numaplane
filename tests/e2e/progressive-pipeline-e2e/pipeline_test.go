@@ -27,11 +27,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
 
@@ -133,7 +135,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
-	It("Should validate Pipeline upgrade using Progressive strategy", func() {
+	It("Should validate Pipeline and ISBService upgrade failure followed by success using Progressive strategy", func() {
 		By("Creating a PipelineRollout")
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
 
@@ -269,7 +271,38 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess, "")
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure, "")
+
+		By("Updating the Pipeline back to original healthy state")
+		rawSpec, err = json.Marshal(initialPipelineSpec)
+		Expect(err).ShouldNot(HaveOccurred())
+		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
+			return pipelineRollout, nil
+		})
+
+		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
+		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
+
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), initialPipelineSpecVertices, ComponentVertex)
+
+		// Verify the previously promoted pipeline was deleted
+		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVerticesZero, ComponentVertex)
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+
+		By("Updating the ISBService to set the 'force promote' Label")
+		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			labels := isbservice.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels[common.LabelKeyForcePromote] = "true"
+			isbservice.SetLabels(labels)
+			return isbservice, nil
+		})
+
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess, "")
+		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 2))
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
@@ -287,18 +320,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
-
-		/*By("Updating the Pipeline Topology to cause a Progressive change - Valid change")
-		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].Name = "newcat"
-		updatedPipelineSpec.Edges[0].To = "newcat"
-		updatedPipelineSpec.Edges[1].From = "newcat"
-		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return pipelineRollout, nil
-		})*/
 
 		By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
