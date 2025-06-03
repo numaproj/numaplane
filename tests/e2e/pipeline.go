@@ -199,6 +199,26 @@ func UpdatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.Pipe
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
+func UpdatePipelineInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
+	By("updating Pipeline")
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		pipeline, err := dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		updatedPipeline, err := f(pipeline)
+		if err != nil {
+			return err
+		}
+
+		_, err = dynamicClient.Resource(GetGVRForPipeline()).Namespace(Namespace).Update(ctx, updatedPipeline, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
 func GetPromotedPipelineSpecAndStatus(namespace string, pipelineRolloutName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
