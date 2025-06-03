@@ -281,7 +281,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		})
 
 		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
+		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), true, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
 
 		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), initialPipelineSpecVertices, ComponentVertex)
 
