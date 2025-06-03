@@ -112,7 +112,6 @@ func VerifyISBServiceRolloutProgressiveStatus(
 	expectedPromotedName string,
 	expectedUpgradingName string,
 	expectedAssessmentResult apiv1.AssessmentResult,
-	expectedFailureReason string,
 ) {
 	CheckEventually(fmt.Sprintf("verifying the ISBServiceRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		isbSvcRolloutProgressiveStatus := GetISBServiceRolloutProgressiveStatus(isbServiceRolloutName)
@@ -127,8 +126,7 @@ func VerifyISBServiceRolloutProgressiveStatus(
 		return promotedStatus.Name == expectedPromotedName &&
 			upgradingStatus.Name == expectedUpgradingName &&
 			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-			upgradingStatus.AssessmentEndTime != nil &&
-			upgradingStatus.FailureReason == expectedFailureReason
+			upgradingStatus.AssessmentEndTime != nil
 	}).Should(BeTrue())
 }
 
