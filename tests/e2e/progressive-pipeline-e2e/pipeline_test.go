@@ -312,7 +312,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 4)
+		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 3)
 		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
@@ -356,3 +356,30 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+func createPipelineRollout(currentPromotedISBService string) {
+	By("Creating a PipelineRollout")
+	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+
+	By("Verifying that the Pipeline spec is as expected")
+	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
+	initialPipelineSpec.InterStepBufferServiceName = currentPromotedISBService
+	VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
+	})
+	initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutHealthy(pipelineRolloutName)
+}
+
+func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName string, forcePromoted bool, expectedVertices []numaflowv1.AbstractVertex) {
+	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcePromoted)
+
+	VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), expectedVertices, ComponentVertex)
+
+	// Verify the previously promoted pipeline was deleted
+	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+}
+
+func verifyPipelineFailure
