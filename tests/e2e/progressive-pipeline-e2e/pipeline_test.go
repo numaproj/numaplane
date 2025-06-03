@@ -197,7 +197,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			return pipeline, nil
 		})
 
-		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), true, initialPipelineSpec)
+		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
 
 		By("Updating the ISBService to set the 'force promote' Label")
 		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -250,9 +250,11 @@ func createPipelineRollout(currentPromotedISBService string) {
 	VerifyPipelineRolloutHealthy(pipelineRolloutName)
 }
 
-func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName string, forcePromoted bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
-	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcePromoted)
+func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	if !forcedSuccess {
+		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
+	}
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcedSuccess)
 
 	newPipelineSpecVertices := []numaflowv1.AbstractVertex{}
 	for _, vertex := range upgradingPipelineSpec.Vertices {
