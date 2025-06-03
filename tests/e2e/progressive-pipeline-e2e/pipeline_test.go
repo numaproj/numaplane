@@ -140,7 +140,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
 		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 0)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
 		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
@@ -224,7 +224,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
 		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
 		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
@@ -281,7 +281,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Verifying that the Pipeline spec is as expected")
 		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
 		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
 		})
 		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName

@@ -158,7 +158,7 @@ func createInitialMonoVertexRollout(strategy *apiv1.PipelineTypeRolloutStrategy)
 	CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy)
 
 	By("Verifying that the MonoVertex spec is as expected")
-	VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return reflect.DeepEqual(retrievedMonoVertexSpec, initialMonoVertexSpec)
 	})
 	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -166,7 +166,7 @@ func createInitialMonoVertexRollout(strategy *apiv1.PipelineTypeRolloutStrategy)
 }
 
 func updateMonoVertexRolloutForFailure() *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change Failure case")
+	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
@@ -191,7 +191,7 @@ func verifyProgressiveFailure(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec) 
 }
 
 func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change Successful case")
+	By("Updating the MonoVertex Topology to cause a Progressive change - Successful case")
 	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
 	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = validUDTransformerImage
@@ -205,19 +205,23 @@ func updateMonoVertexRolloutForSuccess() *numaflowv1.MonoVertexSpec {
 }
 
 func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex int, updatedMonoVertexIndex int, forcedSuccess bool, checkRunningVertices bool) {
+
+	promotedMonoVertexName := GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex)
+	upgradingMonoVertexName := GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex)
 	if !forcedSuccess {
-		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
+		VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, promotedMonoVertexName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
 	}
-	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, promotedMonoVertexIndex), GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), false, apiv1.AssessmentResultSuccess, forcedSuccess)
+	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, promotedMonoVertexName, upgradingMonoVertexName, false, apiv1.AssessmentResultSuccess, forcedSuccess)
+
+	By(fmt.Sprintf("Verifying MonoVertex %s has become the Promoted one", upgradingMonoVertexName))
+	VerifyPromotedMonoVertexName(Namespace, monoVertexRolloutName, upgradingMonoVertexName)
 
 	VerifyMonoVertexPromotedScale(Namespace, monoVertexRolloutName, map[string]numaflowv1.Scale{
-		GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex): updatedMonoVertexSpec.Scale,
+		upgradingMonoVertexName: updatedMonoVertexSpec.Scale,
 	})
 
-	VerifyMonoVertexUpgradeState(Namespace, GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex), common.LabelValueUpgradePromoted)
-
 	if checkRunningVertices {
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, updatedMonoVertexIndex),
+		VerifyVerticesPodsRunning(Namespace, upgradingMonoVertexName,
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 	}
 

@@ -87,7 +87,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
 		}, false, nil, nil)
 
-		VerifyMonoVertexStaysPaused(monoVertexRolloutName)
+		VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName)
 	})
 
 	It("Should resume the MonoVertex if user requests it", func() {
@@ -120,7 +120,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
 		}, true, &expectedPipelineTypeProgressiveStatusInProgress, &expectedPipelineTypeProgressiveStatusOnDone)
 
-		VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
 		})
 
