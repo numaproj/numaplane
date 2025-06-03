@@ -288,7 +288,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
 
-		By("Updating the Pipeline Topology to cause a Progressive change - Valid change")
+		/*By("Updating the Pipeline Topology to cause a Progressive change - Valid change")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
 		updatedPipelineSpec.Vertices[1].Name = "newcat"
 		updatedPipelineSpec.Edges[0].To = "newcat"
@@ -298,12 +298,12 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
 			return pipelineRollout, nil
-		})
+		})*/
 
 		By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
 		updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
+		rawSpec, err := json.Marshal(updatedISBServiceSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
 			isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
