@@ -966,13 +966,13 @@ func (r *ISBServiceRolloutReconciler) merge(existingISBService, newISBService *u
 	return resultISBService
 }
 
-// ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
+// UpgradingChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading InterstepBufferService
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
 // configured as "progressive", in the off chance that changing one of those fixes a problem.
 // However, we need to exclude any field that Numaplane itself changes or it will confuse things.
-func (r *ISBServiceRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+func (r *ISBServiceRolloutReconciler) UpgradingChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])

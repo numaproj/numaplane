@@ -47,7 +47,7 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
+func (fpc fakeProgressiveController) UpgradingChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
 	return false, nil
 }
 

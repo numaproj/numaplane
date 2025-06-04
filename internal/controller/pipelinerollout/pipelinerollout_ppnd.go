@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/util"
@@ -50,7 +51,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		return false, fmt.Errorf("failed to convert new Pipeline spec %q into PipelineSpec type, err=%v", newPipelineDef.Object, err)
 	}
 
-	pipelineNeedsToUpdate, err := r.ChildNeedsUpdating(ctx, existingPipelineDef, newPipelineDef)
+	pipelineNeedsToUpdate, err := r.pipelineNeedsUpdatingForPPND(ctx, existingPipelineDef, newPipelineDef)
 	if err != nil {
 		return false, err
 	}
@@ -199,6 +200,29 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 	}
 
 	return &needPPND, nil
+}
+
+// Determine if the Pipeline has changed and needs updating
+// We need to ignore any field that could be set by Numaplane in the pause-and-drain process
+// TODO: do we really need this or can we just use usde functionality and just look for data loss fields?
+func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	fromCopy := from.DeepCopy()
+	toCopy := to.DeepCopy()
+	// remove lifecycle.desiredPhase field from comparison to test for equality
+	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
+	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
+
+	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
+	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
+		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
+	// compare Labels and Annotations, excluding any that Numaplane itself applies
+	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }
 
 func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec numaflowtypes.PipelineSpec) bool {
