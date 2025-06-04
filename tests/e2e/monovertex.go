@@ -214,19 +214,19 @@ func watchMonoVertex() {
 
 }
 
-func VerifyMonoVertexPaused(namespace string, monoVertexName string) {
+func VerifyPromotedMonoVertexPaused(namespace string, monoVertexRolloutName string) {
 	CheckEventually("Verify that MonoVertex Rollout condition is Pausing/Paused", func() metav1.ConditionStatus {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexName, metav1.GetOptions{})
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused)
 	}).Should(Equal(metav1.ConditionTrue))
 
-	VerifyMonoVertexEventually(namespace, monoVertexName,
+	VerifyPromotedMonoVertexEventually(namespace, monoVertexRolloutName,
 		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool {
 			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused
 		})
 }
 
-func VerifyMonoVertexEventually(namespace string, monoVertexRolloutName string, f func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool) {
+func VerifyPromotedMonoVertexEventually(namespace string, monoVertexRolloutName string, f func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool) {
 	CheckEventually("Verify MonoVertex value", func() bool {
 		unstruc, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetPromotedMonoVertexFromK8S(namespace, monoVertexRolloutName)
 		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus, unstruc.GetLabels(), unstruc.GetAnnotations())
@@ -465,7 +465,7 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	VerifyMonoVertexRolloutInProgressStrategy(name, apiv1.UpgradeStrategyNoOp)
 
 	if expectedFinalPhase == numaflowv1.MonoVertexPhasePaused {
-		VerifyMonoVertexPaused(Namespace, name)
+		VerifyPromotedMonoVertexPaused(Namespace, name)
 	} else {
 		err = VerifyPromotedMonoVertexRunning(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
