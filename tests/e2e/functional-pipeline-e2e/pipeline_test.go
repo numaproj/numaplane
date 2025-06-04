@@ -206,7 +206,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		if UpgradeStrategy == config.PPNDStrategyID {
 			By("Verify that child Pipeline is not paused when an update not requiring pause is made")
-			VerifyPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+			VerifyPromotedPipelineStatusConsistently(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 				return retrievedPipelineStatus.Phase != numaflowv1.PipelinePhasePaused
 			})
 		}
@@ -216,7 +216,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		// get updated Pipeline again to compare spec
 		By("Verifying self-healing")
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return !retrievedPipelineSpec.Watermark.Disabled
 		})
 
@@ -225,7 +225,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-		VerifyPipelineRunning(Namespace, pipelineRolloutName)
+		VerifyPromotedPipelineRunning(Namespace, pipelineRolloutName)
 	})
 
 	It("Should update the child Pipeline if the PipelineRollout is updated", func() {
@@ -245,7 +245,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
 		}, false, false, true)
 
-		VerifyPipelineStaysPaused(pipelineRolloutName)
+		VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
 	})
 
 	It("Should resume the Pipeline if user requests it", func() {

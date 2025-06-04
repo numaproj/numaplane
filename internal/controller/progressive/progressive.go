@@ -49,8 +49,8 @@ type progressiveController interface {
 	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
-	// ChildNeedsUpdating determines if the difference between the current child definition and the desired child definition requires an update
-	ChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
+	// UpgradingChildNeedsUpdating determines if the difference between the current Upgrading child definition and the desired child definition requires a replacement to the current Upgrading child
+	UpgradingChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error)
@@ -518,7 +518,7 @@ func rolloutNeedsUpdating(
 
 	needsUpdating := false
 
-	childNeedsUpdating, err := controller.ChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
+	childNeedsUpdating, err := controller.UpgradingChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}

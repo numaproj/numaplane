@@ -16,6 +16,11 @@ limitations under the License.
 
 package util
 
+import (
+	"maps"
+	"strings"
+)
+
 func MergeMaps(existing, new map[string]string) map[string]string {
 	merged := make(map[string]string)
 	if existing != nil {
@@ -34,4 +39,37 @@ func CompareMaps(existing, new map[string]string) bool {
 		return len(existing) == len(new)
 	}
 	return CompareStructNumTypeAgnostic(existing, new)
+}
+
+// CompareMapsWithExceptions compares two maps but ignoring any differences where the keys are prefixed with any of the 'prefixExceptions'
+func CompareMapsWithExceptions(existing, new map[string]string, prefixExceptions ...string) bool {
+	// clone the maps because we can make nil maps empty maps to make it easier to compare
+	existingCopy := maps.Clone(existing)
+	newCopy := maps.Clone(new)
+	if existingCopy == nil {
+		existingCopy = make(map[string]string)
+	}
+	if newCopy == nil {
+		newCopy = make(map[string]string)
+	}
+
+	for existingKey, existingValue := range existingCopy {
+		isException := false
+		for _, prefixException := range prefixExceptions {
+			if strings.HasPrefix(existingKey, prefixException) {
+				isException = true
+				break
+			}
+		}
+		if !isException {
+			// is this key in the other map and does it have the same value?
+			newValue := newCopy[existingKey]
+			if existingValue != newValue {
+				return false
+			}
+		}
+
+	}
+
+	return true
 }

@@ -207,7 +207,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			DeletePipelineRollout(slowPipelineRolloutName)
 
 			// confirm update
-			VerifyISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 				return retrievedISBServiceSpec.JetStream.Version == UpdatedJetstreamVersion
 			})
 
@@ -250,7 +250,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
 		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
-		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
+		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 
@@ -272,7 +272,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
 		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
-		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
+		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 
@@ -300,7 +300,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
 		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
-		VerifyPipelineFailed(Namespace, failedPipelineRolloutName)
+		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
 
@@ -337,11 +337,11 @@ func createSlowPipelineRollout() {
 	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil)
 
 	By("Verifying that the slow pipeline was created")
-	VerifyPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+	VerifyPromotedPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return len(slowPipelineSpec.Vertices) == len(retrievedPipelineSpec.Vertices)
 	})
 
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPromotedPipelineRunning(Namespace, slowPipelineRolloutName)
 	VerifyPipelineRolloutInProgressStrategy(slowPipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
@@ -349,11 +349,11 @@ func createSlowPipelineRollout() {
 func verifyPipelineIsSlowToPause() {
 
 	By("Verifying that Pipeline tries to pause")
-	VerifyPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+	VerifyPromotedPipelineStatusEventually(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 		return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
 	})
 	By("Verifying that Pipeline keeps trying to pause")
-	VerifyPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
+	VerifyPromotedPipelineStatusConsistently(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec, retrievedPipelineStatus numaflowv1.PipelineStatus) bool {
 		return retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing
 	})
 
@@ -371,6 +371,6 @@ func allowDataLoss() {
 	})
 
 	By("Verifying that Pipeline has stopped trying to pause")
-	VerifyPipelineRunning(Namespace, slowPipelineRolloutName)
+	VerifyPromotedPipelineRunning(Namespace, slowPipelineRolloutName)
 
 }

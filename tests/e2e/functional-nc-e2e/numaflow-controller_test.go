@@ -136,11 +136,11 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
 		UpdateNumaflowControllerRollout(InitialNumaflowControllerVersion, UpdatedNumaflowControllerVersion, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, true)
-		VerifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+		VerifyPromotedISBSvcReady(Namespace, isbServiceRolloutName, 3)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
-		VerifyPipelineRunning(Namespace, pipelineRolloutName)
+		VerifyPromotedPipelineRunning(Namespace, pipelineRolloutName)
 		VerifyMonoVertexRolloutReady(monoVertexRolloutName)
-		Expect(VerifyMonoVertexReady(Namespace, monoVertexRolloutName)).ShouldNot(HaveOccurred())
+		Expect(VerifyPromotedMonoVertexRunning(Namespace, monoVertexRolloutName)).ShouldNot(HaveOccurred())
 	})
 
 	It("Should fail if the NumaflowControllerRollout is updated with a bad version", func() {

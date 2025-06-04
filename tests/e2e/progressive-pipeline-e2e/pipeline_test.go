@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -27,11 +26,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
 
@@ -133,201 +134,97 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
-	It("Should validate Pipeline upgrade using Progressive strategy", func() {
-		By("Creating a PipelineRollout")
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+	It("Should validate Pipeline and ISBService upgrade failure followed by success using Progressive strategy", func() {
 
-		By("Verifying that the Pipeline spec is as expected")
-		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 0)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
-		})
-		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
-		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyPipelineRolloutHealthy(pipelineRolloutName)
+		createPipelineRollout(GetInstanceName(isbServiceRolloutName, 0))
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
 		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
 			Name: "badcat",
 		}}
-		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return pipelineRollout, nil
-		})
+		updatePipeline(*updatedPipelineSpec)
 
-		By("Updating the ISBService to cause a Progressive change - Failure case")
-		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
-		updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-			isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-			return isbSvcRollout, nil
-		})
+		updatedISBServiceSpec := updateISBServiceForFailure()
 
-		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
-
-		// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
-		initialPipelineSpecVertices := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVertices = append(initialPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVertices, ComponentVertex)
-		initialPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVerticesZero = append(initialPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
+		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
-		rawSpec, err = json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return pipelineRollout, nil
-		})
+		updatePipeline(*updatedPipelineSpec)
 
 		By("Updating the ISBService to cause a Progressive change - Successful case")
 		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-			isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-			return isbSvcRollout, nil
-		})
+		updateISBService(*updatedISBServiceSpec)
 
-		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, apiv1.AssessmentResultSuccess, defaultStrategy.Progressive.ForcePromote)
-
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 2), initialPipelineSpecVertices, ComponentVertex)
-
-		// Verify the previously promoted pipeline was deleted
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
+		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess, "")
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
 	It("Should validate ISBService as failure when Pipeline upgrade assesses in failure", func() {
-		By("Creating a PipelineRollout")
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
-
-		By("Verifying that the Pipeline spec is as expected")
-		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
-		})
-		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
-		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyPipelineRolloutHealthy(pipelineRolloutName)
+		createPipelineRollout(GetInstanceName(isbServiceRolloutName, 2))
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
 		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
 			Name: "badcat",
 		}}
-		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return pipelineRollout, nil
-		})
+		updatePipeline(*updatedPipelineSpec)
 
 		By("Updating the ISBService to cause a Progressive change - Valid change")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
-		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-			isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-			return isbSvcRollout, nil
-		})
+		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
+		updateISBService(*updatedISBServiceSpec)
 
-		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
-
-		// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
-		initialPipelineSpecVertices := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVertices = append(initialPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVertices, ComponentVertex)
-		initialPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVerticesZero = append(initialPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
+		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess, "")
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure)
+
+		By("Updating the Pipeline to set the 'force promote' Label")
+		UpdatePipelineInK8S(GetInstanceName(pipelineRolloutName, 1), func(pipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			labels := pipeline.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels[common.LabelKeyForcePromote] = "true"
+			pipeline.SetLabels(labels)
+			return pipeline, nil
+		})
+
+		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
+
+		By("Updating the ISBService to set the 'force promote' Label")
+		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			labels := isbservice.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels[common.LabelKeyForcePromote] = "true"
+			isbservice.SetLabels(labels)
+			return isbservice, nil
+		})
+
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess)
+		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 2))
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
 	It("Should validate Pipeline as failure when ISBService upgrade assesses in failure", func() {
-		By("Creating a PipelineRollout")
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+		createPipelineRollout(GetInstanceName(isbServiceRolloutName, 3))
 
-		By("Verifying that the Pipeline spec is as expected")
-		originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-		initialPipelineSpec.InterStepBufferServiceName = GetInstanceName(isbServiceRolloutName, 2)
-		VerifyPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
-		})
-		initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
-		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyPipelineRolloutHealthy(pipelineRolloutName)
+		_ = updateISBServiceForFailure()
 
-		By("Updating the Pipeline Topology to cause a Progressive change - Valid change")
-		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].Name = "newcat"
-		updatedPipelineSpec.Edges[0].To = "newcat"
-		updatedPipelineSpec.Edges[1].From = "newcat"
-		rawSpec, err := json.Marshal(updatedPipelineSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-			pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-			return pipelineRollout, nil
-		})
-
-		By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
-		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
-		updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
-		rawSpec, err = json.Marshal(updatedISBServiceSpec)
-		Expect(err).ShouldNot(HaveOccurred())
-		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-			isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-			return isbSvcRollout, nil
-		})
-
-		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-		VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
-
-		// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
-		initialPipelineSpecVertices := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVertices = append(initialPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 0), initialPipelineSpecVertices, ComponentVertex)
-		initialPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
-		for _, vertex := range initialPipelineSpec.Vertices {
-			initialPipelineSpecVerticesZero = append(initialPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
-		}
-		VerifyVerticesPodsRunning(Namespace, GetInstanceName(pipelineRolloutName, 1), initialPipelineSpecVerticesZero, ComponentVertex)
+		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, initialPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure,
-			fmt.Sprintf("Pipeline %s failed while upgrading", GetInstanceName(pipelineRolloutName, 1)))
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure)
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
@@ -337,3 +234,79 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+func createPipelineRollout(currentPromotedISBService string) {
+	By("Creating a PipelineRollout")
+	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+
+	By("Verifying that the Pipeline spec is as expected")
+	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
+	initialPipelineSpec.InterStepBufferServiceName = currentPromotedISBService
+	VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
+	})
+	initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutHealthy(pipelineRolloutName)
+}
+
+func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	if !forcedSuccess {
+		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
+	}
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcedSuccess)
+
+	newPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+	for _, vertex := range upgradingPipelineSpec.Vertices {
+		newPipelineSpecVertices = append(newPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+	}
+	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
+
+	// Verify the previously promoted pipeline was deleted
+	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+}
+
+func verifyPipelineFailure(promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, promotedPipelineName)
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
+
+	// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
+	originalPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+	for _, vertex := range promotedPipelineSpec.Vertices {
+		originalPipelineSpecVertices = append(originalPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+	}
+	VerifyVerticesPodsRunning(Namespace, promotedPipelineName, originalPipelineSpecVertices, ComponentVertex)
+	upgradingPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
+	for _, vertex := range upgradingPipelineSpec.Vertices {
+		upgradingPipelineSpecVerticesZero = append(upgradingPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
+	}
+	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, upgradingPipelineSpecVerticesZero, ComponentVertex)
+
+}
+
+func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
+	By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
+	updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
+	updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
+	updateISBService(*updatedISBServiceSpec)
+
+	return updatedISBServiceSpec
+}
+
+func updateISBService(spec numaflowv1.InterStepBufferServiceSpec) {
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+		isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+		return isbSvcRollout, nil
+	})
+}
+
+func updatePipeline(spec numaflowv1.PipelineSpec) {
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
+		return pipelineRollout, nil
+	})
+}
