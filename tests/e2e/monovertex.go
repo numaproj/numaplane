@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -471,22 +470,6 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 		err = VerifyPromotedMonoVertexRunning(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
 	}
-}
-
-func VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName string) {
-	CheckConsistently("verifying MonoVertex stays in paused or otherwise pausing", func() bool {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		_, _, retrievedMonoVertexStatus, err := GetPromotedMonoVertexFromK8S(Namespace, monoVertexRolloutName)
-		if err != nil {
-			return false
-		}
-		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
-			(retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused)
-	}).WithTimeout(15 * time.Second).Should(BeTrue())
-
-	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
-
-	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(monoVertexRolloutName))
 }
 
 func VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {

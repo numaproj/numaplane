@@ -41,6 +41,7 @@ func CompareMaps(existing, new map[string]string) bool {
 	return CompareStructNumTypeAgnostic(existing, new)
 }
 
+// CompareMapsWithExceptions compares two maps but ignoring any differences where the keys are prefixed with any of the 'prefixExceptions'
 func CompareMapsWithExceptions(existing, new map[string]string, prefixExceptions ...string) bool {
 	// clone the maps because we can make nil maps empty maps to make it easier to compare
 	existingCopy := maps.Clone(existing)

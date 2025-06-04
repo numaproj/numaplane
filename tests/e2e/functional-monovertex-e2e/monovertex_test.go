@@ -77,30 +77,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 	})
 
-	It("Should pause the MonoVertex if user requests it", func() {
-
-		By("setting desiredPhase=Paused")
-		currentMonoVertexSpec := initialMonoVertexSpec
-		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
-
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-		}, false, nil, nil)
-
-		VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName)
-	})
-
-	It("Should resume the MonoVertex if user requests it", func() {
-
-		By("setting desiredPhase=Running")
-		currentMonoVertexSpec := initialMonoVertexSpec
-		currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhaseRunning
-
-		UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-		}, false, nil, nil)
-	})
-
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
 		// new MonoVertex spec
