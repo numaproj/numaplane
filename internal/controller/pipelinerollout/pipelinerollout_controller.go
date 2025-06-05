@@ -1059,19 +1059,22 @@ func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstruc
 	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
-// ChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
-// This implements a function of the progressiveController interface
-func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// UpgradingChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
+// This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
+// should be replaced with a new one.
+// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
+// configured as "progressive", in the off chance that changing one of those fixes a problem.
+// However, we need to exclude any field that Numaplane itself changes or it will confuse things.
+// TODO: move to pipelinerollout_progressive.go
+func (r *PipelineRolloutReconciler) UpgradingChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
 	toCopy := to.DeepCopy()
-	// remove lifecycle.desiredPhase field from comparison to test for equality
-	numaflowtypes.PipelineWithoutDesiredPhase(fromCopy)
+
 	err := numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
 	if err != nil {
 		return false, err
 	}
-	numaflowtypes.PipelineWithoutDesiredPhase(toCopy)
 	err = numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
 	if err != nil {
 		return false, err
@@ -1080,10 +1083,11 @@ func (r *PipelineRolloutReconciler) ChildNeedsUpdating(ctx context.Context, from
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
-	labelsEqual := util.CompareMaps(from.GetLabels(), to.GetLabels())
-	numaLogger.Debugf("labelsEqual: %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMaps(from.GetAnnotations(), to.GetAnnotations())
-	numaLogger.Debugf("annotationsEqual: %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	// compare Labels and Annotations, excluding any that Numaplane itself applies
+	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
 	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 }

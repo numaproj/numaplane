@@ -19,6 +19,8 @@ package util
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMergeMaps(t *testing.T) {
@@ -59,6 +61,73 @@ func TestCompareMaps(t *testing.T) {
 			if result != tt.expectedResult {
 				t.Errorf("expected result: %v, got: %v", tt.expectedResult, result)
 			}
+		})
+	}
+}
+
+func TestCompareMapsWithExceptions(t *testing.T) {
+	testCases := []struct {
+		name             string
+		existing         map[string]string
+		new              map[string]string
+		prefixExceptions []string
+		expected         bool
+	}{
+		{
+			name:             "identical maps",
+			existing:         map[string]string{"key1": "value1", "key2": "value2"},
+			new:              map[string]string{"key1": "value1", "key2": "value2"},
+			prefixExceptions: []string{"prefix."},
+			expected:         true,
+		},
+		{
+			name:             "nil maps",
+			existing:         nil,
+			new:              nil,
+			prefixExceptions: []string{"prefix."},
+			expected:         true,
+		},
+		{
+			name:             "one nil map",
+			existing:         map[string]string{"key1": "value1"},
+			new:              nil,
+			prefixExceptions: []string{"prefix."},
+			expected:         false,
+		},
+		{
+			name:             "different values",
+			existing:         map[string]string{"key1": "value1", "key2": "value2"},
+			new:              map[string]string{"key1": "value1", "key2": "different"},
+			prefixExceptions: []string{"prefix."},
+			expected:         false,
+		},
+		{
+			name:             "different keys",
+			existing:         map[string]string{"key1": "value1", "key2": "value2"},
+			new:              map[string]string{"key1": "value1", "key3": "value2"},
+			prefixExceptions: []string{"prefix."},
+			expected:         false,
+		},
+		{
+			name:             "exception prefix ignored",
+			existing:         nil,
+			new:              map[string]string{"prefix.key": "value1"},
+			prefixExceptions: []string{"prefix."},
+			expected:         true,
+		},
+		{
+			name:             "multiple exceptions",
+			existing:         map[string]string{"key1": "value1", "prefix1.key": "old", "prefix2.key": "old"},
+			new:              map[string]string{"key1": "value1", "prefix1.key": "new", "prefix2.key": "new"},
+			prefixExceptions: []string{"prefix1.", "prefix2."},
+			expected:         true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CompareMapsWithExceptions(tc.existing, tc.new, tc.prefixExceptions...)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }

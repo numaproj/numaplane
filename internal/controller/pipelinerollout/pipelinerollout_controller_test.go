@@ -482,7 +482,6 @@ var specWithNonEmptyScale = `
 }
 `
 
-// TODO: update to account for Labels/Annotations differences
 func Test_ChildNeedsUpdating(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
@@ -500,6 +499,123 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 		name                  string
 		spec1                 string
 		spec2                 string
+		labels1               map[string]string
+		labels2               map[string]string
+		annotations1          map[string]string
+		annotations2          map[string]string
+		expectedNeedsUpdating bool
+		expectedError         bool
+	}{
+		{
+			name:                  "Equal - just scale different",
+			spec1:                 specNoScale,
+			spec2:                 specWithEmptyScale,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Equal - just scale min/max different",
+			spec1:                 specWithEmptyScale,
+			spec2:                 specWithNonEmptyScale,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Different Labels",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			labels1:               map[string]string{"app": "test1"},
+			labels2:               map[string]string{"app": "test2"},
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Different Annotations",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			annotations1:          map[string]string{"key1": "test1"},
+			annotations2:          nil,
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Numaplane Labels should be ignored",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			labels1:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value1"},
+			labels2:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value2"},
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+		{
+			name:                  "Numaplane Annotations should be ignored",
+			spec1:                 specNoScale,
+			spec2:                 specNoScale,
+			annotations1:          map[string]string{common.KeyNumaplanePrefix + "test": "value1"},
+			annotations2:          nil,
+			expectedNeedsUpdating: false,
+			expectedError:         false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			obj1 := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var yaml1Spec map[string]interface{}
+			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
+			assert.NoError(t, err)
+			obj1.Object["spec"] = yaml1Spec
+			if tc.labels1 != nil {
+				obj1.SetLabels(tc.labels1)
+			}
+			if tc.annotations1 != nil {
+				obj1.SetAnnotations(tc.annotations1)
+			}
+
+			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var yaml2Spec map[string]interface{}
+			err = json.Unmarshal([]byte(tc.spec2), &yaml2Spec)
+			assert.NoError(t, err)
+			obj2.Object["spec"] = yaml2Spec
+			if tc.labels2 != nil {
+				obj2.SetLabels(tc.labels2)
+			}
+			if tc.annotations2 != nil {
+				obj2.SetAnnotations(tc.annotations2)
+			}
+
+			needsUpdating, err := r.UpgradingChildNeedsUpdating(context.Background(), obj1, obj2)
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
+			}
+		})
+	}
+}
+
+func Test_pipelineNeedsUpdatingForPPND(t *testing.T) {
+
+	_, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+
+	recorder := record.NewFakeRecorder(64)
+
+	r := NewPipelineRolloutReconciler(
+		client,
+		scheme.Scheme,
+		ctlrcommon.TestCustomMetrics,
+		recorder)
+
+	testCases := []struct {
+		name                  string
+		spec1                 string
+		spec2                 string
+		labels1               map[string]string
+		labels2               map[string]string
+		annotations1          map[string]string
+		annotations2          map[string]string
 		expectedNeedsUpdating bool
 		expectedError         bool
 	}{
@@ -532,16 +648,38 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 			expectedError:         false,
 		},
 		{
-			name:                  "Equal - just scale different",
-			spec1:                 specNoScale,
-			spec2:                 specWithEmptyScale,
+			name:                  "Different Labels",
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhase,
+			labels1:               map[string]string{"app": "test1"},
+			labels2:               map[string]string{"app": "test2"},
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Different Annotations",
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhase,
+			annotations1:          map[string]string{"key1": "test1"},
+			annotations2:          nil,
+			expectedNeedsUpdating: true,
+			expectedError:         false,
+		},
+		{
+			name:                  "Numaplane Labels should be ignored",
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhase,
+			labels1:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value1"},
+			labels2:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value2"},
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
-			name:                  "Equal - just scale min/max different",
-			spec1:                 specWithEmptyScale,
-			spec2:                 specWithNonEmptyScale,
+			name:                  "Numaplane Annotations should be ignored",
+			spec1:                 specHasDesiredPhase,
+			spec2:                 specHasDesiredPhase,
+			annotations1:          map[string]string{common.KeyNumaplanePrefix + "test": "value1"},
+			annotations2:          nil,
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
@@ -554,21 +692,32 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 			err := json.Unmarshal([]byte(tc.spec1), &yaml1Spec)
 			assert.NoError(t, err)
 			obj1.Object["spec"] = yaml1Spec
+			if tc.labels1 != nil {
+				obj1.SetLabels(tc.labels1)
+			}
+			if tc.annotations1 != nil {
+				obj1.SetAnnotations(tc.annotations1)
+			}
 
 			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
 			var yaml2Spec map[string]interface{}
 			err = json.Unmarshal([]byte(tc.spec2), &yaml2Spec)
 			assert.NoError(t, err)
 			obj2.Object["spec"] = yaml2Spec
+			if tc.labels2 != nil {
+				obj2.SetLabels(tc.labels2)
+			}
+			if tc.annotations2 != nil {
+				obj2.SetAnnotations(tc.annotations2)
+			}
 
-			needsUpdating, err := r.ChildNeedsUpdating(context.Background(), obj1, obj2)
+			needsUpdating, err := r.pipelineNeedsUpdatingForPPND(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedNeedsUpdating, needsUpdating)
 			}
-
 		})
 	}
 }

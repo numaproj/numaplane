@@ -380,17 +380,17 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			VerifyNumaflowControllerRolloutReady()
 
 			By("Verifying ISBService got updated")
-			VerifyISBServiceSpec(Namespace, isbServiceRolloutName, tc.isbServiceVerifyFunc)
+			VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, tc.isbServiceVerifyFunc)
 			VerifyISBSvcRolloutReady(isbServiceRolloutName)
 			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying Pipeline got updated")
-			VerifyPipelineSpec(Namespace, pipelineRolloutName, tc.pipelineVerifyFunc)
+			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, tc.pipelineVerifyFunc)
 			VerifyPipelineRolloutDeployed(pipelineRolloutName)
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying MonoVertexRollout got updated")
-			VerifyMonoVertexSpec(Namespace, monoVertexRolloutName, tc.monoVertexVerifyFunc)
+			VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, tc.monoVertexVerifyFunc)
 			VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 

@@ -52,7 +52,7 @@ func GetISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBuffer
 	return isbServiceSpec, err
 }
 
-func GetISBServiceName(namespace, isbServiceRolloutName string) (string, error) {
+func GetPromotedISBServiceName(namespace, isbServiceRolloutName string) (string, error) {
 	isbsvc, err := GetPromotedISBService(namespace, isbServiceRolloutName)
 	if err != nil {
 		return "", err
@@ -60,7 +60,7 @@ func GetISBServiceName(namespace, isbServiceRolloutName string) (string, error) 
 	return isbsvc.GetName(), nil
 }
 
-func VerifyISBServiceSpec(namespace string, isbServiceRolloutName string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
+func VerifyPromotedISBServiceSpec(namespace string, isbServiceRolloutName string, f func(numaflowv1.InterStepBufferServiceSpec) bool) {
 	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
 	CheckEventually("verifying ISBService Spec", func() bool {
 		unstruct, err := GetPromotedISBService(namespace, isbServiceRolloutName)
@@ -102,7 +102,7 @@ func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
 
 }
 
-func VerifyISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize int) {
+func VerifyPromotedISBSvcReady(namespace string, isbServiceRolloutName string, nodeSize int) {
 
 	var isbsvcName string
 	CheckEventually("Verifying that the ISBService exists", func() error {
@@ -147,6 +147,26 @@ func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 			return err
 		}
 		_, err = isbServiceRolloutClient.Update(ctx, rollout, metav1.UpdateOptions{})
+		return err
+	})
+	Expect(err).ShouldNot(HaveOccurred())
+}
+
+func UpdateISBServiceInK8S(name string, f func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) {
+	By("updating ISBService")
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		isbservice, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		updatedISBService, err := f(isbservice)
+		if err != nil {
+			return err
+		}
+
+		_, err = dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Update(ctx, updatedISBService, metav1.UpdateOptions{})
 		return err
 	})
 	Expect(err).ShouldNot(HaveOccurred())
@@ -255,10 +275,10 @@ func CreateISBServiceRollout(name string, isbServiceSpec numaflowv1.InterStepBuf
 
 	VerifyISBSvcRolloutReady(name)
 
-	VerifyISBSvcReady(Namespace, name, 3)
+	VerifyPromotedISBSvcReady(Namespace, name, 3)
 
 	By("getting new isbservice name")
-	newISBServiceName, err := GetISBServiceName(Namespace, name)
+	newISBServiceName, err := GetPromotedISBServiceName(Namespace, name)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	VerifyPDBForISBService(Namespace, newISBServiceName)
@@ -342,14 +362,14 @@ func UpdateISBServiceRollout(
 	Expect(err).ShouldNot(HaveOccurred())
 
 	// get name of isbservice and name of pipeline before the change so we can check them after the change to see if they're the same or if they've changed
-	originalISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
+	originalISBServiceName, err := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	// need to iterate over rollout names
 	originalPipelineNames := make(map[string]string)
 	originalPipelineCount := make(map[string]int)
 	for _, pipelineRollout := range pipelineRollouts {
-		originalPipelineName, err := GetPipelineName(Namespace, pipelineRollout.PipelineRolloutName)
+		originalPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRollout.PipelineRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		originalPipelineNames[pipelineRollout.PipelineRolloutName] = originalPipelineName
@@ -371,7 +391,7 @@ func UpdateISBServiceRollout(
 			isbRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			isbCondStatus := getRolloutConditionStatus(isbRollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 			for _, rolloutInfo := range pipelineRollouts {
-				_, _, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, rolloutInfo.PipelineRolloutName)
+				_, _, retrievedPipelineStatus, err := GetPromotedPipelineSpecAndStatus(Namespace, rolloutInfo.PipelineRolloutName)
 				if err != nil {
 					return false
 				}
@@ -398,7 +418,7 @@ func UpdateISBServiceRollout(
 			for _, rolloutInfo := range pipelineRollouts {
 				if !rolloutInfo.PipelineIsFailed {
 					VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyPPND)
-					VerifyPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
+					VerifyPromotedPipelinePaused(Namespace, rolloutInfo.PipelineRolloutName)
 				}
 			}
 
@@ -421,23 +441,23 @@ func UpdateISBServiceRollout(
 		}
 	}
 
-	VerifyISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
+	VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, verifySpecFunc)
 
 	VerifyISBSvcRolloutReady(isbServiceRolloutName)
-	VerifyISBSvcReady(Namespace, isbServiceRolloutName, 3)
+	VerifyPromotedISBSvcReady(Namespace, isbServiceRolloutName, 3)
 
 	for _, rolloutInfo := range pipelineRollouts {
 		VerifyPipelineRolloutInProgressStrategy(rolloutInfo.PipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 		// check that pipeline will be failed if we expect it to be
 		if rolloutInfo.PipelineIsFailed {
-			VerifyPipelineFailed(Namespace, rolloutInfo.PipelineRolloutName)
+			VerifyPromotedPipelineFailed(Namespace, rolloutInfo.PipelineRolloutName)
 		} else {
-			VerifyPipelineRunning(Namespace, rolloutInfo.PipelineRolloutName)
+			VerifyPromotedPipelineRunning(Namespace, rolloutInfo.PipelineRolloutName)
 		}
 	}
 
 	By("getting new isbservice name")
-	newISBServiceName, err := GetISBServiceName(Namespace, isbServiceRolloutName)
+	newISBServiceName, err := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	VerifyPDBForISBService(Namespace, newISBServiceName)
@@ -447,7 +467,7 @@ func UpdateISBServiceRollout(
 		rolloutName := pipelineRollout.PipelineRolloutName
 
 		By("getting new pipeline name")
-		newPipelineName, err := GetPipelineName(Namespace, rolloutName)
+		newPipelineName, err := GetPromotedPipelineName(Namespace, rolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		if (recreateFieldChanged && UpgradeStrategy != config.ProgressiveStrategyID) || (UpgradeStrategy == config.ProgressiveStrategyID && progressiveRequiredField) {
@@ -502,4 +522,15 @@ func VerifyPDBForISBService(namespace string, isbServiceName string) {
 		return false
 
 	}).Should(BeTrue())
+}
+
+func VerifyISBServiceDeletion(isbsvcName string) {
+	CheckEventually(fmt.Sprintf("Verifying that the InterstepBufferService was deleted (%s)", isbsvcName), func() bool {
+		pipeline, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).Get(ctx, isbsvcName, metav1.GetOptions{})
+		if err != nil {
+			return errors.IsNotFound(err)
+		}
+
+		return pipeline == nil
+	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
 }
