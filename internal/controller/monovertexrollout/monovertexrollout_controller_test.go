@@ -180,7 +180,7 @@ var (
 		},
 	}
 
-	analysisRunName       = "monovertexrollout-test-1"
+	analysisRunName       = "monovertex-monovertexrollout-test-1"
 	successfulAnalysisRun = argorolloutsv1.AnalysisRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      analysisRunName,
