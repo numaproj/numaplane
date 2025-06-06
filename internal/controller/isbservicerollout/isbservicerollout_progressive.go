@@ -57,11 +57,9 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	// just set BasicAssessmentEndTime to now
 	if assessmentResult != apiv1.AssessmentResultUnknown {
 		childStatus := isbServiceRollout.GetUpgradingChildStatus()
-		if !childStatus.IsAssessmentEndTimeSet() {
-			assessmentEndTime := metav1.NewTime(time.Now())
-			childStatus.BasicAssessmentEndTime = &assessmentEndTime
-			isbServiceRollout.SetUpgradingChildStatus(childStatus)
-		}
+		assessmentEndTime := metav1.NewTime(time.Now())
+		childStatus.BasicAssessmentEndTime = &assessmentEndTime
+		isbServiceRollout.SetUpgradingChildStatus(childStatus)
 	}
 	if assessmentResult == apiv1.AssessmentResultFailure {
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil

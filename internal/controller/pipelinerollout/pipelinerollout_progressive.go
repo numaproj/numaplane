@@ -106,6 +106,11 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return assessment, reasonFailure, err
 	}
 	if assessment == apiv1.AssessmentResultFailure {
+		// set AssessmentEndTime to now and return failure
+		assessmentEndTime := metav1.NewTime(time.Now())
+		childStatus.BasicAssessmentEndTime = &assessmentEndTime
+		pipelineRollout.SetUpgradingChildStatus(childStatus)
+
 		return assessment, reasonFailure, nil
 	}
 

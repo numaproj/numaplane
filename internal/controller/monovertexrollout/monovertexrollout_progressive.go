@@ -58,6 +58,10 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		return assessment, reasonFailure, err
 	}
 	if assessment == apiv1.AssessmentResultFailure {
+		// set AssessmentEndTime to now and return failure
+		assessmentEndTime := metav1.NewTime(time.Now())
+		childStatus.BasicAssessmentEndTime = &assessmentEndTime
+		mvtxRollout.SetUpgradingChildStatus(childStatus)
 		return assessment, reasonFailure, nil
 	}
 	if assessment == apiv1.AssessmentResultSuccess {
