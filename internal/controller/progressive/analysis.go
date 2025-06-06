@@ -96,22 +96,22 @@ Parameters:
   - analysis: struct which contains templateRefs to AnalysisTemplates and ClusterAnalysisTemplates and arguments that can be passed
     and override values already specified in the templates
   - existingUpgradingChildDef: the definition of the upgrading child as an unstructured object.
+  - analysisRunName: name to use for the AnalysisRun
   - ownerReference: reference to the upgrading child this AnalysisRun is associated with - ensures cleanup
   - client: the client used for interacting with the Kubernetes API.
   - promotedChildName - argument we support in templates.
 
 Returns:
-  - name of the AnalysisRun which was generated, if any
   - An error if any issues occur during processing.
 */
-func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) (string, error) {
+func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, analysisRunName string, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) error {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// set special arguments for child name and namespace
@@ -129,24 +129,22 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-namespace", Value: &childNamespace})
 	}
 
-	analysisRunName := fmt.Sprintf("%s-%s", strings.ToLower(existingUpgradingChildDef.GetKind()), childName)
-
 	// create new AnalysisRun in the child namespace from combination of all templates and args
 	analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, analysis.Args, nil, nil,
 		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, analysisRunName, "", childNamespace)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// set ownerReference to guarantee AnalysisRun deletion when owner is cleaned up
 	analysisRun.SetOwnerReferences([]metav1.OwnerReference{ownerReference})
 	if err = client.Create(ctx, analysisRun); err != nil {
-		return "", err
+		return err
 	}
 
 	numaLogger.WithValues("AnalysisRunName", analysisRun.Name).Debug("Successfully created AnalysisRun")
 
-	return analysisRunName, nil
+	return nil
 }
 
 func PerformAnalysis(
@@ -162,8 +160,11 @@ func PerformAnalysis(
 	}
 
 	analysisRun := &argorolloutsv1.AnalysisRun{}
+
+	analysisRunName := fmt.Sprintf("%s-%s", strings.ToLower(existingUpgradingChildDef.GetKind()), existingUpgradingChildDef.GetName())
+
 	// check if analysisRun has already been created
-	if err := c.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Name: analysisRunName, Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 		if apierrors.IsNotFound(err) {
 			// analysisRun is created the first time the upgrading child is assessed
 			ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(),
@@ -175,14 +176,14 @@ func PerformAnalysis(
 			if promotedChildStatus != nil {
 				promotedChildName = promotedChildStatus.Name
 			}
-			name, err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, c, promotedChildName)
+			err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, analysisRunName, ownerRef, c, promotedChildName)
 			if err != nil {
 				return analysisStatus, err
 			}
 
 			// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
 			// and start time for its assessment
-			analysisStatus.AnalysisRunName = name
+			analysisStatus.AnalysisRunName = analysisRunName
 			timeNow := metav1.NewTime(time.Now())
 			analysisStatus.StartTime = &timeNow
 			return analysisStatus, nil
