@@ -101,16 +101,17 @@ Parameters:
   - promotedChildName - argument we support in templates.
 
 Returns:
+  - name of the AnalysisRun which was generated, if any
   - An error if any issues occur during processing.
 */
-func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) error {
+func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpgradingChildDef *unstructured.Unstructured, ownerReference metav1.OwnerReference, client client.Client, promotedChildName string) (string, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// find all specified templates to merge into single AnalysisRun
 	analysisTemplates, clusterAnalysisTemplates, err := GetAnalysisTemplatesFromRefs(ctx, &analysis.Templates, existingUpgradingChildDef.GetNamespace(), client)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// set special arguments for child name and namespace
@@ -128,22 +129,24 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 		analysis.Args = append(analysis.Args, argorolloutsv1.Argument{Name: "pipeline-namespace", Value: &childNamespace})
 	}
 
+	analysisRunName := fmt.Sprintf("%s-%s", strings.ToLower(existingUpgradingChildDef.GetKind()), childName)
+
 	// create new AnalysisRun in the child namespace from combination of all templates and args
 	analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, analysis.Args, nil, nil,
-		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, fmt.Sprintf("%s-%s", strings.ToLower(existingUpgradingChildDef.GetKind()), childName), "", childNamespace)
+		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, analysisRunName, "", childNamespace)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// set ownerReference to guarantee AnalysisRun deletion when owner is cleaned up
 	analysisRun.SetOwnerReferences([]metav1.OwnerReference{ownerReference})
 	if err = client.Create(ctx, analysisRun); err != nil {
-		return err
+		return "", err
 	}
 
 	numaLogger.WithValues("AnalysisRunName", analysisRun.Name).Debug("Successfully created AnalysisRun")
 
-	return nil
+	return analysisRunName, nil
 }
 
 func PerformAnalysis(
@@ -172,14 +175,14 @@ func PerformAnalysis(
 			if promotedChildStatus != nil {
 				promotedChildName = promotedChildStatus.Name
 			}
-			err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, c, promotedChildName)
+			name, err := CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, c, promotedChildName)
 			if err != nil {
 				return analysisStatus, err
 			}
 
 			// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
 			// and start time for its assessment
-			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+			analysisStatus.AnalysisRunName = name
 			timeNow := metav1.NewTime(time.Now())
 			analysisStatus.StartTime = &timeNow
 			return analysisStatus, nil
