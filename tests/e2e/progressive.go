@@ -125,8 +125,8 @@ func VerifyISBServiceRolloutProgressiveStatus(
 
 		return promotedStatus.Name == expectedPromotedName &&
 			upgradingStatus.Name == expectedUpgradingName &&
-			upgradingStatus.AssessmentResult == expectedAssessmentResult /*&&
-			upgradingStatus.BasicAssessmentEndTime != nil */
+			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
+			upgradingStatus.BasicAssessmentEndTime != nil
 	}).Should(BeTrue())
 }
 
