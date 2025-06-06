@@ -8,6 +8,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -87,6 +88,58 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+
+}
+
+// UpgradingChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison.
+// This implements a function of the progressiveController interface, used to determine if a previously Upgrading MonoVertex
+// should be replaced with a new one.
+// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
+// configured as "progressive", in the off chance that changing one of those fixes a problem.
+// However, we need to exclude any field that Numaplane itself changes or it will confuse things.
+func (r *MonoVertexRolloutReconciler) UpgradingChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	// remove certain fields (which numaplane needs to set) from comparison to test for equality
+	removeFunc := func(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
+		var specAsMap map[string]any
+
+		if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+			return nil, err
+		}
+
+		excludedPaths := []string{"replicas", "scale.min", "scale.max"}
+		util.RemovePaths(specAsMap, excludedPaths, ".")
+
+		// if "scale" is there and empty, remove it
+		// (this enables accurate comparison between one monovertex with "scale" empty and one with "scale" not present)
+		scaleMap, found := specAsMap["scale"].(map[string]interface{})
+		if found && len(scaleMap) == 0 {
+			unstructured.RemoveNestedField(specAsMap, "scale")
+		}
+
+		return specAsMap, nil
+	}
+
+	fromNew, err := removeFunc(from)
+	if err != nil {
+		return false, err
+	}
+	toNew, err := removeFunc(to)
+	if err != nil {
+		return false, err
+	}
+
+	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
+	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
+		specsEqual, fromNew, toNew)
+	// compare Labels and Annotations, excluding any that Numaplane itself applies
+	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
+	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
+	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+
+	return !specsEqual || !labelsEqual || !annotationsEqual, nil
 
 }
 
