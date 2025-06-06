@@ -3,6 +3,7 @@ package isbservicerollout
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -10,6 +11,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -42,6 +44,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	existingUpgradingChildDef *unstructured.Unstructured,
 	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
 
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
+
 	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
 	// Note: until we have health check for isbsvc, we don't need to use any resource health check start time or end time
 	// If Pipelines are healthy or Pipelines are failed, that's good enough
@@ -49,6 +53,15 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	assessmentResult, failedPipeline, err := r.assessPipelines(ctx, existingUpgradingChildDef)
 	if err != nil {
 		return assessmentResult, "", err
+	}
+	// just set BasicAssessmentEndTime to now
+	if assessmentResult != apiv1.AssessmentResultUnknown {
+		childStatus := isbServiceRollout.GetUpgradingChildStatus()
+		if !childStatus.IsAssessmentEndTimeSet() {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			childStatus.BasicAssessmentEndTime = &assessmentEndTime
+			isbServiceRollout.SetUpgradingChildStatus(childStatus)
+		}
 	}
 	if assessmentResult == apiv1.AssessmentResultFailure {
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil

@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -129,7 +130,7 @@ func CreateAnalysisRun(ctx context.Context, analysis apiv1.Analysis, existingUpg
 
 	// create new AnalysisRun in the child namespace from combination of all templates and args
 	analysisRun, err := analysisutil.NewAnalysisRunFromTemplates(analysisTemplates, clusterAnalysisTemplates, analysis.Args, nil, nil,
-		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, fmt.Sprintf("%s-%s", existingUpgradingChildDef.GetKind(), childName), "", childNamespace)
+		map[string]string{"app.kubernetes.io/part-of": "numaplane"}, nil, fmt.Sprintf("%s-%s", strings.ToLower(existingUpgradingChildDef.GetKind()), childName), "", childNamespace)
 	if err != nil {
 		return err
 	}
