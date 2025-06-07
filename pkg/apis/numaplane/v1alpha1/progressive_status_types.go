@@ -40,11 +40,11 @@ type UpgradingChildStatus struct {
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 
-	// AssessmentStartTime indicates the time at/after which the assessment result will be computed
-	AssessmentStartTime *metav1.Time `json:"assessmentStartTime,omitempty"`
+	// BasicAssessmentStartTime indicates the time at/after which the assessment result will be computed
+	BasicAssessmentStartTime *metav1.Time `json:"basicAssessmentStartTime,omitempty"`
 
-	// AssessmentEndTime indicates the time after which no more assessments will be performed
-	AssessmentEndTime *metav1.Time `json:"assessmentEndTime,omitempty"`
+	// BasicAssessmentEndTime indicates the time after which no more assessments will be performed
+	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
@@ -110,7 +110,7 @@ type PromotedPipelineTypeStatus struct {
 
 // IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil.
 func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
-	return ucs != nil && ucs.AssessmentEndTime != nil
+	return ucs != nil && ucs.BasicAssessmentEndTime != nil
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
@@ -118,18 +118,15 @@ func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
 func (ucs *UpgradingChildStatus) CanAssess() bool {
 	return ucs != nil &&
-		ucs.AssessmentStartTime != nil && time.Now().After(ucs.AssessmentStartTime.Time) &&
+		ucs.BasicAssessmentStartTime != nil && time.Now().After(ucs.BasicAssessmentStartTime.Time) &&
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 
-// CanDeclareSuccess() determines if it's okay to declare success:
-// We must have arrived at the AssessmentEndTime
-// Note that if we've arrived at the AssessmentEndTime, then the assumption is that it never failed within the window;
-// otherwise we would've stopped assessing
-func (ucs *UpgradingChildStatus) CanDeclareSuccess() bool {
+// BasicAssessmentEndTimeArrived() determines if the BasicAssessmentEndTime has been set and is in the past
+func (ucs *UpgradingChildStatus) BasicAssessmentEndTimeArrived() bool {
 	return ucs != nil &&
-		ucs.AssessmentEndTime != nil &&
-		time.Now().After(ucs.AssessmentEndTime.Time)
+		ucs.BasicAssessmentEndTime != nil &&
+		time.Now().After(ucs.BasicAssessmentEndTime.Time)
 }
 
 func (ucs *UpgradingChildStatus) IsFailed() bool {
