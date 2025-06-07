@@ -212,6 +212,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			if requeue {
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 			}
+			numaLogger.Info("Removing Finalizer from ISBServiceRollout")
 			controllerutil.RemoveFinalizer(isbServiceRollout, common.FinalizerName)
 		}
 		// generate metrics for ISB Service deletion.

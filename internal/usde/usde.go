@@ -91,63 +91,81 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	dataLossFields := usdeConfig[usdeConfigMapKey].DataLoss
 	progressiveFields := usdeConfig[usdeConfigMapKey].Progressive
 
-	upgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
+	dataLossUpgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, err
 	}
 
 	numaLogger.WithValues(
-		"usdeConfig", usdeConfig,
-		"usdeConfigMapKey", usdeConfigMapKey,
-		"recreateFields", recreateFields,
-		"dataLossFields", dataLossFields,
-		"progressiveFields", progressiveFields,
-		"upgradeStrategy", upgradeStrategy,
+		"dataLossUpgradeStrategy", dataLossUpgradeStrategy,
 		"newDefUnstr", newDef,
 		"existingDefUnstr", existingDef,
 	).Debug("started deriving upgrade strategy")
 
-	switch upgradeStrategy {
+	switch dataLossUpgradeStrategy {
 	case apiv1.UpgradeStrategyProgressive:
 		mergedSpecFieldLists := []config.SpecField{}
 		mergedSpecFieldLists = append(mergedSpecFieldLists, recreateFields...)
 		mergedSpecFieldLists = append(mergedSpecFieldLists, dataLossFields...)
 		mergedSpecFieldLists = append(mergedSpecFieldLists, progressiveFields...)
 
-		specNeedsUpdating, err := checkFieldsList(ctx, mergedSpecFieldLists, newDef, existingDef)
+		specNeedsUpdating, field, err := checkFieldsList(mergedSpecFieldLists, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using full USDE Config (strategy '%s'): %w", upgradeStrategy, err)
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using full USDE Config (strategy '%s'): %w", dataLossUpgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			return specNeedsUpdating, upgradeStrategy, false, nil
+			if field != nil {
+				numaLogger.WithValues(
+					"field", field.Path,
+					"resource", existingDef.GetName()).Debug("field resulting in Progressive strategy")
+			}
+			return specNeedsUpdating, dataLossUpgradeStrategy, false, nil
+
 		}
 	case apiv1.UpgradeStrategyPPND:
 		// Use the recreate fields list from config
-		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
+		specNeedsUpdating, field, err := checkFieldsList(recreateFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", dataLossUpgradeStrategy, err)
 		}
 		if specNeedsUpdating {
+
+			if field != nil {
+				numaLogger.WithValues(
+					"field", field.Path,
+					"resource", existingDef.GetName()).Debug("recreate field resulting in PPND strategy")
+			}
+
 			// Also return "recreate" true to communicate to the controller to recreate the appropriate resources
-			return specNeedsUpdating, upgradeStrategy, true, nil
+			return specNeedsUpdating, dataLossUpgradeStrategy, true, nil
 		}
 
 		// Use the dataLoss fields list from config
-		specNeedsUpdating, err = checkFieldsList(ctx, dataLossFields, newDef, existingDef)
+		specNeedsUpdating, field, err = checkFieldsList(dataLossFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'dataLoss' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'dataLoss' USDE Config (strategy '%s'): %w", dataLossUpgradeStrategy, err)
 		}
 		if specNeedsUpdating {
-			return specNeedsUpdating, upgradeStrategy, false, nil
+			if field != nil {
+				numaLogger.WithValues(
+					"field", field.Path,
+					"resource", existingDef.GetName()).Debug("data loss field resulting in PPND strategy")
+			}
+			return specNeedsUpdating, dataLossUpgradeStrategy, false, nil
 		}
 	case apiv1.UpgradeStrategyApply:
-		specNeedsUpdating, err := checkFieldsList(ctx, recreateFields, newDef, existingDef)
+		specNeedsUpdating, field, err := checkFieldsList(recreateFields, newDef, existingDef)
 		if err != nil {
-			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", upgradeStrategy, err)
+			if field != nil {
+				numaLogger.WithValues(
+					"field", field.Path,
+					"resource", existingDef.GetName()).Debug("field resulting in Direct Apply strategy")
+			}
+			return false, apiv1.UpgradeStrategyError, false, fmt.Errorf("error while checking spec changes using 'recreate' USDE Config (strategy '%s'): %w", dataLossUpgradeStrategy, err)
 		}
 		if specNeedsUpdating {
 			// Also return "recreate" true to communicate to the controller to recreate the appropriate resources
-			return specNeedsUpdating, upgradeStrategy, true, nil
+			return specNeedsUpdating, dataLossUpgradeStrategy, true, nil
 		}
 	}
 
@@ -165,9 +183,9 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 	return false, apiv1.UpgradeStrategyNoOp, false, nil
 }
 
-func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef, existingDef *unstructured.Unstructured) (bool, error) {
-
-	numaLogger := logger.FromContext(ctx)
+// traverse the fields passed in to see if any are different
+// if true, return the first one found
+func checkFieldsList(specFields []config.SpecField, newDef, existingDef *unstructured.Unstructured) (bool, *config.SpecField, error) {
 
 	// Loop through all the spec fields from config to see if any changes based on those fields require the specified upgrade strategy
 	for _, specField := range specFields {
@@ -175,45 +193,37 @@ func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef,
 		// newIsMap describes the inner most element(s) described by the path
 		newDefField, newIsMap, err := util.ExtractPath(newDef.Object, strings.Split(specField.Path, "."))
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 
 		// existingDefField is a map starting with the first field specified in the path
 		// existingIsMap describes the inner most element(s) described by the path
 		existingDefField, existingIsMap, err := util.ExtractPath(existingDef.Object, strings.Split(specField.Path, "."))
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
-
-		numaLogger.WithValues(
-			"specField", specField,
-			"newDefField", newDefField,
-			"existingDefField", existingDefField,
-			"newIsMap", newIsMap,
-			"existingIsMap", existingIsMap,
-		).Debug("checking spec field differences")
 
 		if specField.IncludeSubfields {
 			// is the definition (fields + children) at all different?
 			if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
-				return true, nil
+				return true, &specField, nil
 			}
 		} else {
 			isMap := newIsMap || existingIsMap
 			// if it's a map, since we don't care about subfields, we just need to know if it's present in one and not the other
 			if isMap {
 				if !newIsMap || !existingIsMap { // this means that one of them is nil
-					return true, nil
+					return true, &specField, nil
 				}
 			} else {
 				if !util.CompareStructNumTypeAgnostic(newDefField, existingDefField) {
-					return true, nil
+					return true, &specField, nil
 				}
 			}
 		}
 	}
 
-	return false, nil
+	return false, nil, nil
 }
 
 func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.UpgradeStrategy {
