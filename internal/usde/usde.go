@@ -167,8 +167,6 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef, existingDef *unstructured.Unstructured) (bool, error) {
 
-	//numaLogger := logger.FromContext(ctx)
-
 	// Loop through all the spec fields from config to see if any changes based on those fields require the specified upgrade strategy
 	for _, specField := range specFields {
 		// newDefField is a map starting with the first field specified in the path
@@ -184,14 +182,6 @@ func checkFieldsList(ctx context.Context, specFields []config.SpecField, newDef,
 		if err != nil {
 			return false, err
 		}
-
-		/*numaLogger.WithValues(
-			"specField", specField,
-			"newDefField", newDefField,
-			"existingDefField", existingDefField,
-			"newIsMap", newIsMap,
-			"existingIsMap", existingIsMap,
-		).Debug("checking spec field differences")*/
 
 		if specField.IncludeSubfields {
 			// is the definition (fields + children) at all different?
