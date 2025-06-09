@@ -204,6 +204,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 			if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
 				ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
+
+				numaLogger.Info("Removing Finalizer from NumaflowControllerRollout")
 				controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
 			}
 

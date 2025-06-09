@@ -357,6 +357,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			if requeue {
 				return 5 * time.Second, nil, nil
 			}
+			numaLogger.Info("Removing Finalizer from PipelineRollout")
 			controllerutil.RemoveFinalizer(pipelineRollout, common.FinalizerName)
 		}
 		// generate the metrics for the Pipeline deletion.
