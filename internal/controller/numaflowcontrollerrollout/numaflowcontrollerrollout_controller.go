@@ -204,6 +204,8 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 			r.recorder.Eventf(nfcRollout, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowControllerRollout")
 			if controllerutil.ContainsFinalizer(nfcRollout, common.FinalizerName) {
 				ppnd.GetPauseModule().DeletePauseRequest(controllerKey)
+
+				numaLogger.Info("Removing Finalizer from NumaflowControllerRollout")
 				controllerutil.RemoveFinalizer(nfcRollout, common.FinalizerName)
 			}
 
@@ -480,8 +482,8 @@ func (r *NumaflowControllerRolloutReconciler) isNumaflowControllerReconciled(ctx
 		return false, "", fmt.Errorf("failed to convert NumaflowController Status: %+v, %v", numaflowController, err)
 	}
 
-	// Assume NumaflowController is progressing unless otherwise specified in the condition
-	ncProgressing := true
+	// Check if NumaflowController is still progressing
+	ncProgressing := false
 	healthyChildCond := nfcStatus.GetCondition(apiv1.ConditionChildResourceHealthy)
 	if healthyChildCond != nil {
 		ncProgressing = healthyChildCond.Reason == apiv1.ProgressingReasonString
