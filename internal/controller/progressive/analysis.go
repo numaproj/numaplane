@@ -166,7 +166,7 @@ func PerformAnalysis(
 	// check if analysisRun has already been created
 	if err := c.Get(ctx, client.ObjectKey{Name: analysisRunName, Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
 		if apierrors.IsNotFound(err) {
-			// analysisRun is created the first time the upgrading child is assessed
+			// AnalysisRun is owned by the upgrading child
 			ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(),
 				Namespace: existingUpgradingChildDef.GetNamespace(),
 				UID:       existingUpgradingChildDef.GetUID()},
@@ -196,7 +196,7 @@ func PerformAnalysis(
 	if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
 		analysisStatus.EndTime = analysisRun.Status.CompletedAt
 	}
-	analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
+	analysisStatus.AnalysisRunName = analysisRunName
 	analysisStatus.Phase = analysisRun.Status.Phase
 	return analysisStatus, nil
 

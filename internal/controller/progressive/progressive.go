@@ -420,7 +420,6 @@ func processUpgradingChild(
 		return false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
-		//if childStatus.CanDeclareSuccess() {
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
 			return done, 0, err

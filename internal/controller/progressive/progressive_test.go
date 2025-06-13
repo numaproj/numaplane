@@ -223,7 +223,7 @@ func Test_processUpgradingChild(t *testing.T) {
 							InitializationComplete:   true,
 						},
 						Analysis: apiv1.AnalysisStatus{
-							AnalysisRunName: "test-analysis-success",
+							AnalysisRunName: "monovertex-test-analysis-success",
 							StartTime:       &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							EndTime:         &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							Phase:           argorolloutsv1.AnalysisPhaseSuccessful,
@@ -251,7 +251,7 @@ func Test_processUpgradingChild(t *testing.T) {
 							InitializationComplete:   true,
 						},
 						Analysis: apiv1.AnalysisStatus{
-							AnalysisRunName: "test-analysis-failure",
+							AnalysisRunName: "monovertex-test-analysis-failure",
 							StartTime:       &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							EndTime:         &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 							Phase:           argorolloutsv1.AnalysisPhaseFailed,
