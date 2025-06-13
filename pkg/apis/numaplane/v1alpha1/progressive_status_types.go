@@ -40,10 +40,10 @@ type UpgradingChildStatus struct {
 	// AssessmentResult described whether it's failed or succeeded, or to be determined
 	AssessmentResult AssessmentResult `json:"assessmentResult,omitempty"`
 
-	// BasicAssessmentStartTime indicates the time at/after which the assessment result will be computed
+	// BasicAssessmentStartTime indicates the time at/after which the basic resource health check assessment result will be computed
 	BasicAssessmentStartTime *metav1.Time `json:"basicAssessmentStartTime,omitempty"`
 
-	// BasicAssessmentEndTime indicates the time after which no more assessments will be performed
+	// BasicAssessmentEndTime indicates the time after which no more basic resource health check assessments will be performed
 	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
 	// ForcedSuccess indicates if this promotion was forced to complete

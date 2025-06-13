@@ -75,6 +75,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 	childStatus := pipelineRollout.GetUpgradingChildStatus()
 
+	// function for checking readiness of Pipeline Vertex replicas
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
@@ -101,29 +102,37 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return areAllVerticesReplicasReady, replicasFailureReason, nil
 	}
 
+	// First perform basic resource health check
 	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 	if err != nil {
 		return assessment, reasonFailure, err
 	}
+	// if we fail even once, that's considered failure
 	if assessment == apiv1.AssessmentResultFailure {
 		// set AssessmentEndTime to now and return failure
-		assessmentEndTime := metav1.NewTime(time.Now())
-		childStatus.BasicAssessmentEndTime = &assessmentEndTime
-		pipelineRollout.SetUpgradingChildStatus(childStatus)
+		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &assessmentEndTime
+		})
 
 		return assessment, reasonFailure, nil
 	}
 
+	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
+	// check "successful"
 	if assessment == apiv1.AssessmentResultSuccess {
 		// has AssessmentEndTime been set? if not, set it - now we can start our interval
 		if !childStatus.IsAssessmentEndTimeSet() {
-			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-			childStatus.BasicAssessmentEndTime = &assessmentEndTime
+			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+				assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
+				status.BasicAssessmentEndTime = &assessmentEndTime
+			})
 			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
-			pipelineRollout.SetUpgradingChildStatus(childStatus)
 		}
 
-		// if end time has arrived, we can make sure we launch the AnalysisRun if we need to, or if not we can declare success
+		// if end time has arrived (i.e. we continually determined "Success" for the entire prescribed period of time),
+		// if we need to launch an AnalysisRun, we can do it now;
+		// otherwise, we can declare success
 		if childStatus.BasicAssessmentEndTimeArrived() {
 			analysis := pipelineRollout.GetAnalysis()
 			// only check for and create AnalysisRun if templates are specified
@@ -144,86 +153,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	return apiv1.AssessmentResultUnknown, "", nil
 
 }
-
-// create function to check that all of the Vertices are ready
-/*verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
-		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
-			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
-			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
-		if err != nil {
-			return false, "", err
-		}
-
-		areAllVerticesReplicasReady := true
-		var replicasFailureReason string
-		for _, vertex := range verticesList.Items {
-			areVertexReplicasReady, failureReason, err := progressive.AreVertexReplicasReady(&vertex)
-			if err != nil {
-				return false, "", err
-			}
-
-			if !areVertexReplicasReady {
-				areAllVerticesReplicasReady = false
-				replicasFailureReason = fmt.Sprintf("%s (vertex: %s)", failureReason, vertex.GetName())
-				break
-			}
-		}
-
-		return areAllVerticesReplicasReady, replicasFailureReason, nil
-	}
-
-	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-	analysis := pipelineRollout.GetAnalysis()
-	// only check for and create AnalysisRuns if templates are specified
-	if len(analysis.Templates) > 0 {
-		analysisRun := &argorolloutsv1.AnalysisRun{}
-		// check if analysisRun has already been created
-		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-			if apierrors.IsNotFound(err) {
-				// analysisRun is created the first time the upgrading child is assessed
-				ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace(), UID: existingUpgradingChildDef.GetUID()}, numaflowv1.PipelineGroupVersionKind)
-				promotedChildStatus := rolloutObject.GetPromotedChildStatus()
-				var promotedChildName string
-				if promotedChildStatus != nil {
-					promotedChildName = promotedChildStatus.Name
-				}
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client, promotedChildName)
-				if err != nil {
-					return apiv1.AssessmentResultUnknown, "", err
-				}
-				analysisStatus := pipelineRollout.GetAnalysisStatus()
-				if analysisStatus == nil {
-					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
-				}
-				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
-				// and start time for its assessment
-				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
-				timeNow := metav1.NewTime(time.Now())
-				analysisStatus.StartTime = &timeNow
-				pipelineRollout.SetAnalysisStatus(analysisStatus)
-			} else {
-				return apiv1.AssessmentResultUnknown, "", err
-			}
-		}
-
-		// assess analysisRun status and set endTime if completed
-		analysisStatus := pipelineRollout.GetAnalysisStatus()
-		if analysisStatus != nil {
-			// assess analysisRun status and set endTime if completed
-			if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
-				analysisStatus.EndTime = analysisRun.Status.CompletedAt
-			}
-			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
-			analysisStatus.Phase = analysisRun.Status.Phase
-			pipelineRollout.SetAnalysisStatus(analysisStatus)
-		}
-
-	}
-
-	return progressive.PerformResourceHealthCheckForPipelineType(ctx, pipelineRollout.GetAnalysisStatus(), existingUpgradingChildDef, verifyReplicasFunc)
-
-	return apiv1.AssessmentResultUnknown, "", nil
-}*/
 
 // UpgradingChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline

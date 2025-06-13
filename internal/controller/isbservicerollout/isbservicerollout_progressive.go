@@ -47,7 +47,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
-	// Note: until we have health check for isbsvc, we don't need to use any resource health check start time or end time
+	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
 	// If Pipelines are healthy or Pipelines are failed, that's good enough
 
 	assessmentResult, failedPipeline, err := r.assessPipelines(ctx, existingUpgradingChildDef)
@@ -56,10 +56,10 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	}
 	// just set BasicAssessmentEndTime to now
 	if assessmentResult != apiv1.AssessmentResultUnknown {
-		childStatus := isbServiceRollout.GetUpgradingChildStatus()
-		assessmentEndTime := metav1.NewTime(time.Now())
-		childStatus.BasicAssessmentEndTime = &assessmentEndTime
-		isbServiceRollout.SetUpgradingChildStatus(childStatus)
+		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &assessmentEndTime
+		})
 	}
 	if assessmentResult == apiv1.AssessmentResultFailure {
 		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil

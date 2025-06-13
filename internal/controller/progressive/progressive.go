@@ -363,10 +363,11 @@ func processUpgradingChild(
 	// If no AssessmentStartTime has been set already, calculate it and set it
 	if childStatus.BasicAssessmentStartTime == nil {
 		// Add to the current time the assessmentSchedule.Delay and set the AssessmentStartTime in the Rollout object
-		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
-		childStatus.BasicAssessmentStartTime = &nextAssessmentTime
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
+			status.BasicAssessmentStartTime = &nextAssessmentTime
+		})
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
-		rolloutObject.SetUpgradingChildStatus(childStatus)
 	}
 
 	// Assess the upgrading child status only if within the assessment time window and if not previously failed.
@@ -391,20 +392,15 @@ func processUpgradingChild(
 			Debug("skipping upgrading child assessment but assessing previous child status")
 	}
 
-	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
-	/*if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessmentEndTimeSet() {
-		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-		childStatus.AssessmentEndTime = &assessmentEndTime
-		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
-	}*/
-
 	switch assessment {
 	case apiv1.AssessmentResultFailure:
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
-		childStatus.FailureReason = failureReason
-		childStatus.ChildStatus.Raw = childSts
-		rolloutObject.SetUpgradingChildStatus(childStatus)
+
+		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.FailureReason = failureReason
+			status.ChildStatus.Raw = childSts
+		})
 
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
@@ -431,13 +427,11 @@ func processUpgradingChild(
 		} else {
 			return done, assessmentSchedule.Interval, err
 		}
-		/*} else {
-			return false, assessmentSchedule.Interval, nil
-		}*/
 
 	default:
-		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-		rolloutObject.SetUpgradingChildStatus(childStatus)
+		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultUnknown
+		})
 
 		return false, assessmentSchedule.Interval, nil
 	}
@@ -799,16 +793,16 @@ func startPostUpgradeProcess(
 	}
 
 	// set Upgrading Child Status
-	childStatus := rolloutObject.GetUpgradingChildStatus()
-	childStatus.InitializationComplete = true
-	childStatus.Riders = make([]apiv1.RiderStatus, len(newRiders))
-	for i, rider := range newRiders {
-		childStatus.Riders[i] = apiv1.RiderStatus{
-			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
-			Name:             rider.Definition.GetName(),
+	_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+		status.InitializationComplete = true
+		status.Riders = make([]apiv1.RiderStatus, len(newRiders))
+		for i, rider := range newRiders {
+			status.Riders[i] = apiv1.RiderStatus{
+				GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+				Name:             rider.Definition.GetName(),
+			}
 		}
-	}
-	rolloutObject.SetUpgradingChildStatus(childStatus)
+	})
 
 	return false, err
 
@@ -937,4 +931,11 @@ func Discontinue(ctx context.Context,
 		}
 	}
 	return nil
+}
+
+func UpdateUpgradingChildStatus(rollout ProgressiveRolloutObject, f func(*apiv1.UpgradingChildStatus)) *apiv1.UpgradingChildStatus {
+	upgradingChildStatus := rollout.GetUpgradingChildStatus()
+	f(upgradingChildStatus)
+	rollout.SetUpgradingChildStatus(upgradingChildStatus)
+	return upgradingChildStatus
 }

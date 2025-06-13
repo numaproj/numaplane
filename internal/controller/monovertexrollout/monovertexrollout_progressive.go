@@ -53,27 +53,36 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
 
+	// First perform basic resource health check
 	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
 	if err != nil {
 		return assessment, reasonFailure, err
 	}
+	// if we fail even once, that's considered failure
 	if assessment == apiv1.AssessmentResultFailure {
 		// set AssessmentEndTime to now and return failure
-		assessmentEndTime := metav1.NewTime(time.Now())
-		childStatus.BasicAssessmentEndTime = &assessmentEndTime
-		mvtxRollout.SetUpgradingChildStatus(childStatus)
+		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &assessmentEndTime
+		})
+
 		return assessment, reasonFailure, nil
 	}
+	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
+	// check "successful"
 	if assessment == apiv1.AssessmentResultSuccess {
 		// has AssessmentEndTime been set? if not, set it - now we can start our interval
 		if !childStatus.IsAssessmentEndTimeSet() {
-			assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-			childStatus.BasicAssessmentEndTime = &assessmentEndTime
+			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+				assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
+				status.BasicAssessmentEndTime = &assessmentEndTime
+			})
 			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
-			mvtxRollout.SetUpgradingChildStatus(childStatus)
 		}
 
-		// if end time has arrived, we can make sure we launch the AnalysisRun if we need to, or if not we can declare success
+		// if end time has arrived (i.e. we continually determined "Success" for the entire prescribed period of time),
+		// if we need to launch an AnalysisRun, we can do it now;
+		// otherwise, we can declare success
 		if childStatus.BasicAssessmentEndTimeArrived() {
 			analysis := mvtxRollout.GetAnalysis()
 			// only check for and create AnalysisRun if templates are specified
