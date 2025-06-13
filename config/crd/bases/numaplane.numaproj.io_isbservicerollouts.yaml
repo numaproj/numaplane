@@ -244,12 +244,14 @@ spec:
                         type: string
                       basicAssessmentEndTime:
                         description: BasicAssessmentEndTime indicates the time after
-                          which no more assessments will be performed
+                          which no more basic resource health check assessments will
+                          be performed
                         format: date-time
                         type: string
                       basicAssessmentStartTime:
                         description: BasicAssessmentStartTime indicates the time at/after
-                          which the assessment result will be computed
+                          which the basic resource health check assessment result
+                          will be computed
                         format: date-time
                         type: string
                       childStatus:
