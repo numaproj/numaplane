@@ -153,7 +153,7 @@ func ProcessResource(
 		return false, 0, err
 	}
 
-	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
+	// if there isn't already an "upgrading" definition, then create one and return
 	if currentUpgradingChildDef == nil {
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
@@ -468,6 +468,7 @@ func checkForUpgradeReplacement(
 			return false, err
 		}
 
+		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 		reason := common.LabelValueProgressiveReplaced
 		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 		if err != nil {
@@ -483,7 +484,6 @@ func checkForUpgradeReplacement(
 			return true, nil
 		}
 
-		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 	}
 
