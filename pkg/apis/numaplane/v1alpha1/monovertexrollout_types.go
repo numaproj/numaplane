@@ -179,10 +179,10 @@ func (monoVertexRollout *MonoVertexRollout) ResetUpgradingChildStatus(upgradingM
 	upgradingMonoVertexStatus := &UpgradingMonoVertexStatus{
 		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: UpgradingChildStatus{
-				Name:              upgradingMonoVertex.GetName(),
-				AssessmentEndTime: nil,
-				AssessmentResult:  AssessmentResultUnknown,
-				FailureReason:     "",
+				Name:                   upgradingMonoVertex.GetName(),
+				BasicAssessmentEndTime: nil,
+				AssessmentResult:       AssessmentResultUnknown,
+				FailureReason:          "",
 			},
 			Analysis: AnalysisStatus{},
 		},

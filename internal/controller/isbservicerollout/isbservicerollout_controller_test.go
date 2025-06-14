@@ -426,11 +426,11 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 	successfulUpgradingISBServiceStatus := &apiv1.UpgradingISBServiceStatus{
 		UpgradingChildStatus: apiv1.UpgradingChildStatus{
-			Name:                   ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
-			AssessmentStartTime:    &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
-			AssessmentEndTime:      &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
-			AssessmentResult:       apiv1.AssessmentResultSuccess,
-			InitializationComplete: true,
+			Name:                     ctlrcommon.DefaultTestISBSvcRolloutName + "-1",
+			BasicAssessmentStartTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+			BasicAssessmentEndTime:   &metav1.Time{Time: time.Now().Add(-30 * time.Second)},
+			AssessmentResult:         apiv1.AssessmentResultSuccess,
+			InitializationComplete:   true,
 		},
 	}
 	failedUpgradingISBServiceStatus := successfulUpgradingISBServiceStatus.DeepCopy()

@@ -289,18 +289,20 @@ spec:
                     description: UpgradingISBServiceStatus represents either the current
                       or otherwise the most recent "upgrading" isbservice
                     properties:
-                      assessmentEndTime:
-                        description: AssessmentEndTime indicates the time after which
-                          no more assessments will be performed
-                        format: date-time
-                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
-                      assessmentStartTime:
-                        description: AssessmentStartTime indicates the time at/after
-                          which the assessment result will be computed
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
                         format: date-time
                         type: string
                       childStatus:
@@ -748,18 +750,20 @@ spec:
                         required:
                         - phase
                         type: object
-                      assessmentEndTime:
-                        description: AssessmentEndTime indicates the time after which
-                          no more assessments will be performed
-                        format: date-time
-                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
-                      assessmentStartTime:
-                        description: AssessmentStartTime indicates the time at/after
-                          which the assessment result will be computed
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
                         format: date-time
                         type: string
                       childStatus:
@@ -1669,18 +1673,20 @@ spec:
                         required:
                         - phase
                         type: object
-                      assessmentEndTime:
-                        description: AssessmentEndTime indicates the time after which
-                          no more assessments will be performed
-                        format: date-time
-                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
                         type: string
-                      assessmentStartTime:
-                        description: AssessmentStartTime indicates the time at/after
-                          which the assessment result will be computed
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
                         format: date-time
                         type: string
                       childStatus:
