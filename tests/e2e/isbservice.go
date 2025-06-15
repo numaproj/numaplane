@@ -173,10 +173,17 @@ func UpdateISBServiceInK8S(name string, f func(*unstructured.Unstructured) (*uns
 }
 
 func VerifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually("Verifying InProgressStrategy for ISBService", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy for ISBService is %v", inProgressStrategy), func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
 		return rollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
+}
+
+func VerifyInProgressStrategyISBServiceConsistently(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy for ISBService is consistently %v", inProgressStrategy), func() bool {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
+		return rollout.Status.UpgradeInProgress == inProgressStrategy
+	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
 func watchISBServiceRollout() {

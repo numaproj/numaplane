@@ -163,6 +163,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
 
+		// Verify in-progress-strategy no longer set
+		VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyInProgressStrategyISBServiceConsistently(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
@@ -211,6 +215,9 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		})
 
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess)
+		// Verify in-progress-strategy no longer set
+		VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyInProgressStrategyISBServiceConsistently(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 2))
 
 		DeletePipelineRollout(pipelineRolloutName)
@@ -264,6 +271,10 @@ func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName st
 
 	// Verify the previously promoted pipeline was deleted
 	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+
+	// Verify no in progress strategy set
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 }
 
 func verifyPipelineFailure(promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
