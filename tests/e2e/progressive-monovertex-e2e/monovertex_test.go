@@ -225,6 +225,7 @@ func verifyProgressiveSuccess(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, 
 			[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 	}
 
+	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
 }
