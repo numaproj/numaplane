@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -228,6 +229,13 @@ func VerifyPromotedMonoVertexPaused(namespace string, monoVertexRolloutName stri
 
 func VerifyPromotedMonoVertexEventually(namespace string, monoVertexRolloutName string, f func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool) {
 	CheckEventually("Verify MonoVertex value", func() bool {
+		unstruc, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetPromotedMonoVertexFromK8S(namespace, monoVertexRolloutName)
+		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus, unstruc.GetLabels(), unstruc.GetAnnotations())
+	}).Should(BeTrue())
+}
+
+func VerifyPromotedMonoVertexConsistently(namespace string, monoVertexRolloutName string, f func(spec numaflowv1.MonoVertexSpec, status numaflowv1.MonoVertexStatus, labels map[string]string, annotations map[string]string) bool) {
+	CheckConsistently("Verify MonoVertex value consistently", func() bool {
 		unstruc, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetPromotedMonoVertexFromK8S(namespace, monoVertexRolloutName)
 		return err == nil && f(retrievedMonoVertexSpec, retrievedMonoVertexStatus, unstruc.GetLabels(), unstruc.GetAnnotations())
 	}).Should(BeTrue())
@@ -473,8 +481,15 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 }
 
 func VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually("Verifying InProgressStrategy", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy is %v", inProgressStrategy), func() bool {
 		monoVertexRollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return monoVertexRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
+}
+
+func VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy is consistently %v", inProgressStrategy), func() bool {
+		monoVertexRollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return monoVertexRollout.Status.UpgradeInProgress == inProgressStrategy
+	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
