@@ -73,5 +73,5 @@ func VerifyAnalysisRunStatus(name string, expectedStatus argov1alpha1.AnalysisPh
 		}
 
 		return false
-	}).Should(Succeed())
+	}).Should(BeTrue())
 }
