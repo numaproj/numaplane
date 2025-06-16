@@ -33,7 +33,6 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
-// TODO: move PPND logic out to its own separate file
 // normal sequence of events when we need to pause:
 // - set Pipeline's desiredPhase=Paused
 // - wait for Pipeline to become Paused

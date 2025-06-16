@@ -3,12 +3,15 @@ package isbservicerollout
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -35,24 +38,53 @@ func (r *ISBServiceRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
-	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
+func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+
+	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
+	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
+	// If Pipelines are healthy or Pipelines are failed, that's good enough
 
-	// Get the Pipelines using this "upgrading" isbsvc to determine if they're healthy
-	// First get all PipelineRollouts using this ISBServiceRollout - need to make sure all have created a Pipeline using this isbsvc, otherwise we're not ready to assess
+	assessmentResult, failedPipeline, err := r.assessPipelines(ctx, existingUpgradingChildDef)
+	if err != nil {
+		return assessmentResult, "", err
+	}
+	// just set BasicAssessmentEndTime to now
+	if assessmentResult != apiv1.AssessmentResultUnknown {
+		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &assessmentEndTime
+		})
+	}
+	if assessmentResult == apiv1.AssessmentResultFailure {
+		return assessmentResult, fmt.Sprintf("Pipeline %s failed", failedPipeline), nil
+	}
+	return assessmentResult, "", nil
+}
+
+// Assess the Pipelines of the upgrading ISBService
+// return AssessmentResult and if it failed, the name of the pipeline that failed
+func (r *ISBServiceRolloutReconciler) assessPipelines(
+	ctx context.Context,
+	existingUpgradingChildDef *unstructured.Unstructured,
+) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
 
 	// What is the name of the ISBServiceRollout?
 	isbsvcRolloutName, found := existingUpgradingChildDef.GetLabels()[common.LabelKeyParentRollout]
 	if !found {
-		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("There is no Label named %q for isbsvc %s/%s; can't make assessment for progressive",
+		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("there is no Label named %q for isbsvc %s/%s; can't make assessment for progressive",
 			common.LabelKeyParentRollout, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName())
 	}
 	// get all PipelineRollouts using this ISBServiceRollout
 	pipelineRollouts, err := r.getPipelineRolloutList(ctx, existingUpgradingChildDef.GetNamespace(), isbsvcRolloutName)
 	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("Error getting PipelineRollouts: %s", err.Error())
+		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting PipelineRollouts: %s", err.Error())
 	}
 	if len(pipelineRollouts) == 0 {
 		numaLogger.Warn("Found no PipelineRollouts using ISBServiceRollout: so isbsvc is deemed Successful") // not typical but could happen
@@ -70,7 +102,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(ctx context.Context, 
 		switch pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.AssessmentResult {
 		case apiv1.AssessmentResultFailure:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline is failed")
-			return apiv1.AssessmentResultFailure, fmt.Sprintf("Pipeline %s failed while upgrading", upgradingPipelineStatus.Name), nil
+			return apiv1.AssessmentResultFailure, upgradingPipelineStatus.Name, nil
 		case apiv1.AssessmentResultUnknown:
 			numaLogger.WithValues("pipeline", upgradingPipelineStatus.Name).Debug("pipeline assessment is unknown")
 			return apiv1.AssessmentResultUnknown, "", nil

@@ -58,7 +58,7 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 		if promotedStatus == nil {
 			return upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
+				upgradingStatus.BasicAssessmentEndTime != nil
 		} else {
 			return promotedStatus.Name == expectedPromotedName &&
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
@@ -90,7 +90,7 @@ func VerifyPipelineRolloutProgressiveStatus(
 		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
 			success := promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
 				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.AssessmentEndTime != nil
+				upgradingStatus.BasicAssessmentEndTime != nil
 			if forcedPromotion {
 				return success && upgradingStatus.ForcedSuccess
 			} else {
@@ -126,7 +126,7 @@ func VerifyISBServiceRolloutProgressiveStatus(
 		return promotedStatus.Name == expectedPromotedName &&
 			upgradingStatus.Name == expectedUpgradingName &&
 			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-			upgradingStatus.AssessmentEndTime != nil
+			upgradingStatus.BasicAssessmentEndTime != nil
 	}).Should(BeTrue())
 }
 

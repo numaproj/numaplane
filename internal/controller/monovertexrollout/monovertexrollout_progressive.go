@@ -6,21 +6,18 @@ import (
 	"fmt"
 	"time"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
-
-	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" monovertex
@@ -45,55 +42,65 @@ func (r *MonoVertexRolloutReconciler) CreateUpgradingChildDefinition(ctx context
 
 // AssessUpgradingChild makes an assessment of the upgrading child to determine if it was successful, failed, or still not known
 // This implements a function of the progressiveController interface
-func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
+	ctx context.Context,
+	rolloutObject progressive.ProgressiveRolloutObject,
+	existingUpgradingChildDef *unstructured.Unstructured,
+	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-	analysis := mvtxRollout.GetAnalysis()
-	// only check for and create AnalysisRuns if templates are specified
-	if len(analysis.Templates) > 0 {
-		analysisRun := &argorolloutsv1.AnalysisRun{}
-		// check if analysisRun has already been created
-		if err := r.client.Get(ctx, client.ObjectKey{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace()}, analysisRun); err != nil {
-			if apierrors.IsNotFound(err) {
-				// analysisRun is created the first time the upgrading child is assessed
-				ownerRef := *metav1.NewControllerRef(&metav1.ObjectMeta{Name: existingUpgradingChildDef.GetName(), Namespace: existingUpgradingChildDef.GetNamespace(), UID: existingUpgradingChildDef.GetUID()}, numaflowv1.MonoVertexGroupVersionKind)
-				promotedChildStatus := rolloutObject.GetPromotedChildStatus()
-				var promotedChildName string
-				if promotedChildStatus != nil {
-					promotedChildName = promotedChildStatus.Name
-				}
-				err := progressive.CreateAnalysisRun(ctx, analysis, existingUpgradingChildDef, ownerRef, r.client, promotedChildName)
+
+	childStatus := mvtxRollout.GetUpgradingChildStatus()
+
+	// First perform basic resource health check
+	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+	if err != nil {
+		return assessment, reasonFailure, err
+	}
+	// if we fail even once, that's considered failure
+	if assessment == apiv1.AssessmentResultFailure {
+		// set AssessmentEndTime to now and return failure
+		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+			assessmentEndTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &assessmentEndTime
+		})
+
+		return assessment, reasonFailure, nil
+	}
+	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
+	// check "successful"
+	if assessment == apiv1.AssessmentResultSuccess {
+		// has AssessmentEndTime been set? if not, set it - now we can start our interval
+		if !childStatus.IsAssessmentEndTimeSet() {
+			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+				assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
+				status.BasicAssessmentEndTime = &assessmentEndTime
+			})
+			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
+		}
+
+		// if end time has arrived (i.e. we continually determined "Success" for the entire prescribed period of time),
+		// if we need to launch an AnalysisRun, we can do it now;
+		// otherwise, we can declare success
+		if childStatus.BasicAssessmentEndTimeArrived() {
+			analysis := mvtxRollout.GetAnalysis()
+			// only check for and create AnalysisRun if templates are specified
+			if len(analysis.Templates) > 0 {
+				// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
+				analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, mvtxRollout, mvtxRollout.GetAnalysis(), mvtxRollout.GetAnalysisStatus(), r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
-				analysisStatus := mvtxRollout.GetAnalysisStatus()
-				if analysisStatus == nil {
-					return apiv1.AssessmentResultUnknown, "", errors.New("analysisStatus not set")
-				}
-				// analysisStatus is updated with name of AnalysisRun (which is the same name as the upgrading child)
-				// and start time for its assessment
-				analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
-				timeNow := metav1.NewTime(time.Now())
-				analysisStatus.StartTime = &timeNow
-				mvtxRollout.SetAnalysisStatus(analysisStatus)
+				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 			} else {
-				return apiv1.AssessmentResultUnknown, "", err
+				return apiv1.AssessmentResultSuccess, "", nil
 			}
-		}
-
-		analysisStatus := mvtxRollout.GetAnalysisStatus()
-		if analysisStatus != nil {
-			// assess analysisRun status and set endTime if completed
-			if analysisRun.Status.Phase.Completed() && analysisStatus.EndTime == nil {
-				analysisStatus.EndTime = analysisRun.Status.CompletedAt
-			}
-			analysisStatus.AnalysisRunName = existingUpgradingChildDef.GetName()
-			analysisStatus.Phase = analysisRun.Status.Phase
-			mvtxRollout.SetAnalysisStatus(analysisStatus)
 		}
 
 	}
 
-	return progressive.AssessUpgradingPipelineType(ctx, mvtxRollout.GetAnalysisStatus(), existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+	return apiv1.AssessmentResultUnknown, "", nil
 
 }
 

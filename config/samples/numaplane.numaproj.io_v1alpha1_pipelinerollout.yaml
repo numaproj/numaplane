@@ -10,6 +10,8 @@ spec:
     analysis:
       args:
       templates:
+      - templateName: pipeline-template
+        clusterScope: false
   riders:
     - perVertex: true
       definition:

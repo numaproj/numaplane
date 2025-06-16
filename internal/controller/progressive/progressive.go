@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -53,7 +52,7 @@ type progressiveController interface {
 	UpgradingChildNeedsUpdating(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
-	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error)
+	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error)
 
 	// ProcessPromotedChildPreUpgrade performs operations on the promoted child prior to the upgrade (just the operations which are unique to this Kind)
 	// return true if requeue is needed (note this is ignored if error != nil)
@@ -156,14 +155,13 @@ func ProcessResource(
 	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it
-		if currentUpgradingChildDef == nil {
-			_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
-			if needRequeue {
-				return false, common.DefaultRequeueDelay, err
-			} else {
-				return false, 0, err
-			}
+		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
+		if needRequeue {
+			return false, common.DefaultRequeueDelay, err
+		} else {
+			return false, 0, err
 		}
+
 	}
 
 	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
@@ -362,10 +360,12 @@ func processUpgradingChild(
 	}
 
 	// If no AssessmentStartTime has been set already, calculate it and set it
-	if childStatus.AssessmentStartTime == nil {
+	if childStatus.BasicAssessmentStartTime == nil {
 		// Add to the current time the assessmentSchedule.Delay and set the AssessmentStartTime in the Rollout object
-		nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
-		childStatus.AssessmentStartTime = &nextAssessmentTime
+		childStatus = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			nextAssessmentTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Delay))
+			status.BasicAssessmentStartTime = &nextAssessmentTime
+		})
 		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentStartTime")
 	}
 
@@ -375,7 +375,7 @@ func processUpgradingChild(
 	failureReason := childStatus.FailureReason
 	childSts := childStatus.ChildStatus.Raw
 	if childStatus.CanAssess() {
-		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef)
+		assessment, failureReason, err = controller.AssessUpgradingChild(ctx, rolloutObject, existingUpgradingChildDef, assessmentSchedule)
 		if err != nil {
 			return false, 0, err
 		}
@@ -391,20 +391,15 @@ func processUpgradingChild(
 			Debug("skipping upgrading child assessment but assessing previous child status")
 	}
 
-	// Once a "not unknown" assessment is reached, set the assessment's end time (if not set yet)
-	if assessment != apiv1.AssessmentResultUnknown && !childStatus.IsAssessmentEndTimeSet() {
-		assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-		childStatus.AssessmentEndTime = &assessmentEndTime
-		numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
-	}
-
 	switch assessment {
 	case apiv1.AssessmentResultFailure:
 		rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeFailed(fmt.Sprintf("New Child Object %s/%s Failed", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()), rolloutObject.GetRolloutObjectMeta().Generation)
-		childStatus.AssessmentResult = apiv1.AssessmentResultFailure
-		childStatus.FailureReason = failureReason
-		childStatus.ChildStatus.Raw = childSts
-		rolloutObject.SetUpgradingChildStatus(childStatus)
+
+		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.FailureReason = failureReason
+			status.ChildStatus.Raw = childSts
+		})
 
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {
@@ -424,20 +419,17 @@ func processUpgradingChild(
 		return false, 0, nil
 
 	case apiv1.AssessmentResultSuccess:
-		if childStatus.CanDeclareSuccess() {
-			done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
-			if err != nil || done {
-				return done, 0, err
-			} else {
-				return done, assessmentSchedule.Interval, err
-			}
+		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
+		if err != nil || done {
+			return done, 0, err
 		} else {
-			return false, assessmentSchedule.Interval, nil
+			return done, assessmentSchedule.Interval, err
 		}
 
 	default:
-		childStatus.AssessmentResult = apiv1.AssessmentResultUnknown
-		rolloutObject.SetUpgradingChildStatus(childStatus)
+		_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultUnknown
+		})
 
 		return false, assessmentSchedule.Interval, nil
 	}
@@ -560,15 +552,16 @@ func ridersNeedUpdating(
 	return needUpdating, nil
 }
 
-// AssessUpgradingPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
+// PerformResourceHealthCheckForPipelineType makes an assessment of the upgrading child (either Pipeline or MonoVertex) to determine
 // if it was successful, failed, or still not known
-// Assessment:
+// Return assessment result along with reason (string) if it failed
+//
+// Assessment result:
 // Success: phase must be "Running" and all conditions must be True
 // Failure: phase is "Failed" or any condition is False
 // Unknown: neither of the above if met
-func AssessUpgradingPipelineType(
+func PerformResourceHealthCheckForPipelineType(
 	ctx context.Context,
-	analysisStatus *apiv1.AnalysisStatus,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	verifyReplicasFunc func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error),
 ) (apiv1.AssessmentResult, string, error) {
@@ -601,30 +594,8 @@ func AssessUpgradingPipelineType(
 		return apiv1.AssessmentResultUnknown, "", err
 	}
 
-	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
-	if err != nil {
-		return apiv1.AssessmentResultUnknown, "", err
-	}
-
 	// conduct standard health assessment first
 	if phaseHealthy && healthyConditions && healthyReplicas {
-		// if analysisStatus is set with an AnalysisRun's name, we must also check that it is in a Completed phase to declare success
-		if analysisStatus != nil && analysisStatus.AnalysisRunName != "" {
-			numaLogger.WithValues("namespace", existingUpgradingChildDef.GetNamespace(), "name", existingUpgradingChildDef.GetName()).
-				Debugf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase)
-			switch analysisStatus.Phase {
-			case argorolloutsv1.AnalysisPhaseSuccessful:
-				return apiv1.AssessmentResultSuccess, "", nil
-			case argorolloutsv1.AnalysisPhaseError, argorolloutsv1.AnalysisPhaseFailed, argorolloutsv1.AnalysisPhaseInconclusive:
-				return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s is in phase %s", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
-			default:
-				// if analysisRun is not completed yet, we check if it has exceeded the analysisRunTimeout
-				if time.Since(analysisStatus.StartTime.Time) >= analysisRunTimeout {
-					return apiv1.AssessmentResultFailure, fmt.Sprintf("AnalysisRun %s in phase %s has exceeded the analysisRunTimeout", analysisStatus.AnalysisRunName, analysisStatus.Phase), nil
-				}
-				return apiv1.AssessmentResultUnknown, "", nil
-			}
-		}
 		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
@@ -820,16 +791,16 @@ func startPostUpgradeProcess(
 	}
 
 	// set Upgrading Child Status
-	childStatus := rolloutObject.GetUpgradingChildStatus()
-	childStatus.InitializationComplete = true
-	childStatus.Riders = make([]apiv1.RiderStatus, len(newRiders))
-	for i, rider := range newRiders {
-		childStatus.Riders[i] = apiv1.RiderStatus{
-			GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
-			Name:             rider.Definition.GetName(),
+	_ = UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+		status.InitializationComplete = true
+		status.Riders = make([]apiv1.RiderStatus, len(newRiders))
+		for i, rider := range newRiders {
+			status.Riders[i] = apiv1.RiderStatus{
+				GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(rider.Definition.GroupVersionKind()),
+				Name:             rider.Definition.GetName(),
+			}
 		}
-	}
-	rolloutObject.SetUpgradingChildStatus(childStatus)
+	})
 
 	return false, err
 
@@ -958,4 +929,11 @@ func Discontinue(ctx context.Context,
 		}
 	}
 	return nil
+}
+
+func UpdateUpgradingChildStatus(rollout ProgressiveRolloutObject, f func(*apiv1.UpgradingChildStatus)) *apiv1.UpgradingChildStatus {
+	upgradingChildStatus := rollout.GetUpgradingChildStatus()
+	f(upgradingChildStatus)
+	rollout.SetUpgradingChildStatus(upgradingChildStatus)
+	return upgradingChildStatus
 }
