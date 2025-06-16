@@ -383,16 +383,19 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, tc.isbServiceVerifyFunc)
 			VerifyISBSvcRolloutReady(isbServiceRolloutName)
 			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying Pipeline got updated")
 			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, tc.pipelineVerifyFunc)
 			VerifyPipelineRolloutDeployed(pipelineRolloutName)
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying MonoVertexRollout got updated")
 			VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, tc.monoVertexVerifyFunc)
 			VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			// case cleanup
 			DeleteMonoVertexRollout(monoVertexRolloutName)

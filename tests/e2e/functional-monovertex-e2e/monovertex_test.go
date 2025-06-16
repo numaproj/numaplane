@@ -100,6 +100,10 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
 		})
 
+		// Verify no in progress strategy set
+		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+
 	})
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted

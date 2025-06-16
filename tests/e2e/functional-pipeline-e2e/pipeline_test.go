@@ -223,7 +223,9 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyPipelineRolloutDeployed(pipelineRolloutName)
 		VerifyPipelineRolloutHealthy(pipelineRolloutName)
 
+		// Verify no in progress strategy set
 		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		VerifyPromotedPipelineRunning(Namespace, pipelineRolloutName)
 	})
@@ -267,21 +269,33 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return retrievedISBServiceSpec.JetStream.Version == UpdatedJetstreamVersion
 		}, true, false, true)
 
+		// Verify no in progress strategy set when it's done
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 	})
 
-	It("Should update the child ISBService updating a no-data-loss field", func() {
+	It("Should update the child ISBService updating a no-data-loss/no recreate field", func() {
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecNoDataLossField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate != nil &&
 				retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() != nil &&
 				*retrievedISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits.Memory() == updatedMemLimit
 		}, false, false, false)
+
 	})
 
 	It("Should update the child ISBService updating a recreate field", func() {
 		UpdateISBServiceRollout(isbServiceRolloutName, []PipelineRolloutInfo{{PipelineRolloutName: pipelineRolloutName}}, ISBServiceSpecRecreateField, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
 			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
 		}, false, true, true)
+
+		// Verify no in progress strategy set when it's done
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 	})
 
 	It("Should only be one child per Rollout", func() { // all prior children should be marked "Recyclable" and deleted
