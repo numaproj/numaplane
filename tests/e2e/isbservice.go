@@ -172,20 +172,6 @@ func UpdateISBServiceInK8S(name string, f func(*unstructured.Unstructured) (*uns
 	Expect(err).ShouldNot(HaveOccurred())
 }
 
-func VerifyInProgressStrategyISBService(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy for ISBService is %v", inProgressStrategy), func() bool {
-		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
-		return rollout.Status.UpgradeInProgress == inProgressStrategy
-	}).Should(BeTrue())
-}
-
-func VerifyInProgressStrategyISBServiceConsistently(namespace string, isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy for ISBService is consistently %v", inProgressStrategy), func() bool {
-		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
-		return rollout.Status.UpgradeInProgress == inProgressStrategy
-	}).WithTimeout(10 * time.Second).Should(BeTrue())
-}
-
 func watchISBServiceRollout() {
 
 	watchResourceType(func() (watch.Interface, error) {
@@ -420,7 +406,7 @@ func UpdateISBServiceRollout(
 		if dataLossRisk {
 
 			By("Verify that in-progress-strategy gets set to PPND")
-			VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
+			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyPPND)
 			// if we expect the pipeline to be healthy after update
 			for _, rolloutInfo := range pipelineRollouts {
 				if !rolloutInfo.PipelineIsFailed {
@@ -505,10 +491,17 @@ func UpdateISBServiceRollout(
 }
 
 func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually("Verifying InProgressStrategy", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy for ISBService is %v", inProgressStrategy), func() bool {
 		isbServiceRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return isbServiceRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
+}
+
+func VerifyISBServiceRolloutInProgressStrategyConsistently(isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy for ISBService is consistently %v", inProgressStrategy), func() bool {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
+		return rollout.Status.UpgradeInProgress == inProgressStrategy
+	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
 func VerifyPDBForISBService(namespace string, isbServiceName string) {

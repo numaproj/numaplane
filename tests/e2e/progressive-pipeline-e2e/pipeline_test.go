@@ -164,8 +164,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
 
 		// Verify in-progress-strategy no longer set
-		VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyInProgressStrategyISBServiceConsistently(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
@@ -216,8 +216,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess)
 		// Verify in-progress-strategy no longer set
-		VerifyInProgressStrategyISBService(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyInProgressStrategyISBServiceConsistently(Namespace, isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 2))
 
 		DeletePipelineRollout(pipelineRolloutName)
