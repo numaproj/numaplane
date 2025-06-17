@@ -153,8 +153,12 @@ func ProcessResource(
 		return false, 0, err
 	}
 
+	// TODO: do we want to keep 'promotedDifference' and check below? or no?
+	// Evidence: before I'd made the update to return "done" in checkForUpgradeReplacement(), I found that this saw a promotedDifference in checking with the promoted
+	// pipeline because it was scaled down
+
 	// if there isn't already an "upgrading" definition, then create one and return
-	if currentUpgradingChildDef == nil {
+	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
 		if needRequeue {
@@ -162,6 +166,11 @@ func ProcessResource(
 		} else {
 			return false, 0, err
 		}
+	}
+
+	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
+	if currentUpgradingChildDef == nil {
+		return true, 0, err
 	}
 
 	// There's already an Upgrading child, now process it
@@ -189,9 +198,12 @@ func ProcessResource(
 	}
 
 	// determine if we need to replace the Upgrading child with a newer one
-	needsRequeue, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
+	needsRequeue, done, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
 	if needsRequeue {
 		return false, common.DefaultRequeueDelay, err
+	}
+	if done {
+		return true, 0, nil
 	}
 
 	done, requeueDelay, err := processUpgradingChild(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
@@ -438,13 +450,17 @@ func processUpgradingChild(
 
 // checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
 // and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+// Returns:
+// - A boolean indicating we need to requeue
+// - A boolean indicating if the upgrade is done
+// - Error if any
 func checkForUpgradeReplacement(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
-) (bool, error) {
+) (bool, bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
@@ -452,39 +468,53 @@ func checkForUpgradeReplacement(
 	// check if there are any new incoming changes to the desired spec
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	needsUpdating, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
+	differentFromExistingUpgrading, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, true, newUpgradingChildDef)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	// Replace existing Upgrading child with new one and mark the existing one for garbage collection
-	if needsUpdating {
+	differentFromPromoted, err := rolloutNeedsUpdating(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDef)
+	if err != nil {
+		return false, false, err
+	}
+
+	if differentFromExistingUpgrading {
+
+		numaLogger.WithValues("differentFromPromoted", differentFromPromoted).Debugf("new spec differs from existing upgrading child")
+
 		// mark recyclable the existing upgrading child
 		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 
+		// TODO: consider using progressive-discontinued here
 		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 		reason := common.LabelValueProgressiveReplaced
 		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 
-		needRequeue := false
-		newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
-		if err != nil {
-			return false, err
-		}
-		if needRequeue {
-			return true, nil
-		}
+		if differentFromPromoted {
+			// Create a new upgrading child to replace it
 
-		childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
+			needRequeue := false
+			newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
+			if err != nil {
+				return false, false, err
+			}
+			if needRequeue {
+				return true, false, nil
+			}
+
+			childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
+		} else {
+			return false, true, nil
+		}
 	}
 
 	// After creating the new Upgrading child, do post-upgrade process (check that AssessmentResult is not set just in case) and return
@@ -492,26 +522,27 @@ func checkForUpgradeReplacement(
 
 		needsRequeue, err := startPostUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, newUpgradingChildDef, controller, c)
 		if needsRequeue {
-			return true, err
+			return true, false, err
 		}
 	}
 
 	// if we just created a new upgrading child, we should requeue
-	return needsUpdating, nil
+	return differentFromExistingUpgrading, false, nil
 }
 
-// does our Rollout need updating? (used after case of Failure)
+// does our Rollout need updating?
 // this could include either the main child definition or a Rider definition
 func rolloutNeedsUpdating(
 	ctx context.Context,
 	controller progressiveController,
 	rolloutObject ctlrcommon.RolloutObject,
-	existingUpgradingChildDef *unstructured.Unstructured,
+	existingChildDef *unstructured.Unstructured,
+	existingIsUpgrading bool, // vs promoted
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 
 	needsUpdating := false
 
-	childNeedsUpdating, err := controller.UpgradingChildNeedsUpdating(ctx, existingUpgradingChildDef, newUpgradingChildDef)
+	childNeedsUpdating, err := controller.UpgradingChildNeedsUpdating(ctx, existingChildDef, newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
@@ -520,7 +551,7 @@ func rolloutNeedsUpdating(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = ridersNeedUpdating(ctx, controller, rolloutObject, existingUpgradingChildDef, newUpgradingChildDef)
+		needsUpdating, err = ridersNeedUpdating(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newUpgradingChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -533,19 +564,20 @@ func ridersNeedUpdating(
 	ctx context.Context,
 	controller progressiveController,
 	rolloutObject ctlrcommon.RolloutObject,
-	existingUpgradingChildDef *unstructured.Unstructured,
+	existingChildDef *unstructured.Unstructured,
+	existingIsUpgrading bool, // vs promoted
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
-	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingUpgradingChildDef.GetName(), newUpgradingChildDef)
+	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChildDef.GetName(), newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 
-	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, true)
+	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, existingIsUpgrading)
 	if err != nil {
 		return false, err
 	}
 
-	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetKind(), existingUpgradingChildDef.GetName(),
+	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChildDef.GetNamespace(), existingChildDef.GetKind(), existingChildDef.GetName(),
 		newRiders, existingRiders)
 	if err != nil {
 		return false, err
