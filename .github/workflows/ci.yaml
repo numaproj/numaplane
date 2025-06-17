@@ -128,6 +128,8 @@ jobs:
             case: "rider"
           - strategy: "progressive"
             case: "progressive-analysis-monovertex"
+          - strategy: "progressive"
+            case: "progressive-analysis-pipeline"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
