@@ -152,10 +152,6 @@ func ProcessResource(
 		return false, 0, err
 	}
 
-	// TODO: do we want to keep 'promotedDifference' and check below? or no?
-	// Evidence: before I'd made the update to return "done" in checkForUpgradeReplacement(), I found that this saw a promotedDifference in checking with the promoted
-	// pipeline because it was scaled down
-
 	// if there isn't already an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it

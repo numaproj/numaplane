@@ -233,6 +233,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure)
 
+		// TODO: put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
+
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
