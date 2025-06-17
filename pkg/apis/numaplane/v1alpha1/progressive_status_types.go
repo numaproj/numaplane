@@ -49,6 +49,11 @@ type UpgradingChildStatus struct {
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 
+	// Discontinued indicates if the upgrade was stopped prematurely
+	// This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+	// in the middle of an upgrade
+	Discontinued bool `json:"discontinued,omitempty"`
+
 	// FailureReason indicates the reason for the failure
 	FailureReason string `json:"failureReason,omitempty"`
 

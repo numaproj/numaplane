@@ -459,7 +459,12 @@ func checkForUpgradeReplacement(
 
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 
-	// check if there are any new incoming changes to the desired spec
+	// Compare our new spec to:
+	// 1. the existing Upgrading child definition
+	// 2. the existing Promoted child definition
+	// If the new one is different from the existing Upgrading one:
+	//  Then if the new one is different from the existing Promoted one: remove the Upgrading one
+	//  Else replace the Upgrading one with a new one
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
 	if err != nil {
 		return false, false, err
@@ -477,23 +482,22 @@ func checkForUpgradeReplacement(
 
 	if differentFromExistingUpgrading {
 
-		numaLogger.WithValues("differentFromPromoted", differentFromPromoted).Debugf("new spec differs from existing upgrading child")
-
-		// mark recyclable the existing upgrading child
+		// prepare existing upgrading child for Recycle
 		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
 		if err != nil {
 			return false, false, err
 		}
 
-		// TODO: consider using progressive-discontinued here
-		numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
-		reason := common.LabelValueProgressiveReplaced
-		err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
-		if err != nil {
-			return false, false, err
-		}
-
 		if differentFromPromoted {
+			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
+
+			// recycle the old one
+			reason := common.LabelValueProgressiveReplaced
+			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
+			if err != nil {
+				return false, false, err
+			}
+
 			// Create a new upgrading child to replace it
 
 			needRequeue := false
@@ -507,7 +511,10 @@ func checkForUpgradeReplacement(
 
 			childStatus = rolloutObject.GetUpgradingChildStatus() // update childStatus to reflect new child
 		} else {
-			return false, true, nil
+			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName()).Debug("removing 'upgrading' child as Rollout is back to matching 'promoted' child")
+
+			// Discontinue the Progressive upgrade altogether
+			return false, true, Discontinue(ctx, rolloutObject, controller, c)
 		}
 	}
 
@@ -943,13 +950,15 @@ func Discontinue(ctx context.Context,
 	c client.Client,
 ) error {
 
+	// mark the upgrading child in the Status as "Discontinued"
 	upgradingChildStatus := rolloutObject.GetUpgradingChildStatus()
 	if upgradingChildStatus != nil {
-
+		UpdateUpgradingChildStatus(rolloutObject, func(status *apiv1.UpgradingChildStatus) {
+			status.Discontinued = true
+		})
 	}
 
-	// Generally, there should just be one Upgrading child, but in case there's more than 1, mark all recyclable
-
+	// Generally, there should just be one Upgrading child, but just in case there's more than 1, mark all of them recyclable
 	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
