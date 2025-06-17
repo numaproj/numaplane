@@ -164,9 +164,9 @@ func (isbServiceRollout *ISBServiceRollout) GetPromotedChildStatus() *PromotedCh
 func (isbServiceRollout *ISBServiceRollout) ResetUpgradingChildStatus(upgradingISBService *unstructured.Unstructured) error {
 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{
 		UpgradingChildStatus: UpgradingChildStatus{
-			Name:              upgradingISBService.GetName(),
-			AssessmentEndTime: nil,
-			AssessmentResult:  AssessmentResultUnknown,
+			Name:                   upgradingISBService.GetName(),
+			BasicAssessmentEndTime: nil,
+			AssessmentResult:       AssessmentResultUnknown,
 		},
 	}
 

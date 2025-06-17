@@ -224,10 +224,10 @@ func (pipelineRollout *PipelineRollout) ResetUpgradingChildStatus(upgradingPipel
 		InterStepBufferServiceName: isbsvcName,
 		UpgradingPipelineTypeStatus: UpgradingPipelineTypeStatus{
 			UpgradingChildStatus: UpgradingChildStatus{
-				Name:              upgradingPipeline.GetName(),
-				AssessmentEndTime: nil,
-				AssessmentResult:  AssessmentResultUnknown,
-				FailureReason:     "",
+				Name:                   upgradingPipeline.GetName(),
+				BasicAssessmentEndTime: nil,
+				AssessmentResult:       AssessmentResultUnknown,
+				FailureReason:          "",
 			},
 			Analysis: AnalysisStatus{},
 		},
