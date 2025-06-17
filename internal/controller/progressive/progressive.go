@@ -970,6 +970,13 @@ func Discontinue(ctx context.Context,
 	c client.Client,
 ) error {
 
+	upgradingChildStatus := rolloutObject.GetUpgradingChildStatus()
+	if upgradingChildStatus != nil {
+
+	}
+
+	// Generally, there should just be one Upgrading child, but in case there's more than 1, mark all recyclable
+
 	upgradingChildren, err := ctlrcommon.FindChildrenOfUpgradeState(ctx, rolloutObject, common.LabelValueUpgradeInProgress, nil, true, c)
 	if err != nil {
 		return fmt.Errorf("failed to Discontinue progressive upgrade: error looking for Upgrading children of rollout %s: %v", rolloutObject.GetRolloutObjectMeta().Name, err)
