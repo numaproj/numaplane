@@ -275,6 +275,43 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		})
 	})
 
+	It("Should update ISBServiceRollout and PipelineRollout and rollback just PipelineRollout", func() {
+		updateResources(&updatedPipelineSpec, &updatedISBServiceSpec, nil, nil)
+
+		time.Sleep(30 * time.Second)
+
+		// Now roll everything back to original versions
+		updateResources(&initialPipelineSpec, nil, nil, nil)
+
+		By("verifying updates have completed")
+
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		CheckEventually("verifying just 1 InterstepBufferService", func() int {
+			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+		}).Should(Equal(1))
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		CheckEventually("verifying just 1 Pipeline", func() int {
+			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+		}).Should(Equal(1))
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		By("Verifying ISBService ready and spec correct")
+		VerifyISBSvcRolloutReady(isbServiceRolloutName)
+		VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(revisedVolSize)
+		})
+		promotedISBServiceName, _ := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
+		By("Verifying Pipeline ready and spec correct")
+		VerifyPipelineRolloutDeployed(pipelineRolloutName)
+		VerifyPipelineRolloutHealthy(pipelineRolloutName)
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return len(retrievedPipelineSpec.Vertices) == 2 && retrievedPipelineSpec.InterStepBufferServiceName == promotedISBServiceName
+		})
+
+	})
+
 	It("Should Delete Rollouts", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeletePipelineRollout(pipelineRolloutName)
@@ -287,7 +324,6 @@ var _ = Describe("Rollback e2e", Serial, func() {
 func updateResources(pipelineSpec *numaflowv1.PipelineSpec, isbsvcSpec *numaflowv1.InterStepBufferServiceSpec, mvSpec *numaflowv1.MonoVertexSpec, numaflowVersion *string) {
 	// update each rollout
 	if isbsvcSpec != nil {
-		By("Updating ISBServiceRollout")
 		rawSpec, err := json.Marshal(isbsvcSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(rollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
@@ -297,7 +333,6 @@ func updateResources(pipelineSpec *numaflowv1.PipelineSpec, isbsvcSpec *numaflow
 	}
 
 	if pipelineSpec != nil {
-		By("Updating PipelineRollout")
 		rawSpec, err := json.Marshal(pipelineSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
@@ -307,7 +342,6 @@ func updateResources(pipelineSpec *numaflowv1.PipelineSpec, isbsvcSpec *numaflow
 	}
 
 	if mvSpec != nil {
-		By("Updating MonoVertexRollout")
 		rawSpec, err := json.Marshal(mvSpec)
 		Expect(err).ShouldNot(HaveOccurred())
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
@@ -317,7 +351,6 @@ func updateResources(pipelineSpec *numaflowv1.PipelineSpec, isbsvcSpec *numaflow
 	}
 
 	if numaflowVersion != nil {
-		By("Updating NumaflowControllerRollout")
 		UpdateNumaflowControllerRolloutInK8S(func(rollout apiv1.NumaflowControllerRollout) (apiv1.NumaflowControllerRollout, error) {
 			rollout.Spec = apiv1.NumaflowControllerRolloutSpec{
 				Controller: apiv1.Controller{Version: *numaflowVersion},
