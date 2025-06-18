@@ -383,7 +383,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, tc.isbServiceVerifyFunc)
 			VerifyISBSvcRolloutReady(isbServiceRolloutName)
 			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-			VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 
 			By("Verifying Pipeline got updated")
 			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, tc.pipelineVerifyFunc)

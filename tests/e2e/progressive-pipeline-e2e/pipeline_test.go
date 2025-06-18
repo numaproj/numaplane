@@ -241,7 +241,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Now put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
 		updateISBService(initialISBServiceSpec)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))     // the "Upgrading" one
-		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 3)) // the "Upgrading" one
+		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 4)) // the "Upgrading" one
 		CheckConsistently("verifying just the original promoted Pipeline remains", func() bool {
 			pipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
 			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
