@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -591,4 +592,44 @@ func VerifyPipelineDeletion(pipelineName string) {
 
 		return pipeline == nil
 	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
+}
+
+func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineTypeRolloutStrategy) {
+	By("Creating a PipelineRollout")
+	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+
+	By("Verifying that the Pipeline spec is as expected")
+	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
+	initialPipelineSpec.InterStepBufferServiceName = currentPromotedISBService
+	VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
+	})
+	initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutHealthy(pipelineRolloutName)
+}
+
+func VerifyPipelineSuccess(pipelineRolloutName, promotedPipelineName, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	if !forcedSuccess {
+		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
+	}
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcedSuccess)
+
+	newPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+	for _, vertex := range upgradingPipelineSpec.Vertices {
+		newPipelineSpecVertices = append(newPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+	}
+	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
+
+	// Verify the previously promoted pipeline was deleted
+	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+}
+
+func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+		pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
+		return pipelineRollout, nil
+	})
 }

@@ -17,11 +17,9 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
-	"reflect"
 	"testing"
 	"time"
 
@@ -195,12 +193,12 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("Should validate Pipeline and ISBService upgrade using Progressive strategy", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
-		createPipelineRollout(GetInstanceName(isbServiceRolloutName, 0))
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
-		updatePipeline(updatedPipelineSpec)
+		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
 
-		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
+		VerifyPipelineSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
 		VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
@@ -212,43 +210,3 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
-
-func createPipelineRollout(currentPromotedISBService string) {
-	By("Creating a PipelineRollout")
-	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
-
-	By("Verifying that the Pipeline spec is as expected")
-	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
-	initialPipelineSpec.InterStepBufferServiceName = currentPromotedISBService
-	VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-		return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
-	})
-	initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
-	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	VerifyPipelineRolloutHealthy(pipelineRolloutName)
-}
-
-func verifyPipelineSuccess(promotedPipelineName string, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
-	if !forcedSuccess {
-		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
-	}
-	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultSuccess, forcedSuccess)
-
-	newPipelineSpecVertices := []numaflowv1.AbstractVertex{}
-	for _, vertex := range upgradingPipelineSpec.Vertices {
-		newPipelineSpecVertices = append(newPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
-	}
-	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
-
-	// Verify the previously promoted pipeline was deleted
-	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
-}
-
-func updatePipeline(spec numaflowv1.PipelineSpec) {
-	rawSpec, err := json.Marshal(spec)
-	Expect(err).ShouldNot(HaveOccurred())
-	UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(pipelineRollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
-		pipelineRollout.Spec.Pipeline.Spec.Raw = rawSpec
-		return pipelineRollout, nil
-	})
-}

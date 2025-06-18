@@ -147,7 +147,6 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
-
 	})
 
 	It("Should delete all remaining rollout objects", func() {
