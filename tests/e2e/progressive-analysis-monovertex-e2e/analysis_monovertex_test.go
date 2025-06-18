@@ -38,6 +38,7 @@ import (
 const (
 	monoVertexRolloutName = "test-monovertex-analysis-rollout"
 	analysisTemplateName  = "test-monovertex-template"
+	analysisRunName       = "monovertex-" + monoVertexRolloutName
 )
 
 var (
@@ -132,7 +133,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
-		VerifyAnalysisRunStatus(GetInstanceName(monoVertexRolloutName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)

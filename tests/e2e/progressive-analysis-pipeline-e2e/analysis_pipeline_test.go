@@ -41,6 +41,7 @@ const (
 	isbServiceRolloutName   = "test-isbservice-rollout"
 	initialJetstreamVersion = "2.10.17"
 	analysisTemplateName    = "test-pipeline-template"
+	analysisRunName         = "pipeline-" + pipelineRolloutName
 )
 
 var (
@@ -200,6 +201,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatePipeline(updatedPipelineSpec)
 
 		verifyPipelineSuccess(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
+		VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
