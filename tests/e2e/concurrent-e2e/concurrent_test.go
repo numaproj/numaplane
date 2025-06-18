@@ -391,7 +391,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
-			By("Verifying MonoVertexRollout got updated")
+			By("Verifying MonoVertex got updated")
 			VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, tc.monoVertexVerifyFunc)
 			VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)

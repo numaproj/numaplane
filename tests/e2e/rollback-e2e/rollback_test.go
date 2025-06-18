@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -130,6 +132,7 @@ var (
 	monoVertexScaleMin = int32(4)
 	monoVertexScaleMax = int32(5)
 
+	initialMVImage        = "quay.io/numaio/numaflow-go/source-simple-source:stable"
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &monoVertexScaleMin,
@@ -138,7 +141,7 @@ var (
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
+					Image: initialMVImage,
 				},
 			},
 		},
@@ -150,6 +153,7 @@ var (
 	}
 
 	// image change
+	updateMVImage         = "quay.io/numaio/numaflow-java/source-simple-source:stable"
 	updatedMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &monoVertexScaleMin,
@@ -158,7 +162,7 @@ var (
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-java/source-simple-source:stable",
+					Image: updateMVImage,
 				},
 			},
 		},
@@ -215,14 +219,60 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		// update each rollout
 		updateResources(updatedPipelineSpec, updatedISBServiceSpec, updatedMonoVertexSpec, UpdatedNumaflowControllerVersion)
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(30 * time.Second)
 
 		// Now roll everything back to original versions
 		updateResources(initialPipelineSpec, initialISBServiceSpec, initialMonoVertexSpec, InitialNumaflowControllerVersion)
 
-		// TODO: make sure there is just one child for each
-		// TODO: make sure its spec is correct
-		// TODO: make sure in progress strategy is consistently noop
+		// Verify everything got updated, and there's just one Promoted child for each with the correct spec
+
+		By("Verifying NumaflowController ready")
+		VerifyNumaflowControllerRolloutReady()
+
+		By("Verifying ISBService ready")
+		VerifyISBSvcRolloutReady(isbServiceRolloutName)
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		CheckEventually("verifying just 1 InterstepBufferService", func() int {
+			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName)
+		}).Should(Equal(1))
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		By("Verifying Pipeline ready")
+		VerifyPipelineRolloutDeployed(pipelineRolloutName)
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		CheckEventually("verifying just 1 Pipeline", func() int {
+			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+		}).Should(Equal(1))
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		By("Verifying MonoVertex ready")
+		VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
+		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+		CheckEventually("verifying just 1 MonoVertex", func() int {
+			return GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
+		}).Should(Equal(1))
+		VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		By("verifying all child specs")
+		VerifyNumaflowControllerDeployment(Namespace, func(d appsv1.Deployment) bool {
+			colon := strings.Index(d.Spec.Template.Spec.Containers[0].Image, ":")
+			return colon != -1 && d.Spec.Template.Spec.Containers[0].Image[colon+1:] == "v"+InitialNumaflowControllerVersion
+		})
+		VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, func(retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec) bool {
+			return retrievedISBServiceSpec.JetStream.Persistence.VolumeSize.Equal(volSize)
+		})
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return len(retrievedPipelineSpec.Vertices) == 2
+		})
+		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == initialMVImage
+		})
+
+		// case cleanup
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteISBServiceRollout(isbServiceRolloutName)
+		DeleteNumaflowControllerRollout()
 	})
 
 })
