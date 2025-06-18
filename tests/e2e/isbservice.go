@@ -44,12 +44,41 @@ func GetUpgradingISBServices(namespace, isbServiceRolloutName string) (*unstruct
 
 }
 
+func GetPromotedISBServiceSpecAndStatus(namespace string, isbsvcRolloutName string) (*unstructured.Unstructured, numaflowv1.InterStepBufferServiceSpec, numaflowv1.InterStepBufferServiceStatus, error) {
+
+	var retrievedISBServiceSpec numaflowv1.InterStepBufferServiceSpec
+	var retrievedISBServiceStatus numaflowv1.InterStepBufferServiceStatus
+
+	unstruct, err := GetPromotedISBService(namespace, isbsvcRolloutName)
+	if err != nil {
+		return nil, retrievedISBServiceSpec, retrievedISBServiceStatus, err
+	}
+	retrievedISBServiceSpec, err = GetISBServiceSpec(unstruct)
+	if err != nil {
+		return unstruct, retrievedISBServiceSpec, retrievedISBServiceStatus, err
+	}
+
+	retrievedISBServiceStatus, err = GetISBServiceStatus(unstruct)
+
+	if err != nil {
+		return unstruct, retrievedISBServiceSpec, retrievedISBServiceStatus, err
+	}
+	return unstruct, retrievedISBServiceSpec, retrievedISBServiceStatus, nil
+}
+
 // Get ISBServiceSpec from Unstructured type
 func GetISBServiceSpec(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceSpec, error) {
 	specMap := u.Object["spec"]
 	var isbServiceSpec numaflowv1.InterStepBufferServiceSpec
 	err := util.StructToStruct(&specMap, &isbServiceSpec)
 	return isbServiceSpec, err
+}
+
+func GetISBServiceStatus(u *unstructured.Unstructured) (numaflowv1.InterStepBufferServiceStatus, error) {
+	statusMap := u.Object["status"]
+	var status numaflowv1.InterStepBufferServiceStatus
+	err := util.StructToStruct(&statusMap, &status)
+	return status, err
 }
 
 func GetPromotedISBServiceName(namespace, isbServiceRolloutName string) (string, error) {
