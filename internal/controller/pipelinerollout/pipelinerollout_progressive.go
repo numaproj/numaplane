@@ -154,14 +154,13 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 }
 
-// UpgradingChildNeedsUpdating() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
+// CheckForDifferences() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
 // configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane itself changes or it will confuse things.
-// TODO: move to pipelinerollout_progressive.go
-func (r *PipelineRolloutReconciler) UpgradingChildNeedsUpdating(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// However, we need to exclude any field that Numaplane itself changes or it will confuse things
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
 	toCopy := to.DeepCopy()

@@ -584,7 +584,7 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 				obj2.SetAnnotations(tc.annotations2)
 			}
 
-			needsUpdating, err := r.UpgradingChildNeedsUpdating(context.Background(), obj1, obj2)
+			needsUpdating, err := r.CheckForDifferences(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -1255,7 +1255,6 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				//ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
 		},
 		{

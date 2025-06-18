@@ -914,7 +914,7 @@ func TestChildNeedsUpdating(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &MonoVertexRolloutReconciler{}
-			needsUpdate, err := reconciler.UpgradingChildNeedsUpdating(ctx, tt.from, tt.to)
+			needsUpdate, err := reconciler.CheckForDifferences(ctx, tt.from, tt.to)
 
 			if tt.expectedError {
 				assert.Error(t, err)
