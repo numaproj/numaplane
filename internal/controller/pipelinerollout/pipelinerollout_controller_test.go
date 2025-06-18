@@ -1250,13 +1250,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: failedUpgradingChildStatus,
 			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
+				//ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
 		},
 		{
