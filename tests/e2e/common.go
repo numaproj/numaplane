@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientgo "k8s.io/client-go/kubernetes"
 
+	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/client/clientset/versioned/typed/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -57,6 +58,8 @@ var (
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
 	numaflowControllerClient        planepkg.NumaflowControllerInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
+	argoAnalysisTemplateClient      argov1alpha1.AnalysisTemplateInterface
+	argoAnalysisRunClient           argov1alpha1.AnalysisRunInterface
 	kubeClient                      clientgo.Interface
 
 	wg     sync.WaitGroup
@@ -587,6 +590,14 @@ func BeforeSuiteSetup() {
 
 	numaflowControllerClient = planeversiond.NewForConfigOrDie(cfg).NumaplaneV1alpha1().NumaflowControllers(Namespace)
 	Expect(numaflowControllerClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	argoAnalysisTemplateClient = argov1alpha1.NewForConfigOrDie(cfg).AnalysisTemplates(Namespace)
+	Expect(argoAnalysisTemplateClient).NotTo(BeNil())
+	Expect(err).NotTo(HaveOccurred())
+
+	argoAnalysisRunClient = argov1alpha1.NewForConfigOrDie(cfg).AnalysisRuns(Namespace)
+	Expect(argoAnalysisRunClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
 	kubeClient, err = clientgo.NewForConfig(cfg)
