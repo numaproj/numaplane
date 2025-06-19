@@ -520,14 +520,14 @@ func UpdateISBServiceRollout(
 }
 
 func VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy for ISBService is %v", inProgressStrategy), func() bool {
+	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy for ISBService is %q", string(inProgressStrategy)), func() bool {
 		isbServiceRollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return isbServiceRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
 }
 
 func VerifyISBServiceRolloutInProgressStrategyConsistently(isbsvcRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy for ISBService is consistently %v", inProgressStrategy), func() bool {
+	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy for ISBService is consistently %q", string(inProgressStrategy)), func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
 		return rollout.Status.UpgradeInProgress == inProgressStrategy
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
