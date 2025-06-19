@@ -97,7 +97,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		verifyProgressiveFailure(updatedMonoVertexSpec)
 
 		updatedMonoVertexSpec = UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
-		VerifyProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
+		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
 			0, 2, false, true)
 
 		// Verify the previously promoted monovertex was deleted
@@ -114,7 +114,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
 
-		VerifyProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
+		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
 			0, 1, true, false)
 
 		// Verify the previously promoted monovertex was deleted
@@ -140,7 +140,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 			return monovertex, nil
 		})
 
-		VerifyProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
+		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
 			0, 1, true, false)
 
 		// Verify the previously promoted monovertex was deleted

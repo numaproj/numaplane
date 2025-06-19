@@ -480,7 +480,7 @@ func VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName string, inP
 	}).Should(BeTrue())
 }
 
-func VerifyProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString string, monoVertexScaleTo int64,
+func VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString string, monoVertexScaleTo int64,
 	updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex, updatedMonoVertexIndex int,
 	forcedSuccess, checkRunningVertices bool) {
 
