@@ -1255,6 +1255,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
 		},
 		{
@@ -1324,7 +1325,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: nil,
+			existingPromotedPipelineDef: nil,          // somebody just deleted their promoted pipeline
 			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
@@ -1334,8 +1335,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
-			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
 		},
