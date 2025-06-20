@@ -152,10 +152,17 @@ func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName
 }
 
 func VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually("Verifying InProgressStrategy", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
 		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
+}
+
+func VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
+	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
+		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
+	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
 // GetPipelineSpec from Unstructured type
@@ -623,6 +630,10 @@ func VerifyPipelineSuccess(pipelineRolloutName, promotedPipelineName, upgradingP
 
 	// Verify the previously promoted pipeline was deleted
 	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+
+	// Verify no in progress strategy set
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 }
 
 func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {

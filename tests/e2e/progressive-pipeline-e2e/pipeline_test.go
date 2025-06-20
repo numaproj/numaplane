@@ -161,6 +161,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
 
+		// Verify in-progress-strategy no longer set
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
@@ -209,6 +213,9 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		})
 
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess)
+		// Verify in-progress-strategy no longer set
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 2))
 
 		DeletePipelineRollout(pipelineRolloutName)
@@ -217,12 +224,31 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	It("Should validate Pipeline as failure when ISBService upgrade assesses in failure", func() {
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, defaultStrategy)
 
+		promotedISBSvc, initialISBServiceSpec, _, err := GetPromotedISBServiceSpecAndStatus(Namespace, isbServiceRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		_ = updateISBServiceForFailure()
 
 		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, initialPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure)
+
+		// Now put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
+		updateISBService(initialISBServiceSpec)
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))     // the "Upgrading" one
+		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 4)) // the "Upgrading" one
+		CheckConsistently("verifying just the original promoted Pipeline remains", func() bool {
+			pipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName) == 1 && pipelineName == promotedPipelineName
+		}).Should(BeTrue())
+
+		CheckConsistently("verifying just the original promoted InterstepBufferService remains", func() bool {
+			isbsvcName, _ := GetPromotedISBServiceName(Namespace, isbServiceRolloutName)
+			return GetNumberOfChildren(GetGVRForISBService(), Namespace, isbServiceRolloutName) == 1 && isbsvcName == promotedISBSvc.GetName()
+		}).Should(BeTrue())
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})

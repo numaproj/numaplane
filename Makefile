@@ -158,6 +158,7 @@ test-progressive-pipeline-e2e:
 test-progressive-analysis-monovertex-e2e:
 test-progressive-analysis-pipeline-e2e:
 test-rider-e2e:
+test-rollback-e2e:
 test-%: envtest ## Run e2e tests. Note we may need to increase the timeout in the future.
 	GOFLAGS="-count=1" ginkgo run -v --timeout 35m ./tests/e2e/$*
 

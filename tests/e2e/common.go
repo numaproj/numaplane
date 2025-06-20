@@ -699,15 +699,15 @@ func setupOutputDir() {
 
 // CheckEventually is wrappers around Ginkgo's Eventually
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
-func CheckEventually(testData string, actualOrCtx interface{}) AsyncAssertion {
-	By(testData)
+func CheckEventually(testDescription string, actualOrCtx interface{}) AsyncAssertion {
+	By(testDescription)
 	return Eventually(actualOrCtx, TestTimeout, TestPollingInterval)
 }
 
 // CheckConsistently is wrappers around Ginkgo's Consistently
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
-func CheckConsistently(testData string, actualOrCtx interface{}) AsyncAssertion {
-	By(testData)
+func CheckConsistently(testDescription string, actualOrCtx interface{}) AsyncAssertion {
+	By(testDescription)
 	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
 }
 

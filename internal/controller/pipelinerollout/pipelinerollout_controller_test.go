@@ -584,7 +584,7 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 				obj2.SetAnnotations(tc.annotations2)
 			}
 
-			needsUpdating, err := r.UpgradingChildNeedsUpdating(context.Background(), obj1, obj2)
+			needsUpdating, err := r.CheckForDifferences(context.Background(), obj1, obj2)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -1250,13 +1250,12 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			initialInProgressStrategy:   &progressiveUpgradeStrategy,
 			initialUpgradingChildStatus: failedUpgradingChildStatus,
 			initialPromotedChildStatus:  defaultPromotedChildStatus,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyProgressive,
+			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
 			expectedPipelines: map[string]common.UpgradeState{
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradeInProgress,
 			},
 		},
 		{
@@ -1326,7 +1325,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		{
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
-			existingPromotedPipelineDef: nil,
+			existingPromotedPipelineDef: nil,          // somebody just deleted their promoted pipeline
 			existingUpgradePipelineDef:  defaultFailedUpgradingPipelineDef,
 			initialRolloutPhase:         apiv1.PhasePending,
 			initialRolloutNameCount:     2,
@@ -1336,8 +1335,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
 
-			// the Failed Pipeline which is marked "recyclable" gets deleted right away due to the fact that it's in "Failed" state and therefore can't pause
 			expectedPipelines: map[string]common.UpgradeState{
+				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
 		},
