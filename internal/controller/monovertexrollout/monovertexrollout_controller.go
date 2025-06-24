@@ -547,11 +547,7 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, mono
 }
 
 func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
-	if old == nil {
-		return true
-	}
-
-	return false
+	return old == nil
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {

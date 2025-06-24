@@ -194,11 +194,7 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 func (r *NumaflowControllerReconciler) needsUpdate(old, new *apiv1.NumaflowController) bool {
-	if old == nil {
-		return true
-	}
-
-	return false
+	return old == nil
 }
 
 // reconcile does the real logic
