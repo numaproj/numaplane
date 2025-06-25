@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -24,19 +25,19 @@ import (
 	. "github.com/onsi/gomega"
 
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
-
-	"k8s.io/utils/ptr"
 )
 
 const (
-	monoVertexRolloutName = "test-monovertex-analysis-rollout"
-	analysisTemplateName  = "test-monovertex-template"
-	analysisRunName       = "monovertex-" + monoVertexRolloutName
+	monoVertexRolloutName       = "test-monovertex-analysis-rollout"
+	analysisTemplateNameSuccess = "test-monovertex-template-success"
+	analysisTemplateNameFailure = "test-monovertex-template-failure"
+	analysisRunName             = "monovertex-" + monoVertexRolloutName
 )
 
 var (
@@ -55,7 +56,11 @@ var (
 			Analysis: apiv1.Analysis{
 				Templates: []argov1alpha1.AnalysisTemplateRef{
 					{
-						TemplateName: analysisTemplateName,
+						TemplateName: analysisTemplateNameSuccess,
+						ClusterScope: false,
+					},
+					{
+						TemplateName: analysisTemplateNameFailure,
 						ClusterScope: false,
 					},
 				},
@@ -63,8 +68,9 @@ var (
 		},
 	}
 
-	udTransformer           = numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
-	validUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	udTransformer             = numaflowv1.UDTransformer{Container: &numaflowv1.Container{}}
+	validUDTransformerImage   = "quay.io/numaio/numaflow-rs/source-transformer-now:stable"
+	invalidUDTransformerImage = "quay.io/numaio/numaflow-rs/source-transformer-now:invalid-e8y78rwq5h"
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{Min: &monoVertexScaleMin, Max: &monoVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -85,7 +91,7 @@ var (
 	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:         "mvtx-example",
+				Name:         "mvtx-example-success",
 				FailureLimit: ptr.To(intstrutil.FromInt32(10)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
@@ -122,7 +128,10 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy", func() {
-		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
+		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, initialAnalysisTemplateSpec)
+		initialAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] >= 0"
+		initialAnalysisTemplateSpec.Metrics[0].Name = "mvtx-example-failure"
+		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
@@ -135,10 +144,51 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
-		DeleteAnalysisTemplate(analysisTemplateName)
+		DeleteAnalysisTemplate(analysisTemplateNameSuccess)
+		DeleteAnalysisTemplate(analysisTemplateNameFailure)
+	})
+
+	It("Should validate MonoVertex upgrade using Progressive strategy with Analysis template via Forced Promotion configured on MonoVertexRollout Failure case", func() {
+		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, initialAnalysisTemplateSpec)
+		initialAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] >= 0"
+		initialAnalysisTemplateSpec.Metrics[0].Name = "mvtx-example-failure"
+		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, initialAnalysisTemplateSpec)
+
+		strategy := defaultStrategy.DeepCopy()
+		strategy.Progressive.ForcePromote = true
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, strategy)
+
+		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
+		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
+
+		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
+			0, 1, true, false)
+
+		// Verify the previously promoted monovertex was deleted
+		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
+
+		//VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateNameSuccess)
+		DeleteAnalysisTemplate(analysisTemplateNameFailure)
 	})
 
 	It("Should delete all remaining rollout objects", func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+func updateMonoVertexRolloutForFailure() *numaflowv1.MonoVertexSpec {
+	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
+	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
+	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
+	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
+	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
+		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
+		return mvr, nil
+	})
+	return updatedMonoVertexSpec
+}

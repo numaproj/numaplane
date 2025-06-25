@@ -59,7 +59,6 @@ func DeleteAnalysisTemplate(name string) {
 }
 
 func VerifyAnalysisRunStatus(name string, expectedStatus argov1alpha1.AnalysisPhase) {
-	By("Verifying AnalysisRun status")
 	CheckEventually("Verifying AnalysisRun status", func() bool {
 		analysisRun, err := argoAnalysisRunClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
