@@ -46,6 +46,7 @@ var (
 
 	monoVertexScaleTo               = int64(2)
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
+	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-failure:stable"
 
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
@@ -85,15 +86,17 @@ var (
 	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:         "mvtx-example",
-				FailureLimit: ptr.To(intstrutil.FromInt32(10)),
+				Name:                    "mvtx-example",
+				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				Interval:                "60s",
+				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query:   "increase(monovtx_ack_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\", mvtx_replica=\"0\"}[1m])",
+						Query:   "(vector(1) and on() (sum(monovtx_read_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) == 0)) or (vector(1) and on() (sum(monovtx_ack_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) > 0)) or vector(0)",
 					},
 				},
-				SuccessCondition: "len(result) == 0",
+				SuccessCondition: "result[0] > 0",
 			},
 		},
 		Args: []argov1alpha1.Argument{
@@ -121,7 +124,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 	})
 
-	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy", func() {
+	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
 
@@ -132,7 +135,25 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		// Verify the previously promoted monovertex was deleted
 		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
 
-		VerifyAnalysisRunStatus(GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateName)
+	})
+
+	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Failure case", func() {
+		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
+
+		// Update the initial MonoVertexSpec to use a bad image for the sink
+		initialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
+		initialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
+
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
+
+		// Verify the AnalysisRun status is Failed
+		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)
