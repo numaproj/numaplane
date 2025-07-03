@@ -441,7 +441,7 @@ func writeToFile(resource Output) error {
 	case "AnalysisRun":
 		if len(resource.Metadata.OwnerReferences) > 0 {
 			switch resource.Metadata.OwnerReferences[0].Kind {
-			case "Monovertex":
+			case "MonoVertex":
 				fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "analysisrun.yaml")
 			case "Pipeline":
 				fileName = filepath.Join(ResourceChangesPipelineOutputPath, "analysisrun.yaml")
