@@ -5,6 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: numaflow
   name: numaflow-pipeline-metrics
+  namespace: prometheus
 spec:
   namespaceSelector:
     any: true
@@ -31,6 +32,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: numaflow
   name: numaflow-mono-vertex-metrics
+  namespace: prometheus
 spec:
   namespaceSelector:
     any: true

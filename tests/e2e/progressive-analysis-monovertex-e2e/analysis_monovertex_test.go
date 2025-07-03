@@ -96,13 +96,13 @@ var (
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
 						Query: `
 (
-  absent(sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
+  absent(sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
   OR
-  sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
+  sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
 )
 OR
 (
-  sum(numaflow_monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
+  sum(monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
 )`,
 					},
 				},
