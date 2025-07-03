@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -46,7 +48,7 @@ func DeleteAnalysisTemplate(name string) {
 	err := argoAnalysisTemplateClient.Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &foregroundDeletion})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	CheckEventually("Verifying AnalysisTemplate deletion", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying AnalysisTemplate deletion, (%s)", name), func() bool {
 		_, err := argoAnalysisTemplateClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if !errors.IsNotFound(err) {
@@ -58,9 +60,8 @@ func DeleteAnalysisTemplate(name string) {
 	}).WithTimeout(TestTimeout).Should(BeFalse(), "The AnalysisTemplate should have been deleted but it was found.")
 }
 
-func VerifyAnalysisRunStatus(name string, expectedStatus argov1alpha1.AnalysisPhase) {
-	By("Verifying AnalysisRun status")
-	CheckEventually("Verifying AnalysisRun status", func() bool {
+func VerifyAnalysisRunStatus(metricName, name string, expectedStatus argov1alpha1.AnalysisPhase) {
+	CheckEventually(fmt.Sprintf("Verifying AnalysisRun status (%s)", name), func() bool {
 		analysisRun, err := argoAnalysisRunClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if !errors.IsNotFound(err) {
@@ -68,8 +69,12 @@ func VerifyAnalysisRunStatus(name string, expectedStatus argov1alpha1.AnalysisPh
 			}
 			return false
 		}
-		if analysisRun.Status.Phase == expectedStatus {
-			return true
+		for _, metric := range analysisRun.Status.MetricResults {
+			if metric.Name == metricName {
+				if metric.Phase == expectedStatus {
+					return true
+				}
+			}
 		}
 		return false
 	}).Should(BeTrue())

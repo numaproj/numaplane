@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -30,7 +29,6 @@ import (
 	. "github.com/numaproj/numaplane/tests/e2e"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -93,8 +91,8 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
 
-		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
-		verifyProgressiveFailure(updatedMonoVertexSpec)
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		updatedMonoVertexSpec = UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
@@ -112,7 +110,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, strategy)
 
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
-		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
 
 		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
 			0, 1, true, false)
@@ -126,8 +124,8 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on MonoVertex", func() {
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
 
-		updatedMonoVertexSpec := updateMonoVertexRolloutForFailure()
-		verifyProgressiveFailure(updatedMonoVertexSpec)
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		By("Updating the MonoVertex to set the 'force promote' Label")
 		UpdateMonoVertexInK8S(GetInstanceName(monoVertexRolloutName, 1), func(monovertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -153,28 +151,3 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
-
-func updateMonoVertexRolloutForFailure() *numaflowv1.MonoVertexSpec {
-	By("Updating the MonoVertex Topology to cause a Progressive change - Failure case")
-	updatedMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
-	updatedMonoVertexSpec.Source.UDTransformer = &udTransformer
-	updatedMonoVertexSpec.Source.UDTransformer.Container.Image = invalidUDTransformerImage
-	rawSpec, err := json.Marshal(updatedMonoVertexSpec)
-	Expect(err).ShouldNot(HaveOccurred())
-	UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(mvr apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-		mvr.Spec.MonoVertex.Spec.Raw = rawSpec
-		return mvr, nil
-	})
-	return updatedMonoVertexSpec
-}
-
-func verifyProgressiveFailure(updatedMonoVertexSpec *numaflowv1.MonoVertexSpec) {
-	VerifyMonoVertexRolloutScaledDownForProgressive(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), monoVertexScaleMinMaxJSONString, monoVertexScaleTo)
-	VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), true, apiv1.AssessmentResultFailure, defaultStrategy.Progressive.ForcePromote)
-
-	// Verify that when the "upgrading" MonoVertex fails, it scales down to 0 Pods, and the "promoted" MonoVertex scales back up
-	VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 0),
-		[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
-	VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
-		[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
-}
