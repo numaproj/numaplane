@@ -134,7 +134,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 	})
 
-	/*It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
+	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Success case", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
 
@@ -149,7 +149,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)
-	})*/
+	})
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Failure case", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
@@ -163,7 +163,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		// Verify the AnalysisRun status is Failed
-		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)
