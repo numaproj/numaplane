@@ -438,6 +438,15 @@ func writeToFile(resource Output) error {
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller.yaml")
 	case "NumaflowControllerRollout":
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml")
+	case "AnalysisRun":
+		if len(resource.Metadata.OwnerReferences) > 0 {
+			switch resource.Metadata.OwnerReferences[0].Kind {
+			case "Monovertex":
+				fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "analysisrun.yaml")
+			case "Pipeline":
+				fileName = filepath.Join(ResourceChangesPipelineOutputPath, "analysisrun.yaml")
+			}
+		}
 	case "Pod":
 		switch resource.Metadata.Labels["app.kubernetes.io/component"] {
 		case "controller-manager":
