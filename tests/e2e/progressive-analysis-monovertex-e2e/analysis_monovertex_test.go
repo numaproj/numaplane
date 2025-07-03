@@ -93,7 +93,16 @@ var (
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query:   "(vector(1) and on() (sum(monovtx_read_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) == 0)) or (vector(1) and on() (sum(monovtx_ack_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) > 0)) or vector(0)",
+						Query: `
+(
+  absent(sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
+  OR
+  sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
+)
+OR
+(
+  sum(numaflow_monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
+)`,
 					},
 				},
 				SuccessCondition: "result[0] > 0",
