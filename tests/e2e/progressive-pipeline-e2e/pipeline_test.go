@@ -300,6 +300,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPromotedISBSvcReady(Namespace, isbServiceRolloutName, 3)      // 3 nodes for JetStream cluster
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 3)) // the original
 
+		DeletePipelineRollout(pipelineRolloutName)
+
 	})
 
 	It("Should delete all remaining rollout objects", func() {
