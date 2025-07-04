@@ -469,7 +469,7 @@ func DeletePipelineRollout(name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The PipelineRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying Pipeline deletion", func() bool {
 		// ensures deletion of single pipeline
@@ -482,7 +482,7 @@ func DeletePipelineRollout(name string) {
 			return true
 		}
 		return false
-	}).WithTimeout(TestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 }
 
 // update PipelineRollout and verify correct process
@@ -598,7 +598,7 @@ func VerifyPipelineDeletion(pipelineName string) {
 		}
 
 		return pipeline == nil
-	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
 }
 
 func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineTypeRolloutStrategy) {

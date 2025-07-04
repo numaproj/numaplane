@@ -29,7 +29,9 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientgo "k8s.io/client-go/kubernetes"
 
-	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/client/clientset/versioned/typed/rollouts/v1alpha1"
+	argoclientsetv1alpha1 "github.com/argoproj/argo-rollouts/pkg/client/clientset/versioned/typed/rollouts/v1alpha1"
+
+	argorolloutv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -50,17 +52,17 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	TestTimeout            = 6 * time.Minute
-	ConsistentCheckTimeout = 15 * time.Second
-	TestPollingInterval    = 10 * time.Millisecond
+	DefaultTestTimeout            = 6 * time.Minute
+	DefaultConsistentCheckTimeout = 15 * time.Second // the default time for checks using "Consistently"
+	TestPollingInterval           = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
 	numaflowControllerRolloutClient planepkg.NumaflowControllerRolloutInterface
 	numaflowControllerClient        planepkg.NumaflowControllerInterface
 	monoVertexRolloutClient         planepkg.MonoVertexRolloutInterface
-	argoAnalysisTemplateClient      argov1alpha1.AnalysisTemplateInterface
-	argoAnalysisRunClient           argov1alpha1.AnalysisRunInterface
+	argoAnalysisTemplateClient      argoclientsetv1alpha1.AnalysisTemplateInterface
+	argoAnalysisRunClient           argoclientsetv1alpha1.AnalysisRunInterface
 	kubeClient                      clientgo.Interface
 
 	wg     sync.WaitGroup
@@ -102,8 +104,9 @@ const (
 	PodLogsNumaflowControllerOutputPath  = "../output/logs/numaflowcontrollerrollouts"
 	PodLogsNumaplaneControllerOutputPath = "../output/logs/numaplanecontroller"
 
-	NumaplaneAPIVersion = "numaplane.numaproj.io/v1alpha1"
-	NumaflowAPIVersion  = "numaflow.numaproj.io/v1alpha1"
+	NumaplaneAPIVersion    = "numaplane.numaproj.io/v1alpha1"
+	NumaflowAPIVersion     = "numaflow.numaproj.io/v1alpha1"
+	ArgoRolloutsAPIVersion = "argoproj.io/v1alpha1"
 
 	NumaplaneLabel = "app.kubernetes.io/part-of=numaplane"
 	NumaflowLabel  = "app.kubernetes.io/part-of=numaflow"
@@ -146,7 +149,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 			return true
 		}
 		return false
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 
 }
 
@@ -211,7 +214,7 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 			}
 
 			return true
-		}).WithTimeout(TestTimeout).Should(BeTrue())
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 	}
 }
 
@@ -386,6 +389,27 @@ func watchResourceType(getWatchFunc func() (watch.Interface, error), processEven
 
 }
 
+func watchAnalysisRun() {
+
+	watchResourceType(func() (watch.Interface, error) {
+		watcher, err := argoAnalysisRunClient.Watch(context.Background(), metav1.ListOptions{})
+		return watcher, err
+	}, func(o runtime.Object) Output {
+		if analysisRun, ok := o.(*argorolloutv1alpha1.AnalysisRun); ok {
+			analysisRun.ManagedFields = nil
+			return Output{
+				APIVersion: ArgoRolloutsAPIVersion,
+				Kind:       "AnalysisRun",
+				Metadata:   analysisRun.ObjectMeta,
+				Spec:       analysisRun.Spec,
+				Status:     analysisRun.Status,
+			}
+		}
+		return Output{}
+	})
+
+}
+
 // helper func to write `kubectl get -o yaml` output to file
 func writeToFile(resource Output) error {
 
@@ -415,6 +439,15 @@ func writeToFile(resource Output) error {
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller.yaml")
 	case "NumaflowControllerRollout":
 		fileName = filepath.Join(ResourceChangesNumaflowControllerOutputPath, "numaflowcontroller_rollout.yaml")
+	case "AnalysisRun":
+		if len(resource.Metadata.OwnerReferences) > 0 {
+			switch resource.Metadata.OwnerReferences[0].Kind {
+			case "MonoVertex":
+				fileName = filepath.Join(ResourceChangesMonoVertexOutputPath, "analysisrun.yaml")
+			case "Pipeline":
+				fileName = filepath.Join(ResourceChangesPipelineOutputPath, "analysisrun.yaml")
+			}
+		}
 	case "Pod":
 		switch resource.Metadata.Labels["app.kubernetes.io/component"] {
 		case "controller-manager":
@@ -473,14 +506,14 @@ func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
 func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
 		resource, _ := GetResource(gvr, Namespace, name)
 		return resource == nil
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
 func GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
@@ -530,6 +563,11 @@ func getUpgradeStrategy() config.USDEUserStrategy {
 	} else {
 		return userStrategy
 	}
+}
+
+func startCommonWatches() {
+	wg.Add(1)
+	go watchAnalysisRun()
 }
 
 func BeforeSuiteSetup() {
@@ -593,11 +631,11 @@ func BeforeSuiteSetup() {
 	Expect(numaflowControllerClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
-	argoAnalysisTemplateClient = argov1alpha1.NewForConfigOrDie(cfg).AnalysisTemplates(Namespace)
+	argoAnalysisTemplateClient = argoclientsetv1alpha1.NewForConfigOrDie(cfg).AnalysisTemplates(Namespace)
 	Expect(argoAnalysisTemplateClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
-	argoAnalysisRunClient = argov1alpha1.NewForConfigOrDie(cfg).AnalysisRuns(Namespace)
+	argoAnalysisRunClient = argoclientsetv1alpha1.NewForConfigOrDie(cfg).AnalysisRuns(Namespace)
 	Expect(argoAnalysisRunClient).NotTo(BeNil())
 	Expect(err).NotTo(HaveOccurred())
 
@@ -613,6 +651,8 @@ func BeforeSuiteSetup() {
 
 		wg.Add(1)
 		go watchPods()
+
+		startCommonWatches()
 
 		startNumaflowControllerRolloutWatches()
 
@@ -702,14 +742,14 @@ func setupOutputDir() {
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
 func CheckEventually(testDescription string, actualOrCtx interface{}) AsyncAssertion {
 	By(testDescription)
-	return Eventually(actualOrCtx, TestTimeout, TestPollingInterval)
+	return Eventually(actualOrCtx, DefaultTestTimeout, TestPollingInterval)
 }
 
 // CheckConsistently is wrappers around Ginkgo's Consistently
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
 func CheckConsistently(testDescription string, actualOrCtx interface{}) AsyncAssertion {
 	By(testDescription)
-	return Consistently(actualOrCtx, ConsistentCheckTimeout, TestPollingInterval)
+	return Consistently(actualOrCtx, DefaultConsistentCheckTimeout, TestPollingInterval)
 }
 
 func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expectedVertexScaleMap map[string]numaflowv1.Scale) bool {

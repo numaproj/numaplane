@@ -263,7 +263,7 @@ func VerifyMonoVertexPromotedScale(namespace, monoVertexRolloutName string, expe
 		}
 
 		return VerifyVerticesScale(actualMonoVertexScaleMap, expectedMonoVertexScaleMap)
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
 // Make sure Upgrading Pipeline has min=max equal to difference between Initial and ScaleTo in promoted status
