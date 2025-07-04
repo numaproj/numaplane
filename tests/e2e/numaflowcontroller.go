@@ -201,7 +201,7 @@ func DeleteNumaflowControllerRollout() {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The NumaflowControllerRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying Numaflow Controller deletion", func() bool {
 		_, err := kubeClient.AppsV1().Deployments(Namespace).Get(ctx, numaflowControllerRolloutName, metav1.GetOptions{})
@@ -212,7 +212,7 @@ func DeleteNumaflowControllerRollout() {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The deployment should have been deleted but it was found.")
 }
 
 // UpdateNumaflowControllerRollout updates the NumaflowControllerRollout and its dependent PipelineRollouts.

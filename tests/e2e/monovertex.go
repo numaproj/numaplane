@@ -373,7 +373,7 @@ func DeleteMonoVertexRollout(name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The MonoVertexRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying MonoVertex deletion", func() bool {
 		list, err := dynamicClient.Resource(GetGVRForMonoVertex()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
@@ -384,7 +384,7 @@ func DeleteMonoVertexRollout(name string) {
 			return true
 		}
 		return false
-	}).WithTimeout(TestTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The MonoVertex should have been deleted but it was found.")
 }
 
 func VerifyMonoVertexDeletion(name string) {
@@ -395,7 +395,7 @@ func VerifyMonoVertexDeletion(name string) {
 		}
 
 		return monovertex == nil
-	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The MonoVertex %s/%s should have been deleted but it was found.", Namespace, name))
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The MonoVertex %s/%s should have been deleted but it was found.", Namespace, name))
 }
 
 func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
