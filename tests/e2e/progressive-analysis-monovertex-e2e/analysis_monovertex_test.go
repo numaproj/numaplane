@@ -93,7 +93,16 @@ var (
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
-						Query:   "(vector(1) and on() (sum(monovtx_read_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) == 0)) or (vector(1) and on() (sum(monovtx_ack_total{namespace=\"{{args.monovertex-namespace}}\", mvtx_name=\"{{args.upgrading-monovertex-name}}\"}) > 0)) or vector(0)",
+						Query: `
+(
+  absent(sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
+  OR
+  sum(monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
+)
+OR
+(
+  sum(monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
+)`,
 					},
 				},
 				SuccessCondition: "result[0] > 0",
@@ -153,7 +162,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		// Verify the AnalysisRun status is Failed
-		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseFailed)
+		VerifyAnalysisRunStatus("mvtx-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)
