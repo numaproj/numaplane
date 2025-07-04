@@ -629,7 +629,7 @@ func VerifyPipelineSuccess(pipelineRolloutName, promotedPipelineName, upgradingP
 	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
 
 	// Verify the previously promoted pipeline was deleted
-	VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
+	VerifyPipelineDeletion(promotedPipelineName)
 
 	// Verify no in progress strategy set
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)

@@ -170,6 +170,9 @@ func UpdateISBServiceRolloutInK8S(name string, f func(apiv1.ISBServiceRollout) (
 		if err != nil {
 			return err
 		}
+		if rollout == nil {
+			return fmt.Errorf("ISBServiceRollout %s is nil", name)
+		}
 
 		*rollout, err = f(*rollout)
 		if err != nil {
