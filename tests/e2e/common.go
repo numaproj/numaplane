@@ -50,8 +50,9 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	TestTimeout         = 6 * time.Minute
-	TestPollingInterval = 10 * time.Millisecond
+	DefaultTestTimeout            = 6 * time.Minute
+	DefaultConsistentCheckTimeout = 15 * time.Second // the default time for checks using "Consistently"
+	TestPollingInterval           = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
@@ -145,7 +146,7 @@ func verifyPodsRunning(namespace string, numPods int, labelSelector string) {
 			return true
 		}
 		return false
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 
 }
 
@@ -210,7 +211,7 @@ func VerifyVerticesPodsRunning(namespace, rolloutChildName string, specVertices 
 			}
 
 			return true
-		}).WithTimeout(TestTimeout).Should(BeTrue())
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 	}
 }
 
@@ -472,14 +473,14 @@ func VerifyResourceExists(gvr schema.GroupVersionResource, name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
 func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
 		resource, _ := GetResource(gvr, Namespace, name)
 		return resource == nil
-	}).WithTimeout(TestTimeout).Should(BeTrue())
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
 func GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
@@ -701,14 +702,14 @@ func setupOutputDir() {
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
 func CheckEventually(testDescription string, actualOrCtx interface{}) AsyncAssertion {
 	By(testDescription)
-	return Eventually(actualOrCtx, TestTimeout, TestPollingInterval)
+	return Eventually(actualOrCtx, DefaultTestTimeout, TestPollingInterval)
 }
 
 // CheckConsistently is wrappers around Ginkgo's Consistently
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
 func CheckConsistently(testDescription string, actualOrCtx interface{}) AsyncAssertion {
 	By(testDescription)
-	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
+	return Consistently(actualOrCtx, DefaultConsistentCheckTimeout, TestPollingInterval)
 }
 
 func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expectedVertexScaleMap map[string]numaflowv1.Scale) bool {

@@ -57,7 +57,7 @@ func DeleteAnalysisTemplate(name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The AnalysisTemplate should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The AnalysisTemplate should have been deleted but it was found.")
 }
 
 func VerifyAnalysisRunStatus(metricName, name string, expectedStatus argov1alpha1.AnalysisPhase) {

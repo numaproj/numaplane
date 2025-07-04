@@ -349,7 +349,7 @@ func DeleteISBServiceRollout(name string) {
 			return false
 		}
 		return true
-	}).WithTimeout(TestTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeFalse(), "The ISBServiceRollout should have been deleted but it was found.")
 
 	CheckEventually("Verifying ISBService deletion", func() bool {
 		list, err := dynamicClient.Resource(GetGVRForISBService()).Namespace(Namespace).List(ctx, metav1.ListOptions{})
@@ -360,7 +360,7 @@ func DeleteISBServiceRollout(name string) {
 			return true
 		}
 		return false
-	}).WithTimeout(TestTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The ISBService should have been deleted but it was found.")
 }
 
 // pipelineRolloutNames is an array of pipelinerollout names that are checked to see if it is pausing or not after update
@@ -561,5 +561,5 @@ func VerifyISBServiceDeletion(isbsvcName string) {
 		}
 
 		return pipeline == nil
-	}).WithTimeout(TestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
 }
