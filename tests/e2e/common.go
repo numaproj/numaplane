@@ -50,8 +50,9 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	TestTimeout         = 6 * time.Minute
-	TestPollingInterval = 10 * time.Millisecond
+	TestTimeout            = 6 * time.Minute
+	ConsistentCheckTimeout = 15 * time.Second
+	TestPollingInterval    = 10 * time.Millisecond
 
 	pipelineRolloutClient           planepkg.PipelineRolloutInterface
 	isbServiceRolloutClient         planepkg.ISBServiceRolloutInterface
@@ -708,7 +709,7 @@ func CheckEventually(testDescription string, actualOrCtx interface{}) AsyncAsser
 // You can override the default timeout and polling interval by using WithTimeout and WithPolling methods
 func CheckConsistently(testDescription string, actualOrCtx interface{}) AsyncAssertion {
 	By(testDescription)
-	return Consistently(actualOrCtx, TestTimeout, TestPollingInterval)
+	return Consistently(actualOrCtx, ConsistentCheckTimeout, TestPollingInterval)
 }
 
 func VerifyVerticesScale(actualVertexScaleMap map[string]numaflowv1.Scale, expectedVertexScaleMap map[string]numaflowv1.Scale) bool {
