@@ -275,7 +275,7 @@ func verifyPipelineFailure(promotedPipelineName string, upgradingPipelineName st
 	}
 	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, upgradingPipelineSpecVerticesZero, ComponentVertex)
 
-	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, false)
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
 }
 
 func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {

@@ -489,8 +489,8 @@ func VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
-func VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName string, success bool) {
-	CheckEventually(fmt.Sprintf("Verify that MonoVertexRollout ProgressiveUpgradeSucceeded condition is %t", success), func() metav1.ConditionStatus {
+func VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName string, success metav1.ConditionStatus) {
+	CheckEventually(fmt.Sprintf("Verify that MonoVertexRollout ProgressiveUpgradeSucceeded condition is %s", success), func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
 	}).Should(Equal(success))
@@ -522,7 +522,7 @@ func VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMi
 	// Verify no in progress strategy set
 	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
-	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, true)
+	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, metav1.ConditionTrue)
 }
 
 func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) {
@@ -575,5 +575,5 @@ func VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMi
 	VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
 		[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
-	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, false)
+	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, metav1.ConditionFalse)
 }

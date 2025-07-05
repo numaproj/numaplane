@@ -548,8 +548,8 @@ func VerifyISBServiceRolloutInProgressStrategyConsistently(isbsvcRolloutName str
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
-func VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName string, success bool) {
-	CheckEventually(fmt.Sprintf("Verify that ISBServiceRollout ProgressiveUpgradeSucceeded condition is %t", success), func() metav1.ConditionStatus {
+func VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName string, success metav1.ConditionStatus) {
+	CheckEventually(fmt.Sprintf("Verify that ISBServiceRollout ProgressiveUpgradeSucceeded condition is %s", success), func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
 	}).Should(Equal(success))
@@ -588,10 +588,10 @@ func VerifyISBServiceDeletion(isbsvcName string) {
 
 func VerifyISBServiceProgressiveFailure(isbsvcRolloutName string, promotedISBSvcName string, upgradingISBSvcName string) {
 	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultFailure)
-	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, false)
+	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionFalse)
 }
 
 func VerifyISBServiceProgressiveSuccess(isbsvcRolloutName string, promotedISBSvcName string, upgradingISBSvcName string) {
 	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultSuccess)
-	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, true)
+	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionTrue)
 }

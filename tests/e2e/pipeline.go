@@ -157,8 +157,8 @@ func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
-func VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName string, success bool) {
-	CheckEventually(fmt.Sprintf("Verify that PipelineRollout ProgressiveUpgradeSucceeded condition is %t", success), func() metav1.ConditionStatus {
+func VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName string, success metav1.ConditionStatus) {
+	CheckEventually(fmt.Sprintf("Verify that PipelineRollout ProgressiveUpgradeSucceeded condition is %s", success), func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
 	}).Should(Equal(success))
@@ -647,7 +647,7 @@ func VerifyPipelineProgressiveSuccess(pipelineRolloutName, promotedPipelineName,
 	// Verify no in progress strategy set
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, true)
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionTrue)
 }
 
 func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {
