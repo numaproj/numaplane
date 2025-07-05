@@ -313,9 +313,9 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 	})
 
-	if UpgradeStrategy == config.ProgressiveStrategyID {
-		It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back", func() {
+	It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back (Progressive strategy only)", func() {
 
+		if UpgradeStrategy == config.ProgressiveStrategyID {
 			// update each rollout
 			updatedNCVersion := UpdatedNumaflowControllerVersion
 			updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
@@ -355,9 +355,9 @@ var _ = Describe("Rollback e2e", Serial, func() {
 			}).Should(Equal(true))
 			VerifyMonoVertexRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyMonoVertexRolloutHealthy(pipelineRolloutName)
+		}
 
-		})
-	}
+	})
 
 	It("Should Delete Rollouts", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
