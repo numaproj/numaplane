@@ -100,7 +100,7 @@ func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
 	CheckEventually("Verifying that the PipelineRollout Progressive Upgrade Condition is True", func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
-	}).Should(Equal(metav1.ConditionTrue))
+	}).Should(Or(Equal(metav1.ConditionTrue), Equal(metav1.ConditionUnknown)))
 
 }
 

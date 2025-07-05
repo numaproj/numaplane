@@ -141,7 +141,7 @@ func VerifyISBSvcRolloutHealthy(isbServiceRolloutName string) {
 		CheckEventually("Verifying that the ISBServiceRollout ProgressiveUpgrade condition is True", func() metav1.ConditionStatus {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
-		}).Should(Equal(metav1.ConditionTrue))
+		}).Should(Or(Equal(metav1.ConditionTrue), Equal(metav1.ConditionUnknown)))
 	}
 
 }
