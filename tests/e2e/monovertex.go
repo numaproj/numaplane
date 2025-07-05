@@ -34,6 +34,14 @@ func GetUpgradingMonoVertices(namespace, monoVertexRolloutName string) (*unstruc
 	return GetChildrenOfUpgradeStrategy(GetGVRForMonoVertex(), namespace, monoVertexRolloutName, common.LabelValueUpgradeInProgress)
 }
 
+func GetPromotedMonoVertexName(namespace, monoVertexRolloutName string) (string, error) {
+	mv, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+	if err != nil {
+		return "", err
+	}
+	return mv.GetName(), nil
+}
+
 func GetGVRForMonoVertex() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "numaflow.numaproj.io",

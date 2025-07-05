@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	. "github.com/numaproj/numaplane/tests/e2e"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -312,13 +313,14 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 	})
 
-	// TODO: how do we want to do this? this test is being run by all strategies, not just progressive:
-	/*
+	if UpgradeStrategy == config.ProgressiveStrategyID {
 		It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back", func() {
 
 			// update each rollout
 			updatedNCVersion := UpdatedNumaflowControllerVersion
 			updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
+
+			By("verifying Pipeline and MonoVertex have failed progressive rollout")
 
 			// allow Pipeline and MonoVertex to fail
 			promotedPipelineName := GetInstanceName(pipelineRolloutName, 4)
@@ -332,21 +334,30 @@ var _ = Describe("Rollback e2e", Serial, func() {
 			// Now roll everything back to original versions
 			updateResources(&initialPipelineSpec, nil, nil, nil)
 
-			By("verifying updates have completed")
+			By("verifying Pipeline and MonoVertex are back to healthy after rollback")
 
 			// Verify Pipeline
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			CheckEventually("verifying just 1 Pipeline", func() int {
-				return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
-			}).Should(Equal(1))
+			CheckEventually("verifying just 1 promoted Pipeline, with expected name", func() bool {
+				currentPromotedName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+				numChildren := GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+				return currentPromotedName == promotedPipelineName && numChildren == 1
+			}).Should(Equal(true))
 			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyPipelineRolloutHealthy(pipelineRolloutName)
-			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-				return len(retrievedPipelineSpec.Vertices) == 2
-			})
 
+			// Verify MonoVertex
+			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+			CheckEventually("verifying just 1 promoted MonoVertex, with expected name", func() bool {
+				currentPromotedName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+				numChildren := GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
+				return currentPromotedName == monoVertexRolloutName && numChildren == 1
+			}).Should(Equal(true))
+			VerifyMonoVertexRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyMonoVertexRolloutHealthy(pipelineRolloutName)
 
-		})*/
+		})
+	}
 
 	It("Should Delete Rollouts", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)
