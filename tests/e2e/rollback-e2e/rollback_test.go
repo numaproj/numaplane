@@ -81,8 +81,8 @@ var (
 		},
 	}
 
-	// topology change
-	updatedPipelineSpec = numaflowv1.PipelineSpec{
+	// topology change with invalid image
+	failedPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Lifecycle: numaflowv1.Lifecycle{
 			PauseGracePeriodSeconds: ptr.To(int64(120)),
@@ -102,7 +102,7 @@ var (
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
 					Builtin: &numaflowv1.Function{
-						Name: "cat",
+						Name: "badcat",
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -152,9 +152,9 @@ var (
 		},
 	}
 
-	// image change
-	updateMVImage         = "quay.io/numaio/numaflow-java/source-simple-source:stable"
-	updatedMonoVertexSpec = numaflowv1.MonoVertexSpec{
+	// invalid image change
+	invalidMVImage       = "quay.io/numaio/numaflow-java/source-simple-source:invalid"
+	failedMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &monoVertexScaleMin,
 			Max: &monoVertexScaleMax,
@@ -162,7 +162,7 @@ var (
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: updateMVImage,
+					Image: invalidMVImage,
 				},
 			},
 		},
@@ -216,11 +216,11 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 	})
 
-	It("Should Update Rollouts and then Roll them back", func() {
+	It("Should Update Rollouts and then immediately Roll them back", func() {
 
 		// update each rollout
 		updatedNCVersion := UpdatedNumaflowControllerVersion
-		updateResources(&updatedPipelineSpec, &updatedISBServiceSpec, &updatedMonoVertexSpec, &updatedNCVersion)
+		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
 
 		time.Sleep(30 * time.Second)
 
@@ -275,8 +275,8 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		})
 	})
 
-	It("Should update ISBServiceRollout and PipelineRollout and rollback just PipelineRollout", func() {
-		updateResources(&updatedPipelineSpec, &updatedISBServiceSpec, nil, nil)
+	It("Should update ISBServiceRollout and PipelineRollout and immediately rollback just PipelineRollout", func() {
+		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, nil, nil)
 
 		time.Sleep(30 * time.Second)
 
@@ -311,6 +311,42 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		})
 
 	})
+
+	// TODO: how do we want to do this? this test is being run by all strategies, not just progressive:
+	/*
+		It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back", func() {
+
+			// update each rollout
+			updatedNCVersion := UpdatedNumaflowControllerVersion
+			updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
+
+			// allow Pipeline and MonoVertex to fail
+			promotedPipelineName := GetInstanceName(pipelineRolloutName, 4)
+			upgradingPipelineName := GetInstanceName(pipelineRolloutName, 5)
+			VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
+
+			promotedMonoVertexName := GetInstanceName(monoVertexRolloutName, 0)
+			upgradingMonoVertexName := GetInstanceName(monoVertexRolloutName, 1)
+			VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, promotedMonoVertexName, upgradingMonoVertexName, true, apiv1.AssessmentResultFailure, false)
+
+			// Now roll everything back to original versions
+			updateResources(&initialPipelineSpec, nil, nil, nil)
+
+			By("verifying updates have completed")
+
+			// Verify Pipeline
+			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			CheckEventually("verifying just 1 Pipeline", func() int {
+				return GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+			}).Should(Equal(1))
+			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyPipelineRolloutHealthy(pipelineRolloutName)
+			VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+				return len(retrievedPipelineSpec.Vertices) == 2
+			})
+
+
+		})*/
 
 	It("Should Delete Rollouts", func() {
 		DeleteMonoVertexRollout(monoVertexRolloutName)

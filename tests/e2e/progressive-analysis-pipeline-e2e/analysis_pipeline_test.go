@@ -17,11 +17,12 @@ limitations under the License.
 package e2e
 
 import (
+	"testing"
+	"time"
+
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
-	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -198,7 +199,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
 
-		VerifyPipelineSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), false, updatedPipelineSpec)
 		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 

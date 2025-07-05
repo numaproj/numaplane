@@ -65,20 +65,9 @@ func VerifyPromotedMonoVertexSpec(namespace, monoVertexRolloutName string, f fun
 }
 
 func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
-	CheckEventually("verifying that the MonoVertexRollout is ready (PhaseDeployed)", func() bool {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return rollout.Status.Phase == apiv1.PhaseDeployed
-	}).Should(BeTrue())
+	VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
-	CheckEventually("verifying that the MonoVertexRollout is ready (ConditionChildResourceDeployed)", func() metav1.ConditionStatus {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
-	}).Should(Equal(metav1.ConditionTrue))
-
-	CheckEventually("verifying that the MonoVertexRollout is ready (ConditionChildResourceHealthy)", func() metav1.ConditionStatus {
-		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
-		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
-	}).Should(Equal(metav1.ConditionTrue))
+	VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 }
 
 func VerifyPromotedMonoVertexRunning(namespace, monoVertexRolloutName string) error {
@@ -278,9 +267,14 @@ func GetMonoVertexStatus(u *unstructured.Unstructured) (numaflowv1.MonoVertexSta
 }
 
 func VerifyMonoVertexRolloutHealthy(monoVertexRolloutName string) {
-	CheckEventually("Verifying that the MonoVertexRollout Child Condition is Healthy", func() metav1.ConditionStatus {
+	CheckEventually("Verifying that the MonoVertexRollout Child Condition is True", func() metav1.ConditionStatus {
 		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
+	}).Should(Equal(metav1.ConditionTrue))
+
+	CheckEventually("Verifying that the MonoVertexRollout Progressive Upgrade Condition is True", func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
 	}).Should(Equal(metav1.ConditionTrue))
 }
 
@@ -494,6 +488,14 @@ func VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName
 		return monoVertexRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
+
+func VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName string, success bool) {
+	CheckEventually(fmt.Sprintf("Verify that MonoVertexRollout ProgressiveUpgradeSucceeded condition is %t", success), func() metav1.ConditionStatus {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+	}).Should(Equal(success))
+}
+
 func VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString string, monoVertexScaleTo int64,
 	updatedMonoVertexSpec *numaflowv1.MonoVertexSpec, promotedMonoVertexIndex, updatedMonoVertexIndex int,
 	forcedSuccess, checkRunningVertices bool) {
@@ -520,6 +522,7 @@ func VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMi
 	// Verify no in progress strategy set
 	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, true)
 }
 
 func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) {
@@ -571,4 +574,6 @@ func VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMi
 		[]numaflowv1.AbstractVertex{{Scale: updatedMonoVertexSpec.Scale}}, ComponentMonoVertex)
 	VerifyVerticesPodsRunning(Namespace, GetInstanceName(monoVertexRolloutName, 1),
 		[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
+
+	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, false)
 }
