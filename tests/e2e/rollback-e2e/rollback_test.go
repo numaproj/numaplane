@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -351,7 +352,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 			// Verify Pipeline
 			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			CheckEventually("verifying just 1 promoted Pipeline, with expected name", func() bool {
+			CheckEventually(fmt.Sprintf("verifying just 1 promoted Pipeline, with expected name %s", promotedPipelineName), func() bool {
 				currentPromotedName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
 				numChildren := GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
 				return currentPromotedName == promotedPipelineName && numChildren == 1
@@ -361,10 +362,10 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 			// Verify MonoVertex
 			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
-			CheckEventually("verifying just 1 promoted MonoVertex, with expected name", func() bool {
+			CheckEventually(fmt.Sprintf("verifying just 1 promoted MonoVertex, with expected name %s", promotedMonoVertexName), func() bool {
 				currentPromotedName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
 				numChildren := GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
-				return currentPromotedName == monoVertexRolloutName && numChildren == 1
+				return currentPromotedName == promotedMonoVertexName && numChildren == 1
 			}).Should(Equal(true))
 			VerifyMonoVertexRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 			VerifyMonoVertexRolloutHealthy(pipelineRolloutName)
