@@ -368,7 +368,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 				return currentPromotedName == promotedMonoVertexName && numChildren == 1
 			}).Should(Equal(true))
 			VerifyMonoVertexRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-			VerifyMonoVertexRolloutHealthy(pipelineRolloutName)
+			VerifyMonoVertexRolloutHealthy(monoVertexRolloutName)
 
 			DeletePipelineRollout(pipelineRolloutName)
 			DeleteMonoVertexRollout(monoVertexRolloutName)
