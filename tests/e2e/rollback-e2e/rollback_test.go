@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	. "github.com/numaproj/numaplane/tests/e2e"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -81,8 +82,8 @@ var (
 		},
 	}
 
-	// topology change
-	updatedPipelineSpec = numaflowv1.PipelineSpec{
+	// topology change with invalid image
+	failedPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Lifecycle: numaflowv1.Lifecycle{
 			PauseGracePeriodSeconds: ptr.To(int64(120)),
@@ -102,7 +103,7 @@ var (
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
 					Builtin: &numaflowv1.Function{
-						Name: "cat",
+						Name: "badcat",
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -152,9 +153,9 @@ var (
 		},
 	}
 
-	// image change
-	updateMVImage         = "quay.io/numaio/numaflow-java/source-simple-source:stable"
-	updatedMonoVertexSpec = numaflowv1.MonoVertexSpec{
+	// invalid image change
+	invalidMVImage       = "quay.io/numaio/numaflow-java/source-simple-source:invalid"
+	failedMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
 			Min: &monoVertexScaleMin,
 			Max: &monoVertexScaleMax,
@@ -162,7 +163,7 @@ var (
 		Source: &numaflowv1.Source{
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
-					Image: updateMVImage,
+					Image: invalidMVImage,
 				},
 			},
 		},
@@ -209,18 +210,20 @@ func TestRollbackE2E(t *testing.T) {
 
 var _ = Describe("Rollback e2e", Serial, func() {
 
-	It("Should Create Rollouts", func() {
+	It("Should create NumaflowControllerRollout and ISBServiceRollout", func() {
 		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+
 	})
 
-	It("Should Update Rollouts and then Roll them back", func() {
+	It("Should Update Rollouts and then immediately Roll them back", func() {
+
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 		// update each rollout
 		updatedNCVersion := UpdatedNumaflowControllerVersion
-		updateResources(&updatedPipelineSpec, &updatedISBServiceSpec, &updatedMonoVertexSpec, &updatedNCVersion)
+		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
 
 		time.Sleep(30 * time.Second)
 
@@ -273,10 +276,16 @@ var _ = Describe("Rollback e2e", Serial, func() {
 		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.UDSource.Container.Image == initialMVImage
 		})
+
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
 
 	It("Should update ISBServiceRollout and PipelineRollout and rollback just PipelineRollout", func() {
-		updateResources(&updatedPipelineSpec, &updatedISBServiceSpec, nil, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+
+		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, nil, nil)
 
 		time.Sleep(30 * time.Second)
 
@@ -310,11 +319,63 @@ var _ = Describe("Rollback e2e", Serial, func() {
 			return len(retrievedPipelineSpec.Vertices) == 2 && retrievedPipelineSpec.InterStepBufferServiceName == promotedISBServiceName
 		})
 
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteMonoVertexRollout(monoVertexRolloutName)
+	})
+
+	It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back (Progressive strategy only)", func() {
+
+		if UpgradeStrategy == config.ProgressiveStrategyID {
+			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+
+			// update each rollout
+			updatedNCVersion := UpdatedNumaflowControllerVersion
+			updateResources(&failedPipelineSpec, &updatedISBServiceSpec, &failedMonoVertexSpec, &updatedNCVersion)
+
+			By("verifying Pipeline and MonoVertex have failed progressive rollout")
+
+			// allow Pipeline and MonoVertex to fail
+			promotedPipelineName := GetInstanceName(pipelineRolloutName, 0)
+			upgradingPipelineName := GetInstanceName(pipelineRolloutName, 1)
+			VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
+
+			promotedMonoVertexName := GetInstanceName(monoVertexRolloutName, 0)
+			upgradingMonoVertexName := GetInstanceName(monoVertexRolloutName, 1)
+			VerifyMonoVertexRolloutProgressiveStatus(monoVertexRolloutName, promotedMonoVertexName, upgradingMonoVertexName, true, apiv1.AssessmentResultFailure, false)
+
+			// Now roll everything back to original versions
+			updateResources(&initialPipelineSpec, nil, &initialMonoVertexSpec, nil)
+
+			By("verifying Pipeline and MonoVertex are back to healthy after rollback")
+
+			// Verify Pipeline
+			VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			CheckEventually("verifying just 1 promoted Pipeline, with expected name", func() bool {
+				currentPromotedName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+				numChildren := GetNumberOfChildren(GetGVRForPipeline(), Namespace, pipelineRolloutName)
+				return currentPromotedName == promotedPipelineName && numChildren == 1
+			}).Should(Equal(true))
+			VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyPipelineRolloutHealthy(pipelineRolloutName)
+
+			// Verify MonoVertex
+			VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
+			CheckEventually("verifying just 1 promoted MonoVertex, with expected name", func() bool {
+				currentPromotedName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+				numChildren := GetNumberOfChildren(GetGVRForMonoVertex(), Namespace, monoVertexRolloutName)
+				return currentPromotedName == monoVertexRolloutName && numChildren == 1
+			}).Should(Equal(true))
+			VerifyMonoVertexRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+			VerifyMonoVertexRolloutHealthy(pipelineRolloutName)
+
+			DeletePipelineRollout(pipelineRolloutName)
+			DeleteMonoVertexRollout(monoVertexRolloutName)
+		}
+
 	})
 
 	It("Should Delete Rollouts", func() {
-		DeleteMonoVertexRollout(monoVertexRolloutName)
-		DeletePipelineRollout(pipelineRolloutName)
 		DeleteISBServiceRollout(isbServiceRolloutName)
 		DeleteNumaflowControllerRollout()
 	})

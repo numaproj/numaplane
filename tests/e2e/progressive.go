@@ -31,7 +31,7 @@ func VerifyMonoVertexRolloutProgressiveStatus(
 	expectedAssessmentResult apiv1.AssessmentResult,
 	forcedPromotion bool,
 ) {
-	CheckEventually("verifying the MonoVertexRollout Progressive Status", func() bool {
+	CheckEventually(fmt.Sprintf("verifying the MonoVertexRollout Progressive Status (promoted=%s, upgrading=%s)", expectedPromotedName, expectedUpgradingName), func() bool {
 		mvrProgressiveStatus := GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName)
 
 		if forcedPromotion {
@@ -98,6 +98,9 @@ func VerifyPipelineRolloutProgressiveStatus(
 			}
 		} else {
 			// still in the middle of progressive upgrade strategy
+			if promotedStatus == nil {
+				return false
+			}
 			return promotedStatus.Name == expectedPromotedName &&
 				promotedStatus.ScaleValuesRestoredToOriginal == expectedScaleValuesRestoredToOriginal &&
 				upgradingStatus.Name == expectedUpgradingName &&
@@ -478,6 +481,13 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 		VerifyPromotedPipelineScaledUpForProgressive(pipelineRolloutName, expectedPromotedPipelineName, newPipelineSpec)
 		VerifyUpgradingPipelineScaledToZeroForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
 	}
+
+	// TODO: replace the above with the functions we're using everywhere else:
+	/*if expectedSuccess {
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, expectedPromotedPipelineName, expectedUpgradingPipelineName, false, newPipelineSpec)
+	} else {
+
+	}*/
 
 }
 

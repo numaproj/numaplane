@@ -1,0 +1,83 @@
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+apiVersion: numaplane.numaproj.io/v1alpha1
+kind: MonoVertexRollout
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"numaplane.numaproj.io/v1alpha1","kind":"MonoVertexRollout","metadata":{"annotations":{},"name":"my-monovertex","namespace":"example-namespace"},"spec":{"monoVertex":{"spec":{"scale":{"lookbackSeconds":60,"max":3,"min":2},"sink":{"udsink":{"container":{"image":"quay.io/numaio/numaflow-go/sink-log:stable"}}},"source":{"transformer":{"container":{"image":"docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable"}},"udsource":{"container":{"image":"quay.io/numaio/numaflow-go/source-simple-source:stable"}}}}},"riders":[{"definition":{"apiVersion":"autoscaling.k8s.io/v1beta2","kind":"VerticalPodAutoscaler","metadata":{"name":"vpa"},"spec":{"targetRef":{"apiVersion":"numaproj.io/v1alpha1","kind":"MonoVertex","name":"{{.monovertex-name}}"}}}}],"strategy":{"analysis":{"args":null,"templates":[{"clusterScope":false,"templateName":"mvtx-template"}]},"progressive":{"assessmentSchedule":"60,60,10"}}}}
+  creationTimestamp: "2025-07-05T16:33:52Z"
+  generation: 1
+  name: my-monovertex
+  namespace: example-namespace
+  resourceVersion: "206575"
+  uid: fa4c0ef6-ef47-4347-9759-2ed3da2167bf
+spec:
+  monoVertex:
+    spec:
+      scale:
+        lookbackSeconds: 60
+        max: 3
+        min: 2
+      sink:
+        udsink:
+          container:
+            image: quay.io/numaio/numaflow-go/sink-log:stable
+      source:
+        transformer:
+          container:
+            image: docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:invalid
+        udsource:
+          container:
+            image: quay.io/numaio/numaflow-go/source-simple-source:stable
+  riders:
+  - definition:
+      apiVersion: autoscaling.k8s.io/v1beta2
+      kind: VerticalPodAutoscaler
+      metadata:
+        name: vpa
+      spec:
+        targetRef:
+          apiVersion: numaproj.io/v1alpha1
+          kind: MonoVertex
+          name: '{{.monovertex-name}}'
+  strategy:
+    analysis:
+      templates:
+      - clusterScope: false
+        templateName: mvtx-template
+    progressive:
+      assessmentSchedule: 60,60,10
+status:
+  conditions:
+  - lastTransitionTime: "2025-07-05T16:33:52Z"
+    message: Successful
+    observedGeneration: 1
+    reason: Successful
+    status: "True"
+    type: ChildResourceDeployed
+  - lastTransitionTime: "2025-07-05T16:35:51Z"
+    message: Successful
+    observedGeneration: 1
+    reason: Successful
+    status: "True"
+    type: ChildResourcesHealthy
+  - lastTransitionTime: "2025-07-05T16:33:52Z"
+    message: MonoVertex unpaused
+    observedGeneration: 1
+    reason: Unpaused
+    status: "False"
+    type: MonoVertexPausingOrPaused
+  message: Deployed
+  nameCount: 1
+  observedGeneration: 1
+  phase: Deployed
+  progressiveStatus: {}
+  riders:
+  - groupVersionKind:
+      group: autoscaling.k8s.io
+      kind: VerticalPodAutoscaler
+      version: v1beta2
+    name: vpa-my-monovertex-0
