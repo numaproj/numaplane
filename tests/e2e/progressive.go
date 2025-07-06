@@ -482,13 +482,6 @@ func PipelineFinalProgressiveChecks(pipelineRolloutName string, expectedPromoted
 		VerifyUpgradingPipelineScaledToZeroForProgressive(pipelineRolloutName, expectedUpgradingPipelineName)
 	}
 
-	// TODO: replace the above with the functions we're using everywhere else:
-	/*if expectedSuccess {
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, expectedPromotedPipelineName, expectedUpgradingPipelineName, false, newPipelineSpec)
-	} else {
-
-	}*/
-
 }
 
 func GetMonoVertexRolloutProgressiveStatus(monoVertexRolloutName string) apiv1.MonoVertexProgressiveStatus {
