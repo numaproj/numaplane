@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -648,6 +649,25 @@ func VerifyPipelineProgressiveSuccess(pipelineRolloutName, promotedPipelineName,
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionTrue)
+}
+
+func VerifyPipelineProgressiveFailure(pipelineRolloutName string, promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, promotedPipelineName)
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
+
+	// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
+	originalPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+	for _, vertex := range promotedPipelineSpec.Vertices {
+		originalPipelineSpecVertices = append(originalPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+	}
+	VerifyVerticesPodsRunning(Namespace, promotedPipelineName, originalPipelineSpecVertices, ComponentVertex)
+	upgradingPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
+	for _, vertex := range upgradingPipelineSpec.Vertices {
+		upgradingPipelineSpecVerticesZero = append(upgradingPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
+	}
+	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, upgradingPipelineSpecVerticesZero, ComponentVertex)
+
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
 }
 
 func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {
