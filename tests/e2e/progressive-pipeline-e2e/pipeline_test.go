@@ -32,7 +32,6 @@ import (
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -145,7 +144,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		updatedISBServiceSpec := updateISBServiceForFailure()
 
-		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
@@ -155,11 +154,11 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
 		updateISBService(*updatedISBServiceSpec)
 
-		VerifyPipelineSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
+		VerifyISBServiceProgressiveSuccess(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2))
 
 		// Verify in-progress-strategy no longer set
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -183,10 +182,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
 		updateISBService(*updatedISBServiceSpec)
 
-		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultFailure)
+		VerifyISBServiceProgressiveFailure(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3))
 
 		By("Updating the Pipeline to set the 'force promote' Label")
 		UpdatePipelineInK8S(GetInstanceName(pipelineRolloutName, 1), func(pipeline *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -199,7 +198,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			return pipeline, nil
 		})
 
-		VerifyPipelineSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
 
 		By("Updating the ISBService to set the 'force promote' Label")
 		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -212,7 +211,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			return isbservice, nil
 		})
 
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3), apiv1.AssessmentResultSuccess)
+		VerifyISBServiceProgressiveSuccess(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 2), GetInstanceName(isbServiceRolloutName, 3))
 		// Verify in-progress-strategy no longer set
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -231,10 +230,10 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		_ = updateISBServiceForFailure()
 
-		verifyPipelineFailure(GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, initialPipelineSpec)
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, initialPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4), apiv1.AssessmentResultFailure)
+		VerifyISBServiceProgressiveFailure(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4))
 
 		// Now put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
 		updateISBService(initialISBServiceSpec)
@@ -258,24 +257,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
-
-func verifyPipelineFailure(promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
-	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, promotedPipelineName)
-	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
-
-	// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
-	originalPipelineSpecVertices := []numaflowv1.AbstractVertex{}
-	for _, vertex := range promotedPipelineSpec.Vertices {
-		originalPipelineSpecVertices = append(originalPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
-	}
-	VerifyVerticesPodsRunning(Namespace, promotedPipelineName, originalPipelineSpecVertices, ComponentVertex)
-	upgradingPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
-	for _, vertex := range upgradingPipelineSpec.Vertices {
-		upgradingPipelineSpecVerticesZero = append(upgradingPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
-	}
-	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, upgradingPipelineSpecVerticesZero, ComponentVertex)
-
-}
 
 func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
 	By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
