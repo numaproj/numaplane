@@ -106,6 +106,11 @@ func VerifyPromotedISBServiceSpec(namespace string, isbServiceRolloutName string
 
 func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
 	By("Verifying that the ISBServiceRollout is ready")
+	VerifyISBSvcRolloutDeployed(isbServiceRolloutName)
+	VerifyISBSvcRolloutHealthy(isbServiceRolloutName)
+}
+
+func VerifyISBSvcRolloutDeployed(isbServiceRolloutName string) {
 
 	CheckEventually("verify ISBServiceRollout is deployed", func() bool {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
@@ -117,7 +122,10 @@ func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceDeployed)
 	}).Should(Equal(metav1.ConditionTrue))
 
-	CheckEventually("verify ISBServiceRollout child resource is healthy", func() metav1.ConditionStatus {
+}
+func VerifyISBSvcRolloutHealthy(isbServiceRolloutName string) {
+
+	CheckEventually("verify ISBServiceRollout child resource is True", func() metav1.ConditionStatus {
 		rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}).WithTimeout(4 * time.Minute).Should(Equal(metav1.ConditionTrue))
@@ -127,6 +135,13 @@ func VerifyISBSvcRolloutReady(isbServiceRolloutName string) {
 			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
 			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPausingPipelines)
 		}).Should(Or(Equal(metav1.ConditionFalse), Equal(metav1.ConditionUnknown)))
+	}
+
+	if UpgradeStrategy == config.ProgressiveStrategyID {
+		CheckEventually("Verifying that the ISBServiceRollout ProgressiveUpgrade condition is True", func() metav1.ConditionStatus {
+			rollout, _ := isbServiceRolloutClient.Get(ctx, isbServiceRolloutName, metav1.GetOptions{})
+			return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+		}).Should(Or(Equal(metav1.ConditionTrue), Equal(metav1.ConditionUnknown)))
 	}
 
 }
@@ -536,6 +551,13 @@ func VerifyISBServiceRolloutInProgressStrategyConsistently(isbsvcRolloutName str
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
 
+func VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName string, success metav1.ConditionStatus) {
+	CheckEventually(fmt.Sprintf("Verify that ISBServiceRollout ProgressiveUpgradeSucceeded condition is %s", success), func() metav1.ConditionStatus {
+		rollout, _ := isbServiceRolloutClient.Get(ctx, isbsvcRolloutName, metav1.GetOptions{})
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+	}).Should(Equal(success))
+}
+
 func VerifyPDBForISBService(namespace string, isbServiceName string) {
 	// verify there's a PDB selecting pods for this isbsvc
 	CheckEventually("Verifying PDB", func() bool {
@@ -565,4 +587,14 @@ func VerifyISBServiceDeletion(isbsvcName string) {
 
 		return pipeline == nil
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The InterstepBufferService %s/%s should have been deleted but it was found.", Namespace, isbsvcName))
+}
+
+func VerifyISBServiceProgressiveFailure(isbsvcRolloutName string, promotedISBSvcName string, upgradingISBSvcName string) {
+	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultFailure)
+	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionFalse)
+}
+
+func VerifyISBServiceProgressiveSuccess(isbsvcRolloutName string, promotedISBSvcName string, upgradingISBSvcName string) {
+	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultSuccess)
+	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionTrue)
 }

@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -92,10 +93,16 @@ func VerifyPipelineRolloutDeployed(pipelineRolloutName string) {
 }
 
 func VerifyPipelineRolloutHealthy(pipelineRolloutName string) {
-	CheckEventually("Verifying that the PipelineRollout Child Condition is Healthy", func() metav1.ConditionStatus {
+	CheckEventually("Verifying that the PipelineRollout Child Condition is True", func() metav1.ConditionStatus {
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionChildResourceHealthy)
 	}).Should(Equal(metav1.ConditionTrue))
+
+	CheckEventually("Verifying that the PipelineRollout Progressive Upgrade Condition is True", func() metav1.ConditionStatus {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+	}).Should(Or(Equal(metav1.ConditionTrue), Equal(metav1.ConditionUnknown)))
+
 }
 
 func VerifyPromotedPipelineRunning(namespace string, pipelineRolloutName string) {
@@ -149,6 +156,13 @@ func VerifyPipelineRolloutConditionPausing(namespace string, pipelineRolloutName
 		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionPipelinePausingOrPaused)
 	}).Should(Equal(metav1.ConditionTrue))
+}
+
+func VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName string, success metav1.ConditionStatus) {
+	CheckEventually(fmt.Sprintf("Verify that PipelineRollout ProgressiveUpgradeSucceeded condition is %s", success), func() metav1.ConditionStatus {
+		rollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionProgressiveUpgradeSucceeded)
+	}).Should(Equal(success))
 }
 
 func VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
@@ -616,7 +630,7 @@ func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService
 	VerifyPipelineRolloutHealthy(pipelineRolloutName)
 }
 
-func VerifyPipelineSuccess(pipelineRolloutName, promotedPipelineName, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+func VerifyPipelineProgressiveSuccess(pipelineRolloutName, promotedPipelineName, upgradingPipelineName string, forcedSuccess bool, upgradingPipelineSpec numaflowv1.PipelineSpec) {
 	if !forcedSuccess {
 		VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0))
 	}
@@ -634,6 +648,26 @@ func VerifyPipelineSuccess(pipelineRolloutName, promotedPipelineName, upgradingP
 	// Verify no in progress strategy set
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionTrue)
+}
+
+func VerifyPipelineProgressiveFailure(pipelineRolloutName string, promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, promotedPipelineName)
+	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
+
+	// Verify that when the "upgrading" Pipeline fails, it scales down to 0 Pods, and the "promoted" Pipeline scales back up
+	originalPipelineSpecVertices := []numaflowv1.AbstractVertex{}
+	for _, vertex := range promotedPipelineSpec.Vertices {
+		originalPipelineSpecVertices = append(originalPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
+	}
+	VerifyVerticesPodsRunning(Namespace, promotedPipelineName, originalPipelineSpecVertices, ComponentVertex)
+	upgradingPipelineSpecVerticesZero := []numaflowv1.AbstractVertex{}
+	for _, vertex := range upgradingPipelineSpec.Vertices {
+		upgradingPipelineSpecVerticesZero = append(upgradingPipelineSpecVerticesZero, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}})
+	}
+	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, upgradingPipelineSpecVerticesZero, ComponentVertex)
+
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
 }
 
 func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {
