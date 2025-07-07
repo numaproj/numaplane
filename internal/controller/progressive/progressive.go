@@ -957,5 +957,11 @@ func Discontinue(ctx context.Context,
 			return fmt.Errorf("failed to Discontinue progressive upgrade: error marking child %s recyclable: %v", child.GetName(), err)
 		}
 	}
+
+	// We need to set our Progressive Upgrade Condition back to its default state of true since we're no longer
+	// doing a Progressive upgrade
+	rolloutObject.GetRolloutStatus().MarkProgressiveUpgradeSucceeded("Discontinued", rolloutObject.GetRolloutObjectMeta().Generation)
+	rolloutObject.GetRolloutStatus().MarkDeployed(rolloutObject.GetRolloutObjectMeta().Generation)
+
 	return nil
 }
