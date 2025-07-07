@@ -286,7 +286,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		// Since forcePromote=true, both Pipeline and ISBService should be promoted successfully
 		// even though the pipeline change was invalid ("badcat" function)
-		VerifyPipelineSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status shows success
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 5), apiv1.AssessmentResultSuccess)
