@@ -598,3 +598,12 @@ func VerifyISBServiceProgressiveSuccess(isbsvcRolloutName string, promotedISBSvc
 	VerifyISBServiceRolloutProgressiveStatus(isbsvcRolloutName, promotedISBSvcName, upgradingISBSvcName, apiv1.AssessmentResultSuccess)
 	VerifyISBServiceRolloutProgressiveCondition(isbsvcRolloutName, metav1.ConditionTrue)
 }
+
+func UpdateISBService(isbServiceRolloutName string, spec numaflowv1.InterStepBufferServiceSpec) {
+	rawSpec, err := json.Marshal(spec)
+	Expect(err).ShouldNot(HaveOccurred())
+	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+		isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
+		return isbSvcRollout, nil
+	})
+}

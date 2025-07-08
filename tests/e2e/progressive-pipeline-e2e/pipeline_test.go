@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -152,7 +151,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the ISBService to cause a Progressive change - Successful case")
 		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
-		updateISBService(*updatedISBServiceSpec)
+		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
 		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
@@ -180,7 +179,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Updating the ISBService to cause a Progressive change - Valid change")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
 		updatedISBServiceSpec.JetStream.Version = initialJetstreamVersion
-		updateISBService(*updatedISBServiceSpec)
+		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
 
@@ -231,12 +230,11 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		_ = updateISBServiceForFailure()
 
 		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, initialPipelineSpec)
-
 		// Verify ISBServiceRollout Progressive Status
 		VerifyISBServiceProgressiveFailure(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 4))
 
 		// Now put the isbsvc spec back to what it was before; this will cause the isbsvc and pipeline to both go back to just the "promoted" one
-		updateISBService(initialISBServiceSpec)
+		UpdateISBService(isbServiceRolloutName, initialISBServiceSpec)
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))     // the "Upgrading" one
 		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 4)) // the "Upgrading" one
 		CheckConsistently("verifying just the original promoted Pipeline remains", func() bool {
@@ -313,16 +311,7 @@ func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
 	By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
 	updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
 	updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
-	updateISBService(*updatedISBServiceSpec)
+	UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
 	return updatedISBServiceSpec
-}
-
-func updateISBService(spec numaflowv1.InterStepBufferServiceSpec) {
-	rawSpec, err := json.Marshal(spec)
-	Expect(err).ShouldNot(HaveOccurred())
-	UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(isbSvcRollout apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
-		isbSvcRollout.Spec.InterStepBufferService.Spec.Raw = rawSpec
-		return isbSvcRollout, nil
-	})
 }

@@ -39,6 +39,8 @@ const (
 	pipelineRolloutName     = "test-pipeline-rollout"
 	isbServiceRolloutName   = "test-isbservice-rollout"
 	initialJetstreamVersion = "2.10.17"
+	invalidJetstreamVersion = "0.0.0"
+	validJetstreamVersion   = "2.10.11"
 	analysisTemplateName    = "test-pipeline-template"
 	analysisRunName         = "pipeline-" + pipelineRolloutName
 )
@@ -192,7 +194,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
-	It("Should validate Pipeline and ISBService upgrade using Progressive strategy", func() {
+	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful case", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
 
@@ -204,6 +206,49 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateName)
+	})
+
+	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Failure case", func() {
+		// update analysis template to expect failure
+		initialAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0"
+		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
+
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
+
+		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
+		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{Name: "badcat"}}
+		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
+
+		updatedISBServiceSpec := updateISBServiceForFailure()
+
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
+
+		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
+		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
+		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
+
+		By("Updating the ISBService to cause a Progressive change - Successful case")
+		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
+		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
+
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
+
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
+
+		// Verify ISBServiceRollout Progressive Status
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
+
+		// Verify in-progress-strategy no longer set
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		// Verifying the fake AnalysisRun status
+		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 2), argov1alpha1.AnalysisPhaseSuccessful)
+
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateName)
 	})
 
 	It("Should delete all remaining rollout objects", func() {
@@ -211,3 +256,12 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
+	By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
+	updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
+	updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
+	UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
+
+	return updatedISBServiceSpec
+}
