@@ -6,11 +6,11 @@ metadata:
 spec:
   strategy:
     progressive:
-      assessmentSchedule: "60,60,10"
+      assessmentSchedule: "120,60,10"
     analysis:
       args:
       templates:
-      - templateName: mvtx-template
+      - templateName: mvtx-acknowledged-messages
         clusterScope: false
   riders:
     - definition:
@@ -41,8 +41,47 @@ spec:
             image: quay.io/numaio/numaflow-go/source-simple-source:stable
         transformer:
           container:
-            image: docker.intuit.com/quay-rmt/numaio/numaflow-rs/source-transformer-now:stable
+            image: quay.io/numaio/numaflow-rs/source-transformer-now:stable
       sink:
         udsink:
           container:
             image: quay.io/numaio/numaflow-go/sink-log:stable
+            #image: quay.io/numaio/numaflow-go/sink-log-failure:stable # use to fail the AnalysisRun
+---
+
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: mvtx-acknowledged-messages
+  labels:
+    used_by: numaplane
+spec:
+  args:
+    - name: upgrading-monovertex-name
+    - name: monovertex-namespace
+    - name: interval
+      value: 10s
+    - name: success-limit
+      value: "3" # if we do this check too early and the prometheus metric doesn't know about the read count yet, it could
+                        # succeed when it shouldn't
+    - name: failure-limit 
+      value: "3" # if we do this check too early and the read has occurred but not the ack, it could fail when it shouldn't
+  metrics:
+  - name: acknowledged-messages
+    consecutiveSuccessLimit: '{{args.success-limit}}'
+    failureLimit: '{{args.failure-limit}}'
+    interval: '{{args.interval}}'
+    provider:
+      prometheus:
+        address: http://prometheus.addon-metricset-ns.svc.cluster.local:9090/
+        query: |
+          (
+            absent(sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
+            OR
+            sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) == 0
+          )
+          OR
+          (
+            sum(numaflow_monovtx_ack_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}) > 0
+          )
+    successCondition: len(result) > 0 && result[0] > 0
