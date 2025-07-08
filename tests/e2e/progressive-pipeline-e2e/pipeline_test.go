@@ -252,6 +252,57 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeletePipelineRollout(pipelineRolloutName)
 	})
 
+	It("Should validate ISBServiceRollout and PipelineRollout ForcePromote Strategy works", func() {
+		// Create a PipelineRollout with forcePromote=true
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					ForcePromote: true,
+				},
+			},
+		})
+
+		// Update ISBServiceRollout to set forcePromote=true
+		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(ir apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {
+			ir.Spec.Strategy = &apiv1.ISBServiceRolloutStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					ForcePromote: true,
+				},
+			}
+			return ir, nil
+		})
+
+		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
+		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
+			Name: "badcat",
+		}}
+		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
+
+		By("Updating the ISBService to cause a Progressive change - Valid change")
+		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
+		updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
+		updateISBService(*updatedISBServiceSpec)
+
+		// Since forcePromote=true, both Pipeline and ISBService should be promoted successfully
+		// even though the pipeline change was invalid ("badcat" function)
+		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
+
+		// Verify ISBServiceRollout Progressive Status shows success
+		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 5), apiv1.AssessmentResultSuccess)
+
+		// Verify in-progress-strategy no longer set (rollout completed)
+		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+
+		// Verify ISBService is ready and working
+		VerifyPromotedISBSvcReady(Namespace, isbServiceRolloutName, 3)      // 3 nodes for JetStream cluster
+		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 3)) // the original
+
+		DeletePipelineRollout(pipelineRolloutName)
+
+	})
+
 	It("Should delete all remaining rollout objects", func() {
 		DeleteISBServiceRollout(isbServiceRolloutName)
 		DeleteNumaflowControllerRollout()

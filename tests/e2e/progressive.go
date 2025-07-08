@@ -89,12 +89,11 @@ func VerifyPipelineRolloutProgressiveStatus(
 
 		if expectedAssessmentResult == apiv1.AssessmentResultSuccess {
 			success := promotedStatus == nil && upgradingStatus.Name == expectedUpgradingName &&
-				upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-				upgradingStatus.BasicAssessmentEndTime != nil
+				upgradingStatus.AssessmentResult == expectedAssessmentResult
 			if forcedPromotion {
 				return success && upgradingStatus.ForcedSuccess
 			} else {
-				return success
+				return success && upgradingStatus.BasicAssessmentEndTime != nil
 			}
 		} else {
 			// still in the middle of progressive upgrade strategy
@@ -128,8 +127,7 @@ func VerifyISBServiceRolloutProgressiveStatus(
 
 		return promotedStatus.Name == expectedPromotedName &&
 			upgradingStatus.Name == expectedUpgradingName &&
-			upgradingStatus.AssessmentResult == expectedAssessmentResult &&
-			upgradingStatus.BasicAssessmentEndTime != nil
+			upgradingStatus.AssessmentResult == expectedAssessmentResult
 	}).Should(BeTrue())
 }
 
