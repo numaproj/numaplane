@@ -215,6 +215,7 @@ func AssessAnalysisStatus(
 		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting the global config: %v", err)
 	}
 	if globalConfig.FeatureFlagIgnoreAnalysisResult {
+		numaLogger.Debugf("Feature flag set to ignore AnalysisRun")
 		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
