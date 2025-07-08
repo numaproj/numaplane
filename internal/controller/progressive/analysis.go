@@ -29,6 +29,7 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/numaproj/numaplane/internal/controller/config"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -208,6 +209,17 @@ func AssessAnalysisStatus(
 	analysisStatus *apiv1.AnalysisStatus) (apiv1.AssessmentResult, string, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	// check for feature flag to skip checking the AnalysisRun
+	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
+	if err != nil {
+		return apiv1.AssessmentResultUnknown, "", fmt.Errorf("error getting the global config: %v", err)
+	}
+	if globalConfig.FeatureFlagIgnoreAnalysisResult {
+		numaLogger.Debugf("Feature flag set to ignore AnalysisRun")
+		return apiv1.AssessmentResultSuccess, "", nil
+	}
+
+	// make sure we haven't gone past the max time allowed for an AnalysisRun
 	analysisRunTimeout, err := getAnalysisRunTimeout(ctx)
 	if err != nil {
 		return apiv1.AssessmentResultUnknown, "", err
