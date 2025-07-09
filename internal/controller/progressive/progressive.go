@@ -501,7 +501,9 @@ func checkForUpgradeReplacement(
 			if err != nil {
 				return false, false, err
 			}
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
+			if newUpgradingChildDef != nil {
+				numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
+			}
 			if needRequeue {
 				return true, false, nil
 			}
