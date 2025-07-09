@@ -158,8 +158,10 @@ var (
 	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:         "pipeline-example",
-				FailureLimit: ptr.To(intstrutil.FromInt32(10)),
+				Name:                    "pipeline-example",
+				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				Interval:                "60s",
+				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
@@ -194,7 +196,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
-	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful case", func() {
+	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful analysis", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
 
@@ -209,43 +211,17 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteAnalysisTemplate(analysisTemplateName)
 	})
 
-	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Failure case", func() {
-		// update analysis template to expect failure
-		initialAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0"
-		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
-
+	It("Should validate Pipeline upgrade using Progressive strategy - failure analysis", func() {
+		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
+		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] > 0"
+		CreateAnalysisTemplate(analysisTemplateName, Namespace, *updatedAnalysisTemplateSpec)
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
 
-		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
-		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{Name: "badcat"}}
-		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
+		By("Updating the Pipeline Topology to cause a Progressive change")
+		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
 
-		updatedISBServiceSpec := updateISBServiceForFailure()
-
-		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, *updatedPipelineSpec)
-
-		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
-		updatedPipelineSpec = initialPipelineSpec.DeepCopy()
-		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
-
-		By("Updating the ISBService to cause a Progressive change - Successful case")
-		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
-		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
-
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
-
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
-
-		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2), apiv1.AssessmentResultSuccess)
-
-		// Verify in-progress-strategy no longer set
-		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-
-		// Verifying the fake AnalysisRun status
-		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 2), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, updatedPipelineSpec)
+		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateName)
@@ -256,12 +232,3 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
-
-func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
-	By("Updating the ISBService to cause a Progressive change - Invalid change causing failure")
-	updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
-	updatedISBServiceSpec.JetStream.Version = invalidJetstreamVersion
-	UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
-
-	return updatedISBServiceSpec
-}

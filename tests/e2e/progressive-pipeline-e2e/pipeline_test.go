@@ -280,7 +280,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		By("Updating the ISBService to cause a Progressive change - Valid change")
 		updatedISBServiceSpec := initialISBServiceSpec.DeepCopy()
 		updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
-		updateISBService(*updatedISBServiceSpec)
+		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
 		// Since forcePromote=true, both Pipeline and ISBService should be promoted successfully
 		// even though the pipeline change was invalid ("badcat" function)
