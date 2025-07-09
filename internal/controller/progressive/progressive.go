@@ -486,7 +486,6 @@ func checkForUpgradeReplacement(
 		}
 
 		if differentFromPromoted {
-			numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
@@ -501,6 +500,9 @@ func checkForUpgradeReplacement(
 			newUpgradingChildDef, needRequeue, err = startUpgradeProcess(ctx, rolloutObject, existingPromotedChildDef, controller, c)
 			if err != nil {
 				return false, false, err
+			}
+			if newUpgradingChildDef != nil {
+				numaLogger.WithValues("old child", existingUpgradingChildDef.GetName(), "new child", newUpgradingChildDef.GetName()).Debug("replacing 'upgrading' child")
 			}
 			if needRequeue {
 				return true, false, nil
