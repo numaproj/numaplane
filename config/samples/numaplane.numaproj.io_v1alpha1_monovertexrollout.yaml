@@ -73,7 +73,7 @@ spec:
     interval: '{{args.interval}}'
     provider:
       prometheus:
-        address: http://prometheus.addon-metricset-ns.svc.cluster.local:9090/
+        address: http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:9090
         query: |
           (
             absent(sum(numaflow_monovtx_read_total{namespace="{{args.monovertex-namespace}}", mvtx_name="{{args.upgrading-monovertex-name}}"}))
