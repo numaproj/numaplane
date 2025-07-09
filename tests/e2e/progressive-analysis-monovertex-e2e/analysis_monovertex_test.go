@@ -166,10 +166,12 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 	It("Should validate MonoVertex upgrade using Analysis template for Progressive strategy - Failure case", func() {
 		CreateAnalysisTemplate(analysisTemplateNameOne, Namespace, initialAnalysisTemplateSpec)
-		// Update the initial AnalysisTemplateSpec to use a different metric name and success condition
+		// Update a fake query to cause a success status
 		updatedAnalysisTemplate := initialAnalysisTemplateSpec.DeepCopy()
 		updatedAnalysisTemplate.Metrics[0].Name = "mvtx-example-2"
-		updatedAnalysisTemplate.Metrics[0].SuccessCondition = "result[0] == 0"
+		updatedAnalysisTemplate.Metrics[0].SuccessCondition = "true"
+		updatedAnalysisTemplate.Metrics[0].Provider.Prometheus.Query = "vector(1)"
+
 		CreateAnalysisTemplate(analysisTemplateNameTwo, Namespace, *updatedAnalysisTemplate)
 
 		// Update the initial MonoVertexSpec to use a bad image for the sink
@@ -182,7 +184,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 
 		// Verify the AnalysisRun status is Failed
 		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
-		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
+		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 		DeleteAnalysisTemplate(analysisTemplateNameOne)
