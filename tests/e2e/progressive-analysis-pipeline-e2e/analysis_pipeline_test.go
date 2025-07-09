@@ -39,6 +39,8 @@ const (
 	pipelineRolloutName     = "test-pipeline-rollout"
 	isbServiceRolloutName   = "test-isbservice-rollout"
 	initialJetstreamVersion = "2.10.17"
+	invalidJetstreamVersion = "0.0.0"
+	validJetstreamVersion   = "2.10.11"
 	analysisTemplateName    = "test-pipeline-template"
 	analysisRunName         = "pipeline-" + pipelineRolloutName
 )
@@ -156,8 +158,10 @@ var (
 	initialAnalysisTemplateSpec = argov1alpha1.AnalysisTemplateSpec{
 		Metrics: []argov1alpha1.Metric{
 			{
-				Name:         "pipeline-example",
-				FailureLimit: ptr.To(intstrutil.FromInt32(10)),
+				Name:                    "pipeline-example",
+				FailureLimit:            ptr.To(intstrutil.FromInt32(3)),
+				Interval:                "60s",
+				ConsecutiveSuccessLimit: ptr.To(intstrutil.FromInt32(3)),
 				Provider: argov1alpha1.MetricProvider{
 					Prometheus: &argov1alpha1.PrometheusMetric{
 						Address: "http://prometheus-kube-prometheus-prometheus.prometheus.svc.cluster.local:{{args.prometheus-port}}",
@@ -192,7 +196,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 	})
 
-	It("Should validate Pipeline and ISBService upgrade using Progressive strategy", func() {
+	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful analysis", func() {
 		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
 		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
 
@@ -204,6 +208,23 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateName)
+	})
+
+	It("Should validate Pipeline upgrade using Progressive strategy - failure analysis", func() {
+		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
+		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] > 0"
+		CreateAnalysisTemplate(analysisTemplateName, Namespace, *updatedAnalysisTemplateSpec)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
+
+		By("Updating the Pipeline Topology to cause a Progressive change")
+		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
+
+		VerifyPipelineProgressiveFailure(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), initialPipelineSpec, updatedPipelineSpec)
+		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
+
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteAnalysisTemplate(analysisTemplateName)
 	})
 
 	It("Should delete all remaining rollout objects", func() {
