@@ -21,6 +21,7 @@ import (
 	testcore "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
+	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 )
 
@@ -75,8 +76,10 @@ func newCluster(t *testing.T, objs ...runtime.Object) clustercache.ClusterCache 
 }
 
 func newFakeLivStateCache(t *testing.T, objs ...runtime.Object) LiveStateCache {
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	cluster := newCluster(t, objs...)
-	customMetrics := metrics.RegisterCustomMetrics()
+	customMetrics := metrics.RegisterCustomMetrics(numaLogger)
 	clusterCache := newLiveStateCache(cluster, customMetrics)
 	cluster.Invalidate(clustercache.SetPopulateResourceInfoHandler(clusterCache.PopulateResourceInfo))
 	return clusterCache
