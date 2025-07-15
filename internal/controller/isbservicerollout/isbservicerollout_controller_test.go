@@ -77,7 +77,7 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 	config.GetConfigManagerInstance().UpdateUSDEConfig(usdeConfig)
 
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
@@ -327,6 +327,8 @@ func Test_reconcile_isbservicerollout_PPND(t *testing.T) {
 }
 
 func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	restConfig, numaflowClientSet, client, k8sClientSet, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -347,7 +349,7 @@ func Test_reconcile_isbservicerollout_Progressive(t *testing.T) {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
