@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -86,13 +85,6 @@ var (
 					Generator: &numaflowv1.GeneratorSource{
 						RPU:      &pipelineSpecSourceRPU,
 						Duration: &pipelineSpecSourceDuration,
-					},
-				},
-				ContainerTemplate: &numaflowv1.ContainerTemplate{
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							"memory": sourceMemLimit,
-						},
 					},
 				},
 			},
