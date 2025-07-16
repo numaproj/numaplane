@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -46,11 +47,8 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	sourceVertexScaleMin = int32(5)
-	sourceVertexScaleMax = int32(9)
-	numVertices          = int32(1)
-	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	initialPipelineSpec  = numaflowv1.PipelineSpec{
+	sourceMemLimit, _   = apiresource.ParseQuantity("2Gi")
+	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -61,7 +59,6 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -70,7 +67,6 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
@@ -92,7 +88,13 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				ContainerTemplate: &numaflowv1.ContainerTemplate{
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": sourceMemLimit,
+						},
+					},
+				},
 			},
 			{
 				Name: "cat",
@@ -101,7 +103,6 @@ var (
 						Name: "cat",
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -110,7 +111,6 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
@@ -171,6 +171,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 					To:   "out",
 				},
 			}
+			//slowPipelineSpec.Vertices[0].ContainerTemplate.Resources.Limits.
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
@@ -178,6 +179,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
+			time.Sleep(120 * time.Second)
 			DeletePipelineRollout(slowPipelineRolloutName)
 
 		}
