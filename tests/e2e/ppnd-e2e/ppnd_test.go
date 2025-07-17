@@ -162,7 +162,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 					To:   "out",
 				},
 			}
-			//slowPipelineSpec.Vertices[0].ContainerTemplate.Resources.Limits.
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
@@ -170,7 +169,6 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
-			time.Sleep(120 * time.Second)
 			DeletePipelineRollout(slowPipelineRolloutName)
 
 		}

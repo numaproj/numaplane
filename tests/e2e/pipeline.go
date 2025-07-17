@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/utils/ptr"
 	"reflect"
 	"time"
-
-	"k8s.io/utils/ptr"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -76,7 +75,7 @@ func VerifyPromotedPipelineStatusConsistently(namespace string, pipelineRolloutN
 	CheckConsistently("verify pipeline status", func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPromotedPipelineSpecAndStatus(namespace, pipelineRolloutName)
 		return err == nil && f(retrievedPipelineSpec, retrievedPipelineStatus)
-	}).WithTimeout(60 * time.Second).Should(BeTrue())
+	}).WithTimeout(15 * time.Second).Should(BeTrue())
 }
 
 func VerifyPipelineRolloutDeployed(pipelineRolloutName string) {
