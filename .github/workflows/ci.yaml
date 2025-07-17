@@ -115,23 +115,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strategy: ["pause-and-drain"]
-        case: ["ppnd"]
-        #strategy: ["pause-and-drain", "progressive", "no-strategy"]
-        #case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
-        #include:
-        #  - strategy: "pause-and-drain"
-        #    case: "ppnd"
-        #  - strategy: "progressive"
-        #    case: "progressive-monovertex"
-        #  - strategy: "progressive"
-        #    case: "progressive-pipeline"
-        #  - strategy: "progressive"
-        #    case: "rider"
-        #  - strategy: "progressive"
-        #    case: "progressive-analysis-monovertex"
-        #  - strategy: "progressive"
-        #    case: "progressive-analysis-pipeline"
+        strategy: ["pause-and-drain", "progressive", "no-strategy"]
+        case: ["functional-pipeline", "functional-monovertex", "functional-nc", "concurrent", "rollback"]
+        include:
+          - strategy: "pause-and-drain"
+            case: "ppnd"
+          - strategy: "progressive"
+            case: "progressive-monovertex"
+          - strategy: "progressive"
+            case: "progressive-pipeline"
+          - strategy: "progressive"
+            case: "rider"
+          - strategy: "progressive"
+            case: "progressive-analysis-monovertex"
+          - strategy: "progressive"
+            case: "progressive-analysis-pipeline"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
