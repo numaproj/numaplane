@@ -207,6 +207,7 @@ func (r *NumaflowControllerReconciler) reconcile(
 	numaLogger := logger.FromContext(ctx)
 
 	defer func() {
+		numaLogger.Debugf("Reconcilation finished for controller %s/%s, setting phase metrics: %s", controller.Namespace, controller.Name, controller.Status.Phase)
 		r.customMetrics.SetNumaflowControllersHealth(controller.Namespace, controller.Name, string(controller.Status.Phase))
 	}()
 
