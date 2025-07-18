@@ -340,6 +340,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 ) (time.Duration, *unstructured.Unstructured, error) {
 	numaLogger := logger.FromContext(ctx)
 	defer func() {
+		numaLogger.Debugf("Reconcilation finished for pipelineRollout %s/%s, setting phase metrics: %s", pipelineRollout.Namespace, pipelineRollout.Name, pipelineRollout.Status.Phase)
 		r.customMetrics.SetPipelineRolloutHealth(pipelineRollout.Namespace, pipelineRollout.Name, string(pipelineRollout.Status.Phase))
 	}()
 
