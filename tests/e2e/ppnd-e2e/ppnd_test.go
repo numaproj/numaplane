@@ -46,11 +46,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	sourceVertexScaleMin = int32(5)
-	sourceVertexScaleMax = int32(9)
-	numVertices          = int32(1)
-	zeroReplicaSleepSec  = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
-	initialPipelineSpec  = numaflowv1.PipelineSpec{
+	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -61,7 +57,6 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -70,7 +65,6 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
@@ -92,7 +86,6 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &sourceVertexScaleMin, Max: &sourceVertexScaleMax, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -101,7 +94,6 @@ var (
 						Name: "cat",
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -110,7 +102,6 @@ var (
 						Log: &numaflowv1.Log{},
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
