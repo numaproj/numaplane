@@ -150,7 +150,7 @@ func main() {
 	}
 
 	// initialize the custom metrics with the global prometheus registry
-	customMetrics := metrics.RegisterCustomMetrics()
+	customMetrics := metrics.RegisterCustomMetrics(numaLogger)
 	newRawConfig := metrics.AddMetricsTransportWrapper(customMetrics, mgr.GetConfig())
 
 	if err := kubernetes.StartConfigMapWatcher(ctx, newRawConfig); err != nil {

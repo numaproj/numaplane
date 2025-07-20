@@ -77,7 +77,7 @@ func Test_reconcile_NumaflowControllerRollout_PPND(t *testing.T) {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
