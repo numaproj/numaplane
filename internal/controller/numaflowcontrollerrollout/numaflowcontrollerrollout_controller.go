@@ -189,6 +189,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	autoHealNumaflowController := false
 
 	defer func() {
+		numaLogger.Debugf("Reconcilation finished for nfcRollout %s/%s, setting phase metrics: %s", nfcRollout.Namespace, nfcRollout.Name, nfcRollout.Status.Phase)
 		r.customMetrics.SetNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
 	}()
 

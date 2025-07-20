@@ -7,10 +7,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 type CustomMetrics struct {
+	// NumaLogger is used to log messages related to metrics.
+	NumaLogger *logger.NumaLogger
 	// PipelinesRolloutHealth is the gauge for the health of pipelines.
 	PipelinesRolloutHealth *prometheus.GaugeVec
 	// PipelineRolloutsRunning is the gauge for the number of running PipelineRollouts.
@@ -319,7 +322,7 @@ var (
 )
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
-func RegisterCustomMetrics() *CustomMetrics {
+func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 	metrics.Registry.MustRegister(
 		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength,
 		isbServicesRolloutHealth, isbServiceRolloutsRunning, isbServiceROSyncs, isbServiceROSyncErrors,
@@ -330,6 +333,7 @@ func RegisterCustomMetrics() *CustomMetrics {
 		kubeResourceCache, clusterCacheError, pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds)
 
 	return &CustomMetrics{
+		NumaLogger:                                numaLogger,
 		PipelinesRolloutHealth:                    pipelinesRolloutHealth,
 		PipelineRolloutsRunning:                   pipelineRolloutsRunning,
 		PipelineROCounterMap:                      make(map[string]map[string]struct{}),
@@ -448,6 +452,7 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 
 // DeletePipelineRolloutHealth deletes the pipeline rollout health metric
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
+	m.NumaLogger.Infof("Deleting pipeline rollout health for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -466,6 +471,7 @@ func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhas
 
 // DeleteISBServicesRolloutHealth deletes the ISB service rollout health metric
 func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
+	m.NumaLogger.Infof("Deleting pipeline rollout health for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -484,6 +490,7 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 
 // DeleteMonoVerticesRolloutHealth deletes the monovertex rollout health metric
 func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
+	m.NumaLogger.Infof("Deleting monovertex rollout health for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -502,6 +509,7 @@ func (m *CustomMetrics) SetNumaflowControllerRolloutsHealth(namespace, name, cur
 
 // DeleteNumaflowControllerRolloutsHealth deletes the numaflow controller rollout health metric
 func (m *CustomMetrics) DeleteNumaflowControllerRolloutsHealth(namespace, name string) {
+	m.NumaLogger.Infof("Deleting numaflow controller rollout health for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -520,6 +528,7 @@ func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPha
 
 // DeleteNumaflowControllersHealth deletes the numaflow controller health metric
 func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) {
+	m.NumaLogger.Infof("Deleting numaflow controller health for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
 	}

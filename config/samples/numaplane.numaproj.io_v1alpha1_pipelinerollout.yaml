@@ -9,9 +9,9 @@ spec:
       assessmentSchedule: "120,60,10"
     analysis:
       args:
-      templates:
-      - templateName: pipeline-template
-        clusterScope: false
+      #templates:
+      #- templateName: pipeline-template
+      #  clusterScope: false
   riders:
     - perVertex: true
       definition:

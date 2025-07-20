@@ -42,6 +42,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
@@ -816,6 +817,8 @@ func withInterstepBufferService(origPipelineSpec numaflowv1.PipelineSpec, isbsvc
 // process an existing pipeline
 // in this test, the user preferred strategy is PPND
 func Test_processExistingPipeline_PPND(t *testing.T) {
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -837,7 +840,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
@@ -1083,6 +1086,8 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 // process an existing pipeline in this test, the user preferred strategy is Progressive
 func Test_processExistingPipeline_Progressive(t *testing.T) {
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -1103,7 +1108,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
