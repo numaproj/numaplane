@@ -321,7 +321,8 @@ func createMonoVertex(phase numaflowv1.MonoVertexPhase, status numaflowv1.Status
 
 // process an existing monoVertex's progressive upgrade and check that AnalysisRun with correct spec is created
 func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
-
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -336,7 +337,7 @@ func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
 	ctx := context.Background()
 
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)
@@ -481,6 +482,8 @@ func Test_processExistingMonoVertex_AnalysisRunGeneration(t *testing.T) {
 
 // process an existing monoVertex in this test, the user preferred strategy is Progressive
 func Test_processExistingMonoVertex_Progressive(t *testing.T) {
+	numaLogger := logger.New()
+	numaLogger.SetLevel(4)
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -496,7 +499,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	recorder := record.NewFakeRecorder(64)

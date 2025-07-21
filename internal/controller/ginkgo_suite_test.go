@@ -130,7 +130,7 @@ var _ = BeforeSuite(func() {
 
 	// other tests may call this, but it fails if called more than once
 	if ctlrcommon.TestCustomMetrics == nil {
-		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics()
+		ctlrcommon.TestCustomMetrics = metrics.RegisterCustomMetrics(numaLogger)
 	}
 
 	Expect(kubernetes.SetClientSets(k8sManager.GetConfig())).To(Succeed())

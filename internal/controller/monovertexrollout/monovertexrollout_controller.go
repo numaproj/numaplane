@@ -188,6 +188,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	requeueDelay := time.Duration(0)
 
 	defer func() {
+		numaLogger.Debugf("Reconcilation finished for monoVertexRollout %s/%s, setting phase metrics: %s", monoVertexRollout.Namespace, monoVertexRollout.Name, monoVertexRollout.Status.Phase)
 		r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
 	}()
 

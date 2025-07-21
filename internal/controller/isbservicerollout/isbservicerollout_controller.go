@@ -192,6 +192,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	requeueDelay := time.Duration(0)
 
 	defer func() {
+		numaLogger.Debugf("Reconcilation finished for ISBServiceRollout %s/%s, setting phase metrics: %s", isbServiceRollout.Namespace, isbServiceRollout.Name, isbServiceRollout.Status.Phase)
 		r.customMetrics.SetISBServicesRolloutHealth(isbServiceRollout.Namespace, isbServiceRollout.Name, string(isbServiceRollout.Status.Phase))
 	}()
 
