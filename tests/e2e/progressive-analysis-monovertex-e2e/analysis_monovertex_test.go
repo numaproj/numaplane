@@ -20,17 +20,15 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
-	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
-
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
+
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
-
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -175,9 +173,10 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		CreateAnalysisTemplate(analysisTemplateNameTwo, Namespace, *updatedAnalysisTemplate)
 
 		// Update the initial MonoVertexSpec to use a bad image for the sink
-		initialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
-		initialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
+		updatedInitialMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
+		updatedInitialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
+		updatedInitialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategy)
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
