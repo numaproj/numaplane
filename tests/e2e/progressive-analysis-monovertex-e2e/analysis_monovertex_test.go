@@ -178,7 +178,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedInitialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
 		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategy)
 
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *updatedInitialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		// Verify the AnalysisRun status is Failed
