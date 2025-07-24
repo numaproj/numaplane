@@ -816,7 +816,7 @@ func Test_processExistingMonoVertex_Progressive(t *testing.T) {
 	}
 }
 
-func TestChildNeedsUpdating(t *testing.T) {
+func Test_CheckForDifferences(t *testing.T) {
 	ctx := context.Background()
 	numaLogger := logger.FromContext(ctx)
 
@@ -861,6 +861,20 @@ func TestChildNeedsUpdating(t *testing.T) {
 			to: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
 				obj.SetLabels(map[string]string{"key": "value2"})
+				return obj
+			}(),
+			expectedError:  false,
+			expectedResult: false,
+		},
+		{
+			name: "NumaflowInstanceAnnotationsDiffer",
+			from: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{}
+				return obj
+			}(),
+			to: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{}
+				obj.SetAnnotations(map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"})
 				return obj
 			}(),
 			expectedError:  false,
