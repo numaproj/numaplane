@@ -126,9 +126,9 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, f
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, from.Object["spec"], to.Object["spec"])
 	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, metadataRisk, from.Object["spec"], to.Object["spec"])
 
 	return !specsEqual || metadataRisk, nil
 }

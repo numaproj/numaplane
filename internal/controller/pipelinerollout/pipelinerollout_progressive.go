@@ -176,9 +176,9 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, fro
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
 	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
 
 	return !specsEqual || metadataRisk, nil
 }

@@ -145,9 +145,9 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, f
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromNew["spec"], toNew["spec"])
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, fromNew["spec"], toNew["spec"])
 	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, metadataRisk, fromNew["spec"], toNew["spec"])
 
 	return !specsEqual || metadataRisk, nil
 
