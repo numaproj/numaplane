@@ -8,6 +8,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -143,16 +144,12 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, f
 		return false, err
 	}
 
-	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
-	numaLogger.Debugf("specsEqual: %t, fromNew=%v, toNew=%v\n",
-		specsEqual, fromNew, toNew)
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	specsEqual := util.CompareStructNumTypeAgnostic(fromNew["spec"], toNew["spec"])
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, fromNew["spec"], toNew["spec"])
+	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual || metadataRisk, nil
 
 }
 

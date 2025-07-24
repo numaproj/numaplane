@@ -8,6 +8,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -125,15 +126,11 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, f
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, from, to)
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, from.Object["spec"], to.Object["spec"])
+	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual || metadataRisk, nil
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
