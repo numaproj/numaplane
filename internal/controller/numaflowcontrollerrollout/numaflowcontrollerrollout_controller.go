@@ -189,8 +189,11 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	autoHealNumaflowController := false
 
 	defer func() {
-		numaLogger.Debugf("Reconcilation finished for nfcRollout %s/%s, setting phase metrics: %s", nfcRollout.Namespace, nfcRollout.Name, nfcRollout.Status.Phase)
-		r.customMetrics.SetNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
+		// Set the health of the nfcRollout only if it is not being deleted.
+		if nfcRollout.DeletionTimestamp.IsZero() {
+			numaLogger.Debugf("Reconcilation finished for nfcRollout %s/%s, setting phase metrics: %s", nfcRollout.Namespace, nfcRollout.Name, nfcRollout.Status.Phase)
+			r.customMetrics.SetNumaflowControllerRolloutsHealth(nfcRollout.Namespace, nfcRollout.Name, string(nfcRollout.Status.Phase))
+		}
 	}()
 
 	controllerKey := ppnd.GetPauseModule().GetNumaflowControllerKey(namespace)
@@ -274,7 +277,7 @@ func (r *NumaflowControllerRolloutReconciler) reconcile(
 	return ctrl.Result{}, nil
 }
 
-// for the purpose of logging
+// GetChildTypeString is used for logging
 func (r *NumaflowControllerRolloutReconciler) GetChildTypeString() string {
 	return "numaflowcontroller"
 }

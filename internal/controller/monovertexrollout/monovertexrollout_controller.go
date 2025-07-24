@@ -188,8 +188,11 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	requeueDelay := time.Duration(0)
 
 	defer func() {
-		numaLogger.Debugf("Reconcilation finished for monoVertexRollout %s/%s, setting phase metrics: %s", monoVertexRollout.Namespace, monoVertexRollout.Name, monoVertexRollout.Status.Phase)
-		r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
+		// Set the health of the monoVertexRollout only if it is not being deleted.
+		if monoVertexRollout.DeletionTimestamp.IsZero() {
+			numaLogger.Debugf("Reconcilation finished for monoVertexRollout %s/%s, setting phase metrics: %s", monoVertexRollout.Namespace, monoVertexRollout.Name, monoVertexRollout.Status.Phase)
+			r.customMetrics.SetMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name, string(monoVertexRollout.Status.Phase))
+		}
 	}()
 
 	// Update metrics if monoVertexRollout is being deleted

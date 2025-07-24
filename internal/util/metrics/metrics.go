@@ -452,7 +452,7 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 
 // DeletePipelineRolloutHealth deletes the pipeline rollout health metric
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting pipeline rollout health for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -471,7 +471,7 @@ func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhas
 
 // DeleteISBServicesRolloutHealth deletes the ISB service rollout health metric
 func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting pipeline rollout health for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -490,7 +490,7 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 
 // DeleteMonoVerticesRolloutHealth deletes the monovertex rollout health metric
 func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting monovertex rollout health for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting monovertex rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -509,7 +509,7 @@ func (m *CustomMetrics) SetNumaflowControllerRolloutsHealth(namespace, name, cur
 
 // DeleteNumaflowControllerRolloutsHealth deletes the numaflow controller rollout health metric
 func (m *CustomMetrics) DeleteNumaflowControllerRolloutsHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting numaflow controller rollout health for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting numaflow controller rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
 	}
@@ -528,7 +528,7 @@ func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPha
 
 // DeleteNumaflowControllersHealth deletes the numaflow controller health metric
 func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting numaflow controller health for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting numaflow controller health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
 		m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
 	}
