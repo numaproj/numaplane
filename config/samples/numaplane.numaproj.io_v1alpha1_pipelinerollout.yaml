@@ -26,10 +26,6 @@ spec:
             name: '{{.pipeline-name}}-{{.vertex-name}}'
           # todo: add more fields here...
   pipeline:
-    #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
     spec:
       interStepBufferServiceName: my-isbsvc
       vertices:

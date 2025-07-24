@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
@@ -43,11 +42,6 @@ func ResourceNeedsUpdating(
 	existingRiders unstructured.UnstructuredList) (bool, apiv1.UpgradeStrategy, bool, unstructured.UnstructuredList, unstructured.UnstructuredList, unstructured.UnstructuredList, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	metadataNeedsUpdating, metadataUpgradeStrategy, err := resourceMetadataNeedsUpdating(ctx, newDef, existingDef)
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
-	}
-
 	specNeedsUpdating, specUpgradeStrategy, recreate, err := resourceSpecNeedsUpdating(ctx, newDef, existingDef)
 	if err != nil {
 		return false, apiv1.UpgradeStrategyError, false, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, unstructured.UnstructuredList{}, err
@@ -59,16 +53,15 @@ func ResourceNeedsUpdating(
 	}
 
 	numaLogger.WithValues(
-		"metadataUpgradeStrategy", metadataUpgradeStrategy,
 		"specUpgradeStrategy", specUpgradeStrategy,
 		"ridersUpgradeStrategy", ridersUpgradeStrategy,
 	).Debug("upgrade strategies")
 
-	if !metadataNeedsUpdating && !specNeedsUpdating && !ridersNeedUpdating {
+	if !specNeedsUpdating && !ridersNeedUpdating {
 		return false, apiv1.UpgradeStrategyNoOp, false, additionsRequired, modificationsRequired, deletionsRequired, nil
 	}
 
-	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{metadataUpgradeStrategy, specUpgradeStrategy, ridersUpgradeStrategy}), recreate, additionsRequired, modificationsRequired, deletionsRequired, nil
+	return true, getMostConservativeStrategy([]apiv1.UpgradeStrategy{specUpgradeStrategy, ridersUpgradeStrategy}), recreate, additionsRequired, modificationsRequired, deletionsRequired, nil
 
 }
 
@@ -234,36 +227,6 @@ func getMostConservativeStrategy(strategies []apiv1.UpgradeStrategy) apiv1.Upgra
 		}
 	}
 	return strategy
-}
-
-func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *unstructured.Unstructured) (bool, apiv1.UpgradeStrategy, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	upgradeStrategy, err := getDataLossUpgradeStrategy(ctx, newDef.GetNamespace(), existingDef.GetKind())
-	if err != nil {
-		return false, apiv1.UpgradeStrategyError, err
-	}
-
-	numaLogger.WithValues(
-		"new annotations", newDef.GetAnnotations(),
-		"existing annotations", existingDef.GetAnnotations(),
-		"new labels", newDef.GetLabels(),
-		"existing labels", existingDef.GetLabels(),
-	).Debug("metadata comparison")
-
-	// First look for Label or Annotation changes that require PPND or Progressive strategy
-	// TODO: make this configurable to look for particular Labels and Annotations rather than this specific one
-	instanceIDNew := newDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
-	instanceIDExisting := existingDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
-	if instanceIDNew != instanceIDExisting {
-		return true, upgradeStrategy, nil
-	}
-
-	// now see if any Labels or Annotations changed at all
-	if !checkMapsEqual(newDef.GetLabels(), existingDef.GetLabels()) || !checkMapsEqual(newDef.GetAnnotations(), existingDef.GetAnnotations()) {
-		return true, apiv1.UpgradeStrategyApply, nil
-	}
-	return false, apiv1.UpgradeStrategyNoOp, nil
 }
 
 // return required upgrade strategy, list of additions, modifications, deletions required

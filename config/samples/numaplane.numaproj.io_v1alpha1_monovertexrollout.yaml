@@ -26,10 +26,6 @@ spec:
           # todo: add more fields here...
 
   monoVertex:
-    #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
     spec:
       scale:
         min: 2

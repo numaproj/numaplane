@@ -127,13 +127,8 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, f
 	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, from, to)
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual, nil
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(
