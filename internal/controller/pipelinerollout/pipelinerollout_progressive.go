@@ -155,12 +155,12 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 }
 
-// CheckForDifferences() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
+// CheckForDifferences() tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
 // configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane itself changes or it will confuse things
+// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
 func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
@@ -176,6 +176,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, fro
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
+	// just look specifically for metadata fields that can result in Progressive
+	// anything else could be updated by some platform and not by the user, which would cause an issue
 	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
 	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
 		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
