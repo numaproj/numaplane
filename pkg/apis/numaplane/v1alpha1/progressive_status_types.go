@@ -71,6 +71,9 @@ type UpgradingPipelineTypeStatus struct {
 	UpgradingChildStatus `json:",inline"`
 
 	Analysis AnalysisStatus `json:"analysis,omitempty"`
+
+	// FailureHistory represents the failures of this child over time
+	FailureHistory []FailureStatus `json:"failureHistory,omitempty"`
 }
 
 type AnalysisStatus struct {
@@ -82,6 +85,23 @@ type AnalysisStatus struct {
 	EndTime *metav1.Time `json:"endTime,omitempty"`
 	// Phase is the phase of the AnalysisRun when completed
 	Phase argorolloutsv1.AnalysisPhase `json:"phase"`
+}
+
+// FailureStatus captures the status of a failure from the past
+// Some of the same fields can be found elsewhere in the UpgradingChildStatus, but those just pertain to the most recent failure
+// This struct enables accounting for all failures of this child over time
+type FailureStatus struct {
+	// BasicAssessmentStartTime indicates the time at which the basic resource health check assessment result was allowed to start
+	BasicAssessmentStartTime *metav1.Time `json:"basicAssessmentStartTime,omitempty"`
+
+	// BasicAssessmentEndTime indicates the time that the basic resource health check assessment completed
+	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
+
+	// FailureReason indicates the reason for the failure
+	FailureReason string `json:"failureReason,omitempty"`
+
+	// AnalysisStatus represents the AnalysisRun, if one was generated
+	Analysis AnalysisStatus `json:"analysis,omitempty"`
 }
 
 // ScaleValues stores the original scale min and max values, scaleTo value, and actual scale value of a pipeline or monovertex vertex
