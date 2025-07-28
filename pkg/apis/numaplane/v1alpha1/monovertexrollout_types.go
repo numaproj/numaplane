@@ -208,6 +208,10 @@ func (monoVertexRollout *MonoVertexRollout) SetUpgradingChildStatus(status *Upgr
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.UpgradingChildStatus = *status.DeepCopy()
 }
 
+func (monoVertexRollout *MonoVertexRollout) UpdateFailureHistory() {
+	// If the current status shows failure, then make sure it gets incorporated into the failure history
+}
+
 // ResetPromotedChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 func (monoVertexRollout *MonoVertexRollout) ResetPromotedChildStatus(promotedMonoVertex *unstructured.Unstructured) error {

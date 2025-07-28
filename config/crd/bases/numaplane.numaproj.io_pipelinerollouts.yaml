@@ -404,10 +404,6 @@ spec:
                         description: FailureHistory represents the failures of this
                           child over time
                         items:
-                          description: |-
-                            FailureStatus captures the status of a failure from the past
-                            Some of the same fields can be found elsewhere in the UpgradingChildStatus, but those just pertain to the most recent failure
-                            This struct enables accounting for all failures of this child over time
                           properties:
                             analysis:
                               description: AnalysisStatus represents the AnalysisRun,

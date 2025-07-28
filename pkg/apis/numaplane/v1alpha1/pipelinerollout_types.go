@@ -245,6 +245,16 @@ func (pipelineRollout *PipelineRollout) SetUpgradingChildStatus(status *Upgradin
 	pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.UpgradingChildStatus = *status.DeepCopy()
 }
 
+func (pipelineRollout *PipelineRollout) UpdateFailureHistory() {
+	// If the current status shows failure, then make sure it gets incorporated into the failure history
+	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
+	if upgradingPipelineStatus != nil {
+		if upgradingPipelineStatus.AssessmentResult == AssessmentResultFailure {
+			upgradingPipelineStatus.UpdateFailureHistory()
+		}
+	}
+}
+
 // ResetPromotedChildStatus is a function of the progressiveRolloutObject
 // note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 func (pipelineRollout *PipelineRollout) ResetPromotedChildStatus(promotedPipeline *unstructured.Unstructured) error {

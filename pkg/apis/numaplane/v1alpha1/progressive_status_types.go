@@ -73,8 +73,10 @@ type UpgradingPipelineTypeStatus struct {
 	Analysis AnalysisStatus `json:"analysis,omitempty"`
 
 	// FailureHistory represents the failures of this child over time
-	FailureHistory []FailureStatus `json:"failureHistory,omitempty"`
+	FailureHistory PipelineTypeFailureHistoryStatus `json:"failureHistory,omitempty"`
 }
+
+type PipelineTypeFailureHistoryStatus []*PipelineTypeFailureStatus
 
 type AnalysisStatus struct {
 	// AnalysisRunName is the name of the AnalysisRun, set after it's generated
@@ -99,6 +101,10 @@ type FailureStatus struct {
 
 	// FailureReason indicates the reason for the failure
 	FailureReason string `json:"failureReason,omitempty"`
+}
+
+type PipelineTypeFailureStatus struct {
+	FailureStatus `json:",inline"`
 
 	// AnalysisStatus represents the AnalysisRun, if one was generated
 	Analysis AnalysisStatus `json:"analysis,omitempty"`
@@ -161,4 +167,17 @@ func (ucs *UpgradingChildStatus) IsFailed() bool {
 // AreScaleValuesRestoredToOriginal checks if all vertices have been restored to the original scale values.
 func (pcs *PromotedPipelineTypeStatus) AreScaleValuesRestoredToOriginal(name string) bool {
 	return pcs != nil && pcs.Name == name && pcs.ScaleValuesRestoredToOriginal
+}
+
+func (status *UpgradingPipelineTypeStatus) UpdateFailureHistory() {
+	if status.AssessmentResult == AssessmentResultFailure {
+		status.FailureHistory.AddFailure(&PipelineTypeFailureStatus{
+			// TODO: Add values
+		})
+	}
+}
+
+func (status *PipelineTypeFailureHistoryStatus) AddFailure(failure *PipelineTypeFailureStatus) {
+	// if we already have a failure with this Assessment Begin Time, then update it
+	// if we don't, then add a new one
 }

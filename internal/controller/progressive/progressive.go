@@ -104,6 +104,8 @@ type ProgressiveRolloutObject interface {
 	// note this resets the entire Upgrading status struct which encapsulates the UpgradingChildStatus struct
 	ResetUpgradingChildStatus(upgradingChild *unstructured.Unstructured) error
 
+	UpdateFailureHistory()
+
 	SetPromotedChildStatus(*apiv1.PromotedChildStatus)
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
@@ -404,6 +406,12 @@ func processUpgradingChild(
 			status.FailureReason = failureReason
 			status.ChildStatus.Raw = childSts
 		})
+
+		// TODO: Here we need to augment our current failure history with the information about the most recent failure
+		// We need to make sure it's idempotent
+		// The unique key will have to be the begin time
+		// We should take the existing Failure History, see if the begin time is in there already, if it is we either do nothing or write over top, otherwise we append a new entry
+		rolloutObject.UpdateFailureHistory()
 
 		requeue, err := controller.ProcessPromotedChildPostFailure(ctx, rolloutObject, existingPromotedChildDef, c)
 		if err != nil {

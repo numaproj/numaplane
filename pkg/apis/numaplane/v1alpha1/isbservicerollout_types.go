@@ -71,6 +71,9 @@ type ISBServiceProgressiveStatus struct {
 // UpgradingISBServiceStatus describes the status of an upgrading child
 type UpgradingISBServiceStatus struct {
 	UpgradingChildStatus `json:",inline"`
+
+	// FailureHistory represents the failures of this child over time
+	FailureHistory []FailureStatus `json:"failureHistory,omitempty"`
 }
 
 // PromotedISBServiceStatus describes the status of a promoted child
@@ -179,6 +182,10 @@ func (isbServiceRollout *ISBServiceRollout) SetUpgradingChildStatus(status *Upgr
 		isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus = &UpgradingISBServiceStatus{}
 	}
 	isbServiceRollout.Status.ProgressiveStatus.UpgradingISBServiceStatus.UpgradingChildStatus = *status.DeepCopy()
+}
+
+func (isbServiceRollout *ISBServiceRollout) UpdateFailureHistory() {
+	// If the current status shows failure, then make sure it gets incorporated into the failure history
 }
 
 // ResetPromotedChildStatus is a function of the progressiveRolloutObject

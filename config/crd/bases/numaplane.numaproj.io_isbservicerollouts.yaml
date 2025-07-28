@@ -265,6 +265,32 @@ spec:
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
+                      failureHistory:
+                        description: FailureHistory represents the failures of this
+                          child over time
+                        items:
+                          description: |-
+                            FailureStatus captures the status of a failure from the past
+                            Some of the same fields can be found elsewhere in the UpgradingChildStatus, but those just pertain to the most recent failure
+                            This struct enables accounting for all failures of this child over time
+                          properties:
+                            basicAssessmentEndTime:
+                              description: BasicAssessmentEndTime indicates the time
+                                that the basic resource health check assessment completed
+                              format: date-time
+                              type: string
+                            basicAssessmentStartTime:
+                              description: BasicAssessmentStartTime indicates the
+                                time at which the basic resource health check assessment
+                                result was allowed to start
+                              format: date-time
+                              type: string
+                            failureReason:
+                              description: FailureReason indicates the reason for
+                                the failure
+                              type: string
+                          type: object
+                        type: array
                       failureReason:
                         description: FailureReason indicates the reason for the failure
                         type: string
