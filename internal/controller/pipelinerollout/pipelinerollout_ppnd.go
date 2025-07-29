@@ -63,15 +63,23 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	if needsPaused == nil { // not enough information to know
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
+
+	resumed := false
 	shouldBePaused := *needsPaused
 	if shouldBePaused {
 		if err := r.setPipelineLifecyclePaused(ctx, existingPipelineDef); err != nil {
 			return false, err
 		}
 	} else {
+		// make sure this is set to running
 		if err := r.setPipelineLifecycleRunning(ctx, pipelineRollout, existingPipelineDef, forceResume); err != nil {
 			return false, err
 		}
+
+		// now check if it's running
+		// this is used below to make sure it's running before we exit PPND strategy
+		// (note: this is necessary to prevent overriding of the numaflow run speed annotation)
+		resumed = numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhaseRunning)
 	}
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
@@ -101,7 +109,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	}
 
 	// are we done with PPND?
-	doneWithPPND := !shouldBePaused
+	doneWithPPND := resumed
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
