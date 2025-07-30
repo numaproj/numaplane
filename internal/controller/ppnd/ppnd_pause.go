@@ -137,7 +137,8 @@ func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipelin
 func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase PipelineDesiredPhase) error {
 	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, string(phase))
 	if phase == RunningDesiredPhase {
-
+		// set desiredPhase=Running, but also make sure to set the numaflow.numaproj.io/resume-strategy annotation to "fast" just in case it was set to "slow"
+		patchJson = fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "fast"}}}`, string(phase))
 	}
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 

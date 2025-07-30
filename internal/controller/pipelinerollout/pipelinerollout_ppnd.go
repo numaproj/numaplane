@@ -24,9 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -76,9 +76,10 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			return false, err
 		}
 
+		// TODO: I think we should change this so it really checks if it's not paused - if it's failed, this should be okay - unless handled below...
 		// now check if it's running
 		// this is used below to make sure it's running before we exit PPND strategy
-		// (note: this is necessary to prevent overriding of the numaflow run speed annotation)
+		// (note: this is necessary to prevent overriding of the numaflow.numaproj.io/resume-strategy annotation)
 		resumed = numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhaseRunning)
 	}
 
@@ -223,13 +224,19 @@ func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Con
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
+	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("metadataRisk: %t, from=%v, to=%v\n",
+		metadataRisk, fromCopy.Object["metadata"], toCopy.Object["metadata"])
 	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
+	/*labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
 	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
 	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())*/
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	// just look specifically for metadata fields that can result in Progressive
+	// anything else could be updated by some platform and not by the user, which would cause an issue
+
+	return !specsEqual || metadataRisk, nil
 }
 
 func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec numaflowtypes.PipelineSpec) bool {
