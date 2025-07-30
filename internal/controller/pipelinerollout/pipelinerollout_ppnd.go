@@ -80,7 +80,9 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		// now check if it's running
 		// this is used below to make sure it's running before we exit PPND strategy
 		// (note: this is necessary to prevent overriding of the numaflow.numaproj.io/resume-strategy annotation)
-		resumed = numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhaseRunning)
+		//resumed = numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhaseRunning)
+		resumed = !numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
+			!numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
 	}
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
@@ -211,8 +213,8 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 }
 
 // Determine if the Pipeline has changed and needs updating
-// We need to ignore any field that could be set by Numaplane in the pause-and-drain process
-// TODO: do we really need this or can we just use usde functionality and just look for data loss fields?
+// We need to ignore any field that could be set by Numaplane in the pause-and-drain process as well as any labels or annotations that might be set directly on the Pipeline
+// by some Controller
 func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
@@ -224,17 +226,11 @@ func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Con
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
+	// We need to restrict to just looking specifically at the labels and annotations we care about for data loss; otherwise, some platform (such as Numaflow) may set an annotation
+	// that we don't want to accidentally concern ourselves with
 	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
 	numaLogger.Debugf("metadataRisk: %t, from=%v, to=%v\n",
-		metadataRisk, fromCopy.Object["metadata"], toCopy.Object["metadata"])
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	/*labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())*/
-
-	// just look specifically for metadata fields that can result in Progressive
-	// anything else could be updated by some platform and not by the user, which would cause an issue
+		metadataRisk, from.Object["metadata"], to.Object["metadata"])
 
 	return !specsEqual || metadataRisk, nil
 }
