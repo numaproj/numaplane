@@ -76,7 +76,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 			return false, err
 		}
 
-		// TODO: I think we should change this so it really checks if it's not paused - if it's failed, this should be okay - unless handled below...
 		// now check if it's running
 		// this is used below to make sure it's running before we exit PPND strategy
 		// (note: this is necessary to prevent overriding of the numaflow.numaproj.io/resume-strategy annotation)
