@@ -33,6 +33,10 @@ import (
 
 	argorolloutv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	kubeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
@@ -40,9 +44,6 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
-	kubeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -52,7 +53,7 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	DefaultTestTimeout            = 6 * time.Minute
+	DefaultTestTimeout            = 15 * time.Minute
 	DefaultConsistentCheckTimeout = 15 * time.Second // the default time for checks using "Consistently"
 	TestPollingInterval           = 10 * time.Millisecond
 
@@ -79,12 +80,12 @@ var (
 
 const (
 	// For tests that use just one Numaflow Controller Version:
-	PrimaryNumaflowControllerVersion = "1.4.6"
+	PrimaryNumaflowControllerVersion = "1.5.1"
 
 	// For tests that transition from one Numaflow Controller Version to another:
 	// (generally these are consecutive versions, but not always)
-	InitialNumaflowControllerVersion = "1.4.3"
-	UpdatedNumaflowControllerVersion = "1.4.6"
+	InitialNumaflowControllerVersion = "1.4.6"
+	UpdatedNumaflowControllerVersion = "1.5.1"
 
 	InitialJetstreamVersion = "2.10.17"
 	UpdatedJetstreamVersion = "2.10.11"

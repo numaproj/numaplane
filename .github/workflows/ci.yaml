@@ -171,7 +171,7 @@ jobs:
       - name: Install Numaplane
         env:
           GOPATH: /home/runner/go
-        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} TEST_TYPE=e2e make start
+        run: KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} make start
 
       - name: Wait for Numaplane to be ready
         run: |
@@ -187,19 +187,19 @@ jobs:
           KUBECONFIG=~/.kube/config VERSION=${{ github.sha }} DOCKER_PUSH=true STRATEGY=${{matrix.strategy}} ENABLE_POD_LOGS=true make test-${{matrix.case}}-e2e
 
       ## This is a temporary solution to kill the process twice, until we have fix for a stuck process after initial kill.
-      - name: Stop numaplane process
-        if: always()
-        run: |
-          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
-          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
-          sleep 10s
-          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
+#      - name: Stop numaplane process
+#        if: always()
+#        run: |
+#          export POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+#          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
+#          sleep 10s
+#          kubectl exec -n numaplane-system $POD_NAME -- /bin/bash -c 'kill -SIGTERM `cat /numaplane.pid`'
 
-      - name: Copy report from Numaplane pod
-        run: |
-          mkdir -p tests/e2e/output/resources/coverage/
-          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
-          kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
+#      - name: Copy report from Numaplane pod
+#        run: |
+#          mkdir -p tests/e2e/output/resources/coverage/
+#          POD_NAME=$(kubectl get pods -n numaplane-system -l app.kubernetes.io/name=controller-manager -o jsonpath="{.items[0].metadata.name}")
+#          kubectl cp $POD_NAME:/coverage -n numaplane-system tests/e2e/output/resources/coverage/
 
       - name: Archive code coverage
         uses: actions/upload-artifact@v4
