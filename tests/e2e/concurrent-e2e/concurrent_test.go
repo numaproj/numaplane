@@ -48,9 +48,8 @@ var (
 		Duration: time.Second,
 	}
 	sourceVertexName    = "in"
-	fourPods            = int32(4)
-	fivePods            = int32(5)
 	onePod              = int32(1)
+	twoPods             = int32(2)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
@@ -63,7 +62,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &twoPods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -98,7 +97,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &twoPods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -131,8 +130,8 @@ var (
 		},
 	}
 
-	monoVertexScaleMin = int32(4)
-	monoVertexScaleMax = int32(5)
+	monoVertexScaleMin = int32(1)
+	monoVertexScaleMax = int32(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
@@ -196,7 +195,7 @@ var (
 	}
 
 	// updating Resources.Limits will not cause data loss or require recreating ISBService
-	updatedMemLimit, _        = apiresource.ParseQuantity("2Gi")
+	updatedMemLimit, _        = apiresource.ParseQuantity("1Gi")
 	directApplyISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 		Redis: nil,
 		JetStream: &numaflowv1.JetStreamBufferService{
