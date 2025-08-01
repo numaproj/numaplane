@@ -32,15 +32,17 @@ import (
 )
 
 const (
-	monoVertexRolloutName   = "test-monovertex-analysis-rollout"
-	analysisTemplateNameOne = "test-monovertex-template-1"
-	analysisTemplateNameTwo = "test-monovertex-template-2"
-	analysisRunName         = "monovertex-" + monoVertexRolloutName
+	monoVertexRolloutNameSuccess = "test-monovertex-analysis-rollout-success"
+	monoVertexRolloutNameFailure = "test-monovertex-analysis-rollout-failure"
+	analysisTemplateNameOne      = "test-monovertex-template-1"
+	analysisTemplateNameTwo      = "test-monovertex-template-2"
+	analysisRunNameSuccess       = "monovertex-" + monoVertexRolloutNameSuccess
+	analysisRunNameFailure       = "monovertex-" + monoVertexRolloutNameFailure
 )
 
 var (
-	monoVertexScaleMin  = int32(4)
-	monoVertexScaleMax  = int32(5)
+	monoVertexScaleMin  = int32(1)
+	monoVertexScaleMax  = int32(3)
 	zeroReplicaSleepSec = uint32(15)
 
 	monoVertexScaleTo               = int64(2)
@@ -145,19 +147,19 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0"
 		CreateAnalysisTemplate(analysisTemplateNameTwo, Namespace, *updatedAnalysisTemplateSpec)
 
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
+		CreateInitialMonoVertexRollout(monoVertexRolloutNameSuccess, initialMonoVertexSpec, &defaultStrategy)
 
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
-		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutNameSuccess, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
+		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutNameSuccess, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
 			0, 1, false, true)
 
 		// Verify the previously promoted monovertex was deleted
-		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutName, 0))
+		VerifyMonoVertexDeletion(GetInstanceName(monoVertexRolloutNameSuccess, 0))
 
-		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
-		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunNameSuccess, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunNameSuccess, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
-		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteMonoVertexRollout(monoVertexRolloutNameSuccess)
 		DeleteAnalysisTemplate(analysisTemplateNameOne)
 		DeleteAnalysisTemplate(analysisTemplateNameTwo)
 	})
@@ -176,16 +178,16 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedInitialMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 		updatedInitialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
 		updatedInitialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategy)
+		CreateInitialMonoVertexRollout(monoVertexRolloutNameFailure, *updatedInitialMonoVertexSpec, &defaultStrategy)
 
-		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *updatedInitialMonoVertexSpec, udTransformer)
-		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
+		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutNameFailure, validUDTransformerImage, *updatedInitialMonoVertexSpec, udTransformer)
+		VerifyMonoVertexProgressiveFailure(monoVertexRolloutNameFailure, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
 
 		// Verify the AnalysisRun status is Failed
-		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
-		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseSuccessful)
+		VerifyAnalysisRunStatus("mvtx-example-1", GetInstanceName(analysisRunNameFailure, 1), argov1alpha1.AnalysisPhaseError)
+		VerifyAnalysisRunStatus("mvtx-example-2", GetInstanceName(analysisRunNameFailure, 1), argov1alpha1.AnalysisPhaseSuccessful)
 
-		DeleteMonoVertexRollout(monoVertexRolloutName)
+		DeleteMonoVertexRollout(monoVertexRolloutNameFailure)
 		DeleteAnalysisTemplate(analysisTemplateNameOne)
 		DeleteAnalysisTemplate(analysisTemplateNameTwo)
 	})

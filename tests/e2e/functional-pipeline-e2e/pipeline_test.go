@@ -45,10 +45,11 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
-	sourceVertexName    = "in"
-	fourPods            = int32(4)
-	fivePods            = int32(5)
+	sourceVertexName = "in"
+	//fourPods            = int32(1)
+	//fivePods            = int32(2)
 	onePod              = int32(1)
+	twoPods             = int32(2)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
@@ -61,7 +62,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &twoPods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -95,7 +96,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &twoPods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -211,7 +212,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			})
 		}
 
-		// allow time for self healing to reconcile
+		// allow time for self-healing to reconcile
 		time.Sleep(5 * time.Second)
 
 		// get updated Pipeline again to compare spec

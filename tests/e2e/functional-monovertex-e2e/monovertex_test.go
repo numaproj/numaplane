@@ -33,8 +33,8 @@ const (
 )
 
 var (
-	monoVertexScaleMin = int32(4)
-	monoVertexScaleMax = int32(5)
+	monoVertexScaleMin = int32(1)
+	monoVertexScaleMax = int32(3)
 	monoVertexScaleTo  = int64(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{

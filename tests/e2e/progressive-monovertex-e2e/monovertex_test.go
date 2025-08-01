@@ -35,8 +35,8 @@ const (
 )
 
 var (
-	monoVertexScaleMin  = int32(4)
-	monoVertexScaleMax  = int32(5)
+	monoVertexScaleMin  = int32(1)
+	monoVertexScaleMax  = int32(3)
 	zeroReplicaSleepSec = uint32(15)
 
 	monoVertexScaleTo               = int64(2)
