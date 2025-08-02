@@ -79,7 +79,6 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 		// now check if it's running
 		// this is used below to make sure it's running before we exit PPND strategy
 		// (note: this is necessary to prevent overriding of the numaflow.numaproj.io/resume-strategy annotation)
-		//resumed = numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhaseRunning)
 		resumed = !numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
 			!numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
 	}
