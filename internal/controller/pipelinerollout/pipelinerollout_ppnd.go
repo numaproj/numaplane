@@ -213,6 +213,7 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 // Determine if the Pipeline has changed and needs updating
 // We need to ignore any field that could be set by Numaplane in the pause-and-drain process as well as any labels or annotations that might be set directly on the Pipeline
 // by some Controller
+// TODO: can we replace this function with existing usde logic?
 func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
