@@ -24,6 +24,7 @@ Numaplane is a control plane for installing, managing and running numaflow resou
 
 ## How To Release
 
+
 ### Release Branch
 
 Always create a release branch for the releases, for example branch `release-0.5` is for all the v0.5.x versions release.
