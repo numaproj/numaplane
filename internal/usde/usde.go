@@ -252,10 +252,7 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 	).Debug("metadata comparison")
 
 	// First look for Label or Annotation changes that require PPND or Progressive strategy
-	// TODO: make this configurable to look for particular Labels and Annotations rather than this specific one
-	instanceIDNew := newDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
-	instanceIDExisting := existingDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
-	if instanceIDNew != instanceIDExisting {
+	if ResourceMetadataHasDataLossRisk(ctx, newDef, existingDef) {
 		return true, upgradeStrategy, nil
 	}
 
@@ -264,6 +261,12 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 	return false, apiv1.UpgradeStrategyNoOp, nil
+}
+
+func ResourceMetadataHasDataLossRisk(ctx context.Context, newDef, existingDef *unstructured.Unstructured) bool {
+	instanceIDNew := newDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+	instanceIDExisting := existingDef.GetAnnotations()[common.AnnotationKeyNumaflowInstanceID]
+	return instanceIDNew != instanceIDExisting
 }
 
 // return required upgrade strategy, list of additions, modifications, deletions required
