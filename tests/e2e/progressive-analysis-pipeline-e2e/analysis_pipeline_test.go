@@ -24,15 +24,14 @@ import (
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	. "github.com/numaproj/numaplane/tests/e2e"
-
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
 const (

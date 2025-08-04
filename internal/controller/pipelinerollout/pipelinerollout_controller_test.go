@@ -483,7 +483,7 @@ var specWithNonEmptyScale = `
 }
 `
 
-func Test_ChildNeedsUpdating(t *testing.T) {
+func Test_CheckForDifferences(t *testing.T) {
 
 	_, _, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
@@ -527,7 +527,7 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 			spec2:                 specNoScale,
 			labels1:               map[string]string{"app": "test1"},
 			labels2:               map[string]string{"app": "test2"},
-			expectedNeedsUpdating: true,
+			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
@@ -536,25 +536,16 @@ func Test_ChildNeedsUpdating(t *testing.T) {
 			spec2:                 specNoScale,
 			annotations1:          map[string]string{"key1": "test1"},
 			annotations2:          nil,
-			expectedNeedsUpdating: true,
-			expectedError:         false,
-		},
-		{
-			name:                  "Numaplane Labels should be ignored",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			labels1:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value1"},
-			labels2:               map[string]string{"app": "test", common.KeyNumaplanePrefix + "test": "value2"},
 			expectedNeedsUpdating: false,
 			expectedError:         false,
 		},
 		{
-			name:                  "Numaplane Annotations should be ignored",
+			name:                  "Numaflow Instance Annotation",
 			spec1:                 specNoScale,
 			spec2:                 specNoScale,
-			annotations1:          map[string]string{common.KeyNumaplanePrefix + "test": "value1"},
+			annotations1:          map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"},
 			annotations2:          nil,
-			expectedNeedsUpdating: false,
+			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 	}

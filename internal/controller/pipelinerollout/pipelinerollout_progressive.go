@@ -12,6 +12,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -154,12 +155,12 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 }
 
-// CheckForDifferences() tests for essential equality, with any fields that Numaplane manipulates eliminated from the comparison
+// CheckForDifferences() tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
 // configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane itself changes or it will confuse things
+// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
 func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
@@ -175,15 +176,13 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, fro
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
-	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
-		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	// just look specifically for metadata fields that can result in Progressive
+	// anything else could be updated by some platform and not by the user, which would cause an issue
+	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
+		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual || metadataRisk, nil
 }
 
 /*
