@@ -35,6 +35,11 @@ var (
 	pauseModuleInstance *PauseModule
 )
 
+type PipelineDesiredPhase string
+
+const RunningDesiredPhase PipelineDesiredPhase = "Running"
+const PausedDesiredPhase PipelineDesiredPhase = "Paused"
+
 func GetPauseModule() *PauseModule {
 	once.Do(func() {
 		pauseModuleInstance = &PauseModule{PauseRequests: make(map[string]*bool)}
@@ -97,7 +102,7 @@ func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipel
 		return err
 	}
 
-	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Paused")
+	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, PausedDesiredPhase)
 }
 
 // resume pipeline
@@ -126,11 +131,15 @@ func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipelin
 		}
 	}
 
-	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Running")
+	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, RunningDesiredPhase)
 }
 
-func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase string) error {
-	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
+func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase PipelineDesiredPhase) error {
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, string(phase))
+	if phase == RunningDesiredPhase {
+		// set desiredPhase=Running, but also make sure to set the numaflow.numaproj.io/resume-strategy annotation to "fast" just in case it was set to "slow"
+		patchJson = fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "fast"}}}`, string(phase))
+	}
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 
 }
