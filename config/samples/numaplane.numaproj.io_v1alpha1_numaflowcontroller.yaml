@@ -5,4 +5,4 @@ metadata:
   namespace: example-namespace
 spec:
   #instanceID: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
-  version: "1.4.6"
+  version: "1.5.2"
