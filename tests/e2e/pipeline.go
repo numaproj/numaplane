@@ -449,7 +449,9 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 			Name:      name,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
-			Strategy: strategy,
+			Strategy: &apiv1.PipelineStrategy{
+				PipelineTypeRolloutStrategy: *strategy,
+			},
 			Pipeline: apiv1.Pipeline{
 				Spec: runtime.RawExtension{
 					Raw: pipelineSpecRaw,
