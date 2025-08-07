@@ -138,7 +138,7 @@ func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipelin
 }
 
 func (pm *PauseModule) SetPipelineLifecyclePaused(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
-	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "paused"}}}`
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, PausedDesiredPhase)
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
@@ -148,7 +148,7 @@ func (pm *PauseModule) SetPipelineLifecycleRunning(ctx context.Context, c client
 	if resumeFast {
 		resumeSpeed = "fast"
 	}
-	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "Running"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "%s"}}}`, resumeSpeed)
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "%s"}}}`, RunningDesiredPhase, resumeSpeed)
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
