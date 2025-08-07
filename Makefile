@@ -78,7 +78,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-CONTAINER_RUNTIME := docker
+CONTAINER_RUNTIME ?= docker
 
 CURRENT_CONTEXT := $(shell [[ "`command -v kubectl`" != '' ]] && kubectl config current-context 2> /dev/null || echo "unset")
 
