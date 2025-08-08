@@ -41,7 +41,7 @@ type PipelineRolloutSpec struct {
 type PipelineStrategy struct {
 	PipelineTypeRolloutStrategy `json:",inline"`
 
-	PPNDStrategy `json:"ppndStrategy,omitempty"`
+	PPNDStrategy `json:"ppnd,omitempty"`
 }
 
 type PPNDStrategy struct {

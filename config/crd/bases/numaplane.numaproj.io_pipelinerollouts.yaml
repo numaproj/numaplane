@@ -161,7 +161,7 @@ spec:
                           type: object
                         type: array
                     type: object
-                  ppndStrategy:
+                  ppnd:
                     properties:
                       fastResume:
                         description: FastResume indicates if the Pipeline should be
