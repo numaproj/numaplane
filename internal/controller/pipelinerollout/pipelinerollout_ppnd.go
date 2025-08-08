@@ -299,12 +299,18 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycleRunning(ctx context.Cont
 		numaLogger.Info("resuming pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
+		// determine whether to resume pipeline at the original pod count which was running before it was paused or at its minimal pod count
+		fastResume := false
+		if pipelineRollout.Spec.Strategy != nil {
+			fastResume = pipelineRollout.Spec.Strategy.FastResume
+		}
+
 		isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 		if err != nil {
 			return err
 		}
 
-		return ppnd.GetPauseModule().RunPipeline(ctx, r.client, existingPipelineDef, isbsvcRollout.Name, force)
+		return ppnd.GetPauseModule().RunPipeline(ctx, r.client, existingPipelineDef, isbsvcRollout.Name, force, fastResume)
 	}
 	return nil
 }

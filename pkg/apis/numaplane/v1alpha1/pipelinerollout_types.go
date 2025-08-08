@@ -33,9 +33,20 @@ const (
 
 // PipelineRolloutSpec defines the desired state of PipelineRollout
 type PipelineRolloutSpec struct {
-	Pipeline Pipeline                     `json:"pipeline"`
-	Strategy *PipelineTypeRolloutStrategy `json:"strategy,omitempty"`
-	Riders   []PipelineRider              `json:"riders,omitempty"`
+	Pipeline Pipeline          `json:"pipeline"`
+	Strategy *PipelineStrategy `json:"strategy,omitempty"`
+	Riders   []PipelineRider   `json:"riders,omitempty"`
+}
+
+type PipelineStrategy struct {
+	PipelineTypeRolloutStrategy `json:",inline"`
+
+	PPNDStrategy `json:"ppnd,omitempty"`
+}
+
+type PPNDStrategy struct {
+	// FastResume indicates if the Pipeline should be resumed with the number of replicas it had before it was paused.
+	FastResume bool `json:"fastResume,omitempty"`
 }
 
 // PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
