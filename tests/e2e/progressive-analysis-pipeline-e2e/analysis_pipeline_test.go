@@ -45,16 +45,18 @@ const (
 )
 
 var (
-	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
-		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "120,30,10",
-			},
-			Analysis: apiv1.Analysis{
-				Templates: []argov1alpha1.AnalysisTemplateRef{
-					{
-						TemplateName: analysisTemplateName,
-						ClusterScope: false,
+	defaultStrategy = apiv1.PipelineStrategy{
+		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					AssessmentSchedule: "120,30,10",
+				},
+				Analysis: apiv1.Analysis{
+					Templates: []argov1alpha1.AnalysisTemplateRef{
+						{
+							TemplateName: analysisTemplateName,
+							ClusterScope: false,
+						},
 					},
 				},
 			},

@@ -92,8 +92,6 @@ spec:
                   type: object
                 type: array
               strategy:
-                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
-                  for fields shared by Pipeline and MonoVertex
                 properties:
                   analysis:
                     description: Analysis defines how to perform analysis of health,
@@ -162,6 +160,14 @@ spec:
                               type: string
                           type: object
                         type: array
+                    type: object
+                  ppnd:
+                    properties:
+                      fastResume:
+                        description: FastResume indicates if the Pipeline should be
+                          resumed with the number of replicas it had before it was
+                          paused.
+                        type: boolean
                     type: object
                   progressive:
                     properties:

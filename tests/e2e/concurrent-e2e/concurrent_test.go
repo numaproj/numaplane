@@ -325,10 +325,12 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 				// for this test, we start the assessment window at 4 minutes in, which is longer
 				// than other tests, due to the fact that Numaflow Controller is also restarting
 				// and therefore can take longer to do its reconciliations of Pipeline changes
-				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
-					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-						Progressive: apiv1.ProgressiveStrategy{
-							AssessmentSchedule: "240,60,10",
+				rollout.Spec.Strategy = &apiv1.PipelineStrategy{
+					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+							Progressive: apiv1.ProgressiveStrategy{
+								AssessmentSchedule: "240,60,10",
+							},
 						},
 					},
 				}

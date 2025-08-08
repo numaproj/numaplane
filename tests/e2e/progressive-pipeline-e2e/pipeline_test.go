@@ -41,10 +41,12 @@ const (
 )
 
 var (
-	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
-		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "120,30,10",
+	defaultStrategy = apiv1.PipelineStrategy{
+		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					AssessmentSchedule: "120,30,10",
+				},
 			},
 		},
 	}
@@ -251,10 +253,12 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("Should validate ISBServiceRollout and PipelineRollout ForcePromote Strategy works", func() {
 		// Create a PipelineRollout with forcePromote=true
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, apiv1.PipelineTypeRolloutStrategy{
-			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
-				Progressive: apiv1.ProgressiveStrategy{
-					ForcePromote: true,
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, apiv1.PipelineStrategy{
+			PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+				PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+					Progressive: apiv1.ProgressiveStrategy{
+						ForcePromote: true,
+					},
 				},
 			},
 		})
