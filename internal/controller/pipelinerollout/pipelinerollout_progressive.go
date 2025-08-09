@@ -8,6 +8,11 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -17,10 +22,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpgradingChildDefinition creates a definition for an "upgrading" pipeline
@@ -103,17 +104,30 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return areAllVerticesReplicasReady, replicasFailureReason, nil
 	}
 
+	// if Assessment EndTime ever arrives, we automatically fail
+	if childStatus.AssessmentEndTimeArrived() {
+		numaLogger.WithValues("childStatus", *childStatus).Debug("upgrading child EndTime has arrived, failing the assessment")
+		// set AssessmentEndTime to now and return failure
+		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+			currentTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &currentTime
+		})
+
+		return apiv1.AssessmentResultFailure, "Assessment EndTime has arrived", nil
+	}
+
 	// First perform basic resource health check
 	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 	if err != nil {
 		return assessment, reasonFailure, err
 	}
-	// if we fail even once, that's considered failure
+	// if we fail even once, that's considered a failure
 	if assessment == apiv1.AssessmentResultFailure {
 		// set AssessmentEndTime to now and return failure
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-			assessmentEndTime := metav1.NewTime(time.Now())
-			status.BasicAssessmentEndTime = &assessmentEndTime
+			currentTime := metav1.NewTime(time.Now())
+			status.BasicAssessmentEndTime = &currentTime
+			status.AssessmentLastUpdated = &currentTime
 		})
 
 		return assessment, reasonFailure, nil
@@ -122,6 +136,14 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
 	// check "successful"
 	if assessment == apiv1.AssessmentResultSuccess {
+		// Set AssessmentLastUpdated if it hasn't been set yet, so we can track when the assessment was last successful
+		if !childStatus.IsAssessmentLastUpdatedSet() {
+			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+				currentTime := metav1.NewTime(time.Now())
+				status.AssessmentLastUpdated = &currentTime
+			})
+			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentLastUpdated time")
+		}
 		// has AssessmentEndTime been set? if not, set it - now we can start our interval
 		if !childStatus.IsAssessmentEndTimeSet() {
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
@@ -148,14 +170,13 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				return apiv1.AssessmentResultSuccess, "", nil
 			}
 		}
-
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
 
 }
 
-// CheckForDifferences() tests for essential equality.
+// CheckForDifferences tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are

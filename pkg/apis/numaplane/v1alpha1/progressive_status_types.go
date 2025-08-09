@@ -46,10 +46,13 @@ type UpgradingChildStatus struct {
 	// BasicAssessmentEndTime indicates the time after which no more basic resource health check assessments will be performed
 	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
+	// AssessmentLastUpdated indicates the time at which the last update of EndTime field
+	AssessmentLastUpdated *metav1.Time `json:"assessmentLastUpdated,omitempty"`
+
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 
-	// Discontinued indicates if the upgrade was stopped prematurely
+	// Discontinued indicates if the upgrade was stopped prematurely,
 	// This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
 	// in the middle of an upgrade
 	Discontinued bool `json:"discontinued,omitempty"`
@@ -118,6 +121,18 @@ func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 	return ucs != nil && ucs.BasicAssessmentEndTime != nil
 }
 
+// IsAssessmentLastUpdatedSet checks if the AssessmentLastUpdated field is not nil.
+func (ucs *UpgradingChildStatus) IsAssessmentLastUpdatedSet() bool {
+	return ucs != nil && ucs.AssessmentLastUpdated != nil
+}
+
+// AssessmentEndTimeArrived determines if the Assessment EndTime has been set and is in the past
+func (ucs *UpgradingChildStatus) AssessmentEndTimeArrived() bool {
+	return ucs != nil &&
+		ucs.AssessmentLastUpdated != nil &&
+		time.Now().After(ucs.AssessmentLastUpdated.Time)
+}
+
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
 // It checks that the current time is after the AssessmentStartTime and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
@@ -127,7 +142,7 @@ func (ucs *UpgradingChildStatus) CanAssess() bool {
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 
-// BasicAssessmentEndTimeArrived() determines if the BasicAssessmentEndTime has been set and is in the past
+// BasicAssessmentEndTimeArrived determines if the BasicAssessmentEndTime has been set and is in the past
 func (ucs *UpgradingChildStatus) BasicAssessmentEndTimeArrived() bool {
 	return ucs != nil &&
 		ucs.BasicAssessmentEndTime != nil &&
