@@ -35,6 +35,11 @@ var (
 	pauseModuleInstance *PauseModule
 )
 
+type PipelineDesiredPhase string
+
+const RunningDesiredPhase PipelineDesiredPhase = "Running"
+const PausedDesiredPhase PipelineDesiredPhase = "Paused"
+
 func GetPauseModule() *PauseModule {
 	once.Do(func() {
 		pauseModuleInstance = &PauseModule{PauseRequests: make(map[string]*bool)}
@@ -97,13 +102,16 @@ func (pm *PauseModule) PausePipeline(ctx context.Context, c client.Client, pipel
 		return err
 	}
 
-	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Paused")
+	return pm.SetPipelineLifecyclePaused(ctx, c, pipeline)
 }
 
 // resume pipeline
 // lock the maps while we change pipeline lifecycle so nobody changes their pause request
 // while we run; otherwise, they may think they are pausing the pipeline while it's running
-func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, isbsvcName string, force bool) error {
+// args:
+// - force: if force is false, then first check to make sure numaflow controller and isbsvc aren't requesting pause
+// - resumeFast: determines the speed of resume (whether it goes back to original number of pods running pre-pause or goes to min)
+func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, isbsvcName string, force bool, resumeFast bool) error {
 	pm.lock.RLock()
 	defer pm.lock.RUnlock()
 
@@ -126,13 +134,22 @@ func (pm *PauseModule) RunPipeline(ctx context.Context, c client.Client, pipelin
 		}
 	}
 
-	return pm.UpdatePipelineLifecycle(ctx, c, pipeline, "Running")
+	return pm.SetPipelineLifecycleRunning(ctx, c, pipeline, resumeFast)
 }
 
-func (pm *PauseModule) UpdatePipelineLifecycle(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, phase string) error {
-	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, phase)
+func (pm *PauseModule) SetPipelineLifecyclePaused(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, PausedDesiredPhase)
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
+}
 
+func (pm *PauseModule) SetPipelineLifecycleRunning(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, resumeFast bool) error {
+	// set desiredPhase=Running, but also make sure to set the numaflow.numaproj.io/resume-strategy annotation to either "fast" or "slow", depending on configuration
+	resumeSpeed := "slow"
+	if resumeFast {
+		resumeSpeed = "fast"
+	}
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "%s"}}}`, RunningDesiredPhase, resumeSpeed)
+	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
 func (pm *PauseModule) GetNumaflowControllerKey(namespace string) string {

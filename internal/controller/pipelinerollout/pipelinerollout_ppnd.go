@@ -24,9 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -63,15 +63,24 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	if needsPaused == nil { // not enough information to know
 		return false, errors.New("not enough information available to know if we need to pause")
 	}
+
+	resumed := false
 	shouldBePaused := *needsPaused
 	if shouldBePaused {
 		if err := r.setPipelineLifecyclePaused(ctx, existingPipelineDef); err != nil {
 			return false, err
 		}
 	} else {
+		// make sure this is set to running
 		if err := r.setPipelineLifecycleRunning(ctx, pipelineRollout, existingPipelineDef, forceResume); err != nil {
 			return false, err
 		}
+
+		// now check if it's running
+		// this is used below to make sure it's running before we exit PPND strategy
+		// (note: this is necessary to prevent overriding of the numaflow.numaproj.io/resume-strategy annotation)
+		resumed = !numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
+			!numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
 	}
 
 	// update the ResourceVersion in the newPipelineDef in case it got updated
@@ -101,7 +110,7 @@ func (r *PipelineRolloutReconciler) processExistingPipelineWithPPND(ctx context.
 	}
 
 	// are we done with PPND?
-	doneWithPPND := !shouldBePaused
+	doneWithPPND := resumed
 
 	// but if the PipelineRollout says to pause and we're Paused (or won't pause), stop doing PPND in that case too
 	specBasedPause := r.isSpecBasedPause(newPipelineSpec)
@@ -202,8 +211,9 @@ func (r *PipelineRolloutReconciler) needPPND(ctx context.Context, pipelineRollou
 }
 
 // Determine if the Pipeline has changed and needs updating
-// We need to ignore any field that could be set by Numaplane in the pause-and-drain process
-// TODO: do we really need this or can we just use usde functionality and just look for data loss fields?
+// We need to ignore any field that could be set by Numaplane in the pause-and-drain process as well as any labels or annotations that might be set directly on the Pipeline
+// by some Controller
+// TODO: can we replace this function with existing usde logic?
 func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
@@ -215,13 +225,13 @@ func (r *PipelineRolloutReconciler) pipelineNeedsUpdatingForPPND(ctx context.Con
 	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
 	numaLogger.Debugf("specsEqual: %t, from=%v, to=%v\n",
 		specsEqual, fromCopy.Object["spec"], toCopy.Object["spec"])
-	// compare Labels and Annotations, excluding any that Numaplane itself applies
-	labelsEqual := util.CompareMapsWithExceptions(from.GetLabels(), to.GetLabels(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("labelsEqual (excluding Numaplane labels): %t, from Labels=%v, to Labels=%v", labelsEqual, from.GetLabels(), to.GetLabels())
-	annotationsEqual := util.CompareMapsWithExceptions(from.GetAnnotations(), to.GetAnnotations(), common.KeyNumaplanePrefix)
-	numaLogger.Debugf("annotationsEqual (excluding Numaplane annotations): %t, from Annotations=%v, to Annotations=%v", annotationsEqual, from.GetAnnotations(), to.GetAnnotations())
+	// We need to restrict to just looking specifically at the labels and annotations we care about for data loss; otherwise, some platform (such as Numaflow) may set an annotation
+	// that we don't want to accidentally concern ourselves with
+	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
+	numaLogger.Debugf("metadataRisk: %t, from=%v, to=%v\n",
+		metadataRisk, from.Object["metadata"], to.Object["metadata"])
 
-	return !specsEqual || !labelsEqual || !annotationsEqual, nil
+	return !specsEqual || metadataRisk, nil
 }
 
 func (r *PipelineRolloutReconciler) isSpecBasedPause(pipelineSpec numaflowtypes.PipelineSpec) bool {
@@ -289,12 +299,18 @@ func (r *PipelineRolloutReconciler) setPipelineLifecycleRunning(ctx context.Cont
 		numaLogger.Info("resuming pipeline")
 		r.recorder.Eventf(existingPipelineDef, "Normal", "PipelineResume", "resuming pipeline")
 
+		// determine whether to resume pipeline at the original pod count which was running before it was paused or at its minimal pod count
+		fastResume := false
+		if pipelineRollout.Spec.Strategy != nil {
+			fastResume = pipelineRollout.Spec.Strategy.FastResume
+		}
+
 		isbsvcRollout, err := r.getISBSvcRollout(ctx, pipelineRollout)
 		if err != nil {
 			return err
 		}
 
-		return ppnd.GetPauseModule().RunPipeline(ctx, r.client, existingPipelineDef, isbsvcRollout.Name, force)
+		return ppnd.GetPauseModule().RunPipeline(ctx, r.client, existingPipelineDef, isbsvcRollout.Name, force, fastResume)
 	}
 	return nil
 }

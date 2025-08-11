@@ -1404,8 +1404,6 @@ spec:
                   type: object
                 type: array
               strategy:
-                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
-                  for fields shared by Pipeline and MonoVertex
                 properties:
                   analysis:
                     description: Analysis defines how to perform analysis of health,
@@ -1474,6 +1472,14 @@ spec:
                               type: string
                           type: object
                         type: array
+                    type: object
+                  ppnd:
+                    properties:
+                      fastResume:
+                        description: FastResume indicates if the Pipeline should be
+                          resumed with the number of replicas it had before it was
+                          paused.
+                        type: boolean
                     type: object
                   progressive:
                     properties:
@@ -1876,6 +1882,55 @@ spec:
       name: Reduce UDFs
       priority: 10
       type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: servingpipelines.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: ServingPipeline
+    listKind: ServingPipelineList
+    plural: servingpipelines
+    shortNames:
+    - spl
+    singular: servingpipeline
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
