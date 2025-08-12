@@ -346,11 +346,6 @@ spec:
                         required:
                         - phase
                         type: object
-                      assessmentLastUpdated:
-                        description: AssessmentLastUpdated indicates the time at which
-                          the last update of EndTime field
-                        format: date-time
-                        type: string
                       assessmentResult:
                         description: AssessmentResult described whether it's failed
                           or succeeded, or to be determined
@@ -427,6 +422,11 @@ spec:
                           - name
                           type: object
                         type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
                     required:
                     - name
                     - originalScaleMinMax

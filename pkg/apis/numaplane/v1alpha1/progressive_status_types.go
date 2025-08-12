@@ -46,8 +46,8 @@ type UpgradingChildStatus struct {
 	// BasicAssessmentEndTime indicates the time after which no more basic resource health check assessments will be performed
 	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
-	// AssessmentLastUpdated indicates the time at which the last update of EndTime field
-	AssessmentLastUpdated *metav1.Time `json:"assessmentLastUpdated,omitempty"`
+	// TrialWindowStartTime indicates the time at which the trial window starts
+	TrialWindowStartTime *metav1.Time `json:"trialWindowStartTime,omitempty"`
 
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
@@ -121,16 +121,9 @@ func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 	return ucs != nil && ucs.BasicAssessmentEndTime != nil
 }
 
-// IsAssessmentLastUpdatedSet checks if the AssessmentLastUpdated field is not nil.
-func (ucs *UpgradingChildStatus) IsAssessmentLastUpdatedSet() bool {
-	return ucs != nil && ucs.AssessmentLastUpdated != nil
-}
-
-// AssessmentEndTimeArrived determines if the Assessment EndTime has been set and is in the past
-func (ucs *UpgradingChildStatus) AssessmentEndTimeArrived() bool {
-	return ucs != nil &&
-		ucs.AssessmentLastUpdated != nil &&
-		time.Now().After(ucs.AssessmentLastUpdated.Time)
+// IsTrialWindowStartTimeSet checks if the TrialWindowStartTime field is not nil.
+func (ucs *UpgradingChildStatus) IsTrialWindowStartTimeSet() bool {
+	return ucs != nil && ucs.TrialWindowStartTime != nil
 }
 
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.

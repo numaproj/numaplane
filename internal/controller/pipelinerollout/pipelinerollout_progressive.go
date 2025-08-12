@@ -72,10 +72,20 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
 
 	numaLogger := logger.FromContext(ctx)
-
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
-
 	childStatus := pipelineRollout.GetUpgradingChildStatus()
+	currentTime := time.Now()
+
+	// Check if endTime has arrived, fail immediately
+	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+		//if childStatus.BasicAssessmentEndTime != nil && time.Now().After(childStatus.BasicAssessmentEndTime.Time) {
+		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
+		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		})
+		return apiv1.AssessmentResultFailure, "Assessment window ended", nil
+	}
 
 	// function for checking readiness of Pipeline Vertex replicas
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
@@ -104,72 +114,51 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return areAllVerticesReplicasReady, replicasFailureReason, nil
 	}
 
-	// if Assessment EndTime ever arrives, we automatically fail
-	if childStatus.AssessmentEndTimeArrived() {
-		numaLogger.WithValues("childStatus", *childStatus).Debug("upgrading child EndTime has arrived, failing the assessment")
-		// set AssessmentEndTime to now and return failure
-		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-			currentTime := metav1.NewTime(time.Now())
-			status.BasicAssessmentEndTime = &currentTime
-		})
-
-		return apiv1.AssessmentResultFailure, "Assessment EndTime has arrived", nil
-	}
-
 	// First perform basic resource health check
 	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, verifyReplicasFunc)
 	if err != nil {
 		return assessment, reasonFailure, err
 	}
-	// if we fail even once, that's considered a failure
+
+	// if we fail even once, that's considered failure
 	if assessment == apiv1.AssessmentResultFailure {
 		// set AssessmentEndTime to now and return failure
+		numaLogger.Debugf("Assessment failed for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-			currentTime := metav1.NewTime(time.Now())
-			status.BasicAssessmentEndTime = &currentTime
-			status.AssessmentLastUpdated = &currentTime
+			status.TrialWindowStartTime = nil
+			status.AssessmentResult = apiv1.AssessmentResultFailure
 		})
 
 		return assessment, reasonFailure, nil
 	}
 
-	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
-	// check "successful"
+	// Handle success: set or keep TrialWindowStartTime
 	if assessment == apiv1.AssessmentResultSuccess {
-		// Set AssessmentLastUpdated if it hasn't been set yet, so we can track when the assessment was last successful
-		if !childStatus.IsAssessmentLastUpdatedSet() {
+		if !childStatus.IsTrialWindowStartTimeSet() {
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-				currentTime := metav1.NewTime(time.Now())
-				status.AssessmentLastUpdated = &currentTime
+				status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
+				status.AssessmentResult = apiv1.AssessmentResultSuccess
 			})
-			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentLastUpdated time")
-		}
-		// has AssessmentEndTime been set? if not, set it - now we can start our interval
-		if !childStatus.IsAssessmentEndTimeSet() {
-			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-				assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-				status.BasicAssessmentEndTime = &assessmentEndTime
-			})
-			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
+			numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 		}
 
-		// if end time has arrived (i.e. we continually determined "Success" for the entire prescribed period of time),
-		// if we need to launch an AnalysisRun, we can do it now;
-		// otherwise, we can declare success
-		if childStatus.BasicAssessmentEndTimeArrived() {
+		// Check if the trail window is set and if the success window has passed, if so, perform analysis or declare success
+		if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
+			// Success window passed, launch AnalysisRun or declared success
 			analysis := pipelineRollout.GetAnalysis()
-			// only check for and create AnalysisRun if templates are specified
 			if len(analysis.Templates) > 0 {
-				// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
+				numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
 				analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, pipelineRollout, pipelineRollout.GetAnalysis(), pipelineRollout.GetAnalysisStatus(), r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
 				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
-			} else {
-				return apiv1.AssessmentResultSuccess, "", nil
 			}
+			return apiv1.AssessmentResultSuccess, "", nil
 		}
+		numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
+		// Still waiting for a success window to pass
+		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
