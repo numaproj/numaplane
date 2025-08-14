@@ -335,7 +335,7 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")
 	if len(parts) != 4 {
-		return AssessmentSchedule{}, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
+		return AssessmentSchedule{}, fmt.Errorf("invalid schedule format: expected 4 comma-separated values")
 	}
 
 	// Convert each part to an integer and then to a time.Duration
@@ -374,7 +374,7 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (AssessmentSchedule, error) {
 
 	for _, schedule := range config.DefaultAssessmentSchedule {
-		if strings.EqualFold(schedule.Kind, kind) { // case insensitive equals check
+		if strings.EqualFold(schedule.Kind, kind) { // case-insensitive equals check
 			return ParseAssessmentSchedule(schedule.Schedule)
 		}
 	}

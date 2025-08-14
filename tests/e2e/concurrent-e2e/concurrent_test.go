@@ -329,7 +329,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 							Progressive: apiv1.ProgressiveStrategy{
-								AssessmentSchedule: "240,60,10",
+								AssessmentSchedule: "240,600,60,10",
 							},
 						},
 					},
@@ -348,7 +348,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 						Progressive: apiv1.ProgressiveStrategy{
-							AssessmentSchedule: "240,60,10",
+							AssessmentSchedule: "240,600,60,10",
 						},
 					},
 				}

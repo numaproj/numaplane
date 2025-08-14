@@ -10,6 +10,13 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
@@ -17,12 +24,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
-	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type fakeProgressiveController struct{}
@@ -480,9 +481,10 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 	}{
 		{
 			name:            "rollout defines schedule",
-			rolloutSchedule: "300,200,10",
+			rolloutSchedule: "300,600,200,10",
 			expectedSchedule: config.AssessmentSchedule{
 				Delay:    300 * time.Second,
+				End:      600 * time.Second,
 				Period:   200 * time.Second,
 				Interval: 10 * time.Second,
 			},
@@ -493,6 +495,7 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 			rolloutSchedule: "",
 			expectedSchedule: config.AssessmentSchedule{
 				Delay:    120 * time.Second,
+				End:      360 * time.Second,
 				Period:   60 * time.Second,
 				Interval: 10 * time.Second,
 			},
@@ -503,6 +506,7 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 			rolloutSchedule: "10,20",
 			expectedSchedule: config.AssessmentSchedule{
 				Delay:    120 * time.Second,
+				End:      360 * time.Second,
 				Period:   60 * time.Second,
 				Interval: 10 * time.Second,
 			},
