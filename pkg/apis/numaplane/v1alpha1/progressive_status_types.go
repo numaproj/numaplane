@@ -46,10 +46,13 @@ type UpgradingChildStatus struct {
 	// BasicAssessmentEndTime indicates the time after which no more basic resource health check assessments will be performed
 	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
+	// TrialWindowStartTime indicates the time at which the trial window starts
+	TrialWindowStartTime *metav1.Time `json:"trialWindowStartTime,omitempty"`
+
 	// ForcedSuccess indicates if this promotion was forced to complete
 	ForcedSuccess bool `json:"forcedSuccess,omitempty"`
 
-	// Discontinued indicates if the upgrade was stopped prematurely
+	// Discontinued indicates if the upgrade was stopped prematurely,
 	// This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
 	// in the middle of an upgrade
 	Discontinued bool `json:"discontinued,omitempty"`
@@ -118,6 +121,11 @@ func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 	return ucs != nil && ucs.BasicAssessmentEndTime != nil
 }
 
+// IsTrialWindowStartTimeSet checks if the TrialWindowStartTime field is not nil.
+func (ucs *UpgradingChildStatus) IsTrialWindowStartTimeSet() bool {
+	return ucs != nil && ucs.TrialWindowStartTime != nil
+}
+
 // CanAssess determines if the UpgradingChildStatus instance is eligible for assessment.
 // It checks that the current time is after the AssessmentStartTime and that it hasn't already previously failed
 // (all checks within the time period must succeed, so if we previously failed, we maintain that failed status).
@@ -127,7 +135,7 @@ func (ucs *UpgradingChildStatus) CanAssess() bool {
 		ucs.AssessmentResult != AssessmentResultFailure
 }
 
-// BasicAssessmentEndTimeArrived() determines if the BasicAssessmentEndTime has been set and is in the past
+// BasicAssessmentEndTimeArrived determines if the BasicAssessmentEndTime has been set and is in the past
 func (ucs *UpgradingChildStatus) BasicAssessmentEndTimeArrived() bool {
 	return ucs != nil &&
 		ucs.BasicAssessmentEndTime != nil &&
