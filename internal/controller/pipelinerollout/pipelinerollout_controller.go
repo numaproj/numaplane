@@ -1142,25 +1142,62 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
 			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
 	}
-	pause := false
-	requireDrain := false
+	requiresPause := false
+	requiresPauseOriginalSpec := false
 	if upgradeStateReason != nil {
 		switch *upgradeStateReason {
 		case common.LabelValueDeleteRecreateChild:
 			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
 			// which required that.
 			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced, common.LabelValueDiscontinueProgressive:
+		case common.LabelValueProgressiveSuccess, common.LabelValueDiscontinueProgressive:
 			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
 			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
 			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
-			pause = true
-			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
-			requireDrain = false
+			requiresPause = true
+			requiresPauseOriginalSpec = true
+
+		case common.LabelValueProgressiveReplaced:
+			requiresPause = true
+			// TODO: if assessment is unknown, then set requiresPauseOriginalSpec=true
 		}
+	}
+
+	if !requiresPause {
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return true, err
+	}
+	//originalSpec := getAnnotation() != overridden
+	if requiresPauseOriginalSpec && originalSpec {
+		//   paused, drained, err := drainRecyclablePipeline()
+		//   if Paused:
+		//     if drained:
+		//       delete, return
+		//     else:
+		//       nothing (implicitly fall through)
+		//.  else: return
 
 	}
 
+	// if pausing original spec first:
+	//   desiredPhase:Paused + min scale -> phase:Paused + min scale -> desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
+	// else:
+	//.  desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
+
+	// force drain:
+	// if no new promoted, ensure scaled to 0 and return
+	// else:
+	//   if overridden-spec==false: update spec with 0 scale, overridden-spec=true, desiredPhase=Running, return
+	//   if desiredPhase==Running and phase==Paused, return
+	//   paused, drained, err := drainRecyclablePipeline()
+	//   if paused:
+	//.    delete, return (log whether it drained or not)
+
+	return false, nil
+
+}
+
+/*
 	if pause {
 		// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
 		pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, requireDrain)
@@ -1184,9 +1221,17 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		return true, err
 	}
+*/
 
-	return false, nil
-
+// return values:
+// - whether pipeline is paused
+// - whether pipeline is fully drained
+// - error if any
+func (r *PipelineRolloutReconciler) drainRecyclablePipeline(ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	c client.Client,
+) (bool, bool, error) {
+	// if desiredPhase != Paused: set {scale, pauseGracePeriodSeconds, desiredPhase}
 }
 
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label

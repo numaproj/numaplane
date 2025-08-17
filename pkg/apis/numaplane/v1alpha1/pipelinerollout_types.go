@@ -85,6 +85,9 @@ type PipelineProgressiveStatus struct {
 	UpgradingPipelineStatus *UpgradingPipelineStatus `json:"upgradingPipelineStatus,omitempty"`
 	// PromotedPipelineStatus stores information regarding the current "promoted" pipeline
 	PromotedPipelineStatus *PromotedPipelineStatus `json:"promotedPipelineStatus,omitempty"`
+	// HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
+	// TODO: what are the consequences of not deleting the PromotedPipelineStatus (in which case maybe we don't need this?)
+	HistoricalPodCount map[string]int `json:"historicalPodCount,omitempty"`
 }
 
 // UpgradingPipelineStatus describes the status of an upgrading child
