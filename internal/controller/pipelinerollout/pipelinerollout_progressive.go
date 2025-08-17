@@ -138,6 +138,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 				status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
 				status.AssessmentResult = apiv1.AssessmentResultSuccess
+				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime.Add(assessmentSchedule.Period)}
 			})
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 		}

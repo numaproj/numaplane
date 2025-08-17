@@ -194,7 +194,7 @@ clean:
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: image
 image: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} -f ${DOCKERFILE} .
+	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} --load -f ${DOCKERFILE} .
 	$(MAKE) image-import  # Call the image-import target after building
 
 .PHONY: image-import
