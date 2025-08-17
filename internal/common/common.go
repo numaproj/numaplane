@@ -112,6 +112,10 @@ const (
 	// LabelValueProgressiveReplaced is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child having been replaced
 	LabelValueProgressiveReplaced UpgradeStateReason = "progressive-replaced"
 
+	// LabelValueProgressiveReplacedFailed is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to Progressive child having been
+	// replaced after having failed
+	LabelValueProgressiveReplacedFailed UpgradeStateReason = "progressive-replaced-failed"
+
 	// LabelValueDeleteRecreateChild is the value used for the Label `LabelKeyUpgradeStateReason` when `LabelKeyUpgradeState`="recyclable" due to a child being deleted and recreated
 	LabelValueDeleteRecreateChild UpgradeStateReason = "delete-recreate"
 
@@ -142,6 +146,10 @@ const (
 
 	// AnnotationKeyHash is used to maintain a hash of a Rider to know whether it's changed
 	AnnotationKeyHash = KeyNumaplanePrefix + "hash"
+
+	// AnnotationKeyOverriddenSpec is used in the process of deletion for describing if a pipeline has had its spec overridden with that of a
+	// "promoted" pipeline for the purpose of "force draining" it
+	AnnotationKeyOverriddenSpec = KeyNumaplanePrefix + "overridden-spec"
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"

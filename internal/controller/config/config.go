@@ -99,6 +99,9 @@ type GlobalConfig struct {
 	// Configuration related to the Progressive strategy
 	Progressive ProgressiveConfig `json:"progressive" mapstructure:"progressive"`
 
+	// Configuration specific to Pipeline Type
+	Pipeline PipelineConfig `json:"pipeline" mapstructure:"pipeline"`
+
 	// TODO: remove when no longer needed
 	// FeatureFlagDisallowProgressiveForNonMonoVertex is a TEMPORARY feature flag to disable progressive upgrades for resources other than MonoVertex
 	FeatureFlagDisallowProgressiveForNonMonoVertex bool `json:"featureFlagDisallowProgressiveForNonMonoVertex" mapstructure:"featureFlagDisallowProgressiveForNonMonoVertex"`
@@ -109,6 +112,14 @@ type GlobalConfig struct {
 
 	// List of permitted Kinds for Riders
 	PermittedRiders string `json:"permittedRiders" mapstructure:"permittedRiders"`
+}
+
+type PipelineConfig struct {
+	// RecycleScaleFactor is a percentage of Pipeline's original vertex scale that it will scale down by while it's being paused
+	// before deleting.
+	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
+	// If not defined, default to 0.5
+	RecycleScaleFactor *float32 `json:"recycleScaleFactor,omitempty"`
 }
 
 type ProgressiveConfig struct {

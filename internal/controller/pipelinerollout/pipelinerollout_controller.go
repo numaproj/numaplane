@@ -1120,11 +1120,14 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
-func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
+func (r *PipelineRolloutReconciler) Recycle(
+	ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
+	// update the context with this Logger so downstream users can incorporate these values in the logs
+	ctx = logger.WithLogger(ctx, numaLogger)
 
 	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
 	if err != nil {
@@ -1150,16 +1153,14 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
 			// which required that.
 			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess, common.LabelValueDiscontinueProgressive:
+		case common.LabelValueProgressiveSuccess, common.LabelValueDiscontinueProgressive, common.LabelValueProgressiveReplaced:
 			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
 			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
 			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
 			requiresPause = true
 			requiresPauseOriginalSpec = true
-
-		case common.LabelValueProgressiveReplaced:
+		case common.LabelValueProgressiveReplacedFailed:
 			requiresPause = true
-			// TODO: if assessment is unknown, then set requiresPauseOriginalSpec=true
 		}
 	}
 
@@ -1167,16 +1168,28 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		return true, err
 	}
-	//originalSpec := getAnnotation() != overridden
-	if requiresPauseOriginalSpec && originalSpec {
-		//   paused, drained, err := drainRecyclablePipeline()
-		//   if Paused:
-		//     if drained:
-		//       delete, return
-		//     else:
-		//       nothing (implicitly fall through)
-		//.  else: return
 
+	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
+	originalSpec := true
+	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
+	if found {
+		originalSpec = false
+	}
+
+	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
+	// make sure we pause it and check on it
+	if requiresPauseOriginalSpec && originalSpec {
+		paused, drained, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+		if paused {
+			if drained {
+				err = kubernetes.DeleteResource(ctx, c, pipeline)
+				return true, err
+			} else {
+				// implicitly fall through
+			}
+		} else {
+			return false, nil
+		}
 	}
 
 	// if pausing original spec first:
@@ -1195,6 +1208,59 @@ func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
 
 	return false, nil
 
+}
+
+// make sure Pipeline's desiredPhase==Paused and if not set it
+// make sure it's scale and pauseGracePeriodSeconds is adjusted if necessary
+// return:
+// - whether phase==Paused
+// - whether fully drained
+// - error if any
+func drainRecyclablePipeline(
+	ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	pipelineRollout *apiv1.PipelineRollout,
+	c client.Client,
+) (bool, bool, error) {
+	desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+	if err != nil {
+		return false, false, err
+	}
+	if desiredPhase != string(numaflowv1.PipelinePhasePaused) {
+		newVertexScaleDefinitions, newPauseGracePeriodSeconds, err := calculateScaleAndPauseTimeForRecycle(ctx, pipelineRollout)
+		if err != nil {
+
+		}
+	}
+
+}
+
+// "RescaleFactor" represents the fraction by which we scale our Pipelines down from the PipelineRollout definition
+// We use the inverse of that value to multiply by the pauseGracePeriodSeconds, to give more time for pausing
+func calculateScaleAndPauseTimeForRecycle(
+	ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+) ([]apiv1.VertexScaleDefinition, int, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	recycleScaleFactor := getRecycleScaleFactor(pipelineRollout)
+	numaLogger.WithValues("scaleFactor", recycleScaleFactor).Debug("scale factor to scale down by during pausing")
+
+}
+
+// return the fraction by which the PipelineRollout should scale down if defined; otherwise, return the one defined by config file
+func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) float32 {
+	if pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor != nil {
+		return *pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor
+	}
+
+	// get the globally configured strategy
+	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.RecycleScaleFactor != nil {
+		return *globalConfig.Pipeline.RecycleScaleFactor
+	}
+	// not defined, return default
+	return 0.5
 }
 
 /*
