@@ -496,7 +496,7 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 			expectedSchedule: config.AssessmentSchedule{
 				Delay:    120 * time.Second,
 				End:      360 * time.Second,
-				Period:   60 * time.Second,
+				Period:   0 * time.Second,
 				Interval: 10 * time.Second,
 			},
 			expectedError: false,
@@ -507,7 +507,7 @@ func Test_getChildStatusAssessmentSchedule(t *testing.T) {
 			expectedSchedule: config.AssessmentSchedule{
 				Delay:    120 * time.Second,
 				End:      360 * time.Second,
-				Period:   60 * time.Second,
+				Period:   0 * time.Second,
 				Interval: 10 * time.Second,
 			},
 			expectedError: false,

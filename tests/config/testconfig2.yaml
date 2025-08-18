@@ -3,7 +3,7 @@ defaultUpgradeStrategy: "progressive"
 progressive:
   defaultAssessmentSchedule: 
     - kind: Pipeline
-      schedule: "120,360,60,10"
+      schedule: "120,360,0,10"
     - kind: MonoVertex
       schedule: "120,360,60,10"
     - kind: InterstepBufferService
