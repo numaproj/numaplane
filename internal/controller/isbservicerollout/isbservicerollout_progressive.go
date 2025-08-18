@@ -48,7 +48,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
-	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
+	// TODO: For now, just assessing the health of the underlying Pipelines, we can implement rolling window algorithm
+	// once we assess the health of the isbsvc; need to also assess the health of the isbsvc itself
 	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
 	// If Pipelines are healthy or Pipelines are failed, that's good enough
 
@@ -93,7 +94,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
-	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline which is in fact using this isbsvc
+	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline in fact using this isbsvc
 	// otherwise, it may not have yet started the upgrade process for this isbsvc
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus

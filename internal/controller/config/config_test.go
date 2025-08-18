@@ -58,7 +58,6 @@ func TestLoadConfigMatchValues(t *testing.T) {
 	time.Sleep(10 * time.Second) // need to give it time to make sure that the file was reloaded
 	config, err = configManager.GetConfig()
 	assert.NoError(t, err)
-
 }
 
 func copyFile(src, dst string) error {

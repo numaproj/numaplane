@@ -78,7 +78,6 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 	// Check if endTime has arrived, fail immediately
 	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
-		//if childStatus.BasicAssessmentEndTime != nil && time.Now().After(childStatus.BasicAssessmentEndTime.Time) {
 		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
@@ -122,7 +121,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 
 	// if we fail once, it's okay: we'll check again later
 	if assessment == apiv1.AssessmentResultFailure {
-		numaLogger.Debugf("Assessment failed for upgrading child %s", existingUpgradingChildDef.GetName())
+		numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.TrialWindowStartTime = nil
 			status.AssessmentResult = apiv1.AssessmentResultUnknown
@@ -131,7 +130,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return assessment, reasonFailure, nil
 	}
 
-	// Handle success: set or keep TrialWindowStartTime
+	// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
+	// check "successful".
 	if assessment == apiv1.AssessmentResultSuccess {
 		if !childStatus.IsTrialWindowStartTimeSet() {
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
@@ -145,7 +145,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 			// Success window passed, launch AnalysisRun or declared success
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
-				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime.Add(assessmentSchedule.Period)}
+				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 			})
 			analysis := pipelineRollout.GetAnalysis()
 			if len(analysis.Templates) > 0 {

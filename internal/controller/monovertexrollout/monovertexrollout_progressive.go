@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -13,10 +18,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
 )
@@ -48,43 +49,56 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	rolloutObject progressive.ProgressiveRolloutObject,
 	existingUpgradingChildDef *unstructured.Unstructured,
 	assessmentSchedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error) {
+
 	numaLogger := logger.FromContext(ctx)
-
 	mvtxRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
+	currentTime := time.Now()
+
+	// Check if endTime has arrived, fail immediately
+	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
+		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+		})
+		return apiv1.AssessmentResultFailure, "Assessment window ended", nil
+	}
 
 	// First perform basic resource health check
 	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
 	if err != nil {
 		return assessment, reasonFailure, err
 	}
-	// if we fail even once, that's considered failure
+	// if we fail once, it's okay: we'll check again later
 	if assessment == apiv1.AssessmentResultFailure {
-		// set AssessmentEndTime to now and return failure
+		numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-			assessmentEndTime := metav1.NewTime(time.Now())
-			status.BasicAssessmentEndTime = &assessmentEndTime
+			status.TrialWindowStartTime = nil
+			status.AssessmentResult = apiv1.AssessmentResultUnknown
 		})
 
 		return assessment, reasonFailure, nil
 	}
-	// if we succeed, we must continue to succeed for a prescribed period of time in order to consider the resource health
+	// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
 	// check "successful"
 	if assessment == apiv1.AssessmentResultSuccess {
-		// has AssessmentEndTime been set? if not, set it - now we can start our interval
-		if !childStatus.IsAssessmentEndTimeSet() {
+		if !childStatus.IsTrialWindowStartTimeSet() {
 			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-				assessmentEndTime := metav1.NewTime(time.Now().Add(assessmentSchedule.Period))
-				status.BasicAssessmentEndTime = &assessmentEndTime
+				status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
+				status.AssessmentResult = apiv1.AssessmentResultUnknown
 			})
-			numaLogger.WithValues("childStatus", *childStatus).Debug("set upgrading child AssessmentEndTime")
+			numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 		}
 
-		// if end time has arrived (i.e. we continually determined "Success" for the entire prescribed period of time),
+		// if end time has arrived (i.e., we continually determined "Success" for the entire prescribed period of time),
 		// if we need to launch an AnalysisRun, we can do it now;
 		// otherwise, we can declare success
-		if childStatus.BasicAssessmentEndTimeArrived() {
+		if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
+			// Success window passed, launch AnalysisRun or declared success
+			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+			})
 			analysis := mvtxRollout.GetAnalysis()
 			// only check for and create AnalysisRun if templates are specified
 			if len(analysis.Templates) > 0 {
@@ -98,14 +112,16 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				return apiv1.AssessmentResultSuccess, "", nil
 			}
 		}
-
+		numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
+		// Still waiting for a success window to pass
+		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
 
 }
 
-// CheckForDifferences() tests for essential equality.
+// CheckForDifferences tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading MonoVertex
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
