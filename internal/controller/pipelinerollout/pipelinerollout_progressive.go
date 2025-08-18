@@ -120,13 +120,12 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		return assessment, reasonFailure, err
 	}
 
-	// if we fail even once, that's considered failure
+	// if we fail once, it's okay: we'll check again later
 	if assessment == apiv1.AssessmentResultFailure {
-		// set AssessmentEndTime to now and return failure
 		numaLogger.Debugf("Assessment failed for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.TrialWindowStartTime = nil
-			status.AssessmentResult = apiv1.AssessmentResultFailure
+			status.AssessmentResult = apiv1.AssessmentResultUnknown
 		})
 
 		return assessment, reasonFailure, nil
@@ -137,8 +136,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		if !childStatus.IsTrialWindowStartTimeSet() {
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 				status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				status.AssessmentResult = apiv1.AssessmentResultSuccess
-				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime.Add(assessmentSchedule.Period)}
+				status.AssessmentResult = apiv1.AssessmentResultUnknown
 			})
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 		}
@@ -146,6 +144,9 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		// Check if the trail window is set and if the success window has passed, if so, perform analysis or declare success
 		if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 			// Success window passed, launch AnalysisRun or declared success
+			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
+				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime.Add(assessmentSchedule.Period)}
+			})
 			analysis := pipelineRollout.GetAnalysis()
 			if len(analysis.Templates) > 0 {
 				numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())

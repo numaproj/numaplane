@@ -1384,7 +1384,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
-			////// check results:
+			// check results:
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			// Check In-Progress Strategy
