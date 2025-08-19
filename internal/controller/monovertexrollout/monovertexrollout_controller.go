@@ -639,12 +639,12 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 		TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 	}
 
-	monoVertexSpec, err := util.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
+	monoVertexSpec, err := util.ResolveTemplatedSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplatedSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -768,7 +768,7 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
 			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
 		}
-		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+		resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
 			TemplateMonoVertexName:      monoVertexName,
 			TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 		})

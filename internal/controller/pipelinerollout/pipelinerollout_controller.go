@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 	"sync"
@@ -67,9 +68,10 @@ const (
 	loggerName                = "pipelinerollout-reconciler"
 	numWorkers                = 16 // can consider making configurable
 
-	TemplatePipelineName      = ".pipeline-name"
-	TemplateVertexName        = ".vertex-name"
-	TemplatePipelineNamespace = ".pipeline-namespace"
+	TemplatePipelineName           = ".pipeline-name"
+	TemplateVertexName             = ".vertex-name"
+	TemplatePipelineNamespace      = ".pipeline-namespace"
+	defaultPauseGracePeriodSeconds = 30
 )
 
 var (
@@ -1033,12 +1035,12 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 		TemplatePipelineNamespace: pipelineRollout.Namespace,
 	}
 
-	pipelineSpec, err := util.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+	pipelineSpec, err := util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplatedSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,30 +1224,204 @@ func drainRecyclablePipeline(
 	pipelineRollout *apiv1.PipelineRollout,
 	c client.Client,
 ) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 	if err != nil {
 		return false, false, err
 	}
 	if desiredPhase != string(numaflowv1.PipelinePhasePaused) {
-		newVertexScaleDefinitions, newPauseGracePeriodSeconds, err := calculateScaleAndPauseTimeForRecycle(ctx, pipelineRollout)
+		recycleScaleFactor := getRecycleScaleFactor(pipelineRollout)
+		numaLogger.WithValues("scaleFactor", recycleScaleFactor).Debug("scale factor to scale down by during pausing")
+
+		newVertexScaleDefinitions, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, recycleScaleFactor)
 		if err != nil {
 
 		}
+
+		newPauseGracePeriodSeconds, err := calculatePauseTimeForRecycle(ctx, pipeline, pipelineRollout, 1.0/float64(recycleScaleFactor))
+		if err != nil {
+
+		}
+
+		// patch to set desiredPhase=Paused and set the new pause time
+
+		// patch to update the scale values
+
 	}
 
 }
 
-// "RescaleFactor" represents the fraction by which we scale our Pipelines down from the PipelineRollout definition
-// We use the inverse of that value to multiply by the pauseGracePeriodSeconds, to give more time for pausing
-func calculateScaleAndPauseTimeForRecycle(
+// return the new pauseGracePeriodSeconds to use for the Pipeline, based off of the original pauseGracePeriodSeconds, divided by the recycleScaleFactor
+func calculatePauseTimeForRecycle(
 	ctx context.Context,
+	pipeline *unstructured.Unstructured,
 	pipelineRollout *apiv1.PipelineRollout,
-) ([]apiv1.VertexScaleDefinition, int, error) {
+	multiplier float64,
+) (int64, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	recycleScaleFactor := getRecycleScaleFactor(pipelineRollout)
-	numaLogger.WithValues("scaleFactor", recycleScaleFactor).Debug("scale factor to scale down by during pausing")
+	// get pipeline spec
+	pipelineSpec, err := getPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
+	if err != nil {
+		return 0, err
+	}
+	/*
+		vertices, _, err := unstructured.NestedSlice(pipelineSpec, "vertices")
+		if err != nil {
+			return nil, 0, fmt.Errorf("error while getting vertices of pipeline", err)
+		}
+		vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
+		for i, vertex := range vertices {
+			if vertexAsMap, ok := vertex.(map[string]any); ok {
+				vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
+				if err != nil {
+					return true, err
+				}
+				if !foundVertexName {
+					return true, fmt.Errorf("vertex doesn't have a name, vertices: %+v", vertices)
+				}
+				vertexScaleDefinitions[i] = apiv1.VertexScaleDefinition{
+					VertexName: vertexName,
+					ScaleDefinition: &apiv1.ScaleDefinition{Min: },
+				}
 
+	*/
+	origPauseGracePeriodSeconds, found, err := unstructured.NestedInt64(pipelineSpec, "lifecycle", "pauseGracePeriodSeconds")
+	if err != nil {
+
+	}
+	if !found {
+		numaLogger.Debugf("pauseGracePeriodSeconds field not found, will use default %d seconds", defaultPauseGracePeriodSeconds)
+		origPauseGracePeriodSeconds = defaultPauseGracePeriodSeconds
+	}
+	newPauseGracePeriodSeconds := float64(origPauseGracePeriodSeconds) * multiplier
+	return int64(math.Ceil(newPauseGracePeriodSeconds)), nil
+
+}
+
+// multiply the number of Pods that were running previously for the Pipeline by some factor
+// if the Vertex is new, just use the minimum
+func calculateScaleForRecycle(
+	ctx context.Context,
+	pipeline *unstructured.Unstructured,
+	pipelineRollout *apiv1.PipelineRollout,
+	multiplier float64,
+) ([]apiv1.VertexScaleDefinition, error) {
+
+	// get the spec for the Pipeline that we need to scale down
+	currentVertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline", err)
+	}
+	if !found {
+
+	}
+
+	// get the definition of the pipeline spec in the PipelineRollout
+	pipelineRolloutDefinedSpec, err := getPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
+	if err != nil {
+		return nil, err
+	}
+
+	/*pipelineRolloutDefinedVertices, found, err := unstructured.NestedSlice(pipelineRolloutDefinedSpec, "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline", err)
+	}
+	if !found {
+		// TODO: warn
+	}*/
+
+	// get the number of Pods that were historically running in the last "promoted" Pipeline before it was scaled down
+	// so we can get an idea of how many need to run normally
+	historicalPodCount := pipelineRollout.Status.ProgressiveStatus.HistoricalPodCount
+	if historicalPodCount == nil {
+		return nil, fmt.Errorf("HistoricalPodCount is nil")
+	}
+
+	// Create the VertexScaleDefinitions that we'll use
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
+
+	for vertexIndex, vertex := range currentVertexSpecs {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				return nil, errors.New("a vertex must have a name")
+			}
+
+			var newScaleValue int64
+
+			// If the Vertex was running previously in the "promoted" Pipeline, then multiply by the number that was running then
+			originalPodsRunning, found := historicalPodCount[vertexName]
+			if found {
+				newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * multiplier))
+			} else {
+				// This Vertex was not running in the "promoted" Pipeline: it must be new
+				// We can set the newScaleValue from the PipelineRollout min
+
+				pipelineRolloutVertexDef, found, err := getVertexFromPipelineSpec(pipelineRolloutDefinedSpec, vertexName)
+				if err != nil {
+
+				}
+				if !found {
+
+				} else {
+					newScaleValue, found, err = unstructured.NestedInt64(pipelineRolloutVertexDef, "scale", "min")
+					if err != nil {
+
+					}
+					if !found {
+
+					}
+				}
+			}
+
+			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+				VertexName: vertexName,
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: &newScaleValue,
+					Max: &newScaleValue,
+				},
+			}
+
+		}
+	}
+
+	return vertexScaleDefinitions, nil
+}
+
+// TODO: relocate
+func getVertexFromPipelineSpec(
+	pipelineSpec map[string]interface{},
+	vertexName string,
+) (map[string]interface{}, bool, error) {
+	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if err != nil {
+		return nil, false, fmt.Errorf("error while getting vertices of pipeline", err)
+	}
+	if !found {
+		return nil, false, nil
+	}
+
+	// TODO: find the vertex
+
+}
+
+// TODO: relocate?
+func getPipelineSpecFromRollout(
+	pipelineName string,
+	pipelineRollout *apiv1.PipelineRollout,
+) (map[string]interface{}, error) {
+	args := map[string]interface{}{
+		TemplatePipelineName:      pipelineName,
+		TemplatePipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	return util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 }
 
 // return the fraction by which the PipelineRollout should scale down if defined; otherwise, return the one defined by config file
@@ -1410,7 +1586,7 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			}
 			for _, vertex := range vertices {
 				vertexName := vertex.(map[string]interface{})["name"]
-				resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+				resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
 					TemplatePipelineName:      pipelineName,
 					TemplatePipelineNamespace: pipelineRollout.Namespace,
 					TemplateVertexName:        vertexName,
@@ -1426,7 +1602,7 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			}
 		} else {
 			// create one Rider for the Pipeline
-			resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
+			resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
 				TemplatePipelineName:      pipelineName,
 				TemplatePipelineNamespace: pipelineRollout.Namespace,
 			})

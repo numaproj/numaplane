@@ -406,7 +406,7 @@ func TestResolveTemplateSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ResolveTemplateSpec(tt.data, tt.args)
+			result, err := ResolveTemplatedSpec(tt.data, tt.args)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedOutput, result)
 		})

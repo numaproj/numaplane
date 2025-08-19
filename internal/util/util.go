@@ -220,7 +220,7 @@ func OptionalString(ptr any) string {
 }
 
 // resolves templated definitions of a resource with any arguments
-func ResolveTemplateSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
+func ResolveTemplatedSpec(data any, args map[string]interface{}) (map[string]interface{}, error) {
 
 	// marshal data to cast as a string
 	dataBytes, err := json.Marshal(data)
