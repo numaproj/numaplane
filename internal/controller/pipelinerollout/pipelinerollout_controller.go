@@ -1308,8 +1308,9 @@ func calculateScaleForRecycle(
 	pipelineRollout *apiv1.PipelineRollout,
 	multiplier float64,
 ) ([]apiv1.VertexScaleDefinition, error) {
+	numaLogger := logger.FromContext(ctx)
 
-	// get the spec for the Pipeline that we need to scale down
+	// get the spec for the Pipeline that we need to scale down: this tells us what all the vertices are that we need to account for
 	currentVertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
 	if err != nil {
 		return nil, fmt.Errorf("error while getting vertices of pipeline", err)
@@ -1318,7 +1319,8 @@ func calculateScaleForRecycle(
 
 	}
 
-	// get the definition of the pipeline spec in the PipelineRollout
+	// get the definition of the pipeline spec in the PipelineRollout: if we don't have the historical pod count for a given vertex because it's new
+	// then we will need to refer here for the scale.min value
 	pipelineRolloutDefinedSpec, err := getPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
 	if err != nil {
 		return nil, err
@@ -1342,8 +1344,8 @@ func calculateScaleForRecycle(
 	// Create the VertexScaleDefinitions that we'll use
 	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
 
-	for vertexIndex, vertex := range currentVertexSpecs {
-		if vertexAsMap, ok := vertex.(map[string]any); ok {
+	for vertexIndex, currentVertexSpec := range currentVertexSpecs {
+		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
 
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
@@ -1365,17 +1367,22 @@ func calculateScaleForRecycle(
 
 				pipelineRolloutVertexDef, found, err := getVertexFromPipelineSpec(pipelineRolloutDefinedSpec, vertexName)
 				if err != nil {
-
+					return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting vertex from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
 				}
 				if !found {
-
+					// Vertex not found in the PipelineRollout or in the Historical Pod Count
+					numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to 1", pipelineRolloutDefinedSpec, historicalPodCount)
+					newScaleValue = 1
 				} else {
+					// set the newScaleValue from the PipelineRollout min
 					newScaleValue, found, err = unstructured.NestedInt64(pipelineRolloutVertexDef, "scale", "min")
 					if err != nil {
-
+						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
 					}
 					if !found {
-
+						// If the scale.min wasn't set in PipelineRollout, it is equivalent to 1
+						numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in Historical Pod Count %v, and scale.min not defined in PipelineRollout, so setting newScaleValue to 1", pipelineRolloutDefinedSpec, historicalPodCount)
+						newScaleValue = 1
 					}
 				}
 			}
