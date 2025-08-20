@@ -1266,27 +1266,6 @@ func calculatePauseTimeForRecycle(
 	if err != nil {
 		return 0, err
 	}
-	/*
-		vertices, _, err := unstructured.NestedSlice(pipelineSpec, "vertices")
-		if err != nil {
-			return nil, 0, fmt.Errorf("error while getting vertices of pipeline", err)
-		}
-		vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
-		for i, vertex := range vertices {
-			if vertexAsMap, ok := vertex.(map[string]any); ok {
-				vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
-				if err != nil {
-					return true, err
-				}
-				if !foundVertexName {
-					return true, fmt.Errorf("vertex doesn't have a name, vertices: %+v", vertices)
-				}
-				vertexScaleDefinitions[i] = apiv1.VertexScaleDefinition{
-					VertexName: vertexName,
-					ScaleDefinition: &apiv1.ScaleDefinition{Min: },
-				}
-
-	*/
 	origPauseGracePeriodSeconds, found, err := unstructured.NestedInt64(pipelineSpec, "lifecycle", "pauseGracePeriodSeconds")
 	if err != nil {
 
@@ -1325,14 +1304,6 @@ func calculateScaleForRecycle(
 	if err != nil {
 		return nil, err
 	}
-
-	/*pipelineRolloutDefinedVertices, found, err := unstructured.NestedSlice(pipelineRolloutDefinedSpec, "vertices")
-	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of pipeline", err)
-	}
-	if !found {
-		// TODO: warn
-	}*/
 
 	// get the number of Pods that were historically running in the last "promoted" Pipeline before it was scaled down
 	// so we can get an idea of how many need to run normally
@@ -1411,11 +1382,21 @@ func getVertexFromPipelineSpec(
 		return nil, false, fmt.Errorf("error while getting vertices of pipeline", err)
 	}
 	if !found {
-		return nil, false, nil
+		return nil, false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
 	}
 
-	// TODO: find the vertex
+	// find the vertex
+	for _, vertex := range vertices {
 
+		vertexAsMap := vertex.(map[string]interface{})
+		name := vertexAsMap["name"].(string)
+		if name == vertexName {
+			return vertex.(map[string]interface{}), true, nil
+		}
+	}
+
+	// Vertex not found
+	return nil, false, nil
 }
 
 // TODO: relocate?
