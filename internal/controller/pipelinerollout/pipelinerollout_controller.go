@@ -1336,7 +1336,7 @@ func calculateScaleForRecycle(
 				// This Vertex was not running in the "promoted" Pipeline: it must be new
 				// We can set the newScaleValue from the PipelineRollout min
 
-				pipelineRolloutVertexDef, found, err := getVertexFromPipelineSpec(pipelineRolloutDefinedSpec, vertexName)
+				pipelineRolloutVertexDef, found, err := numaflowtypes.GetVertexFromPipelineSpecMap(pipelineRolloutDefinedSpec, vertexName)
 				if err != nil {
 					return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting vertex from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
 				}
@@ -1370,33 +1370,6 @@ func calculateScaleForRecycle(
 	}
 
 	return vertexScaleDefinitions, nil
-}
-
-// TODO: relocate
-func getVertexFromPipelineSpec(
-	pipelineSpec map[string]interface{},
-	vertexName string,
-) (map[string]interface{}, bool, error) {
-	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
-	if err != nil {
-		return nil, false, fmt.Errorf("error while getting vertices of pipeline", err)
-	}
-	if !found {
-		return nil, false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
-	}
-
-	// find the vertex
-	for _, vertex := range vertices {
-
-		vertexAsMap := vertex.(map[string]interface{})
-		name := vertexAsMap["name"].(string)
-		if name == vertexName {
-			return vertex.(map[string]interface{}), true, nil
-		}
-	}
-
-	// Vertex not found
-	return nil, false, nil
 }
 
 // TODO: relocate?

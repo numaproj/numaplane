@@ -1985,3 +1985,234 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 		})
 	}
 }
+
+func Test_calculateScaleForRecycle(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                 string
+		historicalPodCount   map[string]int
+		multiplier           float64
+		expectedResult       []apiv1.VertexScaleDefinition
+		expectedError        bool
+		expectedErrorMessage string
+	}{
+		{
+			name: "normal case with multiple vertices",
+			historicalPodCount: map[string]int{
+				"vertex1": 4,
+				"vertex2": 6,
+				"vertex3": 1,
+			},
+			multiplier: 0.5,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(2); return &v }(), // ceil(4 * 0.5) = 2
+						Max: func() *int64 { v := int64(2); return &v }(),
+					},
+				},
+				{
+					VertexName: "vertex2",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(3); return &v }(), // ceil(6 * 0.5) = 3
+						Max: func() *int64 { v := int64(3); return &v }(),
+					},
+				},
+				{
+					VertexName: "vertex3",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(1); return &v }(), // ceil(1 * 0.5) = 1
+						Max: func() *int64 { v := int64(1); return &v }(),
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "fractional scaling requiring ceiling",
+			historicalPodCount: map[string]int{
+				"vertex1": 3,
+				"vertex2": 5,
+			},
+			multiplier: 0.3,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(1); return &v }(), // ceil(3 * 0.3) = ceil(0.9) = 1
+						Max: func() *int64 { v := int64(1); return &v }(),
+					},
+				},
+				{
+					VertexName: "vertex2",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(2); return &v }(), // ceil(5 * 0.3) = ceil(1.5) = 2
+						Max: func() *int64 { v := int64(2); return &v }(),
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "zero pod count",
+			historicalPodCount: map[string]int{
+				"vertex1": 0,
+				"vertex2": 2,
+			},
+			multiplier: 0.5,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(0); return &v }(), // ceil(0 * 0.5) = 0
+						Max: func() *int64 { v := int64(0); return &v }(),
+					},
+				},
+				{
+					VertexName: "vertex2",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(1); return &v }(), // ceil(2 * 0.5) = 1
+						Max: func() *int64 { v := int64(1); return &v }(),
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "multiplier greater than 1",
+			historicalPodCount: map[string]int{
+				"vertex1": 2,
+			},
+			multiplier: 1.5,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: func() *int64 { v := int64(3); return &v }(), // ceil(2 * 1.5) = 3
+						Max: func() *int64 { v := int64(3); return &v }(),
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name:               "empty historical pod count",
+			historicalPodCount: map[string]int{},
+			multiplier:         0.5,
+			expectedResult:     []apiv1.VertexScaleDefinition{},
+			expectedError:      false,
+		},
+		{
+			name:                 "nil historical pod count",
+			historicalPodCount:   nil,
+			multiplier:           0.5,
+			expectedResult:       nil,
+			expectedError:        true,
+			expectedErrorMessage: "HistoricalPodCount is nil",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a mock pipeline with vertices
+			pipeline := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "numaflow.numaproj.io/v1alpha1",
+					"kind":       "Pipeline",
+					"metadata": map[string]interface{}{
+						"name":      "test-pipeline",
+						"namespace": "test-namespace",
+					},
+					"spec": map[string]interface{}{
+						"vertices": []interface{}{},
+					},
+				},
+			}
+
+			// Add vertices to the pipeline spec based on historicalPodCount
+			vertices := []interface{}{}
+			for vertexName := range tc.historicalPodCount {
+				vertices = append(vertices, map[string]interface{}{
+					"name": vertexName,
+					"scale": map[string]interface{}{
+						"min": int64(1),
+						"max": int64(10),
+					},
+				})
+			}
+			pipeline.Object["spec"].(map[string]interface{})["vertices"] = vertices
+
+			// Create a PipelineRollout with the test data
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rollout",
+					Namespace: "test-namespace",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{
+							Raw: []byte(`{
+								"vertices": [
+									{"name": "vertex1", "scale": {"min": 1}},
+									{"name": "vertex2", "scale": {"min": 1}},
+									{"name": "vertex3", "scale": {"min": 1}}
+								]
+							}`),
+						},
+					},
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						HistoricalPodCount: tc.historicalPodCount,
+					},
+				},
+			}
+
+			// Call the function
+			result, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, tc.multiplier)
+
+			// Check error expectations
+			if tc.expectedError {
+				assert.Error(t, err)
+				if tc.expectedErrorMessage != "" {
+					assert.Contains(t, err.Error(), tc.expectedErrorMessage)
+				}
+				assert.Nil(t, result)
+				return
+			}
+
+			// Check successful case
+			assert.NoError(t, err)
+			assert.NotNil(t, result)
+			assert.Len(t, result, len(tc.expectedResult))
+
+			// Convert result to map for easier comparison (since order might vary)
+			resultMap := make(map[string]apiv1.VertexScaleDefinition)
+			for _, vsd := range result {
+				resultMap[vsd.VertexName] = vsd
+			}
+
+			// Check each expected result
+			for _, expected := range tc.expectedResult {
+				actual, found := resultMap[expected.VertexName]
+				assert.True(t, found, "Expected vertex %s not found in result", expected.VertexName)
+
+				assert.Equal(t, expected.VertexName, actual.VertexName)
+				assert.NotNil(t, actual.ScaleDefinition)
+				assert.NotNil(t, expected.ScaleDefinition)
+
+				if expected.ScaleDefinition.Min != nil {
+					assert.NotNil(t, actual.ScaleDefinition.Min)
+					assert.Equal(t, *expected.ScaleDefinition.Min, *actual.ScaleDefinition.Min)
+				}
+
+				if expected.ScaleDefinition.Max != nil {
+					assert.NotNil(t, actual.ScaleDefinition.Max)
+					assert.Equal(t, *expected.ScaleDefinition.Max, *actual.ScaleDefinition.Max)
+				}
+			}
+		})
+	}
+}
