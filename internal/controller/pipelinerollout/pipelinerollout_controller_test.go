@@ -2002,7 +2002,6 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 		multiplier               float64
 		expectedResult           []apiv1.VertexScaleDefinition
 		expectedError            bool
-		expectedErrorMessage     string
 	}{
 		{
 			name: "vertex found in Historical Pod Count and in PipelineRollout",
@@ -2192,9 +2191,6 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			// Check error expectations
 			if tc.expectedError {
 				assert.Error(t, err)
-				if tc.expectedErrorMessage != "" {
-					assert.Contains(t, err.Error(), tc.expectedErrorMessage)
-				}
 				assert.Nil(t, result)
 				return
 			}

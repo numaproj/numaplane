@@ -1244,14 +1244,32 @@ func drainRecyclablePipeline(
 			return false, false, err
 		}
 
-		// TODO: patch to set desiredPhase=Paused and set the new pause time
-		// TODO: patch to update the scale values
-		_ = newVertexScaleDefinitions
-		_ = newPauseGracePeriodSeconds
+		// patch the pipeline to update the scale values
+		err = applyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
+		if err != nil {
+			return false, false, err
+		}
 
+		// patch to set desiredPhase=Paused and set the new pause time
+		patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "Paused", "pauseGracePeriodSeconds": %d}}}`, newPauseGracePeriodSeconds)
+		numaLogger.WithValues("pipeline", pipeline.GetName(), "patchJson", patchJson).Debug("patching pipeline lifecycle")
+
+		err = kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
+		if err != nil {
+			return false, false, err
+		}
+
+		return false, false, nil
+
+	} else {
+		isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+		isDrained := false
+		if isPaused {
+			isDrained, _ = numaflowtypes.CheckPipelineDrained(ctx, pipeline)
+		}
+		return isPaused, isDrained, nil
 	}
 
-	return false, false, nil
 }
 
 // return the new pauseGracePeriodSeconds to use for the Pipeline, based off of the original pauseGracePeriodSeconds, divided by the recycleScaleFactor
@@ -1332,10 +1350,18 @@ func calculateScaleForRecycle(
 
 			var newScaleValue int64
 
+			// If the Vertex is a source type, scale it to 0 (we don't want to be ingesting any new data)
+			_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
+			if isSource {
+				newScaleValue = 0
+				numaLogger.WithValues("vertex", vertexName).Debug("Vertex is source, setting its scale to 0")
+			}
+
 			// If the Vertex was running previously in the "promoted" Pipeline, then multiply by the number that was running then
 			originalPodsRunning, found := historicalPodCount[vertexName]
 			if found {
 				newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * multiplier))
+				numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "multiplier", multiplier).Debug("Setting Vertex Scale value to multiplier of previous running count")
 			} else {
 				// This Vertex was not running in the "promoted" Pipeline: it must be new
 				// We can set the newScaleValue from the PipelineRollout min
@@ -1360,6 +1386,7 @@ func calculateScaleForRecycle(
 					// set the newScaleValue from the PipelineRollout min
 					floatVal, found, err := unstructured.NestedFloat64(pipelineRolloutVertexDef, "scale", "min")
 					newScaleValue = int64(floatVal)
+					numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue).Debug("Vertex not found in Historical Pod Count, using PipelineRollout vertex min value")
 					if err != nil {
 						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v, err=%v", vertexName, pipelineRolloutDefinedSpec, err)
 					}
