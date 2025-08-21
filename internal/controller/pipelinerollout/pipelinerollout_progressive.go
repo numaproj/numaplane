@@ -77,7 +77,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	currentTime := time.Now()
 
 	// Check if endTime has arrived, fail immediately
-	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && childStatus.BasicAssessmentEndTime.IsZero() {
 		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure

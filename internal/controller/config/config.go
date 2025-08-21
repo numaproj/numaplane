@@ -319,18 +319,17 @@ func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 type AssessmentSchedule struct {
 	// Delay indicates the number of seconds to delay before assessing the status of the child resource to determine healthiness
 	Delay time.Duration
-	// End time.Duration indicates the last possible time that the assessment window can end
-	// (or maybe the last possible time that it can start)
+	// End indicates the time delta from `Delay` that the assessment window has to be successful within
 	End time.Duration
-	// Period indicates the number of seconds to perform assessments for after the first assessment has been performed
-	// (if failure is indicated before that, it will not continue, however)
+	// Period indicates the minimum window of time for which there must be consecutive success before we can declare
+	// the resource successful
 	Period time.Duration
 	// Interval indicates how often to assess the child status once the first assessment has been performed and before the end
 	Interval time.Duration
 }
 
-// ParseAssessmentSchedule parse the string indicating the AssessmentSchedule
-// Example: "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
+// ParseAssessmentSchedule parses the string indicating the AssessmentSchedule
+// Example: "120,360,60,10" => delay assessment by 120s, assess has to be successful within 360s, assess for 60s, assess every 10s
 func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")

@@ -402,7 +402,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       discontinued:
                         description: |-
-                          Discontinued indicates if the upgrade was stopped prematurely,
+                          Discontinued indicates if the upgrade was stopped prematurely.
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
