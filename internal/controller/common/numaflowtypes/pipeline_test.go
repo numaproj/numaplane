@@ -263,3 +263,109 @@ func Test_WithoutDesiredPhase(t *testing.T) {
 		})
 	}
 }
+
+func Test_GetVertexFromPipelineSpecMap(t *testing.T) {
+	testCases := []struct {
+		name           string
+		pipelineSpec   map[string]interface{}
+		vertexName     string
+		expectedVertex map[string]interface{}
+		expectedFound  bool
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "vertex found successfully",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{
+					map[string]interface{}{
+						"name": "in",
+						"source": map[string]interface{}{
+							"generator": map[string]interface{}{
+								"rpu":      int64(5),
+								"duration": "1s",
+							},
+						},
+					},
+					map[string]interface{}{
+						"name": "out",
+						"sink": map[string]interface{}{
+							"log": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			vertexName: "in",
+			expectedVertex: map[string]interface{}{
+				"name": "in",
+				"source": map[string]interface{}{
+					"generator": map[string]interface{}{
+						"rpu":      int64(5),
+						"duration": "1s",
+					},
+				},
+			},
+			expectedFound: true,
+			expectError:   false,
+		},
+		{
+			name: "vertex not found",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{
+					map[string]interface{}{
+						"name": "in",
+						"source": map[string]interface{}{
+							"generator": map[string]interface{}{
+								"rpu":      int64(5),
+								"duration": "1s",
+							},
+						},
+					},
+					map[string]interface{}{
+						"name": "out",
+						"sink": map[string]interface{}{
+							"log": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			vertexName:     "nonexistent",
+			expectedVertex: nil,
+			expectedFound:  false,
+			expectError:    false,
+		},
+		{
+			name: "empty vertices array",
+			pipelineSpec: map[string]interface{}{
+				"vertices": []interface{}{},
+			},
+			vertexName:     "in",
+			expectedVertex: nil,
+			expectedFound:  false,
+			expectError:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vertex, found, err := GetVertexFromPipelineSpecMap(tc.pipelineSpec, tc.vertexName)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains)
+				}
+				assert.False(t, found)
+				assert.Nil(t, vertex)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedFound, found)
+				if tc.expectedFound {
+					assert.Equal(t, tc.expectedVertex, vertex)
+				} else {
+					assert.Nil(t, vertex)
+				}
+			}
+		})
+	}
+}
