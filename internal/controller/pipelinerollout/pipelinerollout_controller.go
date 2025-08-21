@@ -1358,9 +1358,10 @@ func calculateScaleForRecycle(
 					numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to %d", pipelineRolloutDefinedSpec, historicalPodCount, newScaleValue)
 				} else {
 					// set the newScaleValue from the PipelineRollout min
-					newScaleValue, found, err = unstructured.NestedInt64(pipelineRolloutVertexDef, "scale", "min")
+					floatVal, found, err := unstructured.NestedFloat64(pipelineRolloutVertexDef, "scale", "min")
+					newScaleValue = int64(floatVal)
 					if err != nil {
-						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
+						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v, err=%v", vertexName, pipelineRolloutDefinedSpec, err)
 					}
 					if !found {
 						// If the scale.min wasn't set in PipelineRollout, it is equivalent to 1

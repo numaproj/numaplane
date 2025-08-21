@@ -1991,6 +1991,7 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 
 	one := int64(1)
 	two := int64(2)
+	ten := int64(10)
 
 	tests := []struct {
 		name                     string
@@ -2030,46 +2031,51 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			},
 			expectedError: false,
 		},
-		/*{
-			name: "zero pod count",
+		{
+			name: "vertex not found in Historical Pod Count but found in PipelineRollout",
 			historicalPodCount: map[string]int{
-				"vertex1": 0,
-				"vertex2": 2,
+				"vertex1": 3,
+				"vertex2": 5,
 			},
-			multiplier: 0.5,
+			currentPipelineVertexMin: map[string]int{
+				"vertex1": 30,
+				"vertex3": 50,
+			},
+			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "vertex1",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &[]int64{0}[0],
-						Max: &[]int64{0}[0],
+						Min: &one,
+						Max: &one,
 					},
 				},
 				{
-					VertexName: "vertex2",
+					VertexName: "vertex3",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &[]int64{1}[0],
-						Max: &[]int64{1}[0],
+						Min: &ten,
+						Max: &ten,
 					},
 				},
 			},
 			expectedError: false,
 		},
-		{
-			name:               "empty historical pod count",
-			historicalPodCount: map[string]int{},
-			multiplier:         0.5,
-			expectedResult:     []apiv1.VertexScaleDefinition{},
-			expectedError:      false,
-		},
-		{
-			name:                 "nil historical pod count",
-			historicalPodCount:   nil,
-			multiplier:           0.5,
-			expectedResult:       nil,
-			expectedError:        true,
-			expectedErrorMessage: "HistoricalPodCount is nil",
-		},*/
+		/*
+			{
+				name:               "empty historical pod count",
+				historicalPodCount: map[string]int{},
+				multiplier:         0.5,
+				expectedResult:     []apiv1.VertexScaleDefinition{},
+				expectedError:      false,
+			},
+			{
+				name:                 "nil historical pod count",
+				historicalPodCount:   nil,
+				multiplier:           0.5,
+				expectedResult:       nil,
+				expectedError:        true,
+				expectedErrorMessage: "HistoricalPodCount is nil",
+			},*/
 	}
 
 	for _, tc := range tests {
@@ -2115,7 +2121,7 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 								"vertices": [
 									{"name": "vertex1", "scale": {"min": 1}},
 									{"name": "vertex2", "scale": {"min": 1}},
-									{"name": "vertex3", "scale": {"min": 1}}
+									{"name": "vertex3", "scale": {"min": 10}}
 								]
 							}`),
 						},
