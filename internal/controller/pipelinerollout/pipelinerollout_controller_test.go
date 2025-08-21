@@ -1992,12 +1992,13 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 	one := int64(1)
 	two := int64(2)
 	ten := int64(10)
+	thirty := int64(30)
 	fifty := int64(50)
 
 	tests := []struct {
 		name                     string
 		historicalPodCount       map[string]int
-		currentPipelineVertexMin map[string]int
+		currentPipelineVertexMin map[string]*int64
 		multiplier               float64
 		expectedResult           []apiv1.VertexScaleDefinition
 		expectedError            bool
@@ -2009,9 +2010,9 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				"vertex1": 3,
 				"vertex2": 5,
 			},
-			currentPipelineVertexMin: map[string]int{
-				"vertex1": 30,
-				"vertex2": 50,
+			currentPipelineVertexMin: map[string]*int64{
+				"vertex1": &thirty,
+				"vertex2": &fifty,
 			},
 			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
@@ -2038,9 +2039,9 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				"vertex1": 3,
 				"vertex2": 5,
 			},
-			currentPipelineVertexMin: map[string]int{
-				"vertex1": 30,
-				"vertex3": 50,
+			currentPipelineVertexMin: map[string]*int64{
+				"vertex1": &thirty,
+				"vertex3": &fifty,
 			},
 			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
@@ -2067,9 +2068,9 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				"vertex1": 3,
 				"vertex2": 5,
 			},
-			currentPipelineVertexMin: map[string]int{
-				"vertex1": 30,
-				"vertex4": 50,
+			currentPipelineVertexMin: map[string]*int64{
+				"vertex1": &thirty,
+				"vertex4": &fifty,
 			},
 			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
@@ -2096,9 +2097,9 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				"vertex1": 3,
 				"vertex2": 5,
 			},
-			currentPipelineVertexMin: map[string]int{
-				"vertex1": 30,
-				"vertex5": 50,
+			currentPipelineVertexMin: map[string]*int64{
+				"vertex1": &thirty,
+				"vertex5": &fifty,
 			},
 			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
@@ -2119,23 +2120,6 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			},
 			expectedError: false,
 		},
-		// TODO: add cases for scale not set...
-		/*
-			{
-				name:               "empty historical pod count",
-				historicalPodCount: map[string]int{},
-				multiplier:         0.5,
-				expectedResult:     []apiv1.VertexScaleDefinition{},
-				expectedError:      false,
-			},
-			{
-				name:                 "nil historical pod count",
-				historicalPodCount:   nil,
-				multiplier:           0.5,
-				expectedResult:       nil,
-				expectedError:        true,
-				expectedErrorMessage: "HistoricalPodCount is nil",
-			},*/
 	}
 
 	for _, tc := range tests {
@@ -2158,13 +2142,20 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			// Add vertices to the current pipeline spec
 			vertices := []interface{}{}
 			for vertexName, min := range tc.currentPipelineVertexMin {
-				vertices = append(vertices, map[string]interface{}{
-					"name": vertexName,
-					"scale": map[string]interface{}{
-						"min": int64(min),
-						"max": int64(min + 10),
-					},
-				})
+				if min == nil {
+					vertices = append(vertices, map[string]interface{}{
+						"name":  vertexName,
+						"scale": nil,
+					})
+				} else {
+					vertices = append(vertices, map[string]interface{}{
+						"name": vertexName,
+						"scale": map[string]interface{}{
+							"min": *min,
+							"max": *min + int64(10),
+						},
+					})
+				}
 			}
 			pipeline.Object["spec"].(map[string]interface{})["vertices"] = vertices
 
