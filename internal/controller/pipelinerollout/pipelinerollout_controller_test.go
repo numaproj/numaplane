@@ -1992,6 +1992,7 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 	one := int64(1)
 	two := int64(2)
 	ten := int64(10)
+	fifty := int64(50)
 
 	tests := []struct {
 		name                     string
@@ -2060,6 +2061,65 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			},
 			expectedError: false,
 		},
+		{
+			name: "vertex not found in Historical Pod Count but found in PipelineRollout (which has scale unset)",
+			historicalPodCount: map[string]int{
+				"vertex1": 3,
+				"vertex2": 5,
+			},
+			currentPipelineVertexMin: map[string]int{
+				"vertex1": 30,
+				"vertex4": 50,
+			},
+			multiplier: 0.3,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &one,
+						Max: &one,
+					},
+				},
+				{
+					VertexName: "vertex4",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &one, // if Scale isn't set, it implies 1 for min
+						Max: &one,
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "vertex not found in Historical Pod Count nor in PipelineRollout",
+			historicalPodCount: map[string]int{
+				"vertex1": 3,
+				"vertex2": 5,
+			},
+			currentPipelineVertexMin: map[string]int{
+				"vertex1": 30,
+				"vertex5": 50,
+			},
+			multiplier: 0.3,
+			expectedResult: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "vertex1",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &one,
+						Max: &one,
+					},
+				},
+				{
+					VertexName: "vertex5",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &fifty,
+						Max: &fifty,
+					},
+				},
+			},
+			expectedError: false,
+		},
+		// TODO: add cases for scale not set...
 		/*
 			{
 				name:               "empty historical pod count",
@@ -2121,7 +2181,8 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 								"vertices": [
 									{"name": "vertex1", "scale": {"min": 1}},
 									{"name": "vertex2", "scale": {"min": 1}},
-									{"name": "vertex3", "scale": {"min": 10}}
+									{"name": "vertex3", "scale": {"min": 10}},
+									{"name": "vertex4"}
 								]
 							}`),
 						},
