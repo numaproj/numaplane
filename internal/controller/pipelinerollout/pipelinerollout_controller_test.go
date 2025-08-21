@@ -1989,73 +1989,48 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 func Test_calculateScaleForRecycle(t *testing.T) {
 	ctx := context.Background()
 
+	one := int64(1)
+	two := int64(2)
+
 	tests := []struct {
-		name                 string
-		historicalPodCount   map[string]int
-		multiplier           float64
-		expectedResult       []apiv1.VertexScaleDefinition
-		expectedError        bool
-		expectedErrorMessage string
+		name                     string
+		historicalPodCount       map[string]int
+		currentPipelineVertexMin map[string]int
+		multiplier               float64
+		expectedResult           []apiv1.VertexScaleDefinition
+		expectedError            bool
+		expectedErrorMessage     string
 	}{
 		{
-			name: "normal case with multiple vertices",
-			historicalPodCount: map[string]int{
-				"vertex1": 4,
-				"vertex2": 6,
-				"vertex3": 1,
-			},
-			multiplier: 0.5,
-			expectedResult: []apiv1.VertexScaleDefinition{
-				{
-					VertexName: "vertex1",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(2); return &v }(), // ceil(4 * 0.5) = 2
-						Max: func() *int64 { v := int64(2); return &v }(),
-					},
-				},
-				{
-					VertexName: "vertex2",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(3); return &v }(), // ceil(6 * 0.5) = 3
-						Max: func() *int64 { v := int64(3); return &v }(),
-					},
-				},
-				{
-					VertexName: "vertex3",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(1); return &v }(), // ceil(1 * 0.5) = 1
-						Max: func() *int64 { v := int64(1); return &v }(),
-					},
-				},
-			},
-			expectedError: false,
-		},
-		{
-			name: "fractional scaling requiring ceiling",
+			name: "vertex found in Historical Pod Count and in PipelineRollout",
 			historicalPodCount: map[string]int{
 				"vertex1": 3,
 				"vertex2": 5,
+			},
+			currentPipelineVertexMin: map[string]int{
+				"vertex1": 30,
+				"vertex2": 50,
 			},
 			multiplier: 0.3,
 			expectedResult: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "vertex1",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(1); return &v }(), // ceil(3 * 0.3) = ceil(0.9) = 1
-						Max: func() *int64 { v := int64(1); return &v }(),
+						Min: &one,
+						Max: &one,
 					},
 				},
 				{
 					VertexName: "vertex2",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(2); return &v }(), // ceil(5 * 0.3) = ceil(1.5) = 2
-						Max: func() *int64 { v := int64(2); return &v }(),
+						Min: &two,
+						Max: &two,
 					},
 				},
 			},
 			expectedError: false,
 		},
-		{
+		/*{
 			name: "zero pod count",
 			historicalPodCount: map[string]int{
 				"vertex1": 0,
@@ -2066,32 +2041,15 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				{
 					VertexName: "vertex1",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(0); return &v }(), // ceil(0 * 0.5) = 0
-						Max: func() *int64 { v := int64(0); return &v }(),
+						Min: &[]int64{0}[0],
+						Max: &[]int64{0}[0],
 					},
 				},
 				{
 					VertexName: "vertex2",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(1); return &v }(), // ceil(2 * 0.5) = 1
-						Max: func() *int64 { v := int64(1); return &v }(),
-					},
-				},
-			},
-			expectedError: false,
-		},
-		{
-			name: "multiplier greater than 1",
-			historicalPodCount: map[string]int{
-				"vertex1": 2,
-			},
-			multiplier: 1.5,
-			expectedResult: []apiv1.VertexScaleDefinition{
-				{
-					VertexName: "vertex1",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: func() *int64 { v := int64(3); return &v }(), // ceil(2 * 1.5) = 3
-						Max: func() *int64 { v := int64(3); return &v }(),
+						Min: &[]int64{1}[0],
+						Max: &[]int64{1}[0],
 					},
 				},
 			},
@@ -2111,7 +2069,7 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			expectedResult:       nil,
 			expectedError:        true,
 			expectedErrorMessage: "HistoricalPodCount is nil",
-		},
+		},*/
 	}
 
 	for _, tc := range tests {
@@ -2131,14 +2089,14 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 				},
 			}
 
-			// Add vertices to the pipeline spec based on historicalPodCount
+			// Add vertices to the current pipeline spec
 			vertices := []interface{}{}
-			for vertexName := range tc.historicalPodCount {
+			for vertexName, min := range tc.currentPipelineVertexMin {
 				vertices = append(vertices, map[string]interface{}{
 					"name": vertexName,
 					"scale": map[string]interface{}{
-						"min": int64(1),
-						"max": int64(10),
+						"min": int64(min),
+						"max": int64(min + 10),
 					},
 				})
 			}

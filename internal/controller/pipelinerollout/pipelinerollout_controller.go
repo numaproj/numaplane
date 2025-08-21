@@ -1234,22 +1234,24 @@ func drainRecyclablePipeline(
 		recycleScaleFactor := getRecycleScaleFactor(pipelineRollout)
 		numaLogger.WithValues("scaleFactor", recycleScaleFactor).Debug("scale factor to scale down by during pausing")
 
-		newVertexScaleDefinitions, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, recycleScaleFactor)
+		newVertexScaleDefinitions, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, float64(recycleScaleFactor))
 		if err != nil {
-
+			return false, false, err
 		}
 
 		newPauseGracePeriodSeconds, err := calculatePauseTimeForRecycle(ctx, pipeline, pipelineRollout, 1.0/float64(recycleScaleFactor))
 		if err != nil {
-
+			return false, false, err
 		}
 
-		// patch to set desiredPhase=Paused and set the new pause time
-
-		// patch to update the scale values
+		// TODO: patch to set desiredPhase=Paused and set the new pause time
+		// TODO: patch to update the scale values
+		_ = newVertexScaleDefinitions
+		_ = newPauseGracePeriodSeconds
 
 	}
 
+	return false, false, nil
 }
 
 // return the new pauseGracePeriodSeconds to use for the Pipeline, based off of the original pauseGracePeriodSeconds, divided by the recycleScaleFactor
@@ -1279,8 +1281,9 @@ func calculatePauseTimeForRecycle(
 
 }
 
-// multiply the number of Pods that were running previously for the Pipeline by some factor
-// if the Vertex is new, just use the minimum
+// multiply the number of Pods that were running previously by a promoted Pipeline of this PipelineRollout by some factor
+// return the new Vertex Scale Definitions
+// if the Vertex is new, just use the min value defined in the PipelineRollout
 func calculateScaleForRecycle(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured,
@@ -1292,10 +1295,10 @@ func calculateScaleForRecycle(
 	// get the spec for the Pipeline that we need to scale down: this tells us what all the vertices are that we need to account for
 	currentVertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
 	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of pipeline", err)
+		return nil, fmt.Errorf("error while getting vertices of pipeline %q: %v", pipeline.GetName(), err)
 	}
 	if !found {
-
+		return nil, fmt.Errorf("error while getting vertices of pipeline %q: doesn't exist", pipeline.GetName())
 	}
 
 	// get the definition of the pipeline spec in the PipelineRollout: if we don't have the historical pod count for a given vertex because it's new
@@ -1309,15 +1312,16 @@ func calculateScaleForRecycle(
 	// so we can get an idea of how many need to run normally
 	historicalPodCount := pipelineRollout.Status.ProgressiveStatus.HistoricalPodCount
 	if historicalPodCount == nil {
-		return nil, fmt.Errorf("HistoricalPodCount is nil")
+		return nil, fmt.Errorf("HistoricalPodCount is nil for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
 	}
 
-	// Create the VertexScaleDefinitions that we'll use
+	// Create the VertexScaleDefinitions that we'll return
 	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
 
 	for vertexIndex, currentVertexSpec := range currentVertexSpecs {
 		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
 
+			// Get the vertex's name
 			vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
 			if err != nil {
 				return nil, err
@@ -1342,8 +1346,16 @@ func calculateScaleForRecycle(
 				}
 				if !found {
 					// Vertex not found in the PipelineRollout or in the Historical Pod Count
-					numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to 1", pipelineRolloutDefinedSpec, historicalPodCount)
-					newScaleValue = 1
+					vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+					if err != nil {
+						return nil, err
+					}
+					if vertexScaleDef.Min == nil {
+						newScaleValue = 1
+					} else {
+						newScaleValue = *vertexScaleDef.Min
+					}
+					numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to %d", pipelineRolloutDefinedSpec, historicalPodCount, newScaleValue)
 				} else {
 					// set the newScaleValue from the PipelineRollout min
 					newScaleValue, found, err = unstructured.NestedInt64(pipelineRolloutVertexDef, "scale", "min")
@@ -1352,7 +1364,7 @@ func calculateScaleForRecycle(
 					}
 					if !found {
 						// If the scale.min wasn't set in PipelineRollout, it is equivalent to 1
-						numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in Historical Pod Count %v, and scale.min not defined in PipelineRollout, so setting newScaleValue to 1", pipelineRolloutDefinedSpec, historicalPodCount)
+						numaLogger.WithValues("vertex", vertexName, "pipelineRolloutDefinedSpec", pipelineRolloutDefinedSpec, "historicalPodCount", historicalPodCount).Debug("Vertex not found in Historical Pod Count, and scale.min not defined in PipelineRollout, so setting newScaleValue to 1")
 						newScaleValue = 1
 					}
 				}
@@ -1434,7 +1446,8 @@ func (r *PipelineRolloutReconciler) drainRecyclablePipeline(ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	c client.Client,
 ) (bool, bool, error) {
-	// if desiredPhase != Paused: set {scale, pauseGracePeriodSeconds, desiredPhase}
+	// TODO: if desiredPhase != Paused: set {scale, pauseGracePeriodSeconds, desiredPhase}
+	return false, false, nil
 }
 
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label
