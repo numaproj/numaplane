@@ -21,6 +21,8 @@ GIT_TREE_STATE=$(shell if [[ -z "`git status --porcelain`" ]]; then echo "clean"
 
 NUMAFLOW_CRDS=$(shell kubectl get crd | grep -c 'numaflow.numaproj.io')
 
+WRITE_DIR := $(HOME)
+
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
@@ -76,14 +78,10 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+CONTAINER_RUNTIME ?= docker
+
 CURRENT_CONTEXT := $(shell [[ "`command -v kubectl`" != '' ]] && kubectl config current-context 2> /dev/null || echo "unset")
-IMAGE_IMPORT_CMD := $(shell [[ "`command -v k3d`" != '' ]] && [[ "$(CURRENT_CONTEXT)" =~ k3d-* ]] && echo "k3d image import -c `echo $(CURRENT_CONTEXT) | cut -c 5-`")
-ifndef IMAGE_IMPORT_CMD
-IMAGE_IMPORT_CMD := $(shell [[ "`command -v minikube`" != '' ]] && [[ "$(CURRENT_CONTEXT)" =~ minikube* ]] && echo "minikube image load")
-endif
-ifndef IMAGE_IMPORT_CMD
-IMAGE_IMPORT_CMD := $(shell [[ "`command -v kind`" != '' ]] && [[ "$(CURRENT_CONTEXT)" =~ kind-* ]] && echo "kind load docker-image")
-endif
+
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
@@ -197,9 +195,26 @@ clean:
 .PHONY: image
 image: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} -f ${DOCKERFILE} .
-ifdef IMAGE_IMPORT_CMD
-	$(IMAGE_IMPORT_CMD) ${IMAGE_FULL_PATH}
-endif
+	$(MAKE) image-import  # Call the image-import target after building
+
+.PHONY: image-import
+image-import: ## Import docker image into the appropriate Kubernetes environment.
+	@if command -v k3d >/dev/null && echo "$(CURRENT_CONTEXT)" | grep -qE '^k3d-'; then \
+		echo "Saving image with k3d..."; \
+		k3d image import -c `echo $(CURRENT_CONTEXT) | cut -c 5-` ${IMAGE_FULL_PATH}; \
+	elif command -v kind >/dev/null && echo "$(CURRENT_CONTEXT)" | grep -qE '^kind-'; then \
+		if [ "$(CONTAINER_RUNTIME)" = "podman" ]; then \
+			echo "Saving image with kind/podman..."; \
+			podman save ${IMAGE_FULL_PATH} -o ${WRITE_DIR}/numaplane-controller.tar; \
+			echo "Loading image archive into kind cluster..."; \
+			kind load image-archive ${WRITE_DIR}/numaplane-controller.tar --name `echo $(CURRENT_CONTEXT) | cut -c 6-`; \
+			rm ${WRITE_DIR}/numaplane-controller.tar; \
+		else \
+			echo "Saving image with kind/docker..."; \
+			kind load docker-image ${IMAGE_FULL_PATH}; \
+		fi; \
+	fi
+
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
