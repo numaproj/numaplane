@@ -1225,8 +1225,12 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 		return false, nil
 	} else {
-		// else:
-		//   if overridden-spec==false: update spec with 0 scale, overridden-spec=true, desiredPhase=Running, return
+		// if we still have the original spec, we need to update with the promoted pipeline's spec
+		if originalSpec {
+			// update spec with 0 scale, overridden-spec=true, desiredPhase=Running
+			forceApplySpecOnUndrainablePipeline(ctx, pipeline, currentPromotedPipeline, c)
+			return false, nil
+		}
 		//   if desiredPhase==Running and phase==Paused, return
 		//   paused, drained, err := drainRecyclablePipeline()
 		//   if paused:
@@ -1235,6 +1239,75 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	return false, nil
 
+}
+
+func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *unstructured.Unstructured, newPipeline *unstructured.Unstructured, c client.Client) error {
+
+	numaLogger := logger.FromContext(ctx)
+
+	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
+	// TODO: make this a function (including the not found part which should be an error)
+	currentVertexSpecs, found, err := unstructured.NestedSlice(newPipeline.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error while getting vertices of pipeline %q: %v", newPipeline.GetName(), err)
+	}
+	if !found {
+
+	}
+	zero := int64(0)
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
+	for vertexIndex, currentVertexSpec := range currentVertexSpecs {
+		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
+			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
+				VertexName: vertexAsMap["name"].(string),
+				ScaleDefinition: &apiv1.ScaleDefinition{
+					Min: &zero,
+					Max: &zero,
+				},
+			}
+		}
+	}
+
+	newPipelineCopy := newPipeline.DeepCopy()
+	applyScaleValuesToPipelineDefinition(ctx, newPipelineCopy, vertexScaleDefinitions)
+
+	// Set the desiredPhase to Running just in case it isn't (we need to make to take it out of Paused state if it's in it to give it a chance to pause again)
+	// and set the "overridden-spec" annotation to indicate that we've applied over top the original
+	err = unstructured.SetNestedField(newPipelineCopy.Object, numaflowv1.PipelinePhaseRunning, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return err
+	}
+	annotations := newPipelineCopy.GetAnnotations()
+	annotations[common.AnnotationKeyOverriddenSpec] = "true"
+	newPipelineCopy.SetAnnotations(annotations)
+
+	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
+
+	// Create a strategic merge patch by comparing the current pipeline with the new pipeline copy
+	// We need to extract just the fields we want to update: spec, metadata.annotations
+	patchData := map[string]interface{}{
+		"spec": newPipelineCopy.Object["spec"],
+		"metadata": map[string]interface{}{
+			"annotations": newPipelineCopy.GetAnnotations(),
+		},
+	}
+
+	// Convert patch data to JSON
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal patch data: %w", err)
+	}
+
+	numaLogger.WithValues("currentPipeline", currentPipeline.GetName(), "patch", string(patchBytes)).Debug("applying strategic merge patch to pipeline")
+
+	// Apply the strategic merge patch to the current pipeline
+	err = kubernetes.PatchResource(ctx, c, currentPipeline, string(patchBytes), k8stypes.StrategicMergePatchType)
+	if err != nil {
+		return fmt.Errorf("failed to apply patch to pipeline %s: %w", currentPipeline.GetName(), err)
+	}
+
+	numaLogger.WithValues("currentPipeline", currentPipeline.GetName()).Debug("successfully applied patch to pipeline")
+	return nil
 }
 
 func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
