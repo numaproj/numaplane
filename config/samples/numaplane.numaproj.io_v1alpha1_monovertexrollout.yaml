@@ -4,6 +4,7 @@ metadata:
   name: my-monovertex
   namespace: example-namespace
 spec:
+  # replicas: 1
   strategy:
     progressive:
       assessmentSchedule: "120,60,10"
@@ -13,17 +14,35 @@ spec:
       - templateName: mvtx-acknowledged-messages
         clusterScope: false
   riders:
-    - definition:
-        apiVersion: autoscaling.k8s.io/v1beta2
-        kind: VerticalPodAutoscaler
-        metadata: 
-          name: vpa
+    # - definition:
+    #     apiVersion: autoscaling.k8s.io/v1beta2
+    #     kind: VerticalPodAutoscaler
+    #     metadata: 
+    #       name: vpa
+    #     spec:
+    #       targetRef: 
+    #         apiVersion: numaproj.io/v1alpha1
+    #         kind: MonoVertex
+    #         name: '{{.monovertex-name}}'
+    - definition:    
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata:
+          name: my-mvtx-hpa
         spec:
-          targetRef: 
-            apiVersion: numaproj.io/v1alpha1
+          minReplicas: 1
+          maxReplicas: 3
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 50
+          scaleTargetRef:
+            apiVersion: numaflow.numaproj.io/v1alpha1
             kind: MonoVertex
             name: '{{.monovertex-name}}'
-          # todo: add more fields here...
 
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
@@ -32,7 +51,7 @@ spec:
     #    numaflow.numaproj.io/instance: "0"
     spec:
       scale:
-        min: 2
+        min: 0
         max: 3
         lookbackSeconds: 60
       source:
@@ -45,7 +64,8 @@ spec:
       sink:
         udsink:
           container:
-            image: quay.io/numaio/numaflow-go/sink-log:stable
+            # image: quay.io/numaio/numaflow-go/sink-log:stable
+            image: quay.io/numaio/numaflow-java/simple-sink:stable
             #image: quay.io/numaio/numaflow-go/sink-log-failure:stable # use to fail the AnalysisRun
 ---
 
@@ -53,6 +73,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: mvtx-acknowledged-messages
+  namespace: example-namespace
   labels:
     used_by: numaplane
 spec:
