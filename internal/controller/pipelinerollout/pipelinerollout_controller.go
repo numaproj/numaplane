@@ -1120,6 +1120,7 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
+// TODO: consider relocating Recycle-specific functionality into its own file
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
 func (r *PipelineRolloutReconciler) Recycle(
@@ -1182,8 +1183,13 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// make sure we pause it and check on it
 	if requiresPauseOriginalSpec && originalSpec {
 		paused, drained, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+		if err != nil {
+			return false, err
+		}
+		numaLogger.WithValues("paused", paused, "drained", drained).Debug("trying to do drain of Pipeline using original spec first")
 		if paused {
 			if drained {
+				numaLogger.Debug("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
 				return true, err
 			} else {
@@ -1201,19 +1207,74 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// force drain:
 	// if no new promoted, ensure scaled to 0 and return
-	// else:
-	//   if overridden-spec==false: update spec with 0 scale, overridden-spec=true, desiredPhase=Running, return
-	//   if desiredPhase==Running and phase==Paused, return
-	//   paused, drained, err := drainRecyclablePipeline()
-	//   if paused:
-	//.    delete, return (log whether it drained or not)
+	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, c)
+	if err != nil {
+		return false, err
+	}
+	isNewPromotedPipeline, err := ctlrcommon.IsChildNewer(pipelineRollout.Name, currentPromotedPipeline.GetName(), pipeline.GetName())
+	if err != nil {
+		return false, err
+	}
+	if !isNewPromotedPipeline {
+		// no new promoted pipeline yet
+		// We need to make sure we're scaled to 0 and return
+		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		if err != nil {
+			return false, err
+		}
+
+		return false, nil
+	} else {
+		// else:
+		//   if overridden-spec==false: update spec with 0 scale, overridden-spec=true, desiredPhase=Running, return
+		//   if desiredPhase==Running and phase==Paused, return
+		//   paused, drained, err := drainRecyclablePipeline()
+		//   if paused:
+		//.    delete, return (log whether it drained or not)
+	}
 
 	return false, nil
 
 }
 
+func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) (bool, error) {
+	scaledToZero := true
+
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	for _, vertexScale := range scaleDefinitions {
+		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Min == nil || vertexScale.ScaleDefinition.Max == nil {
+			scaledToZero = false
+			break
+		} else {
+			if !(*vertexScale.ScaleDefinition.Min == 0 && *vertexScale.ScaleDefinition.Max == 0) {
+				scaledToZero = false
+			}
+		}
+
+	}
+	return scaledToZero, nil
+}
+
+func ensurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
+	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline, c)
+	if err != nil {
+		return err
+	}
+
+	if !scaledToZero {
+		err := scalePipelineVerticesToZero(ctx, pipeline, c)
+		if err != nil {
+			return fmt.Errorf("error scaling pipeline %s's vertices to zero: %v", pipeline.GetName(), err)
+		}
+	}
+	return nil
+}
+
 // make sure Pipeline's desiredPhase==Paused and if not set it
-// make sure it's scale and pauseGracePeriodSeconds is adjusted if necessary
+// make sure its scale and pauseGracePeriodSeconds is adjusted if necessary
 // return:
 // - whether phase==Paused
 // - whether fully drained
@@ -1250,7 +1311,7 @@ func drainRecyclablePipeline(
 			return false, false, err
 		}
 
-		// patch to set desiredPhase=Paused and set the new pause time
+		// patch the pipeline to set desiredPhase=Paused and set the new pause time
 		patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "Paused", "pauseGracePeriodSeconds": %d}}}`, newPauseGracePeriodSeconds)
 		numaLogger.WithValues("pipeline", pipeline.GetName(), "patchJson", patchJson).Debug("patching pipeline lifecycle")
 
@@ -1262,6 +1323,7 @@ func drainRecyclablePipeline(
 		return false, false, nil
 
 	} else {
+		// return if Pipeline is Paused and if so if it's Drained
 		isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 		isDrained := false
 		if isPaused {
