@@ -1501,6 +1501,175 @@ func TestGetScaleValuesFromPipelineSpec(t *testing.T) {
 	}
 }
 
+func Test_checkPipelineScaledToZero(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name           string
+		pipelineSpec   string
+		expectedResult bool
+		expectError    bool
+	}{
+		{
+			name: "All vertices scaled to zero",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Some vertices not scaled to zero",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"scale": {
+							"min": 0,
+							"max": 3
+						},
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "Vertex with nil scale definition",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "cat",
+						"udf": {
+							"builtin": {
+								"name": "cat"
+							}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "Vertex with unset min and max",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create unstructured pipeline object
+			pipeline, err := ctlrcommon.CreateTestPipelineUnstructured("test-pipeline", tt.pipelineSpec)
+			assert.NoError(t, err)
+
+			// Call the function under test
+			result, err := checkPipelineScaledToZero(ctx, pipeline)
+
+			// Verify results
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result, "Expected scaled to zero result to be %v, got %v", tt.expectedResult, result)
+			}
+		})
+	}
+}
+
 func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 	one := int64(1)
 	five := int64(5)

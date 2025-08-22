@@ -1237,7 +1237,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 }
 
-func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) (bool, error) {
+func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	scaledToZero := true
 
 	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
@@ -1259,7 +1259,7 @@ func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstr
 }
 
 func ensurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
-	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline, c)
+	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline)
 	if err != nil {
 		return err
 	}
