@@ -73,6 +73,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	if !requiresPause {
+		numaLogger.Info("Pipeline will be deleted now")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		return true, err
 	}
@@ -91,7 +92,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		if err != nil {
 			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
-		numaLogger.WithValues("paused", paused, "drained", drained).Debug("trying to do drain of Pipeline using original spec first")
+		numaLogger.WithValues("paused", paused, "drained", drained).Debug("checking drain of Pipeline using original spec")
 		if paused {
 			if drained {
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
@@ -121,8 +122,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return false, err
 	}
 	if !isNewPromotedPipeline {
-		// no new promoted pipeline yet
-		// We need to make sure we're scaled to 0 and return
+		numaLogger.Debug("No new promoted pipeline found, scaling current pipeline to zero")
 		err = ensurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
@@ -130,8 +130,10 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 		return false, nil
 	} else {
+
 		// if we still have the original spec, we need to update with the promoted pipeline's spec
 		if originalSpec {
+			numaLogger.WithValues("promotedPipeline", currentPromotedPipeline.GetName()).Info("Found newer promoted pipeline, will force apply it")
 			// update spec with 0 scale, overridden-spec=true, desiredPhase=Running
 			forceApplySpecOnUndrainablePipeline(ctx, pipeline, currentPromotedPipeline, c)
 			return false, nil
@@ -145,6 +147,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 		isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
+			numaLogger.WithValues("desiredPhase", desiredPhase, "currentPhase", "Paused").Debug("Pipeline transitioning from paused to running, waiting for completion")
 			return false, nil
 		}
 
@@ -152,6 +155,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		if err != nil {
 			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
+		numaLogger.WithValues("paused", paused, "drained", drained).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
 		if paused {
 			numaLogger.WithValues("drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now ready to delete")
 			err = kubernetes.DeleteResource(ctx, c, pipeline)

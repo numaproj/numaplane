@@ -216,11 +216,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline pre-upgrade", pipelineRollout)
 	}
 
-	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
-	}
-
-	requeue, err := computePipelineVerticesScaleValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
+	requeue, err := computePromotedPipelineVerticesScaleValues(ctx, pipelineRO.Status.ProgressiveStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -598,7 +594,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
 }
 
 /*
-computePipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
+computePromotedPipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
 for all vertices before performing the actually scaling down of the promoted pipeline.
 It checks if the ScaleValues have been already stored and skips the operation if true.
 
@@ -612,15 +608,20 @@ Returns:
 - bool: true if should requeue, false otherwise. Should requeue in case of error or or to store the computed ScaleValues.
 - error: an error if any operation fails during the scaling process.
 */
-func computePipelineVerticesScaleValues(
+func computePromotedPipelineVerticesScaleValues(
 	ctx context.Context,
-	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
+	pipelineProgressiveStatus apiv1.PipelineProgressiveStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("computePipelineVerticesScaleValues").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
+
+	if pipelineProgressiveStatus.PromotedPipelineStatus == nil {
+		return true, errors.New("unable to perform pre-upgrade scale down because the rollout does not have promotedChildStatus set")
+	}
+	promotedPipelineStatus := pipelineProgressiveStatus.PromotedPipelineStatus
 
 	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
 	if err != nil {
@@ -684,6 +685,13 @@ func computePipelineVerticesScaleValues(
 	}
 
 	promotedPipelineStatus.ScaleValues = scaleValuesMap
+
+	// set the HistoricalPodCount to reflect the Initial values
+	// (this duplication is needed since the PromotedPipelineStatus can be cleared)
+	pipelineProgressiveStatus.HistoricalPodCount = map[string]int{}
+	for vertex, scaleValues := range scaleValuesMap {
+		pipelineProgressiveStatus.HistoricalPodCount[vertex] = int(scaleValues.Initial)
+	}
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = false
