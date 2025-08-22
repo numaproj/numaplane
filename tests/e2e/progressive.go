@@ -10,6 +10,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -158,7 +159,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 
 // get the Scale definitions for each Vertex
 func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
-	vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	vertices, err := numaflowtypes.GetVertices(pipelineDef)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
 	}

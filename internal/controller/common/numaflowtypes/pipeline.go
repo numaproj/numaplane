@@ -242,6 +242,17 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 	return nil
 }
 
+func GetVertices(pipeline *unstructured.Unstructured) ([]interface{}, error) {
+	vertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %q: %v", pipeline.GetName(), err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no vertices defined for pipeline %q: %+v", pipeline.GetName(), pipeline.Object)
+	}
+	return vertexSpecs, nil
+}
+
 func GetVertexFromPipelineSpecMap(
 	pipelineSpec map[string]interface{},
 	vertexName string,

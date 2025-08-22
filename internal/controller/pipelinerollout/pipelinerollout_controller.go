@@ -1120,6 +1120,10 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 	return currentNameCount, nil
 }
 
+// TODO: need to figure out how to handle users who have explicitly paused their pipelines or taken those pipelines down to 0 Pods
+// If the previous upgrading pipeline explicitly said 0 pods or pause, then it implies we shouldn't run that one
+// If the new promoted pipeline explicitly says 0 pods or pause, then it implies we shouldn't run that one
+
 // TODO: consider relocating Recycle-specific functionality into its own file
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
@@ -1189,7 +1193,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		numaLogger.WithValues("paused", paused, "drained", drained).Debug("trying to do drain of Pipeline using original spec first")
 		if paused {
 			if drained {
-				numaLogger.Debug("Pipeline has been drained and will be deleted now")
+				numaLogger.Info("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
 				return true, err
 			} else {
@@ -1231,10 +1235,27 @@ func (r *PipelineRolloutReconciler) Recycle(
 			forceApplySpecOnUndrainablePipeline(ctx, pipeline, currentPromotedPipeline, c)
 			return false, nil
 		}
-		//   if desiredPhase==Running and phase==Paused, return
-		//   paused, drained, err := drainRecyclablePipeline()
-		//   if paused:
-		//.    delete, return (log whether it drained or not)
+		// we need to make sure we get out of the previous Paused state
+		// TODO: what if user intended that their pipeline be paused, though?
+		// if desiredPhase==Running and phase==Paused, return
+		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+		if err != nil {
+			return false, err
+		}
+		isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
+			return false, nil
+		}
+
+		paused, drained, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+		if err != nil {
+			return false, err
+		}
+		if paused {
+			numaLogger.WithValues("drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now ready to delete")
+			err = kubernetes.DeleteResource(ctx, c, pipeline)
+			return true, err
+		}
 	}
 
 	return false, nil
@@ -1246,13 +1267,9 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	numaLogger := logger.FromContext(ctx)
 
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
-	// TODO: make this a function (including the not found part which should be an error)
-	currentVertexSpecs, found, err := unstructured.NestedSlice(newPipeline.Object, "spec", "vertices")
+	currentVertexSpecs, err := numaflowtypes.GetVertices(currentPipeline)
 	if err != nil {
-		return fmt.Errorf("error while getting vertices of pipeline %q: %v", newPipeline.GetName(), err)
-	}
-	if !found {
-
+		return err
 	}
 	zero := int64(0)
 	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
@@ -1446,12 +1463,9 @@ func calculateScaleForRecycle(
 	numaLogger := logger.FromContext(ctx)
 
 	// get the spec for the Pipeline that we need to scale down: this tells us what all the vertices are that we need to account for
-	currentVertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	currentVertexSpecs, err := numaflowtypes.GetVertices(pipeline)
 	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of pipeline %q: %v", pipeline.GetName(), err)
-	}
-	if !found {
-		return nil, fmt.Errorf("error while getting vertices of pipeline %q: doesn't exist", pipeline.GetName())
+		return nil, err
 	}
 
 	// get the definition of the pipeline spec in the PipelineRollout: if we don't have the historical pod count for a given vertex because it's new
@@ -1600,18 +1614,6 @@ func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) float32 {
 		return true, err
 	}
 */
-
-// return values:
-// - whether pipeline is paused
-// - whether pipeline is fully drained
-// - error if any
-func (r *PipelineRolloutReconciler) drainRecyclablePipeline(ctx context.Context,
-	pipeline *unstructured.Unstructured,
-	c client.Client,
-) (bool, bool, error) {
-	// TODO: if desiredPhase != Paused: set {scale, pauseGracePeriodSeconds, desiredPhase}
-	return false, false, nil
-}
 
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label
 func (r *PipelineRolloutReconciler) getISBSvc(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, upgradeState common.UpgradeState) (*unstructured.Unstructured, error) {
