@@ -39,7 +39,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to get rollout for pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
 
 	// Need to determine how to delete the pipeline
@@ -89,7 +89,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	if requiresPauseOriginalSpec && originalSpec {
 		paused, drained, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		numaLogger.WithValues("paused", paused, "drained", drained).Debug("trying to do drain of Pipeline using original spec first")
 		if paused {
@@ -114,7 +114,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// if no new promoted, ensure scaled to 0 and return
 	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, c)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to find current promoted pipeline for rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
 	}
 	isNewPromotedPipeline, err := ctlrcommon.IsChildNewer(pipelineRollout.Name, currentPromotedPipeline.GetName(), pipeline.GetName())
 	if err != nil {
@@ -125,7 +125,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		// We need to make sure we're scaled to 0 and return
 		err = ensurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 
 		return false, nil
@@ -150,7 +150,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 		paused, drained, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		if paused {
 			numaLogger.WithValues("drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now ready to delete")
@@ -170,7 +170,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
 	currentVertexSpecs, err := numaflowtypes.GetVertices(currentPipeline)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", currentPipeline.GetNamespace(), currentPipeline.GetName(), err)
 	}
 	zero := int64(0)
 	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
