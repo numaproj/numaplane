@@ -965,3 +965,39 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 	}
 	return scaleDefinitions, nil
 }
+
+func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	scaledToZero := true
+
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	for _, vertexScale := range scaleDefinitions {
+		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Min == nil || vertexScale.ScaleDefinition.Max == nil {
+			scaledToZero = false
+			break
+		} else {
+			if !(*vertexScale.ScaleDefinition.Min == 0 && *vertexScale.ScaleDefinition.Max == 0) {
+				scaledToZero = false
+			}
+		}
+
+	}
+	return scaledToZero, nil
+}
+
+func ensurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
+	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+
+	if !scaledToZero {
+		err := scalePipelineVerticesToZero(ctx, pipeline, c)
+		if err != nil {
+			return fmt.Errorf("error scaling pipeline %s's vertices to zero: %v", pipeline.GetName(), err)
+		}
+	}
+	return nil
+}

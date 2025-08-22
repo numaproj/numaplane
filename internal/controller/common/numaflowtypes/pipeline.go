@@ -103,6 +103,18 @@ func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollou
 
 }
 
+func GetPipelineSpecFromRollout(
+	pipelineName string,
+	pipelineRollout *apiv1.PipelineRollout,
+) (map[string]interface{}, error) {
+	args := map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	return util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+}
+
 func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {
 	if pipeline == nil || len(pipeline.Object) == 0 {
 		return PipelineStatus{}, nil

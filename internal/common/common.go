@@ -153,6 +153,23 @@ const (
 
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
+
+	// Values used for templating specs in this format: `{{.value}}`
+
+	// TemplatePipelineName can be used as a templated argument in a PipelineRollout's pipeline spec
+	TemplatePipelineName = ".pipeline-name"
+
+	// TemplateVertexName can be used as a templated argument in a PipelineRollout's pipeline spec
+	TemplateVertexName = ".vertex-name"
+
+	// TemplatePipelineNamespace can be used as a templated argument in a PipelineRollout's pipeline spec
+	TemplatePipelineNamespace = ".pipeline-namespace"
+
+	// TemplateMonoVertexName can be used as a templated argument in a MonoVertexRollout's mvtx spec
+	TemplateMonoVertexName = ".monovertex-name"
+
+	// TemplateMonoVertexNamespace can be used as a templated argument in a MonoVertexRollout's mvtx spec
+	TemplateMonoVertexNamespace = ".monovertex-namespace"
 )
 
 var (
