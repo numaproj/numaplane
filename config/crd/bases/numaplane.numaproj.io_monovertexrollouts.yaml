@@ -356,6 +356,10 @@ spec:
                           be performed
                         format: date-time
                         type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
                       basicAssessmentStartTime:
                         description: BasicAssessmentStartTime indicates the time at/after
                           which the basic resource health check assessment result

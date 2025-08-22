@@ -46,6 +46,9 @@ type UpgradingChildStatus struct {
 	// BasicAssessmentEndTime indicates the time after which no more basic resource health check assessments will be performed
 	BasicAssessmentEndTime *metav1.Time `json:"basicAssessmentEndTime,omitempty"`
 
+	// BasicAssessmentResult indicates the result of the basic resource health check assessment
+	BasicAssessmentResult AssessmentResult `json:"basicAssessmentResult,omitempty"`
+
 	// TrialWindowStartTime indicates the time at which the trial window starts
 	TrialWindowStartTime *metav1.Time `json:"trialWindowStartTime,omitempty"`
 
@@ -119,6 +122,11 @@ type PromotedPipelineTypeStatus struct {
 // IsAssessmentEndTimeSet checks if the AssessmentEndTime field is not nil.
 func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 	return ucs != nil && ucs.BasicAssessmentEndTime != nil
+}
+
+// IsBasicAssessmentResultSet checks if the AssessmentEndTime field is not nil.
+func (ucs *UpgradingChildStatus) IsBasicAssessmentResultSet() bool {
+	return ucs != nil && ucs.BasicAssessmentResult != ""
 }
 
 // IsTrialWindowStartTimeSet checks if the TrialWindowStartTime field is not nil.

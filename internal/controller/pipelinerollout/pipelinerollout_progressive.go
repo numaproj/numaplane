@@ -77,7 +77,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	currentTime := time.Now()
 
 	// Check if endTime has arrived, fail immediately
-	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && childStatus.BasicAssessmentEndTime.IsZero() {
+	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && !childStatus.IsBasicAssessmentResultSet() {
 		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
@@ -146,6 +146,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 			// Success window passed, launch AnalysisRun or declared success
 			_ = progressive.UpdateUpgradingChildStatus(pipelineRollout, func(status *apiv1.UpgradingChildStatus) {
 				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+				status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 			})
 			analysis := pipelineRollout.GetAnalysis()
 			if len(analysis.Templates) > 0 {

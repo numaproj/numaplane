@@ -55,8 +55,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
 	currentTime := time.Now()
 
-	// Check if endTime has arrived, fail immediately
-	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && childStatus.BasicAssessmentEndTime.IsZero() {
+	// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
+	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && !childStatus.IsBasicAssessmentResultSet() {
 		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
 		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
 			status.AssessmentResult = apiv1.AssessmentResultFailure
@@ -98,6 +98,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 			// Success window passed, launch AnalysisRun or declared success
 			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
 				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+				status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 			})
 			analysis := mvtxRollout.GetAnalysis()
 			// only check for and create AnalysisRun if templates are specified
