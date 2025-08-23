@@ -55,71 +55,78 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 	childStatus := mvtxRollout.GetUpgradingChildStatus()
 	currentTime := time.Now()
 
-	// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
-	if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End && !childStatus.IsBasicAssessmentResultSet() {
-		numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
-		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-			status.AssessmentResult = apiv1.AssessmentResultFailure
-			status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
-		})
-		return apiv1.AssessmentResultFailure, "Assessment window ended", nil
-	}
-
-	// First perform basic resource health check
-	assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
-	if err != nil {
-		return assessment, reasonFailure, err
-	}
-	// if we fail once, it's okay: we'll check again later
-	if assessment == apiv1.AssessmentResultFailure {
-		numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
-		_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-			status.TrialWindowStartTime = nil
-			status.AssessmentResult = apiv1.AssessmentResultUnknown
-		})
-
-		return assessment, reasonFailure, nil
-	}
-	// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
-	// check "successful"
-	if assessment == apiv1.AssessmentResultSuccess {
-		if !childStatus.IsTrialWindowStartTimeSet() {
+	// If a basic assessment result is not yet set, we need to perform basic assessment first
+	// (if it is set, it means we already performed basic assessment and can move on to AnalysisRun if needed)
+	if !childStatus.IsBasicAssessmentResultSet() {
+		// Check if endTime has arrived and basic assessment is not complete yet, in which case we should declare failure
+		if currentTime.Sub(childStatus.BasicAssessmentStartTime.Time) > assessmentSchedule.End {
+			numaLogger.Debugf("Assessment window ended for upgrading child %s", existingUpgradingChildDef.GetName())
 			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-				status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
-				status.AssessmentResult = apiv1.AssessmentResultUnknown
+				status.AssessmentResult = apiv1.AssessmentResultFailure
+				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+				status.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			})
-			numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
+			return apiv1.AssessmentResultFailure, "Assessment window ended", nil
 		}
 
-		// if end time has arrived (i.e., we continually determined "Success" for the entire prescribed period of time),
-		// if we need to launch an AnalysisRun, we can do it now;
-		// otherwise, we can declare success
-		if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
-			// Success window passed, launch AnalysisRun or declared success
+		// perform basic resource health check
+		assessment, reasonFailure, err := progressive.PerformResourceHealthCheckForPipelineType(ctx, existingUpgradingChildDef, progressive.AreVertexReplicasReady)
+		if err != nil {
+			return assessment, reasonFailure, err
+		}
+
+		// if we fail once, it's okay: we'll check again later
+		if assessment == apiv1.AssessmentResultFailure {
+			numaLogger.Debugf("Assessment failed for upgrading child %s, checking again...", existingUpgradingChildDef.GetName())
 			_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
-				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
-				status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
+				status.TrialWindowStartTime = nil
+				status.AssessmentResult = apiv1.AssessmentResultUnknown
 			})
+			return assessment, reasonFailure, nil
+		}
+
+		// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
+		// check "successful".
+		if assessment == apiv1.AssessmentResultSuccess {
+			if !childStatus.IsTrialWindowStartTimeSet() {
+				_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+					status.TrialWindowStartTime = &metav1.Time{Time: currentTime}
+					status.AssessmentResult = apiv1.AssessmentResultUnknown
+				})
+				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
+			}
+
+			// Check if the trail window is set and if the success window has passed.
+			if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
+				// Success window passed, launch AnalysisRun or declared success
+				_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
+					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
+					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
+				})
+			}
+
+			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
+			// Still waiting for a success window to pass
+			return apiv1.AssessmentResultUnknown, "", nil
+		}
+	} else {
+		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
 			analysis := mvtxRollout.GetAnalysis()
 			// only check for and create AnalysisRun if templates are specified
 			if len(analysis.Templates) > 0 {
 				// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
+				numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
 				analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, mvtxRollout, mvtxRollout.GetAnalysis(), mvtxRollout.GetAnalysisStatus(), r.client)
 				if err != nil {
 					return apiv1.AssessmentResultUnknown, "", err
 				}
 				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
-			} else {
-				return apiv1.AssessmentResultSuccess, "", nil
 			}
+			return apiv1.AssessmentResultSuccess, "", nil
 		}
-		numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
-		// Still waiting for a success window to pass
-		return apiv1.AssessmentResultUnknown, "", nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
-
 }
 
 // CheckForDifferences tests for essential equality.

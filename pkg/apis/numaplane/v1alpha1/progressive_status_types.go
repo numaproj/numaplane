@@ -124,7 +124,7 @@ func (ucs *UpgradingChildStatus) IsAssessmentEndTimeSet() bool {
 	return ucs != nil && ucs.BasicAssessmentEndTime != nil
 }
 
-// IsBasicAssessmentResultSet checks if the AssessmentEndTime field is not nil.
+// IsBasicAssessmentResultSet checks if the BasicAssessmentResult field is empty.
 func (ucs *UpgradingChildStatus) IsBasicAssessmentResultSet() bool {
 	return ucs != nil && ucs.BasicAssessmentResult != ""
 }

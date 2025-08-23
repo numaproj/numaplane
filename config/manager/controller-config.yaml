@@ -17,6 +17,6 @@ data:
         - kind: MonoVertex
           schedule: "120,360,60,10"
         - kind: InterstepBufferService
-          schedule: "0,480,0,10"
+          schedule: "0,0,0,10"
       analysisRunTimeout: 1200
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler"
