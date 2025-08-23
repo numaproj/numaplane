@@ -56,7 +56,7 @@ type RecycleStrategy struct {
 	// before deleting.
 	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
 	// If not defined, fallback to the one defined in the global ConfigMap
-	ScaleFactor *float32 `json:"scaleFactor,omitempty"`
+	ScaleFactor *int32 `json:"scaleFactor,omitempty"`
 }
 
 // PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout

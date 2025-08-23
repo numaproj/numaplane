@@ -254,12 +254,12 @@ func drainRecyclablePipeline(
 		recycleScaleFactor := getRecycleScaleFactor(pipelineRollout)
 		numaLogger.WithValues("scaleFactor", recycleScaleFactor).Debug("scale factor to scale down by during pausing")
 
-		newVertexScaleDefinitions, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, float64(recycleScaleFactor))
+		newVertexScaleDefinitions, err := calculateScaleForRecycle(ctx, pipeline, pipelineRollout, recycleScaleFactor)
 		if err != nil {
 			return false, false, err
 		}
 
-		newPauseGracePeriodSeconds, err := calculatePauseTimeForRecycle(ctx, pipeline, pipelineRollout, 1.0/float64(recycleScaleFactor))
+		newPauseGracePeriodSeconds, err := calculatePauseTimeForRecycle(ctx, pipeline, pipelineRollout, 100.0/float64(recycleScaleFactor))
 		if err != nil {
 			return false, false, err
 		}
@@ -327,7 +327,7 @@ func calculateScaleForRecycle(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured,
 	pipelineRollout *apiv1.PipelineRollout,
-	multiplier float64,
+	percent int32,
 ) ([]apiv1.VertexScaleDefinition, error) {
 	numaLogger := logger.FromContext(ctx)
 
@@ -378,8 +378,8 @@ func calculateScaleForRecycle(
 			// If the Vertex was running previously in the "promoted" Pipeline, then multiply by the number that was running then
 			originalPodsRunning, found := historicalPodCount[vertexName]
 			if found {
-				newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * multiplier))
-				numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "multiplier", multiplier).Debug("Setting Vertex Scale value to multiplier of previous running count")
+				newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * float64(percent) / 100.0))
+				numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "percent", percent).Debug("Setting Vertex Scale value to percent of previous running count")
 			} else {
 				// This Vertex was not running in the "promoted" Pipeline: it must be new
 				// We can set the newScaleValue from the PipelineRollout min
@@ -430,8 +430,8 @@ func calculateScaleForRecycle(
 	return vertexScaleDefinitions, nil
 }
 
-// return the fraction by which the PipelineRollout should scale down if defined; otherwise, return the one defined by config file
-func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) float32 {
+// return the percent by which the PipelineRollout should scale down if defined; otherwise, return the one defined by config file
+func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) int32 {
 	if pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor != nil {
 		return *pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor
 	}
@@ -442,5 +442,5 @@ func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) float32 {
 		return *globalConfig.Pipeline.RecycleScaleFactor
 	}
 	// not defined, return default
-	return 0.5
+	return 50
 }

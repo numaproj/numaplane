@@ -117,9 +117,9 @@ type GlobalConfig struct {
 type PipelineConfig struct {
 	// RecycleScaleFactor is a percentage of Pipeline's original vertex scale that it will scale down by while it's being paused
 	// before deleting.
-	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
-	// If not defined, default to 0.5
-	RecycleScaleFactor *float32 `json:"recycleScaleFactor,omitempty"`
+	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse fraction.
+	// If not defined, default to 50
+	RecycleScaleFactor *int32 `json:"recycleScaleFactor,omitempty"`
 }
 
 type ProgressiveConfig struct {
