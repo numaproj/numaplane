@@ -78,20 +78,10 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-CONTAINER_RUNTIME ?= docker
 
 CURRENT_CONTEXT := $(shell [[ "`command -v kubectl`" != '' ]] && kubectl config current-context 2> /dev/null || echo "unset")
 
 
-# CONTAINER_TOOL defines the container tool to be used for building images.
-# Be aware that the target commands are only tested with Docker which is
-# scaffolded by default. However, you might want to replace it to use other
-# tools. (i.e. podman)
-CONTAINER_TOOL ?= docker
-CONTAINER_TOOL:=$(shell command -v docker 2> /dev/null)
-ifndef CONTAINER_TOOL
-CONTAINER_TOOL:=$(shell command -v podman 2> /dev/null)
-endif
 
 .PHONY: all
 all: build
@@ -194,7 +184,7 @@ clean:
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: image
 image: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} -f ${DOCKERFILE} .
+	$(CONTAINER_TOOL) build -t ${IMAGE_FULL_PATH} --load -f ${DOCKERFILE} .
 	$(MAKE) image-import  # Call the image-import target after building
 
 .PHONY: image-import
@@ -203,7 +193,7 @@ image-import: ## Import docker image into the appropriate Kubernetes environment
 		echo "Saving image with k3d..."; \
 		k3d image import -c `echo $(CURRENT_CONTEXT) | cut -c 5-` ${IMAGE_FULL_PATH}; \
 	elif command -v kind >/dev/null && echo "$(CURRENT_CONTEXT)" | grep -qE '^kind-'; then \
-		if [ "$(CONTAINER_RUNTIME)" = "podman" ]; then \
+		if [ "$(CONTAINER_TOOL)" = "podman" ]; then \
 			echo "Saving image with kind/podman..."; \
 			podman save ${IMAGE_FULL_PATH} -o ${WRITE_DIR}/numaplane-controller.tar; \
 			echo "Loading image archive into kind cluster..."; \
