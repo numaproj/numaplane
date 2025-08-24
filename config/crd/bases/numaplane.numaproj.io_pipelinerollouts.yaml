@@ -181,6 +181,17 @@ spec:
                           and Progressive upgrade will succeed
                         type: boolean
                     type: object
+                  recycleStrategy:
+                    properties:
+                      scaleFactor:
+                        description: |-
+                          ScaleFactor is a percentage of Pipeline's original vertex scale that it will scale down by while it's being paused
+                          before deleting.
+                          Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
+                          If not defined, fallback to the one defined in the global ConfigMap
+                        format: int32
+                        type: integer
+                    type: object
                 type: object
             required:
             - pipeline
@@ -308,6 +319,13 @@ spec:
                 description: ProgressiveStatus stores fields related to the Progressive
                   strategy
                 properties:
+                  historicalPodCount:
+                    additionalProperties:
+                      type: integer
+                    description: |-
+                      HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
+                      TODO: what are the consequences of not deleting the PromotedPipelineStatus (in which case maybe we don't need this?)
+                    type: object
                   promotedPipelineStatus:
                     description: PromotedPipelineStatus stores information regarding
                       the current "promoted" pipeline

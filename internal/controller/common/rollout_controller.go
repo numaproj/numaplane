@@ -251,6 +251,18 @@ func getChildIndex(rolloutName string, childName string) (int, error) {
 	return childIndex, nil
 }
 
+func IsChildNewer(rolloutName string, child1Name string, child2Name string) (bool, error) {
+	child1Index, err := getChildIndex(rolloutName, child1Name)
+	if err != nil {
+		return false, fmt.Errorf("error getting index for child: %v", err)
+	}
+	child2Index, err := getChildIndex(rolloutName, child2Name)
+	if err != nil {
+		return false, fmt.Errorf("error getting index for child: %v", err)
+	}
+	return child1Index > child2Index, nil
+}
+
 // get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
 // if none is found, create a new one
 // if one is found, create a new one if "useExistingChild=false", else use existing one

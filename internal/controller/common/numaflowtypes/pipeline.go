@@ -103,6 +103,18 @@ func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollou
 
 }
 
+func GetPipelineSpecFromRollout(
+	pipelineName string,
+	pipelineRollout *apiv1.PipelineRollout,
+) (map[string]interface{}, error) {
+	args := map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	return util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+}
+
 func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {
 	if pipeline == nil || len(pipeline.Object) == 0 {
 		return PipelineStatus{}, nil
@@ -240,4 +252,41 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 		return err
 	}
 	return nil
+}
+
+func GetVertices(pipeline *unstructured.Unstructured) ([]interface{}, error) {
+	vertexSpecs, found, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %q: %v", pipeline.GetName(), err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no vertices defined for pipeline %q: %+v", pipeline.GetName(), pipeline.Object)
+	}
+	return vertexSpecs, nil
+}
+
+func GetVertexFromPipelineSpecMap(
+	pipelineSpec map[string]interface{},
+	vertexName string,
+) (map[string]interface{}, bool, error) {
+	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if err != nil {
+		return nil, false, fmt.Errorf("error while getting vertices of pipeline: %v", err)
+	}
+	if !found {
+		return nil, false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
+	}
+
+	// find the vertex
+	for _, vertex := range vertices {
+
+		vertexAsMap := vertex.(map[string]interface{})
+		name := vertexAsMap["name"].(string)
+		if name == vertexName {
+			return vertex.(map[string]interface{}), true, nil
+		}
+	}
+
+	// Vertex not found
+	return nil, false, nil
 }
