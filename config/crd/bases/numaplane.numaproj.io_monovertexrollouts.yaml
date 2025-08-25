@@ -356,6 +356,10 @@ spec:
                           be performed
                         format: date-time
                         type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
                       basicAssessmentStartTime:
                         description: BasicAssessmentStartTime indicates the time at/after
                           which the basic resource health check assessment result
@@ -369,7 +373,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       discontinued:
                         description: |-
-                          Discontinued indicates if the upgrade was stopped prematurely
+                          Discontinued indicates if the upgrade was stopped prematurely.
                           This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
                           in the middle of an upgrade
                         type: boolean
@@ -422,6 +426,11 @@ spec:
                           - name
                           type: object
                         type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
                     required:
                     - name
                     - originalScaleMinMax
