@@ -96,7 +96,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
-			// Check if the trail window is set and if the success window has passed.
+			// Check if the trial window is set and if the success window has passed.
 			if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 				// Success window passed, launch AnalysisRun or declared success
 				_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {

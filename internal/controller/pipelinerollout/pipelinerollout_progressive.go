@@ -170,6 +170,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 			}
 			return apiv1.AssessmentResultSuccess, "", nil
+		} else {
+			return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 		}
 	}
 
