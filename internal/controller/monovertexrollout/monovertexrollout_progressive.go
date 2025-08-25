@@ -82,7 +82,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				status.TrialWindowStartTime = nil
 				status.AssessmentResult = apiv1.AssessmentResultUnknown
 			})
-			return assessment, reasonFailure, nil
+			return apiv1.AssessmentResultUnknown, "", nil
 		}
 
 		// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
@@ -96,13 +96,14 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				numaLogger.Debugf("Assessment succeeded for upgrading child %s, setting TrialWindowStartTime to %s", existingUpgradingChildDef.GetName(), currentTime)
 			}
 
-			// Check if the trail window is set and if the success window has passed.
+			// Check if the trial window is set and if the success window has passed.
 			if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
 				// Success window passed, launch AnalysisRun or declared success
 				_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
 					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 				})
+				return apiv1.AssessmentResultSuccess, "Assessment window ended", nil
 			}
 
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
@@ -123,6 +124,8 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 			}
 			return apiv1.AssessmentResultSuccess, "", nil
+		} else {
+			return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 		}
 	}
 

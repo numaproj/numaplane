@@ -131,7 +131,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				status.AssessmentResult = apiv1.AssessmentResultUnknown
 			})
 
-			return assessment, reasonFailure, nil
+			return apiv1.AssessmentResultUnknown, "", nil
 		}
 
 		// if we succeed, we must continue to succeed for a prescribed period of time to consider the resource health
@@ -152,6 +152,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 				})
+				return apiv1.AssessmentResultSuccess, "Assessment window ended", nil
 			}
 
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
@@ -170,6 +171,8 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
 			}
 			return apiv1.AssessmentResultSuccess, "", nil
+		} else {
+			return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 		}
 	}
 
