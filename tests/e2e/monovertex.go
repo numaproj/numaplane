@@ -539,6 +539,8 @@ func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVer
 
 	By("Verifying that the MonoVertex spec is as expected")
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		retrievedMonoVertexSpecWithoutReplicas := retrievedMonoVertexSpec.DeepCopy()
+		retrievedMonoVertexSpecWithoutReplicas.Replicas = nil
 		return reflect.DeepEqual(retrievedMonoVertexSpec, initialMonoVertexSpec)
 	})
 	VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
