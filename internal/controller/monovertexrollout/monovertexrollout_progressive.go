@@ -103,7 +103,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
 				})
-				return apiv1.AssessmentResultSuccess, "Assessment window ended", nil
+				return r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
 			}
 
 			numaLogger.Debugf("Assessment succeeded for upgrading child %s, but success window has not passed yet", existingUpgradingChildDef.GetName())
@@ -112,24 +112,32 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 		}
 	} else {
 		if childStatus.BasicAssessmentResult == apiv1.AssessmentResultSuccess {
-			analysis := mvtxRollout.GetAnalysis()
-			// only check for and create AnalysisRun if templates are specified
-			if len(analysis.Templates) > 0 {
-				// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
-				numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
-				analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, mvtxRollout, mvtxRollout.GetAnalysis(), mvtxRollout.GetAnalysisStatus(), r.client)
-				if err != nil {
-					return apiv1.AssessmentResultUnknown, "", err
-				}
-				return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
-			}
-			return apiv1.AssessmentResultSuccess, "", nil
-		} else {
-			return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
+			return r.checkAnalysisTemplates(ctx, mvtxRollout, existingUpgradingChildDef)
 		}
+		return childStatus.BasicAssessmentResult, "Basic assessment failed", nil
 	}
 
 	return apiv1.AssessmentResultUnknown, "", nil
+}
+
+// checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.
+func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
+	mvtxRollout *apiv1.MonoVertexRollout,
+	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
+
+	numaLogger := logger.FromContext(ctx)
+	analysis := mvtxRollout.GetAnalysis()
+	// only check for and create AnalysisRun if templates are specified
+	if len(analysis.Templates) > 0 {
+		// this will create an AnalysisRun if it doesn't exist yet; or otherwise it will check if it's finished running
+		numaLogger.Debugf("Performing analysis for upgrading child %s", existingUpgradingChildDef.GetName())
+		analysisStatus, err := progressive.PerformAnalysis(ctx, existingUpgradingChildDef, mvtxRollout, mvtxRollout.GetAnalysis(), mvtxRollout.GetAnalysisStatus(), r.client)
+		if err != nil {
+			return apiv1.AssessmentResultUnknown, "", err
+		}
+		return progressive.AssessAnalysisStatus(ctx, existingUpgradingChildDef, analysisStatus)
+	}
+	return apiv1.AssessmentResultSuccess, "", nil
 }
 
 // CheckForDifferences tests for essential equality.
