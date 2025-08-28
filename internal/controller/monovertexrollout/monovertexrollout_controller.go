@@ -44,6 +44,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -580,6 +581,21 @@ func performCustomResumeMod(
 	// if newMonoVertexDef.lifecycle.desiredPhase==Running AND existingMonoVertexDef.phase == Paused:
 	//.   set newMonoVertexDef.replicas=nil
 
+	if !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
+		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
+		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newMonoVertexDef)
+		if err != nil {
+			return err
+		}
+		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePausing) ||
+			numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePaused)
+		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
+			return unstructured.SetNestedField(newMonoVertexDef.Object, nil, "spec", "replicas")
+		}
+		return nil
+	}
+	return nil
 }
 
 func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
