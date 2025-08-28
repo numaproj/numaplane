@@ -631,7 +631,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	default:
 		if needsUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
-			if err := updatePipelineSpec(ctx, r.client, newPipelineDef); err != nil {
+			if err := updatePipelineSpec(ctx, r.client, pipelineRollout, newPipelineDef, existingPipelineDef); err != nil {
 				return 0, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -644,6 +644,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			// update the list of riders in the Status
 			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 		}
+
 	}
 
 	if needsUpdate {
@@ -901,8 +902,41 @@ func (r *PipelineRolloutReconciler) SetupWithManager(ctx context.Context, mgr ct
 	return nil
 }
 
-func updatePipelineSpec(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
-	return kubernetes.UpdateResource(ctx, c, obj)
+func updatePipelineSpec(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	err := performCustomPipelineMods(ctx, c, pipelineRollout, newPipelineDef, existingPipelineDef)
+	if err != nil {
+		return err
+	}
+
+	return kubernetes.UpdateResource(ctx, c, newPipelineDef)
+}
+
+func performCustomPipelineMods(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	return performCustomResumeMod(ctx, c, pipelineRollout, newPipelineDef, existingPipelineDef)
+}
+
+func performCustomResumeMod(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	// todo: if newPipelineDef.lifecycle.desiredPhase==Running AND existingPipelineDef.phase == Paused:
+	//.   patch vertices to nil
+
 }
 
 // take the Metadata (Labels and Annotations) specified in the PipelineRollout plus any others that apply to all Pipelines

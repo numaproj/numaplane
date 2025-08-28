@@ -48,6 +48,8 @@ const (
 // PipelineTypeRolloutStrategy specifies the Rollout Strategy for fields shared by Pipeline and MonoVertex
 type PipelineTypeRolloutStrategy struct {
 	PipelineTypeProgressiveStrategy `json:",inline"`
+
+	PauseResumeStrategy `json:"pauseResume,omitempty"`
 }
 
 // PipelineTypeProgressiveStrategy specifies the Progressive Rollout Strategy for fields shared by Pipeline and MonoVertex
@@ -73,6 +75,11 @@ type ProgressiveStrategy struct {
 
 	// if ForcePromote is set, assessment will be skipped and Progressive upgrade will succeed
 	ForcePromote bool `json:"forcePromote,omitempty"`
+}
+
+type PauseResumeStrategy struct {
+	// FastResume indicates if the Pipeline should be resumed with the number of replicas it had before it was paused.
+	FastResume bool `json:"fastResume,omitempty"`
 }
 
 // Rider defines a resource that can be deployed along with the primary child of a rollout

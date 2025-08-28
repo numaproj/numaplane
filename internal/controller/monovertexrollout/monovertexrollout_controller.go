@@ -372,7 +372,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	default:
 		if needsUpdate {
-			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
+			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
@@ -540,14 +540,46 @@ func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *a
 
 }
 
-func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) error {
-	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
+func (r *MonoVertexRolloutReconciler) updateMonoVertex(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	err := performCustomMonoVertexMods(ctx, c, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+	if err != nil {
+		return err
+	}
+
+	err = kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
 	}
 
 	monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
 	return nil
+}
+
+func performCustomMonoVertexMods(
+	ctx context.Context,
+	c client.Client,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	return performCustomResumeMod(ctx, c, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+}
+
+func performCustomResumeMod(
+	ctx context.Context,
+	c client.Client,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	// if newMonoVertexDef.lifecycle.desiredPhase==Running AND existingMonoVertexDef.phase == Paused:
+	//.   set newMonoVertexDef.replicas=nil
+
 }
 
 func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
