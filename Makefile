@@ -69,7 +69,7 @@ ARGO_ROLLOUTS_PATH ?= https://github.com/argoproj/argo-rollouts/manifests/cluste
 
 PROMETHEUS_REQUIRED ?= true
 ROLLOUTS_REQUIRED ?= true
-PROMETHEUS_CHART ?= oci://registry-1.docker.io/bitnamicharts/kube-prometheus
+PROMETHEUS_CHART ?= oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
