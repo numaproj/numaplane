@@ -76,3 +76,7 @@ rules:
     resources:
       - verticalpodautoscalers
     verbs: ["*"]
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["*"]

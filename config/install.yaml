@@ -2505,6 +2505,12 @@ rules:
   - verticalpodautoscalers
   verbs:
   - '*'
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - '*'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -2609,7 +2615,7 @@ data:
         - kind: InterstepBufferService
           schedule: "0,0,0,10"
       analysisRunTimeout: 1200
-    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler"
+    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config
