@@ -934,9 +934,31 @@ func performCustomResumeMod(
 	newPipelineDef *unstructured.Unstructured,
 	existingPipelineDef *unstructured.Unstructured) error {
 
-	// todo: if newPipelineDef.lifecycle.desiredPhase==Running AND existingPipelineDef.phase == Paused:
-	//.   patch vertices to nil
-
+	if !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
+		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
+		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newPipelineDef)
+		if err != nil {
+			return err
+		}
+		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
+			numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
+		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
+			vertices, err := numaflowtypes.GetPipelineVertices(ctx, c, existingPipelineDef)
+			if err != nil {
+				return fmt.Errorf("error getting pipeline vertices for pipeline %s/%s: %v", existingPipelineDef.GetNamespace(), existingPipelineDef.GetName(), err)
+			}
+			for _, vertex := range vertices {
+				// patch replicas to null
+				patchJson := `{"spec": {"replicas": null}}`
+				if err := kubernetes.PatchResource(ctx, c, vertex, patchJson, k8stypes.MergePatchType); err != nil {
+					return fmt.Errorf("error patching vertex %s/%s replicas to null: %v", vertex.GetNamespace(), vertex.GetName(), err)
+				}
+			}
+		}
+		return nil
+	}
+	return nil
 }
 
 // take the Metadata (Labels and Annotations) specified in the PipelineRollout plus any others that apply to all Pipelines

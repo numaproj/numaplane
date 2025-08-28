@@ -49,7 +49,7 @@ const (
 type PipelineTypeRolloutStrategy struct {
 	PipelineTypeProgressiveStrategy `json:",inline"`
 
-	PauseResumeStrategy `json:"pauseResume,omitempty"`
+	PauseResumeStrategy PauseResumeStrategy `json:"pauseResume,omitempty"`
 }
 
 // PipelineTypeProgressiveStrategy specifies the Progressive Rollout Strategy for fields shared by Pipeline and MonoVertex

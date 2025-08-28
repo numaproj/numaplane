@@ -455,12 +455,9 @@ func createScaledDownUpgradingPipelineDef(
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
 	// get the current Vertices definition
-	vertexDefinitions, exists, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
+	vertexDefinitions, err := numaflowtypes.GetPipelineVertexDefinitions(upgradingPipelineDef)
 	if err != nil {
-		return fmt.Errorf("error getting spec.vertices from pipeline %s: %s", upgradingPipelineDef.GetName(), err.Error())
-	}
-	if !exists {
-		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", upgradingPipelineDef.GetName())
+		return err
 	}
 
 	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding

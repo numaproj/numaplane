@@ -241,3 +241,43 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 	}
 	return nil
 }
+
+func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interface{}, error) {
+
+	vertexDefinitions, exists, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error getting spec.vertices from pipeline %s: %s", pipeline.GetName(), err.Error())
+	}
+	if !exists {
+		return nil, fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", pipeline.GetName())
+	}
+
+	return vertexDefinitions, nil
+}
+
+// find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found
+// for any Vertices that can't be found, return an entry mapped to nil
+func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (map[string]*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", "pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
+
+	vertexDefinitions, err := GetPipelineVertexDefinitions(pipeline)
+	if err != nil {
+		return nil, err
+	}
+
+	nameToVertex := map[string]*unstructured.Unstructured{}
+
+	// TODO: should we have a Watch on Vertex Kind?
+	for _, vertexDef := range vertexDefinitions {
+		vertexName, _, _ := unstructured.NestedString(vertexDef.(map[string]interface{}), "name")
+		vertex, err := kubernetes.GetResource(ctx, c, numaflowv1.VertexGroupVersionKind, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: vertexName})
+		if err != nil {
+			numaLogger.WithValues("vertex", vertexName, "err", err.Error()).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
+			nameToVertex[vertexName] = nil
+		} else {
+			nameToVertex[vertexName] = vertex
+		}
+	}
+
+	return nameToVertex, nil
+}
