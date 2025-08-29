@@ -12,6 +12,8 @@ spec:
       templates:
       - templateName: mvtx-acknowledged-messages
         clusterScope: false
+    pauseResume:
+      fastResume: true
   riders:
     - definition:
         apiVersion: autoscaling.k8s.io/v1beta2
