@@ -23,9 +23,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,7 +35,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -1385,7 +1384,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
-			////// check results:
+			// check results:
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			// Check In-Progress Strategy
