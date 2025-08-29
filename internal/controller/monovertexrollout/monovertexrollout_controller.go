@@ -578,7 +578,7 @@ func performCustomResumeMod(
 
 	numaLogger := logger.FromContext(ctx).WithValues("monovertex", fmt.Sprintf("%s/%s", newMonoVertexDef.GetNamespace(), newMonoVertexDef.GetName()))
 
-	if !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+	if monoVertexRollout.Spec.Strategy != nil && !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
 		// if we're in the middle of going from Paused to Running, we need to set monovertex's 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
 		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newMonoVertexDef)

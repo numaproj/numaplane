@@ -936,7 +936,7 @@ func performCustomResumeMod(
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", newPipelineDef.GetNamespace(), newPipelineDef.GetName()))
 
-	if !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+	if pipelineRollout.Spec.Strategy != nil && !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
 		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
 		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newPipelineDef)
