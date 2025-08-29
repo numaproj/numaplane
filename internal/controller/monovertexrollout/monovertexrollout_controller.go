@@ -373,7 +373,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	default:
 		if needsUpdate {
-			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+			err := r.updateMonoVertex(ctx, r.client, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
@@ -543,6 +543,7 @@ func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *a
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(
 	ctx context.Context,
+	c client.Client,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	newMonoVertexDef *unstructured.Unstructured,
 	existingMonoVertexDef *unstructured.Unstructured) error {
@@ -578,11 +579,10 @@ func performCustomResumeMod(
 	newMonoVertexDef *unstructured.Unstructured,
 	existingMonoVertexDef *unstructured.Unstructured) error {
 
-	// if newMonoVertexDef.lifecycle.desiredPhase==Running AND existingMonoVertexDef.phase == Paused:
-	//.   set newMonoVertexDef.replicas=nil
+	numaLogger := logger.FromContext(ctx).WithValues("monovertex", fmt.Sprintf("%s/%s", newMonoVertexDef.GetNamespace(), newMonoVertexDef.GetName()))
 
 	if !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
-		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
+		// if we're in the middle of going from Paused to Running, we need to set monovertex's 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
 		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newMonoVertexDef)
 		if err != nil {
@@ -591,6 +591,7 @@ func performCustomResumeMod(
 		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePausing) ||
 			numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePaused)
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
+			numaLogger.Debug("Unpausing monovertex; setting replicas=nil")
 			return unstructured.SetNestedField(newMonoVertexDef.Object, nil, "spec", "replicas")
 		}
 		return nil

@@ -934,6 +934,8 @@ func performCustomResumeMod(
 	newPipelineDef *unstructured.Unstructured,
 	existingPipelineDef *unstructured.Unstructured) error {
 
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", newPipelineDef.GetNamespace(), newPipelineDef.GetName()))
+
 	if !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
 		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
@@ -948,6 +950,7 @@ func performCustomResumeMod(
 			if err != nil {
 				return fmt.Errorf("error getting pipeline vertices for pipeline %s/%s: %v", existingPipelineDef.GetNamespace(), existingPipelineDef.GetName(), err)
 			}
+			numaLogger.Debug("Unpausing pipeline; setting replicas=nil for each vertex")
 			for _, vertex := range vertices {
 				// patch replicas to null
 				patchJson := `{"spec": {"replicas": null}}`
