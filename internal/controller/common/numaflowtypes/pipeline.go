@@ -270,16 +270,24 @@ func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstruc
 
 	// TODO: should we have a Watch on Vertex Kind?
 	for _, vertexDef := range vertexDefinitions {
-		vertexName, _, _ := unstructured.NestedString(vertexDef.(map[string]interface{}), "name")
+		vertexName, found, err := unstructured.NestedString(vertexDef.(map[string]interface{}), "name")
+		if !found {
+			return nil, fmt.Errorf("vertex has no name?: %v", vertexDef)
+		}
 		//vertexFullName := fmt.Sprintf("%s-%s", )
 		labels := client.MatchingLabels{
 			common.LabelKeyNumaflowPipelineName:       pipeline.GetName(),
 			common.LabelKeyNumaflowPipelineVertexName: vertexName,
 		}
 		vertices, err := kubernetes.ListResources(ctx, c, numaflowv1.VertexGroupVersionKind, pipeline.GetNamespace(), labels)
+		if err != nil {
+			numaLogger.WithValues("vertex", vertexName, "err", err.Error()).Warnf("can't find Vertex in K8S despite being contained within pipeline spec: labels=%v", labels)
+			nameToVertex[vertexName] = nil
+			continue
+		}
 		//vertex, err := kubernetes.GetResource(ctx, c, numaflowv1.VertexGroupVersionKind, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: vertexName})
 		if len(vertices.Items) == 0 {
-			numaLogger.WithValues("vertex", vertexName, "err", err.Error()).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
+			numaLogger.WithValues("vertex", vertexName).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
 			nameToVertex[vertexName] = nil
 		} else if len(vertices.Items) == 1 {
 			nameToVertex[vertexName] = &vertices.Items[0]
