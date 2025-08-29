@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -288,4 +289,29 @@ func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstruc
 	}
 
 	return nameToVertex, nil
+}
+
+// MinimizePipelineVertexReplicas clears out the `replicas` field from each Vertex of a Pipeline, which has the effect
+// in Numaflow of resetting to "scale.min" value
+func MinimizePipelineVertexReplicas(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", "pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
+
+	vertices, err := GetPipelineVertices(ctx, c, pipeline)
+	if err != nil {
+		return fmt.Errorf("error getting pipeline vertices for pipeline %s/%s: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	numaLogger.Debug("setting replicas=nil for each vertex")
+	for vertexName, vertex := range vertices {
+		if vertex == nil {
+			numaLogger.WithValues("vertex", vertexName).Warn("can't set replicas=nil since vertex wasn't found")
+		} else {
+			// patch replicas to null
+			patchJson := `{"spec": {"replicas": null}}`
+			if err := kubernetes.PatchResource(ctx, c, vertex, patchJson, k8stypes.MergePatchType); err != nil {
+				return fmt.Errorf("error patching vertex %s/%s replicas to null: %v", vertex.GetNamespace(), vertex.GetName(), err)
+			}
+		}
+	}
+
+	return nil
 }

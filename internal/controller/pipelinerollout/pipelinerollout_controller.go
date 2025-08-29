@@ -945,23 +945,9 @@ func performCustomResumeMod(
 		}
 		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
 			numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
+		numaLogger.Debug("resuming Pipeline slow: setting replicas=nil for each Vertex")
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
-			vertices, err := numaflowtypes.GetPipelineVertices(ctx, c, existingPipelineDef)
-			if err != nil {
-				return fmt.Errorf("error getting pipeline vertices for pipeline %s/%s: %v", existingPipelineDef.GetNamespace(), existingPipelineDef.GetName(), err)
-			}
-			numaLogger.Debug("Unpausing pipeline; setting replicas=nil for each vertex")
-			for vertexName, vertex := range vertices {
-				if vertex == nil {
-					numaLogger.WithValues("vertex", vertexName).Warn("can't set replicas=nil since vertex wasn't found")
-				} else {
-					// patch replicas to null
-					patchJson := `{"spec": {"replicas": null}}`
-					if err := kubernetes.PatchResource(ctx, c, vertex, patchJson, k8stypes.MergePatchType); err != nil {
-						return fmt.Errorf("error patching vertex %s/%s replicas to null: %v", vertex.GetNamespace(), vertex.GetName(), err)
-					}
-				}
-			}
+			return numaflowtypes.MinimizePipelineVertexReplicas(ctx, c, existingPipelineDef)
 		}
 		return nil
 	}
