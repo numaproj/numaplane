@@ -80,7 +80,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 	verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 		verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 			numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
-			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
+			fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPipelineName, existingUpgradingChildDef.GetName()), "")
 		if err != nil {
 			return false, "", err
 		}
@@ -644,8 +644,8 @@ func computePipelineVerticesScaleValues(
 
 			podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedPipelineDef.GetNamespace(), fmt.Sprintf(
 				"%s=%s, %s=%s",
-				common.LabelKeyNumaflowPodPipelineName, promotedPipelineDef.GetName(),
-				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
+				common.LabelKeyNumaflowPipelineName, promotedPipelineDef.GetName(),
+				common.LabelKeyNumaflowPipelineVertexName, vertexName,
 			))
 			if err != nil {
 				return true, err

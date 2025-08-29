@@ -373,7 +373,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	default:
 		if needsUpdate {
-			err := r.updateMonoVertex(ctx, r.client, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
@@ -543,12 +543,11 @@ func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *a
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertex(
 	ctx context.Context,
-	c client.Client,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	newMonoVertexDef *unstructured.Unstructured,
 	existingMonoVertexDef *unstructured.Unstructured) error {
 
-	err := performCustomMonoVertexMods(ctx, c, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+	err := performCustomMonoVertexMods(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 	if err != nil {
 		return err
 	}
@@ -564,17 +563,15 @@ func (r *MonoVertexRolloutReconciler) updateMonoVertex(
 
 func performCustomMonoVertexMods(
 	ctx context.Context,
-	c client.Client,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	newMonoVertexDef *unstructured.Unstructured,
 	existingMonoVertexDef *unstructured.Unstructured) error {
 
-	return performCustomResumeMod(ctx, c, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+	return performCustomResumeMod(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 }
 
 func performCustomResumeMod(
 	ctx context.Context,
-	c client.Client,
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	newMonoVertexDef *unstructured.Unstructured,
 	existingMonoVertexDef *unstructured.Unstructured) error {
@@ -592,9 +589,8 @@ func performCustomResumeMod(
 			numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePaused)
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
 			numaLogger.Debug("Unpausing monovertex; setting replicas=nil")
-			return unstructured.SetNestedField(newMonoVertexDef.Object, nil, "spec", "replicas")
+			unstructured.RemoveNestedField(newMonoVertexDef.Object, "spec", "replicas")
 		}
-		return nil
 	}
 	return nil
 }

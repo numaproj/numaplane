@@ -270,12 +270,20 @@ func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstruc
 	// TODO: should we have a Watch on Vertex Kind?
 	for _, vertexDef := range vertexDefinitions {
 		vertexName, _, _ := unstructured.NestedString(vertexDef.(map[string]interface{}), "name")
-		vertex, err := kubernetes.GetResource(ctx, c, numaflowv1.VertexGroupVersionKind, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: vertexName})
-		if err != nil {
+		//vertexFullName := fmt.Sprintf("%s-%s", )
+		labels := client.MatchingLabels{
+			common.LabelKeyNumaflowPipelineName:       pipeline.GetName(),
+			common.LabelKeyNumaflowPipelineVertexName: vertexName,
+		}
+		vertices, err := kubernetes.ListResources(ctx, c, numaflowv1.VertexGroupVersionKind, pipeline.GetNamespace(), labels)
+		//vertex, err := kubernetes.GetResource(ctx, c, numaflowv1.VertexGroupVersionKind, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: vertexName})
+		if len(vertices.Items) == 0 {
 			numaLogger.WithValues("vertex", vertexName, "err", err.Error()).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
 			nameToVertex[vertexName] = nil
+		} else if len(vertices.Items) == 1 {
+			nameToVertex[vertexName] = &vertices.Items[0]
 		} else {
-			nameToVertex[vertexName] = vertex
+			return nil, fmt.Errorf("there should not be more than 1 Vertex with labels %v in namespace %s", labels, pipeline.GetNamespace())
 		}
 	}
 
