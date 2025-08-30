@@ -329,7 +329,7 @@ type AssessmentSchedule struct {
 }
 
 // ParseAssessmentSchedule parses the string indicating the AssessmentSchedule
-// Example: "120,360,60,10" => delay assessment by 120s, assess has to be successful within 360s, assess for 60s, assess every 10s
+// Example: "120,360,60,10" => delay assessment by 120s, assessment has to be successful within 360s, assessment must be successful for all checks within 60s, assess every 10s
 func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")

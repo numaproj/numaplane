@@ -98,7 +98,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 
 			// Check if the trial window is set and if the success window has passed.
 			if childStatus.IsTrialWindowStartTimeSet() && currentTime.Sub(childStatus.TrialWindowStartTime.Time) >= assessmentSchedule.Period {
-				// Success window passed, launch AnalysisRun or declared success
+				// Success window passed, launch AnalysisRuns or declare success
 				_ = progressive.UpdateUpgradingChildStatus(mvtxRollout, func(status *apiv1.UpgradingChildStatus) {
 					status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 					status.BasicAssessmentResult = apiv1.AssessmentResultSuccess
@@ -121,6 +121,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 }
 
 // checkAnalysisTemplates checks if there are any analysis templates to run and runs them if so.
+// otherwise it returns success.
 func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	mvtxRollout *apiv1.MonoVertexRollout,
 	existingUpgradingChildDef *unstructured.Unstructured) (apiv1.AssessmentResult, string, error) {
