@@ -566,7 +566,6 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
 		PipelineFinalProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName, expectedSuccess, newSpec)
-
 	}
 
 	switch expectedFinalPhase {
