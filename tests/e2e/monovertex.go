@@ -109,6 +109,7 @@ func VerifyPromotedMonoVertexStatus(namespace, monoVertexRolloutName string, f f
 	var retrievedMonoVertexStatus kubernetes.GenericStatus
 	var monoVertexName string
 	CheckEventually("verifying MonoVertexStatus", func() bool {
+		// TODO: call the new function below
 		unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
 		if err != nil {
 			return false
@@ -124,6 +125,28 @@ func VerifyPromotedMonoVertexStatus(namespace, monoVertexRolloutName string, f f
 	}).Should(BeTrue())
 
 	return monoVertexName
+}
+
+func GetPromotedMonoVertexSpecAndStatus(namespace string, monoVertexRolloutName string) (*unstructured.Unstructured, numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus, error) {
+
+	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
+	var retrievedMonoVertexStatus numaflowv1.MonoVertexStatus
+
+	unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+	if err != nil {
+		return nil, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+	retrievedMonoVertexSpec, err = getMonoVertexSpec(unstruct)
+	if err != nil {
+		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+
+	retrievedMonoVertexStatus, err = GetMonoVertexStatus(unstruct)
+
+	if err != nil {
+		return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err
+	}
+	return unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, nil
 }
 
 func UpdateMonoVertexRolloutInK8S(name string, f func(apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error)) {
@@ -584,4 +607,16 @@ func VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMi
 		[]numaflowv1.AbstractVertex{{Scale: numaflowv1.Scale{Min: ptr.To(int32(0)), Max: ptr.To(int32(0))}}}, ComponentMonoVertex)
 
 	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, metav1.ConditionFalse)
+}
+
+func VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName string) {
+	CheckConsistently("verifying MonoVertex stays in paused", func() bool {
+		rollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
+		_, _, retrievedMonoVertexStatus, err := GetPromotedMonoVertexSpecAndStatus(Namespace, monoVertexRolloutName)
+		if err != nil {
+			return false
+		}
+		return getRolloutConditionStatus(rollout.Status.Conditions, apiv1.ConditionMonoVertexPausingOrPaused) == metav1.ConditionTrue &&
+			(retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhasePaused)
+	}).WithTimeout(10 * time.Second).Should(BeTrue())
 }
