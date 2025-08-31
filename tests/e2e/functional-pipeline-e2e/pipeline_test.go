@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -250,14 +252,34 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
 	})
 
-	It("Should resume the Pipeline if user requests it", func() {
+	It("Should resume the Pipeline gradually if user requests it", func() {
 		By("setting desiredPhase=Running")
 		currentPipelineSpec := updatedPipelineSpec
 		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
 
+		// Verify since strategy.pauseResume.resumeFast isn't set it defaults to resuming slowly
+		// which means that vertex.replicas will get set to null
+
+		// patch "in" vertex's replicas to 5, thereby imitating the Numaflow autoscaler scaling up
+		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+		Expect(err).ShouldNot(HaveOccurred())
+		vertexName := fmt.Sprintf("%s-in", promotedPipelineName)
+		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			five := int64(5)
+			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
+			err := unstructured.SetNestedField(retrievedVertex.Object, five, "spec", "replicas")
+			return retrievedVertex, err
+		})
+
+		// Resume Pipeline
 		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
 		}, false, false, true)
+
+		// then verify that replicas is null
+		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
+			return spec.Replicas == nil
+		})
 	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
