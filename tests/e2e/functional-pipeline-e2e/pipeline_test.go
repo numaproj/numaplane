@@ -240,46 +240,26 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		}, true, true, true)
 	})
 
-	It("Should pause the Pipeline if user requests it", func() {
-		By("setting desiredPhase=Paused")
-		currentPipelineSpec := updatedPipelineSpec
-		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+	It("Should pause the Pipeline if user requests it and resume it", func() {
 
-		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-		}, false, false, true)
+		// test that pause works, as well as that pipeline resumes gradually
+		testPauseResume(updatedPipelineSpec, false)
 
-		VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
-	})
-
-	It("Should resume the Pipeline gradually if user requests it", func() {
-		By("setting desiredPhase=Running")
-		currentPipelineSpec := updatedPipelineSpec
-		currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
-
-		// Verify since strategy.pauseResume.resumeFast isn't set it defaults to resuming slowly
-		// which means that vertex.replicas will get set to null
-
-		// patch "in" vertex's replicas to 5, thereby imitating the Numaflow autoscaler scaling up
-		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-		Expect(err).ShouldNot(HaveOccurred())
-		vertexName := fmt.Sprintf("%s-in", promotedPipelineName)
-		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-			five := int64(5)
-			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
-			err := unstructured.SetNestedField(retrievedVertex.Object, five, "spec", "replicas")
-			return retrievedVertex, err
+		// update PipelineRollout to set FastResume to true such pipeline should resume fast, not gradually
+		By("Setting FastResume=true")
+		UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
+			rollout.Spec.Strategy = &apiv1.PipelineStrategy{
+				PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+					PauseResumeStrategy: apiv1.PauseResumeStrategy{
+						FastResume: true,
+					},
+				},
+			}
+			return rollout, nil
 		})
 
-		// Resume Pipeline
-		UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-		}, false, false, true)
-
-		// then verify that replicas is null
-		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
-			return spec.Replicas == nil
-		})
+		// test that pause works, as well as that pipeline resumes fast
+		testPauseResume(updatedPipelineSpec, true)
 	})
 
 	It("Should update the child ISBService if the ISBServiceRollout is updated", func() {
@@ -342,3 +322,49 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+// test that user can cause Pipeline through PipelineRollout desiredPhase field
+// as well as that user can unpause (either gradually or fast depending on configuration)
+func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast bool) {
+
+	By("setting desiredPhase=Paused")
+	currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+
+	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
+	}, false, false, true)
+
+	VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
+
+	By("setting desiredPhase=Running")
+
+	currentPipelineSpec.Lifecycle.DesiredPhase = numaflowv1.PipelinePhaseRunning
+
+	// Verify since strategy.pauseResume.resumeFast isn't set it defaults to resuming slowly
+	// which means that vertex.replicas will get set to null
+
+	// patch "in" vertex's replicas to 5, thereby imitating the Numaflow autoscaler scaling up
+	promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+	Expect(err).ShouldNot(HaveOccurred())
+	vertexName := fmt.Sprintf("%s-in", promotedPipelineName)
+	UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		five := int64(5)
+		unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
+		err := unstructured.SetNestedField(retrievedVertex.Object, five, "spec", "replicas")
+		return retrievedVertex, err
+	})
+
+	// Resume Pipeline
+	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
+	}, false, false, true)
+
+	// then verify that replicas is null
+	VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
+		if resumeFast {
+			return spec.Replicas != nil && *spec.Replicas == 5
+		} else {
+			return spec.Replicas == nil
+		}
+	})
+}
