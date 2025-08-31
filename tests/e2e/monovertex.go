@@ -444,7 +444,9 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 		if spec.Replicas != nil {
 			currentNumReplicasRunning = *spec.Replicas
 		}
-		monoVertexScaleTo := currentNumReplicasRunning
+		monoVertexScaleTo := currentNumReplicasRunning / 2.0
+
+		fmt.Printf("deletethis: monoVertexScaleTo=%d\n", monoVertexScaleTo)
 
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(name, currentMonoVertexRolloutIndex), GetInstanceName(name, currentMonoVertexRolloutIndex+1), GetInstanceName(name, currentMonoVertexRolloutIndex),
