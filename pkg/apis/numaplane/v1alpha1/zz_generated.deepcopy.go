@@ -1125,6 +1125,10 @@ func (in *UpgradingChildStatus) DeepCopyInto(out *UpgradingChildStatus) {
 		in, out := &in.BasicAssessmentEndTime, &out.BasicAssessmentEndTime
 		*out = (*in).DeepCopy()
 	}
+	if in.TrialWindowStartTime != nil {
+		in, out := &in.TrialWindowStartTime, &out.TrialWindowStartTime
+		*out = (*in).DeepCopy()
+	}
 	in.ChildStatus.DeepCopyInto(&out.ChildStatus)
 	if in.Riders != nil {
 		in, out := &in.Riders, &out.Riders

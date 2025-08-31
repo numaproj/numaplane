@@ -244,7 +244,7 @@ endif
 prometheus:
 ifeq ($(PROMETHEUS_REQUIRED), true)
 	$(KUBECTL) apply -f $(TEST_MANIFEST_DIR_DEFAULT)/prometheus-ns.yaml
-	helm upgrade --install prometheus $(PROMETHEUS_CHART) -n prometheus --set prometheus.resourcesPreset=small --set prometheus.logLevel=debug --hide-notes 
+	helm upgrade --install prometheus $(PROMETHEUS_CHART) -n prometheus --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false --set prometheus.logLevel=debug --hide-notes
 endif
 
 ##@ Deployment

@@ -45,7 +45,7 @@ var (
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
-					AssessmentSchedule: "120,30,10",
+					AssessmentSchedule: "60,300,30,10",
 				},
 			},
 		},

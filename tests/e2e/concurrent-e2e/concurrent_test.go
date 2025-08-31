@@ -323,13 +323,13 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			UpdatePipelineRolloutInK8S(Namespace, pipelineRolloutName, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 				// for this test, we start the assessment window at 4 minutes in, which is longer
-				// than other tests, due to the fact that Numaflow Controller is also restarting
+				// than other tests, because Numaflow Controller is also restarting
 				// and therefore can take longer to do its reconciliations of Pipeline changes
 				rollout.Spec.Strategy = &apiv1.PipelineStrategy{
 					PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 						PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 							Progressive: apiv1.ProgressiveStrategy{
-								AssessmentSchedule: "240,60,10",
+								AssessmentSchedule: "60,300,60,10",
 							},
 						},
 					},
@@ -348,7 +348,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 				rollout.Spec.Strategy = &apiv1.PipelineTypeRolloutStrategy{
 					PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 						Progressive: apiv1.ProgressiveStrategy{
-							AssessmentSchedule: "240,60,10",
+							AssessmentSchedule: "60,300,60,10",
 						},
 					},
 				}

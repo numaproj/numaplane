@@ -45,12 +45,12 @@ var (
 
 	monoVertexScaleTo               = int64(2)
 	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
-	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-failure:stable"
+	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
 
 	defaultStrategy = apiv1.PipelineTypeRolloutStrategy{
 		PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 			Progressive: apiv1.ProgressiveStrategy{
-				AssessmentSchedule: "60,30,10",
+				AssessmentSchedule: "60,180,30,10",
 			},
 			Analysis: apiv1.Analysis{
 				Templates: []argov1alpha1.AnalysisTemplateRef{
