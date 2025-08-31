@@ -850,7 +850,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
 	}{
-		/*{
+		{
 			name:                           "nothing to do",
 			newPipelineSpec:                pipelineSpec,
 			existingPipelineDef:            *createDefaultTestPipeline(numaflowv1.PipelinePhaseRunning),
@@ -956,7 +956,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return util.CompareStructNumTypeAgnostic(ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpec, numaflowv1.PipelinePhasePaused), spec)
 			},
-		},*/
+		},
 		{
 			name:            "PPND in progress, spec applied",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
@@ -979,7 +979,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				return util.CompareStructNumTypeAgnostic(ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
-		/*{
+		{
 			name:                           "Pipeline stuck pausing, allow-data-loss annotation applied",
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
 			pipelineRolloutAnnotations:     map[string]string{common.LabelKeyAllowDataLoss: "true"},
@@ -993,7 +993,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return util.CompareStructNumTypeAgnostic(runningPipelineSpecWithTopologyChange, spec)
 			},
-		},*/
+		},
 	}
 
 	for _, tc := range testCases {
