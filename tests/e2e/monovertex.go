@@ -22,7 +22,6 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -82,8 +81,8 @@ func VerifyPromotedMonoVertexRunning(namespace, monoVertexRolloutName string) er
 
 	By("Verifying that the MonoVertex is running")
 	monoVertexName := VerifyPromotedMonoVertexStatus(namespace, monoVertexRolloutName,
-		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus kubernetes.GenericStatus) bool {
-			return retrievedMonoVertexStatus.Phase == string(numaflowv1.MonoVertexPhaseRunning)
+		func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec, retrievedMonoVertexStatus numaflowv1.MonoVertexStatus) bool {
+			return retrievedMonoVertexStatus.Phase == numaflowv1.MonoVertexPhaseRunning
 		})
 
 	unstructMonoVertex, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
@@ -104,20 +103,12 @@ func VerifyPromotedMonoVertexRunning(namespace, monoVertexRolloutName string) er
 	return nil
 }
 
-func VerifyPromotedMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, kubernetes.GenericStatus) bool) string {
-	var retrievedMonoVertexSpec numaflowv1.MonoVertexSpec
-	var retrievedMonoVertexStatus kubernetes.GenericStatus
+func VerifyPromotedMonoVertexStatus(namespace, monoVertexRolloutName string, f func(numaflowv1.MonoVertexSpec, numaflowv1.MonoVertexStatus) bool) string {
 	var monoVertexName string
 	CheckEventually("verifying MonoVertexStatus", func() bool {
-		// TODO: call the new function below
-		unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+
+		unstruct, retrievedMonoVertexSpec, retrievedMonoVertexStatus, err := GetPromotedMonoVertexSpecAndStatus(namespace, monoVertexRolloutName)
 		if err != nil {
-			return false
-		}
-		if retrievedMonoVertexSpec, err = getMonoVertexSpec(unstruct); err != nil {
-			return false
-		}
-		if retrievedMonoVertexStatus, err = getNumaflowResourceStatus(unstruct); err != nil {
 			return false
 		}
 		monoVertexName = unstruct.GetName()
