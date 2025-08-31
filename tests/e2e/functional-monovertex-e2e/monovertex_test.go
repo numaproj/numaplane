@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"fmt"
 	"testing"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -85,16 +84,16 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
 
 		// TODO: move this out
-		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
+		/*expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
 			monoVertexScaleTo,
 			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
-		)
+		)*/
 
-		UpdateMonoVertexRollout(monoVertexRolloutName, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
+		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, true, &expectedPipelineTypeProgressiveStatusInProgress, &expectedPipelineTypeProgressiveStatusOnDone)
+		}, true, 0)
 
 		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
@@ -115,7 +114,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 		// test that pause works, as well as that monovertex resumes gradually
-		testPauseResume(initialMonoVertexSpec, false)
+		testPauseResume(0, initialMonoVertexSpec, false)
 
 		// update MonoVertexRollout to set FastResume to true such monovertex should resume fast, not gradually
 		By("Setting FastResume=true")
@@ -130,7 +129,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		})
 
 		// test that pause works, as well as that monovertex resumes fast
-		testPauseResume(initialMonoVertexSpec, true)
+		testPauseResume(0, initialMonoVertexSpec, true)
 
 		DeleteMonoVertexRollout(monoVertexRolloutName)
 	})
@@ -142,14 +141,15 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 // test that user can cause MonoVertex through MonoVertexRollout desiredPhase field
 // as well as that user can unpause (either gradually or fast depending on configuration)
-func testPauseResume(currentMonoVertexSpec numaflowv1.MonoVertexSpec, resumeFast bool) {
+func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv1.MonoVertexSpec, resumeFast bool) {
 
 	By("setting desiredPhase=Paused")
+	originalMonoVertexSpec := currentMonoVertexSpec.DeepCopy()
 	currentMonoVertexSpec.Lifecycle.DesiredPhase = numaflowv1.MonoVertexPhasePaused
 
-	UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-	}, false, nil, nil)
+	}, false, currentMonoVertexIndex)
 
 	VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName)
 
@@ -171,9 +171,9 @@ func testPauseResume(currentMonoVertexSpec numaflowv1.MonoVertexSpec, resumeFast
 	})
 
 	// Resume MonoVertex
-	UpdateMonoVertexRollout(monoVertexRolloutName, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-	}, false, nil, nil)
+	}, false, currentMonoVertexIndex)
 
 	// then verify that replicas is null
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(spec numaflowv1.MonoVertexSpec) bool {

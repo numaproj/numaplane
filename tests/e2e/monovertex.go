@@ -414,8 +414,8 @@ func VerifyMonoVertexDeletion(name string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The MonoVertex %s/%s should have been deleted but it was found.", Namespace, name))
 }
 
-func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
-	progressiveFieldChanged bool, expectedPipelineTypeProgressiveStatusInProgress *ExpectedPipelineTypeProgressiveStatus, expectedPipelineTypeProgressiveStatusOnDone *ExpectedPipelineTypeProgressiveStatus,
+func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
+	progressiveFieldChanged bool, currentMonoVertexRolloutIndex int,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -428,6 +428,30 @@ func UpdateMonoVertexRollout(name string, newSpec numaflowv1.MonoVertexSpec, exp
 	})
 
 	if UpgradeStrategy == config.ProgressiveStrategyID && progressiveFieldChanged {
+
+		origMin := int32(1)
+		origMax := int32(1)
+		if origSpec.Scale.Min != nil {
+			origMin = *origSpec.Scale.Min
+		}
+		if origSpec.Scale.Max != nil {
+			origMax = *origSpec.Scale.Max
+		}
+
+		_, spec, _, err := GetPromotedMonoVertexFromK8S(Namespace, name)
+		Expect(err).ShouldNot(HaveOccurred())
+		currentNumReplicasRunning := int32(1)
+		if spec.Replicas != nil {
+			currentNumReplicasRunning = *spec.Replicas
+		}
+		monoVertexScaleTo := currentNumReplicasRunning
+
+		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
+			GetInstanceName(name, currentMonoVertexRolloutIndex), GetInstanceName(name, currentMonoVertexRolloutIndex+1), GetInstanceName(name, currentMonoVertexRolloutIndex),
+			int64(monoVertexScaleTo),
+			fmt.Sprintf("{\"max\":%d,\"min\":%d}", origMax, origMin),
+			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
+		)
 
 		// Check Progressive status while the assessment is in progress
 
