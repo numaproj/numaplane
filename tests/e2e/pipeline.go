@@ -195,14 +195,6 @@ func GetGVRForPipeline() schema.GroupVersionResource {
 	}
 }
 
-func GetGVRForVertex() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaflow.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "vertices",
-	}
-}
-
 func UpdatePipelineRolloutInK8S(namespace string, name string, f func(apiv1.PipelineRollout) (apiv1.PipelineRollout, error)) {
 	By("updating PipelineRollout")
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -360,33 +352,6 @@ func watchPipeline() {
 				Metadata:   pl.ObjectMeta,
 				Spec:       pl.Spec,
 				Status:     pl.Status,
-			}
-		}
-		return Output{}
-	})
-
-}
-
-func watchVertices() {
-
-	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-		return watcher, err
-	}, func(o runtime.Object) Output {
-		if obj, ok := o.(*unstructured.Unstructured); ok {
-			vtx := numaflowv1.Vertex{}
-			err := util.StructToStruct(&obj, &vtx)
-			if err != nil {
-				fmt.Printf("Failed to convert unstruct: %v\n", err)
-				return Output{}
-			}
-			vtx.ManagedFields = nil
-			return Output{
-				APIVersion: NumaflowAPIVersion,
-				Kind:       "Vertex",
-				Metadata:   vtx.ObjectMeta,
-				Spec:       vtx.Spec,
-				Status:     vtx.Status,
 			}
 		}
 		return Output{}

@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -37,6 +39,7 @@ import (
 
 const (
 	isbServiceRolloutName     = "test-isbservice-rollout"
+	pipelineRolloutName       = "pipeline-rollout"
 	slowPipelineRolloutName   = "slow-pipeline-rollout"
 	failedPipelineRolloutName = "failed-pipeline-rollout"
 )
@@ -46,6 +49,8 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	outVertexMin        = int32(1)
+	outVertexMax        = int32(2)
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
@@ -59,7 +64,8 @@ var (
 				},
 			},
 			{
-				Name: "out",
+				Name:  "out",
+				Scale: numaflowv1.Scale{Min: &outVertexMin, Max: &outVertexMax},
 				Sink: &numaflowv1.Sink{
 					AbstractSink: numaflowv1.AbstractSink{
 						Log: &numaflowv1.Log{},
@@ -96,7 +102,8 @@ var (
 				},
 			},
 			{
-				Name: "out",
+				Name:  "out",
+				Scale: numaflowv1.Scale{Min: &outVertexMin, Max: &outVertexMax},
 				Sink: &numaflowv1.Sink{
 					AbstractSink: numaflowv1.AbstractSink{
 						Log: &numaflowv1.Log{},
@@ -302,6 +309,68 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 		DeletePipelineRollout(failedPipelineRolloutName)
 
+	})
+
+	It("Should resume a pipeline after pause-and-drain gradually", func() {
+
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, true, &apiv1.PipelineStrategy{
+			PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{},
+			PPNDStrategy: apiv1.PPNDStrategy{
+				FastResume: false,
+			},
+		})
+
+		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
+		pipelineName := GetInstanceName(pipelineRolloutName, 0)
+		vertexName := fmt.Sprintf("%s-out", pipelineName)
+		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			two := int64(2)
+			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
+			unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
+			return retrievedVertex, nil
+		})
+
+		// update spec to have topology change: Since user prefers "gradual resume", we want to see that it scaled the replicas back down
+		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return len(retrievedPipelineSpec.Vertices) == 3
+		}, true, false, true)
+
+		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
+			return spec.Replicas == nil || *spec.Replicas < 2
+		})
+
+		DeletePipelineRollout(pipelineRolloutName)
+	})
+
+	It("Should resume a pipeline after pause-and-drain quickly", func() {
+
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, true, &apiv1.PipelineStrategy{
+			PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{},
+			PPNDStrategy: apiv1.PPNDStrategy{
+				FastResume: true,
+			},
+		})
+
+		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
+		pipelineName := GetInstanceName(pipelineRolloutName, 0)
+		vertexName := fmt.Sprintf("%s-out", pipelineName)
+		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			two := int64(2)
+			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
+			unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
+			return retrievedVertex, nil
+		})
+
+		// update spec to have topology change: Since user prefers "fast resume", we want to see that the replicas are still scaled to 2
+		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
+			return len(retrievedPipelineSpec.Vertices) == 3
+		}, true, false, true)
+
+		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
+			return spec.Replicas != nil && *spec.Replicas == 2
+		})
+
+		DeletePipelineRollout(pipelineRolloutName)
 	})
 
 	It("Should delete all remaining rollout objects", func() {
