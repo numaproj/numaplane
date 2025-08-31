@@ -274,7 +274,10 @@ func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstruc
 		if !found {
 			return nil, fmt.Errorf("vertex has no name?: %v", vertexDef)
 		}
-		//vertexFullName := fmt.Sprintf("%s-%s", )
+		if err != nil {
+			return nil, fmt.Errorf("error getting vertex name: %v", err)
+		}
+
 		labels := client.MatchingLabels{
 			common.LabelKeyNumaflowPipelineName:       pipeline.GetName(),
 			common.LabelKeyNumaflowPipelineVertexName: vertexName,

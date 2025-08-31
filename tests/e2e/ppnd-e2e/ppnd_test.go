@@ -326,8 +326,8 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			two := int64(2)
 			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
-			unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
-			return retrievedVertex, nil
+			err := unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
+			return retrievedVertex, err
 		})
 
 		// update spec to have topology change: Since user prefers "gradual resume", we want to see that it scaled the replicas back down
@@ -357,8 +357,8 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		UpdateVertexInK8S(vertexName, func(retrievedVertex *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			two := int64(2)
 			unstructured.RemoveNestedField(retrievedVertex.Object, "spec", "replicas")
-			unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
-			return retrievedVertex, nil
+			err := unstructured.SetNestedField(retrievedVertex.Object, two, "spec", "replicas")
+			return retrievedVertex, err
 		})
 
 		// update spec to have topology change: Since user prefers "fast resume", we want to see that the replicas are still scaled to 2
