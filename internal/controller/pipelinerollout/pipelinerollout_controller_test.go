@@ -827,7 +827,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	falseValue := false
-	//trueValue := true
+	trueValue := true
 
 	r := NewPipelineRolloutReconciler(
 		client,
