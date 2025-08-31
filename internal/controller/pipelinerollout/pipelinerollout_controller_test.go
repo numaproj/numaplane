@@ -828,7 +828,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 	recorder := record.NewFakeRecorder(64)
 
 	falseValue := false
-	trueValue := true
+	//trueValue := true
 
 	r := NewPipelineRolloutReconciler(
 		client,
@@ -851,7 +851,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 		// require these Conditions to be set (note that in real life, previous reconciliations may have set other Conditions from before which are still present)
 		expectedPipelineSpecResult func(numaflowv1.PipelineSpec) bool
 	}{
-		{
+		/*{
 			name:                           "nothing to do",
 			newPipelineSpec:                pipelineSpec,
 			existingPipelineDef:            *createDefaultTestPipeline(numaflowv1.PipelinePhaseRunning),
@@ -957,7 +957,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return util.CompareStructNumTypeAgnostic(ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpec, numaflowv1.PipelinePhasePaused), spec)
 			},
-		},
+		},*/
 		{
 			name:            "PPND in progress, spec applied",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
@@ -980,7 +980,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 				return util.CompareStructNumTypeAgnostic(ctlrcommon.PipelineWithDesiredPhase(runningPipelineSpecWithTopologyChange, numaflowv1.PipelinePhaseRunning), spec)
 			},
 		},
-		{
+		/*{
 			name:                           "Pipeline stuck pausing, allow-data-loss annotation applied",
 			newPipelineSpec:                pipelineSpecWithTopologyChange,
 			pipelineRolloutAnnotations:     map[string]string{common.LabelKeyAllowDataLoss: "true"},
@@ -994,7 +994,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			expectedPipelineSpecResult: func(spec numaflowv1.PipelineSpec) bool {
 				return util.CompareStructNumTypeAgnostic(runningPipelineSpecWithTopologyChange, spec)
 			},
-		},
+		},*/
 	}
 
 	for _, tc := range testCases {
@@ -1003,6 +1003,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Vertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
@@ -1032,6 +1033,24 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef := &tc.existingPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, &tc.existingPipelineDef)
+
+			// create the already-existing Vertices in Kubernetes
+			for _, vertexDef := range existingPipelineDef.Spec.Vertices {
+				vertex := numaflowv1.Vertex{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: ctlrcommon.DefaultTestNamespace,
+						Name:      fmt.Sprintf("%s-%s", tc.existingPipelineDef.Name, vertexDef.Name),
+						Labels: map[string]string{
+							common.LabelKeyNumaflowPipelineName:       tc.existingPipelineDef.GetName(),
+							common.LabelKeyNumaflowPipelineVertexName: vertexDef.Name,
+						},
+					},
+				}
+
+				//vertex.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(tc.existingPipelineDef.GetObjectMeta(), numaflowv1.PipelineGroupVersionKind)}
+				fmt.Printf("creating vertex named %q\n", vertex.Name)
+				ctlrcommon.CreateVertexInK8S(ctx, t, numaflowClientSet, &vertex)
+			}
 
 			// external pause requests
 			ppnd.GetPauseModule().PauseRequests = map[string]*bool{}

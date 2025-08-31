@@ -94,6 +94,16 @@ func CreatePipelineInK8S(ctx context.Context, t *testing.T, numaflowClientSet *n
 	assert.NoError(t, err)
 }
 
+func CreateVertexInK8S(ctx context.Context, t *testing.T, numaflowClientSet *numaflowversioned.Clientset, vertex *numaflowv1.Vertex) {
+	resultVertex, err := numaflowClientSet.NumaflowV1alpha1().Vertices(DefaultTestNamespace).Create(ctx, vertex, metav1.CreateOptions{})
+	assert.NoError(t, err)
+	resultVertex.Status = vertex.Status
+
+	// updating the Status subresource is a separate operation
+	_, err = numaflowClientSet.NumaflowV1alpha1().Vertices(DefaultTestNamespace).UpdateStatus(ctx, resultVertex, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+}
+
 func CreateMVRolloutInK8S(ctx context.Context, t *testing.T, numaplaneClient client.Client, monoVertexRollout *apiv1.MonoVertexRollout) {
 	rolloutCopy := *monoVertexRollout
 	err := numaplaneClient.Create(ctx, monoVertexRollout)

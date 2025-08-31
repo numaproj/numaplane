@@ -150,7 +150,8 @@ func (pm *PauseModule) SetPipelineLifecycleRunning(ctx context.Context, c client
 			return err
 		}
 	}
-	return nil
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, RunningDesiredPhase)
+	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
 func (pm *PauseModule) GetNumaflowControllerKey(namespace string) string {
