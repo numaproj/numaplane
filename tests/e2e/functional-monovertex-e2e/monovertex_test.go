@@ -35,7 +35,6 @@ const (
 var (
 	monoVertexScaleMin = int32(4)
 	monoVertexScaleMax = int32(5)
-	monoVertexScaleTo  = int64(2)
 
 	initialMonoVertexSpec = numaflowv1.MonoVertexSpec{
 		Scale: numaflowv1.Scale{
@@ -82,14 +81,6 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		updatedMonoVertexSpec.Source.UDSource = nil
 		rpu := int64(10)
 		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
-
-		// TODO: move this out
-		/*expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
-			GetInstanceName(monoVertexRolloutName, 0), GetInstanceName(monoVertexRolloutName, 1), GetInstanceName(monoVertexRolloutName, 0),
-			monoVertexScaleTo,
-			fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin),
-			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
-		)*/
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
