@@ -440,13 +440,13 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 
 		_, spec, _, err := GetPromotedMonoVertexFromK8S(Namespace, name)
 		Expect(err).ShouldNot(HaveOccurred())
-		currentNumReplicasRunning := int32(1)
+		currentNumReplicasRunning := int32(origMin)
 		if spec.Replicas != nil {
 			currentNumReplicasRunning = *spec.Replicas
 		}
 		monoVertexScaleTo := currentNumReplicasRunning / 2.0
 
-		fmt.Printf("deletethis: monoVertexScaleTo=%d\n", monoVertexScaleTo)
+		fmt.Printf("deletethis: origMin=%d, monoVertexScaleTo=%d\n", origMin, monoVertexScaleTo)
 
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(name, currentMonoVertexRolloutIndex), GetInstanceName(name, currentMonoVertexRolloutIndex+1), GetInstanceName(name, currentMonoVertexRolloutIndex),
