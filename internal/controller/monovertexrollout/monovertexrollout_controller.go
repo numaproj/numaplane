@@ -570,6 +570,8 @@ func performCustomMonoVertexMods(
 	return performCustomResumeMod(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 }
 
+// performCustomResumeMod checks if monovertex's desiredPhase is going from Paused to Running:
+// if their strategy says to resume gradually, we need to reset the MonoVertex's "replicas" value back to nil (i.e. min)
 func performCustomResumeMod(
 	ctx context.Context,
 	monoVertexRollout *apiv1.MonoVertexRollout,
@@ -578,10 +580,12 @@ func performCustomResumeMod(
 
 	numaLogger := logger.FromContext(ctx).WithValues("monovertex", fmt.Sprintf("%s/%s", newMonoVertexDef.GetNamespace(), newMonoVertexDef.GetName()))
 
+	// does user prefer to resume gradually? (note this is the default)
 	if monoVertexRollout.Spec.Strategy == nil || !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+
 		// if we're in the middle of going from Paused to Running, we need to set monovertex's 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
-		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newMonoVertexDef)
+		desiredPhase, err := numaflowtypes.GetMonoVertexDesiredPhase(newMonoVertexDef)
 		if err != nil {
 			return err
 		}

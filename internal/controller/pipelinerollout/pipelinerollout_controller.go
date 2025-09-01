@@ -927,6 +927,8 @@ func performCustomPipelineMods(
 	return performCustomResumeMod(ctx, c, pipelineRollout, newPipelineDef, existingPipelineDef)
 }
 
+// performCustomResumeMod checks if pipeline's desiredPhase is going from Paused to Running:
+// if their strategy says to resume gradually, we need to reset the Vertices' "replicas" value back to nil (i.e. min)
 func performCustomResumeMod(
 	ctx context.Context,
 	c client.Client,
@@ -936,8 +938,8 @@ func performCustomResumeMod(
 
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", newPipelineDef.GetNamespace(), newPipelineDef.GetName()))
 
+	// does user prefer to resume gradually? (note this is the default)
 	if pipelineRollout.Spec.Strategy == nil || !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
-		fmt.Println("deletethis: user wants slow resume")
 		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
 		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
 		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newPipelineDef)

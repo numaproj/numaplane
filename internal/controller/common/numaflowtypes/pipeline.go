@@ -172,6 +172,13 @@ func CheckIfPipelineWontPause(ctx context.Context, pipeline *unstructured.Unstru
 
 func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error) {
 	desiredPhase, _, err := unstructured.NestedString(pipeline.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return desiredPhase, err
+	}
+
+	if desiredPhase == "" {
+		desiredPhase = string(numaflowv1.PipelinePhaseRunning)
+	}
 	return desiredPhase, err
 }
 
@@ -288,7 +295,6 @@ func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstruc
 			nameToVertex[vertexName] = nil
 			continue
 		}
-		//vertex, err := kubernetes.GetResource(ctx, c, numaflowv1.VertexGroupVersionKind, types.NamespacedName{Namespace: pipeline.GetNamespace(), Name: vertexName})
 		if len(vertices.Items) == 0 {
 			numaLogger.WithValues("vertex", vertexName).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
 			nameToVertex[vertexName] = nil

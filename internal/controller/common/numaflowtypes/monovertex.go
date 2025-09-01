@@ -56,5 +56,12 @@ func CheckMonoVertexPhase(ctx context.Context, monovertex *unstructured.Unstruct
 
 func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, error) {
 	desiredPhase, _, err := unstructured.NestedString(monovertex.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return desiredPhase, err
+	}
+
+	if desiredPhase == "" {
+		desiredPhase = string(numaflowv1.MonoVertexPhaseRunning)
+	}
 	return desiredPhase, err
 }
