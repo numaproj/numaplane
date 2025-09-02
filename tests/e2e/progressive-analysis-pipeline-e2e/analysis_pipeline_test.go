@@ -48,7 +48,7 @@ var (
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
-					AssessmentSchedule: "60,300,30,10",
+					AssessmentSchedule: "10,300,30,10",
 				},
 				Analysis: apiv1.Analysis{
 					Templates: []argov1alpha1.AnalysisTemplateRef{
@@ -66,7 +66,7 @@ var (
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
-					AssessmentSchedule: "60,300,30,10",
+					AssessmentSchedule: "10,300,30,10",
 				},
 				Analysis: apiv1.Analysis{
 					Templates: []argov1alpha1.AnalysisTemplateRef{
