@@ -51,7 +51,7 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	DefaultTestTimeout            = 10 * time.Minute
+	DefaultTestTimeout            = 6 * time.Minute
 	DefaultConsistentCheckTimeout = 15 * time.Second // the default time for checks using "Consistently"
 	TestPollingInterval           = 10 * time.Millisecond
 
