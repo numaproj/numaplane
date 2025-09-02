@@ -597,7 +597,7 @@ func computePromotedMonoVertexScaleValues(
 		"%s=%s, %s=%s",
 		common.LabelKeyNumaflowPodMonoVertexName, promotedMonoVertexDef.GetName(),
 		// the vertex name for a monovertex is the same as the monovertex name
-		common.LabelKeyNumaflowPodMonoVertexVertexName, promotedMonoVertexDef.GetName(),
+		common.LabelKeyNumaflowMonoVertexName, promotedMonoVertexDef.GetName(),
 	))
 	if err != nil {
 		return true, err

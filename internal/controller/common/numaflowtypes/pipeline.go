@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -171,6 +172,13 @@ func CheckIfPipelineWontPause(ctx context.Context, pipeline *unstructured.Unstru
 
 func GetPipelineDesiredPhase(pipeline *unstructured.Unstructured) (string, error) {
 	desiredPhase, _, err := unstructured.NestedString(pipeline.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return desiredPhase, err
+	}
+
+	if desiredPhase == "" {
+		desiredPhase = string(numaflowv1.PipelinePhaseRunning)
+	}
 	return desiredPhase, err
 }
 
@@ -239,5 +247,88 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interface{}, error) {
+
+	vertexDefinitions, exists, err := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error getting spec.vertices from pipeline %s: %s", pipeline.GetName(), err.Error())
+	}
+	if !exists {
+		return nil, fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", pipeline.GetName())
+	}
+
+	return vertexDefinitions, nil
+}
+
+// find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found
+// for any Vertices that can't be found, return an entry mapped to nil
+func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (map[string]*unstructured.Unstructured, error) {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", "pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
+
+	vertexDefinitions, err := GetPipelineVertexDefinitions(pipeline)
+	if err != nil {
+		return nil, err
+	}
+
+	nameToVertex := map[string]*unstructured.Unstructured{}
+
+	// TODO: should we have a Watch on Vertex Kind?
+	for _, vertexDef := range vertexDefinitions {
+		vertexName, found, err := unstructured.NestedString(vertexDef.(map[string]interface{}), "name")
+		if !found {
+			return nil, fmt.Errorf("vertex has no name?: %v", vertexDef)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error getting vertex name: %v", err)
+		}
+
+		labels := client.MatchingLabels{
+			common.LabelKeyNumaflowPipelineName:       pipeline.GetName(),
+			common.LabelKeyNumaflowPipelineVertexName: vertexName,
+		}
+		vertices, err := kubernetes.ListResources(ctx, c, numaflowv1.VertexGroupVersionKind, pipeline.GetNamespace(), labels)
+		if err != nil {
+			numaLogger.WithValues("vertex", vertexName, "err", err.Error()).Warnf("can't find Vertex in K8S despite being contained within pipeline spec: labels=%v", labels)
+			nameToVertex[vertexName] = nil
+			continue
+		}
+		if len(vertices.Items) == 0 {
+			numaLogger.WithValues("vertex", vertexName).Warn("can't find Vertex in K8S despite being contained within pipeline spec")
+			nameToVertex[vertexName] = nil
+		} else if len(vertices.Items) == 1 {
+			nameToVertex[vertexName] = &vertices.Items[0]
+		} else {
+			return nil, fmt.Errorf("there should not be more than 1 Vertex with labels %v in namespace %s", labels, pipeline.GetNamespace())
+		}
+	}
+
+	return nameToVertex, nil
+}
+
+// MinimizePipelineVertexReplicas clears out the `replicas` field from each Vertex of a Pipeline, which has the effect
+// in Numaflow of resetting to "scale.min" value
+func MinimizePipelineVertexReplicas(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) error {
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", "pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()))
+
+	vertices, err := GetPipelineVertices(ctx, c, pipeline)
+	if err != nil {
+		return fmt.Errorf("error getting pipeline vertices for pipeline %s/%s: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	numaLogger.Debug("setting replicas=nil for each vertex")
+	for vertexName, vertex := range vertices {
+		if vertex == nil {
+			numaLogger.WithValues("vertex", vertexName).Warn("can't set replicas=nil since vertex wasn't found")
+		} else {
+			// patch replicas to null
+			patchJson := `{"spec": {"replicas": null}}`
+			if err := kubernetes.PatchResource(ctx, c, vertex, patchJson, k8stypes.MergePatchType); err != nil {
+				return fmt.Errorf("error patching vertex %s/%s replicas to null: %v", vertex.GetNamespace(), vertex.GetName(), err)
+			}
+		}
+	}
+
 	return nil
 }

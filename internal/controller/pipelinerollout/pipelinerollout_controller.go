@@ -631,7 +631,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 	default:
 		if needsUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
-			if err := updatePipelineSpec(ctx, r.client, newPipelineDef); err != nil {
+			if err := updatePipelineSpec(ctx, r.client, pipelineRollout, newPipelineDef, existingPipelineDef); err != nil {
 				return 0, err
 			}
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
@@ -644,6 +644,7 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			// update the list of riders in the Status
 			r.SetCurrentRiderList(ctx, pipelineRollout, currentRiderList)
 		}
+
 	}
 
 	if needsUpdate {
@@ -901,8 +902,60 @@ func (r *PipelineRolloutReconciler) SetupWithManager(ctx context.Context, mgr ct
 	return nil
 }
 
-func updatePipelineSpec(ctx context.Context, c client.Client, obj *unstructured.Unstructured) error {
-	return kubernetes.UpdateResource(ctx, c, obj)
+func updatePipelineSpec(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	err := performCustomPipelineMods(ctx, c, pipelineRollout, newPipelineDef, existingPipelineDef)
+	if err != nil {
+		return err
+	}
+
+	return kubernetes.UpdateResource(ctx, c, newPipelineDef)
+}
+
+func performCustomPipelineMods(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	return performCustomResumeMod(ctx, c, pipelineRollout, newPipelineDef, existingPipelineDef)
+}
+
+// performCustomResumeMod checks if pipeline's desiredPhase is going from Paused to Running:
+// if their strategy says to resume gradually, we need to reset the Vertices' "replicas" value back to nil (i.e. min)
+func performCustomResumeMod(
+	ctx context.Context,
+	c client.Client,
+	pipelineRollout *apiv1.PipelineRollout,
+	newPipelineDef *unstructured.Unstructured,
+	existingPipelineDef *unstructured.Unstructured) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", fmt.Sprintf("%s/%s", newPipelineDef.GetNamespace(), newPipelineDef.GetName()))
+
+	// does user prefer to resume gradually? (note this is the default)
+	if pipelineRollout.Spec.Strategy == nil || !pipelineRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+		// if we're in the middle of going from Paused to Running, we need to set vertices' 'replicas' count to nil
+		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
+		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(newPipelineDef)
+		if err != nil {
+			return err
+		}
+		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePausing) ||
+			numaflowtypes.CheckPipelinePhase(ctx, existingPipelineDef, numaflowv1.PipelinePhasePaused)
+
+		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
+			numaLogger.Debug("resuming Pipeline slow: setting replicas=nil for each Vertex")
+			return numaflowtypes.MinimizePipelineVertexReplicas(ctx, c, existingPipelineDef)
+		}
+		return nil
+	}
+	return nil
 }
 
 // take the Metadata (Labels and Annotations) specified in the PipelineRollout plus any others that apply to all Pipelines

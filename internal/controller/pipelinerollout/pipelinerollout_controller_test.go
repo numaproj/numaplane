@@ -1002,6 +1002,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Vertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
@@ -1031,6 +1032,24 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef := &tc.existingPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, &tc.existingPipelineDef)
+
+			// create the already-existing Vertices in Kubernetes
+			for _, vertexDef := range existingPipelineDef.Spec.Vertices {
+				vertex := numaflowv1.Vertex{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: ctlrcommon.DefaultTestNamespace,
+						Name:      fmt.Sprintf("%s-%s", tc.existingPipelineDef.Name, vertexDef.Name),
+						Labels: map[string]string{
+							common.LabelKeyNumaflowPipelineName:       tc.existingPipelineDef.GetName(),
+							common.LabelKeyNumaflowPipelineVertexName: vertexDef.Name,
+						},
+					},
+				}
+
+				//vertex.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(tc.existingPipelineDef.GetObjectMeta(), numaflowv1.PipelineGroupVersionKind)}
+				fmt.Printf("creating vertex named %q\n", vertex.Name)
+				ctlrcommon.CreateVertexInK8S(ctx, t, numaflowClientSet, &vertex)
+			}
 
 			// external pause requests
 			ppnd.GetPauseModule().PauseRequests = map[string]*bool{}

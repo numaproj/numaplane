@@ -39,8 +39,6 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
 	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
@@ -234,13 +232,6 @@ func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv
 		return metav1.ConditionUnknown
 	}
 	return c.Status
-}
-
-func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
-	statusMap := u.Object["status"]
-	var status kubernetes.GenericStatus
-	err := util.StructToStruct(&statusMap, &status)
-	return status, err
 }
 
 func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {

@@ -17,10 +17,14 @@ limitations under the License.
 package numaflowtypes
 
 import (
+	"context"
+
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
 )
 
 type MonoVertexStatus = kubernetes.GenericStatus
@@ -37,4 +41,27 @@ func ParseMonoVertexStatus(monoVertex *unstructured.Unstructured) (MonoVertexSta
 	}
 
 	return status, nil
+}
+
+func CheckMonoVertexPhase(ctx context.Context, monovertex *unstructured.Unstructured, phase numaflowv1.PipelinePhase) bool {
+	numaLogger := logger.FromContext(ctx)
+	pipelineStatus, err := ParseMonoVertexStatus(monovertex)
+	if err != nil {
+		numaLogger.Errorf(err, "failed to parse MonoVertex Status from monovertex CR: %+v, %v", monovertex, err)
+		return false
+	}
+
+	return numaflowv1.PipelinePhase(pipelineStatus.Phase) == phase
+}
+
+func GetMonoVertexDesiredPhase(monovertex *unstructured.Unstructured) (string, error) {
+	desiredPhase, _, err := unstructured.NestedString(monovertex.Object, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		return desiredPhase, err
+	}
+
+	if desiredPhase == "" {
+		desiredPhase = string(numaflowv1.MonoVertexPhaseRunning)
+	}
+	return desiredPhase, err
 }

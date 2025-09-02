@@ -94,7 +94,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 		verifyReplicasFunc := func(existingUpgradingChildDef *unstructured.Unstructured) (bool, string, error) {
 			verticesList, err := kubernetes.ListLiveResource(ctx, common.NumaflowAPIGroup, common.NumaflowAPIVersion,
 				numaflowv1.VertexGroupVersionResource.Resource, existingUpgradingChildDef.GetNamespace(),
-				fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPodPipelineName, existingUpgradingChildDef.GetName()), "")
+				fmt.Sprintf("%s=%s", common.LabelKeyNumaflowPipelineName, existingUpgradingChildDef.GetName()), "")
 			if err != nil {
 				return false, "", err
 			}
@@ -490,12 +490,9 @@ func createScaledDownUpgradingPipelineDef(
 	numaLogger := logger.FromContext(ctx).WithValues("pipeline", upgradingPipelineDef.GetName())
 
 	// get the current Vertices definition
-	vertexDefinitions, exists, err := unstructured.NestedSlice(upgradingPipelineDef.Object, "spec", "vertices")
+	vertexDefinitions, err := numaflowtypes.GetPipelineVertexDefinitions(upgradingPipelineDef)
 	if err != nil {
-		return fmt.Errorf("error getting spec.vertices from pipeline %s: %s", upgradingPipelineDef.GetName(), err.Error())
-	}
-	if !exists {
-		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", upgradingPipelineDef.GetName())
+		return err
 	}
 
 	// map each vertex name to new min/max, which is based on the number of Pods that were removed from the corresponding
@@ -682,8 +679,8 @@ func computePipelineVerticesScaleValues(
 
 			podsList, err := kubernetes.ListPodsMetadataOnly(ctx, c, promotedPipelineDef.GetNamespace(), fmt.Sprintf(
 				"%s=%s, %s=%s",
-				common.LabelKeyNumaflowPodPipelineName, promotedPipelineDef.GetName(),
-				common.LabelKeyNumaflowPodPipelineVertexName, vertexName,
+				common.LabelKeyNumaflowPipelineName, promotedPipelineDef.GetName(),
+				common.LabelKeyNumaflowPipelineVertexName, vertexName,
 			))
 			if err != nil {
 				return true, err
