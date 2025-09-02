@@ -285,8 +285,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
 		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
-		// Since forcePromote=true, both Pipeline and ISBService should be promoted successfully
-		// even though the pipeline change was invalid ("badcat" function)
+		// Had to remove this check due to the fact that things can happen in a different order
+		// See https://github.com/numaproj/numaplane/pull/865 for details
 		//VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status shows success
