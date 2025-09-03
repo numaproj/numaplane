@@ -1,0 +1,2817 @@
+<<<<<<< HEAD
+=======
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: interstepbufferservices.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: InterStepBufferService
+    listKind: InterStepBufferServiceList
+    plural: interstepbufferservices
+    shortNames:
+    - isbsvc
+    singular: interstepbufferservice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: isbservicerollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: ISBServiceRollout
+    listKind: ISBServiceRolloutList
+    plural: isbservicerollouts
+    singular: isbservicerollout
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ISBServiceRollout is the Schema for the isbservicerollouts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ISBServiceRolloutSpec defines the desired state of ISBServiceRollout
+            properties:
+              interStepBufferService:
+                description: InterStepBufferService includes the spec of InterStepBufferService
+                  in Numaflow
+                properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
+              strategy:
+                properties:
+                  progressive:
+                    properties:
+                      assessmentSchedule:
+                        description: |-
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
+                        type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
+                    type: object
+                type: object
+            required:
+            - interStepBufferService
+            type: object
+          status:
+            description: ISBServiceRolloutStatus defines the observed state of ISBServiceRollout
+            properties:
+              conditions:
+                description: Conditions are the latest available observations of a
+                  resource's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
+              message:
+                description: Message is added if Phase is PhaseFailed.
+                type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed isbsvc, to uniquely
+                  identify an isbsvc.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
+              pauseRequestStatus:
+                description: PauseStatus is a common structure used to communicate
+                  how long Pipelines are paused.
+                properties:
+                  lastPauseBeginTime:
+                    description: The begin timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPauseEndTime:
+                    description: The end timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPausePhaseChangeTime:
+                    description: The transition timestamp from Pausing to Paused for
+                      the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                type: object
+              phase:
+                description: Phase indicates the current phase of the resource.
+                enum:
+                - ""
+                - Pending
+                - Deployed
+                - Failed
+                type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  promotedISBServiceStatus:
+                    description: PromotedISBServiceStatus stores information regarding
+                      the current "promoted" isbservice
+                    properties:
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  upgradingISBServiceStatus:
+                    description: UpgradingISBServiceStatus represents either the current
+                      or otherwise the most recent "upgrading" isbservice
+                    properties:
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
+                        format: date-time
+                        type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      discontinued:
+                        description: |-
+                          Discontinued indicates if the upgrade was stopped prematurely.
+                          This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+                          in the middle of an upgrade
+                        type: boolean
+                      failureReason:
+                        description: FailureReason indicates the reason for the failure
+                        type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" InterstepBufferService
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: monovertexrollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: MonoVertexRollout
+    listKind: MonoVertexRolloutList
+    plural: monovertexrollouts
+    singular: monovertexrollout
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MonoVertexRollout is the Schema for the monovertexrollouts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MonoVertexRolloutSpec defines the desired state of MonoVertexRollout
+            properties:
+              monoVertex:
+                description: MonoVertex includes the spec of MonoVertex in Numaflow
+                properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+              riders:
+                items:
+                  description: Rider defines a resource that can be deployed along
+                    with the primary child of a rollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
+              strategy:
+                description: PipelineTypeRolloutStrategy specifies the Rollout Strategy
+                  for fields shared by Pipeline and MonoVertex
+                properties:
+                  analysis:
+                    description: Analysis defines how to perform analysis of health,
+                      outside of basic resource checking
+                    properties:
+                      args:
+                        description: Arguments can be passed to templates to evaluate
+                          any parameterization
+                        items:
+                          description: Argument is an argument to an AnalysisRun
+                          properties:
+                            name:
+                              description: Name is the name of the argument
+                              type: string
+                            value:
+                              description: Value is the value of the argument
+                              type: string
+                            valueFrom:
+                              description: ValueFrom is a reference to where a secret
+                                is stored. This field is one of the fields with valueFrom
+                              properties:
+                                fieldRef:
+                                  description: |-
+                                    FieldRef is a reference to the fields in metadata which we are referencing. This field is one of the fields with
+                                    valueFrom
+                                  properties:
+                                    fieldPath:
+                                      description: 'Required: Path of the field to
+                                        select in the specified API version'
+                                      type: string
+                                  required:
+                                  - fieldPath
+                                  type: object
+                                secretKeyRef:
+                                  description: Secret is a reference to where a secret
+                                    is stored. This field is one of the fields with
+                                    valueFrom
+                                  properties:
+                                    key:
+                                      description: Key is the key of the secret to
+                                        select from.
+                                      type: string
+                                    name:
+                                      description: Name is the name of the secret
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              type: object
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      templates:
+                        description: Templates are used to analyze the AnalysisRun
+                        items:
+                          properties:
+                            clusterScope:
+                              description: Whether to look for the templateName at
+                                cluster scope or namespace scope
+                              type: boolean
+                            templateName:
+                              description: TemplateName name of template to use in
+                                AnalysisRun
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  pauseResume:
+                    properties:
+                      fastResume:
+                        description: FastResume indicates if the Pipeline should be
+                          resumed with the number of replicas it had before it was
+                          paused.
+                        type: boolean
+                    type: object
+                  progressive:
+                    properties:
+                      assessmentSchedule:
+                        description: |-
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
+                        type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
+                    type: object
+                type: object
+            required:
+            - monoVertex
+            type: object
+          status:
+            description: MonoVertexRolloutStatus defines the observed state of MonoVertexRollout
+            properties:
+              conditions:
+                description: Conditions are the latest available observations of a
+                  resource's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
+              message:
+                description: Message is added if Phase is PhaseFailed.
+                type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed monovertex, to uniquely
+                  identify a monovertex.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
+              phase:
+                description: Phase indicates the current phase of the resource.
+                enum:
+                - ""
+                - Pending
+                - Deployed
+                - Failed
+                type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  promotedMonoVertexStatus:
+                    description: PromotedMonoVertexStatus stores information regarding
+                      the current "promoted" MonoVertex
+                    properties:
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                      scaleValues:
+                        additionalProperties:
+                          description: ScaleValues stores the original scale min and
+                            max values, scaleTo value, and actual scale value of a
+                            pipeline or monovertex vertex
+                          properties:
+                            initial:
+                              description: Initial indicates how many pods were initially
+                                running for the vertex at the beginning of the upgrade
+                                process
+                              format: int64
+                              type: integer
+                            originalScaleMinMax:
+                              description: OriginalScaleMinMax stores the original
+                                scale min and max values as JSON string
+                              type: string
+                            scaleTo:
+                              description: ScaleTo indicates how many pods to scale
+                                down to
+                              format: int64
+                              type: integer
+                          required:
+                          - initial
+                          - originalScaleMinMax
+                          - scaleTo
+                          type: object
+                        description: |-
+                          ScaleValues is a map where the keys are the promoted child vertices names
+                          and the values are the scale values of the vertices
+                        type: object
+                      scaleValuesRestoredToOriginal:
+                        description: |-
+                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
+                          This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
+                        type: boolean
+                    required:
+                    - name
+                    type: object
+                  upgradingMonoVertexStatus:
+                    description: UpgradingMonoVertexStatus represents either the current
+                      or otherwise the most recent "upgrading" MonoVertex
+                    properties:
+                      analysis:
+                        properties:
+                          analysisRunName:
+                            description: AnalysisRunName is the name of the AnalysisRun,
+                              set after it's generated
+                            type: string
+                          endTime:
+                            description: EndTime is the time that it completed
+                            format: date-time
+                            type: string
+                          phase:
+                            description: Phase is the phase of the AnalysisRun when
+                              completed
+                            type: string
+                          startTime:
+                            description: StartTime is the time that the AnalysisRun
+                              is created
+                            format: date-time
+                            type: string
+                        required:
+                        - phase
+                        type: object
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
+                        format: date-time
+                        type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      discontinued:
+                        description: |-
+                          Discontinued indicates if the upgrade was stopped prematurely.
+                          This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+                          in the middle of an upgrade
+                        type: boolean
+                      failureReason:
+                        description: FailureReason indicates the reason for the failure
+                        type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                      originalScaleMinMax:
+                        description: OriginalScaleMinMax stores the original scale
+                          min and max values as JSON string
+                        type: string
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
+                    required:
+                    - name
+                    - originalScaleMinMax
+                    type: object
+                type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" MonoVertex
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: monovertices.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: MonoVertex
+    listKind: MonoVertexList
+    plural: monovertices
+    shortNames:
+    - mvtx
+    singular: monovertex
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.desiredReplicas
+      name: Desired
+      type: string
+    - jsonPath: .status.replicas
+      name: Current
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.reason
+      name: Reason
+      type: string
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: numaflowcontrollerrollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: NumaflowControllerRollout
+    listKind: NumaflowControllerRolloutList
+    plural: numaflowcontrollerrollouts
+    singular: numaflowcontrollerrollout
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: The desired Numaflow Controller version
+      jsonPath: .spec.controller.version
+      name: Version
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NumaflowControllerRollout is the Schema for the numaflowcontrollerrollouts
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NumaflowControllerRolloutSpec defines the desired state of
+              NumaflowControllerRollout
+            properties:
+              controller:
+                properties:
+                  instanceID:
+                    description: |-
+                      NOTE: keeping the instanceID also in the NumaflowControllerRollout in case users want to
+                      create multiple Numaflow controllers within the same namespace
+                    type: string
+                  version:
+                    type: string
+                required:
+                - version
+                type: object
+            required:
+            - controller
+            type: object
+          status:
+            description: NumaflowControllerRolloutStatus defines the observed state
+              of NumaflowControllerRollout
+            properties:
+              conditions:
+                description: Conditions are the latest available observations of a
+                  resource's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
+              message:
+                description: Message is added if Phase is PhaseFailed.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
+              pauseRequestStatus:
+                description: PauseStatus is a common structure used to communicate
+                  how long Pipelines are paused.
+                properties:
+                  lastPauseBeginTime:
+                    description: The begin timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPauseEndTime:
+                    description: The end timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPausePhaseChangeTime:
+                    description: The transition timestamp from Pausing to Paused for
+                      the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                type: object
+              phase:
+                description: Phase indicates the current phase of the resource.
+                enum:
+                - ""
+                - Pending
+                - Deployed
+                - Failed
+                type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
+            type: object
+        type: object
+        x-kubernetes-validations:
+        - message: The metadata name must start with 'numaflow-controller'
+          rule: matches(self.metadata.name, '^numaflow-controller.*')
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: numaflowcontrollers.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: NumaflowController
+    listKind: NumaflowControllerList
+    plural: numaflowcontrollers
+    singular: numaflowcontroller
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: The desired Numaflow Controller version
+      jsonPath: .spec.version
+      name: Version
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NumaflowController is the Schema for the numaflowcontrollers
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NumaflowControllerSpec defines the desired state of NumaflowController
+            properties:
+              instanceID:
+                type: string
+              version:
+                type: string
+            required:
+            - version
+            type: object
+          status:
+            description: NumaflowControllerStatus defines the observed state of NumaflowController
+            properties:
+              conditions:
+                description: Conditions are the latest available observations of a
+                  resource's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
+              message:
+                description: Message is added if Phase is PhaseFailed.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
+              phase:
+                description: Phase indicates the current phase of the resource.
+                enum:
+                - ""
+                - Pending
+                - Deployed
+                - Failed
+                type: string
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: pipelinerollouts.numaplane.numaproj.io
+spec:
+  group: numaplane.numaproj.io
+  names:
+    kind: PipelineRollout
+    listKind: PipelineRolloutList
+    plural: pipelinerollouts
+    singular: pipelinerollout
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: The current phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: The upgrade strategy currently prosessing the PipelineRollout.
+        No upgrade in progress if empty
+      jsonPath: .status.upgradeInProgress
+      name: Upgrade In Progress
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PipelineRollout is the Schema for the pipelinerollouts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PipelineRolloutSpec defines the desired state of PipelineRollout
+            properties:
+              pipeline:
+                description: Pipeline includes the spec of Pipeline in Numaflow
+                properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+              riders:
+                items:
+                  description: PipelineRider defines a resource that can be deployed
+                    along with the primary child of a PipelineRollout
+                  properties:
+                    definition:
+                      description: Definition of resource that is deployed with primary
+                        child
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    perVertex:
+                      description: if set, rider resource should be created for each
+                        vertex of the pipeline
+                      type: boolean
+                    progressive:
+                      description: if set, perform progressive rollout when it changes
+                      type: boolean
+                  type: object
+                type: array
+              strategy:
+                properties:
+                  analysis:
+                    description: Analysis defines how to perform analysis of health,
+                      outside of basic resource checking
+                    properties:
+                      args:
+                        description: Arguments can be passed to templates to evaluate
+                          any parameterization
+                        items:
+                          description: Argument is an argument to an AnalysisRun
+                          properties:
+                            name:
+                              description: Name is the name of the argument
+                              type: string
+                            value:
+                              description: Value is the value of the argument
+                              type: string
+                            valueFrom:
+                              description: ValueFrom is a reference to where a secret
+                                is stored. This field is one of the fields with valueFrom
+                              properties:
+                                fieldRef:
+                                  description: |-
+                                    FieldRef is a reference to the fields in metadata which we are referencing. This field is one of the fields with
+                                    valueFrom
+                                  properties:
+                                    fieldPath:
+                                      description: 'Required: Path of the field to
+                                        select in the specified API version'
+                                      type: string
+                                  required:
+                                  - fieldPath
+                                  type: object
+                                secretKeyRef:
+                                  description: Secret is a reference to where a secret
+                                    is stored. This field is one of the fields with
+                                    valueFrom
+                                  properties:
+                                    key:
+                                      description: Key is the key of the secret to
+                                        select from.
+                                      type: string
+                                    name:
+                                      description: Name is the name of the secret
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              type: object
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      templates:
+                        description: Templates are used to analyze the AnalysisRun
+                        items:
+                          properties:
+                            clusterScope:
+                              description: Whether to look for the templateName at
+                                cluster scope or namespace scope
+                              type: boolean
+                            templateName:
+                              description: TemplateName name of template to use in
+                                AnalysisRun
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  pauseResume:
+                    properties:
+                      fastResume:
+                        description: FastResume indicates if the Pipeline should be
+                          resumed with the number of replicas it had before it was
+                          paused.
+                        type: boolean
+                    type: object
+                  ppnd:
+                    properties:
+                      fastResume:
+                        description: FastResume indicates if the Pipeline should be
+                          resumed with the number of replicas it had before it was
+                          paused.
+                        type: boolean
+                    type: object
+                  progressive:
+                    properties:
+                      assessmentSchedule:
+                        description: |-
+                          optional string: comma-separated list consisting of:
+                          assessmentDelay, assessmentPeriod, assessmentInterval
+                        type: string
+                      forcePromote:
+                        description: if ForcePromote is set, assessment will be skipped
+                          and Progressive upgrade will succeed
+                        type: boolean
+                    type: object
+                type: object
+            required:
+            - pipeline
+            type: object
+          status:
+            description: PipelineRolloutStatus defines the observed state of PipelineRollout
+            properties:
+              conditions:
+                description: Conditions are the latest available observations of a
+                  resource's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastFailureTime:
+                description: LastFailureTime records the timestamp of the Last Failure
+                  (PhaseFailed)
+                format: date-time
+                type: string
+              message:
+                description: Message is added if Phase is PhaseFailed.
+                type: string
+              nameCount:
+                description: |-
+                  NameCount is used as a suffix for the name of the managed pipeline, to uniquely
+                  identify a pipeline.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration stores the generation value observed
+                  when setting the current Phase
+                format: int64
+                type: integer
+              pauseStatus:
+                description: PauseStatus is a common structure used to communicate
+                  how long Pipelines are paused.
+                properties:
+                  lastPauseBeginTime:
+                    description: The begin timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPauseEndTime:
+                    description: The end timestamp for the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                  lastPausePhaseChangeTime:
+                    description: The transition timestamp from Pausing to Paused for
+                      the last pause of the Pipeline.
+                    format: date-time
+                    type: string
+                type: object
+              phase:
+                description: Phase indicates the current phase of the resource.
+                enum:
+                - ""
+                - Pending
+                - Deployed
+                - Failed
+                type: string
+              progressiveStatus:
+                description: ProgressiveStatus stores fields related to the Progressive
+                  strategy
+                properties:
+                  promotedPipelineStatus:
+                    description: PromotedPipelineStatus stores information regarding
+                      the current "promoted" pipeline
+                    properties:
+                      name:
+                        description: Name of the promoted child
+                        type: string
+                      scaleValues:
+                        additionalProperties:
+                          description: ScaleValues stores the original scale min and
+                            max values, scaleTo value, and actual scale value of a
+                            pipeline or monovertex vertex
+                          properties:
+                            initial:
+                              description: Initial indicates how many pods were initially
+                                running for the vertex at the beginning of the upgrade
+                                process
+                              format: int64
+                              type: integer
+                            originalScaleMinMax:
+                              description: OriginalScaleMinMax stores the original
+                                scale min and max values as JSON string
+                              type: string
+                            scaleTo:
+                              description: ScaleTo indicates how many pods to scale
+                                down to
+                              format: int64
+                              type: integer
+                          required:
+                          - initial
+                          - originalScaleMinMax
+                          - scaleTo
+                          type: object
+                        description: |-
+                          ScaleValues is a map where the keys are the promoted child vertices names
+                          and the values are the scale values of the vertices
+                        type: object
+                      scaleValuesRestoredToOriginal:
+                        description: |-
+                          ScaleValuesRestoredToOriginal indicates if ALL the promoted child vertices have been set back to the original min and max scale values.
+                          This field being set to `true` invalidates the value(s) in the scaleValues.Actual field.
+                        type: boolean
+                    required:
+                    - name
+                    type: object
+                  upgradingPipelineStatus:
+                    description: UpgradingPipelineStatus represents either the current
+                      or otherwise the most recent "upgrading" pipeline
+                    properties:
+                      analysis:
+                        properties:
+                          analysisRunName:
+                            description: AnalysisRunName is the name of the AnalysisRun,
+                              set after it's generated
+                            type: string
+                          endTime:
+                            description: EndTime is the time that it completed
+                            format: date-time
+                            type: string
+                          phase:
+                            description: Phase is the phase of the AnalysisRun when
+                              completed
+                            type: string
+                          startTime:
+                            description: StartTime is the time that the AnalysisRun
+                              is created
+                            format: date-time
+                            type: string
+                        required:
+                        - phase
+                        type: object
+                      assessmentResult:
+                        description: AssessmentResult described whether it's failed
+                          or succeeded, or to be determined
+                        type: string
+                      basicAssessmentEndTime:
+                        description: BasicAssessmentEndTime indicates the time after
+                          which no more basic resource health check assessments will
+                          be performed
+                        format: date-time
+                        type: string
+                      basicAssessmentResult:
+                        description: BasicAssessmentResult indicates the result of
+                          the basic resource health check assessment
+                        type: string
+                      basicAssessmentStartTime:
+                        description: BasicAssessmentStartTime indicates the time at/after
+                          which the basic resource health check assessment result
+                          will be computed
+                        format: date-time
+                        type: string
+                      childStatus:
+                        description: ChildStatus is the full dump of child status
+                          object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      discontinued:
+                        description: |-
+                          Discontinued indicates if the upgrade was stopped prematurely.
+                          This can happen if the upgrade gets preempted by a new change, or it can happen if user deletes their promoted pipeline
+                          in the middle of an upgrade
+                        type: boolean
+                      failureReason:
+                        description: FailureReason indicates the reason for the failure
+                        type: string
+                      forcedSuccess:
+                        description: ForcedSuccess indicates if this promotion was
+                          forced to complete
+                        type: boolean
+                      initializationComplete:
+                        description: InitializationComplete determines if the upgrade
+                          process has completed (if it hasn't, we will come back and
+                          try it again)
+                        type: boolean
+                      interStepBufferServiceName:
+                        description: InterStepBufferServiceName is the name of the
+                          InterstepBufferService that this Pipeline is using
+                        type: string
+                      name:
+                        description: Name of the upgrading child
+                        type: string
+                      originalScaleMinMax:
+                        description: |-
+                          OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
+                          OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
+                        items:
+                          description: VertexScaleDefinition is a struct to encapsulate
+                            the scale values for a given vertex
+                          properties:
+                            scaleDefinition:
+                              description: ScaleDefinition is a struct to encapsulate
+                                scale values (can be used for a Vertex)
+                              properties:
+                                max:
+                                  format: int64
+                                  type: integer
+                                min:
+                                  format: int64
+                                  type: integer
+                              type: object
+                            vertexName:
+                              type: string
+                          required:
+                          - vertexName
+                          type: object
+                        type: array
+                      riders:
+                        description: Riders stores the list of Riders that have been
+                          deployed along with the "upgrading" child
+                        items:
+                          description: Rider represents a Rider which has been deployed
+                            for a promoted child
+                          properties:
+                            groupVersionKind:
+                              description: |-
+                                GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                                to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                              properties:
+                                group:
+                                  type: string
+                                kind:
+                                  type: string
+                                version:
+                                  type: string
+                              required:
+                              - group
+                              - kind
+                              - version
+                              type: object
+                            name:
+                              type: string
+                          required:
+                          - groupVersionKind
+                          - name
+                          type: object
+                        type: array
+                      trialWindowStartTime:
+                        description: TrialWindowStartTime indicates the time at which
+                          the trial window starts
+                        format: date-time
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              riders:
+                description: Riders stores the list of Riders that have been deployed
+                  along with the "promoted" Pipeline
+                items:
+                  description: Rider represents a Rider which has been deployed for
+                    a promoted child
+                  properties:
+                    groupVersionKind:
+                      description: |-
+                        GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
+                        to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - group
+                      - kind
+                      - version
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - groupVersionKind
+                  - name
+                  type: object
+                type: array
+              upgradeInProgress:
+                description: UpgradeInProgress indicates the upgrade strategy currently
+                  being used and affecting the resource state or empty if no upgrade
+                  is in progress
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: pipelines.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: Pipeline
+    listKind: PipelineList
+    plural: pipelines
+    shortNames:
+    - pl
+    singular: pipeline
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.vertexCount
+      name: Vertices
+      type: integer
+    - jsonPath: .status.sourceCount
+      name: Sources
+      priority: 10
+      type: integer
+    - jsonPath: .status.sinkCount
+      name: Sinks
+      priority: 10
+      type: integer
+    - jsonPath: .status.udfCount
+      name: UDFs
+      priority: 10
+      type: integer
+    - jsonPath: .status.mapUDFCount
+      name: Map UDFs
+      priority: 10
+      type: integer
+    - jsonPath: .status.reduceUDFCount
+      name: Reduce UDFs
+      priority: 10
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: servingpipelines.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: ServingPipeline
+    listKind: ServingPipelineList
+    plural: servingpipelines
+    shortNames:
+    - spl
+    singular: servingpipeline
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: vertices.numaflow.numaproj.io
+spec:
+  group: numaflow.numaproj.io
+  names:
+    kind: Vertex
+    listKind: VertexList
+    plural: vertices
+    shortNames:
+    - vtx
+    singular: vertex
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.desiredReplicas
+      name: Desired
+      type: string
+    - jsonPath: .status.replicas
+      name: Current
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.reason
+      name: Reason
+      type: string
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/name: serviceaccount
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-sa
+  namespace: numaplane-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/name: role
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-leader-election-role
+  namespace: numaplane-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: isbservicerollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: isbservicerollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - isbservicerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: monovertexrollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: monovertexrollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontroller-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontroller-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io.github.com.numaproj
+  resources:
+  - numaflowcontrollers/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontrollerrollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: numaflowcontrollerrollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - numaflowcontrollerrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+  name: numaplane-aggregate-to-admin
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts
+  - isbservicerollouts
+  - numaflowcontrollerrollouts
+  - numaflowcontrollers
+  - monovertexrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts/status
+  - isbservicerollouts/status
+  - numaflowcontrollerrollouts/status
+  - numaflowcontrollers/status
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+  name: numaplane-aggregate-to-edit
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts
+  - isbservicerollouts
+  - numaflowcontrollerrollouts
+  - numaflowcontrollers
+  - monovertexrollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts/status
+  - isbservicerollouts/status
+  - numaflowcontrollerrollouts/status
+  - numaflowcontrollers/status
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: numaplane-aggregate-to-view
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts
+  - isbservicerollouts
+  - numaflowcontrollerrollouts
+  - numaflowcontrollers
+  - monovertexrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts/status
+  - isbservicerollouts/status
+  - numaflowcontrollerrollouts/status
+  - numaflowcontrollers/status
+  - monovertexrollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: numaplane-role
+rules:
+- apiGroups:
+  - numaflow.numaproj.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - serviceaccounts
+  - secrets
+  - services
+  verbs:
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - '*'
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - argoproj.io
+  resources:
+  - analysisruns
+  verbs:
+  - '*'
+- apiGroups:
+  - argoproj.io
+  resources:
+  - analysistemplates
+  - clusteranalysistemplates
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - autoscaling.k8s.io
+  resources:
+  - verticalpodautoscalers
+  verbs:
+  - '*'
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: pipelinerollout-editor-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: numaplane
+  name: pipelinerollout-viewer-role
+rules:
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - numaplane.numaproj.io
+  resources:
+  - pipelinerollouts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/name: rolebinding
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-leader-election-rolebinding
+  namespace: numaplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: numaplane-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: numaplane-sa
+  namespace: numaplane-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: numaplane-role
+subjects:
+- kind: ServiceAccount
+  name: numaplane-sa
+  namespace: numaplane-system
+---
+apiVersion: v1
+data:
+  config.yaml: |
+    # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
+    logLevel: INFO
+    includedResources: "group=apps,kind=Deployment;\
+    group=,kind=ConfigMap;group=,kind=ServiceAccount;group=,kind=Secret;group=,kind=Service;\
+    group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
+    defaultUpgradeStrategy: "pause-and-drain"
+    progressive:
+      defaultAssessmentSchedule:
+        - kind: Pipeline
+          schedule: "120,360,60,10"
+        - kind: MonoVertex
+          schedule: "120,360,60,10"
+        - kind: InterstepBufferService
+          schedule: "0,0,0,10"
+      analysisRunTimeout: 1200
+    permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
+kind: ConfigMap
+metadata:
+  name: numaplane-controller-config
+  namespace: numaplane-system
+---
+apiVersion: v1
+data:
+  interstepbufferservice: "recreate:\n  # Changing persistence settings and number
+    of replicas needs to recreate both the ISBSvc and also the pipelines associated
+    to it to \n  # recreate the buckets and buffers which are only recreated when
+    a pipeline is started.\n  - path: spec.jetstream.replicas\n  - path: spec.redis.native.replicas\n
+    \ - path: spec.jetstream.persistence\n    includeSubfields: true\n  - path: spec.redis.native.persistence\n
+    \   includeSubfields: true\n  \n  # This checks if the spec changed from jetstream
+    to redis and viceversa. In this case, the ISBSvc and associated pipelines will
+    need to be recreated.\n  - path: spec.jetstream\n  - path: spec.redis\ndataLoss:\n
+    \ # Principal: Update to StatefulSet may not be backward compatible to understand
+    the data on the PVC\n  - path: spec.jetstream.version\n  - path: spec.redis.native.version\n
+    \ - path: spec.redis.external.url\n  - path: spec.redis.external.sentinelUrl\n
+    \ - path: spec.redis.external.masterName\n"
+  monovertex: |
+    progressive:
+      - path: spec.initContainers.image
+      - path: spec.initContainers.command
+      - path: spec.initContainers.args
+      - path: spec.initContainers.env
+      - path: spec.sidecars.image
+      - path: spec.sidecars.command
+      - path: spec.sidecars.args
+      - path: spec.sidecars.env
+      - path: spec.sink.fallback.udsink.container.image
+      - path: spec.sink.fallback.udsink.container.command
+      - path: spec.sink.fallback.udsink.container.args
+      - path: spec.sink.fallback.udsink.container.env
+      - path: spec.sink.udsink.container.image
+      - path: spec.sink.udsink.container.command
+      - path: spec.sink.udsink.container.args
+      - path: spec.sink.udsink.container.env
+      - path: spec.source.transformer.container.image
+      - path: spec.source.transformer.container.command
+      - path: spec.source.transformer.container.args
+      - path: spec.source.transformer.container.env
+      - path: spec.source.udsource.container.image
+      - path: spec.source.udsource.container.command
+      - path: spec.source.udsource.container.args
+      - path: spec.source.udsource.container.env
+  numaflowcontroller: |
+    dataLoss:
+     - path: spec.version
+  pipeline: |
+    recreate:
+      # Principal: Changing the InterstepBufferService could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed.
+      # Furthermore, this change needs to recreate the pipeline so that ISBSvc buckets and buffers are also recreated.
+      - path: spec.interStepBufferServiceName
+    dataLoss:
+      # Principal: Pipeline topology change could cause data loss since unconsumed data may be left on the InterstepBufferService which won't get processed
+      - path: spec.edges.from
+      - path: spec.edges.to
+      - path: spec.edges.conditions
+        includeSubfields: true
+
+      # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
+      - path: spec.vertices.source.generator
+      - path: spec.vertices.source.kafka
+      - path: spec.vertices.source.http
+      - path: spec.vertices.source.nats
+      - path: spec.vertices.source.jetstream
+      - path: spec.vertices.source.serving
+      - path: spec.vertices.source.udsource.container.image
+      - path: spec.vertices.source.transformer.container.image
+      - path: spec.vertices.source.transformer.container.command
+      - path: spec.vertices.source.transformer.container.args
+      - path: spec.vertices.source.transformer.container.env
+        includeSubfields: true
+      - path: spec.vertices.source.transformer.container.envfrom
+        includeSubfields: true
+      - path: spec.vertices.source.transformer.builtin
+        includeSubfields: true
+      - path: spec.vertices.sink.log
+      - path: spec.vertices.sink.kafka
+      - path: spec.vertices.sink.blackhole
+      - path: spec.vertices.sink.udsink.container.image
+      - path: spec.vertices.sink.udsink.container.command
+      - path: spec.vertices.sink.udsink.container.args
+      - path: spec.vertices.sink.udsink.container.env
+        includeSubfields: true
+      - path: spec.vertices.sink.udsink.container.envfrom
+        includeSubfields: true
+      - path: spec.vertices.udf.container.image
+      - path: spec.vertices.udf.container.command
+      - path: spec.vertices.udf.container.args
+      - path: spec.vertices.udf.container.env
+        includeSubfields: true
+      - path: spec.vertices.udf.container.envfrom
+        includeSubfields: true
+      - path: spec.vertices.udf.builtin
+        includeSubfields: true
+      - path: spec.sideInputs.container.image
+      - path: spec.sideInputs.container.command
+      - path: spec.sideInputs.container.args
+      - path: spec.sideInputs.container.env
+        includeSubfields: true
+      - path: spec.sideInputs.container.envfrom
+        includeSubfields: true
+      - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
+        includeSubfields: true
+
+      # Principal: TBD
+      - path: spec.sideInputs.container.envfrom
+        includeSubfields: true
+kind: ConfigMap
+metadata:
+  labels:
+    numaplane.numaproj.io/config: usde-config
+  name: numaplane-controller-usde-config
+  namespace: numaplane-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: controller-manager
+    app.kubernetes.io/name: controller-manager
+    app.kubernetes.io/part-of: numaplane
+  name: numaplane-controller-manager
+  namespace: numaplane-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller-manager
+      app.kubernetes.io/name: controller-manager
+      app.kubernetes.io/part-of: numaplane
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/component: controller-manager
+        app.kubernetes.io/name: controller-manager
+        app.kubernetes.io/part-of: numaplane
+    spec:
+      containers:
+      - args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=:8080
+        - --leader-elect
+        command:
+        - /manager
+        image: quay.io/numaproj/numaplane-controller:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /etc/numaplane
+          name: config-volume
+      serviceAccountName: numaplane-sa
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          name: numaplane-controller-config
+        name: config-volume
+>>>>>>> origin/main

@@ -166,14 +166,14 @@ func VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName string, succe
 }
 
 func VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
+	CheckEventually(fmt.Sprintf("Verifying PipelineRollout InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
 		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
 }
 
 func VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
+	CheckConsistently(fmt.Sprintf("Verifying PipelineRollout InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
 		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).WithTimeout(10 * time.Second).Should(BeTrue())
@@ -192,14 +192,6 @@ func GetGVRForPipeline() schema.GroupVersionResource {
 		Group:    "numaflow.numaproj.io",
 		Version:  "v1alpha1",
 		Resource: "pipelines",
-	}
-}
-
-func GetGVRForVertex() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "numaflow.numaproj.io",
-		Version:  "v1alpha1",
-		Resource: "vertices",
 	}
 }
 
@@ -360,33 +352,6 @@ func watchPipeline() {
 				Metadata:   pl.ObjectMeta,
 				Spec:       pl.Spec,
 				Status:     pl.Status,
-			}
-		}
-		return Output{}
-	})
-
-}
-
-func watchVertices() {
-
-	watchResourceType(func() (watch.Interface, error) {
-		watcher, err := dynamicClient.Resource(GetGVRForVertex()).Namespace(Namespace).Watch(context.Background(), metav1.ListOptions{})
-		return watcher, err
-	}, func(o runtime.Object) Output {
-		if obj, ok := o.(*unstructured.Unstructured); ok {
-			vtx := numaflowv1.Vertex{}
-			err := util.StructToStruct(&obj, &vtx)
-			if err != nil {
-				fmt.Printf("Failed to convert unstruct: %v\n", err)
-				return Output{}
-			}
-			vtx.ManagedFields = nil
-			return Output{
-				APIVersion: NumaflowAPIVersion,
-				Kind:       "Vertex",
-				Metadata:   vtx.ObjectMeta,
-				Spec:       vtx.Spec,
-				Status:     vtx.Status,
 			}
 		}
 		return Output{}
@@ -566,7 +531,6 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 
 	if UpgradeStrategy == config.ProgressiveStrategyID && doProgressive {
 		PipelineFinalProgressiveChecks(name, expectedPromotedPipelineName, expectedUpgradingPipelineName, expectedSuccess, newSpec)
-
 	}
 
 	switch expectedFinalPhase {

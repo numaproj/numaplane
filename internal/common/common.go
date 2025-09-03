@@ -126,17 +126,17 @@ const (
 	// child and there should only be one
 	// TODO: reevaluate if we really need that
 	LabelValuePurgeOld UpgradeStateReason = "purge"
-	// LabelKeyNumaflowPodPipelineName is the label key used to identify the pod associated to a specific pipeline
-	LabelKeyNumaflowPodPipelineName = KeyNumaflowPrefix + "pipeline-name"
+	// LabelKeyNumaflowPipelineName is the label key used to identify a pod or a Vertex with a specific pipeline
+	LabelKeyNumaflowPipelineName = KeyNumaflowPrefix + "pipeline-name"
 
-	// LabelKeyNumaflowPodMonoVertexName is the label key used to identify the pod associated to a specific monovertex
+	// LabelKeyNumaflowPodMonoVertexName is the label key used to identify the pod with a specific monovertex
 	LabelKeyNumaflowPodMonoVertexName = "app.kubernetes.io/name"
 
-	// LabelKeyNumaflowPodPipelineVertexName is the label key used to identify the pod associated to a specific pipeline vertex
-	LabelKeyNumaflowPodPipelineVertexName = KeyNumaflowPrefix + "vertex-name"
+	// LabelKeyNumaflowPipelineVertexName is the label key used to identify a pod with a specific pipeline vertex
+	LabelKeyNumaflowPipelineVertexName = KeyNumaflowPrefix + "vertex-name"
 
-	// LabelKeyNumaflowPodMonoVertexVertexName is the label key used to identify the pod associated to a specific monovertex vertex
-	LabelKeyNumaflowPodMonoVertexVertexName = KeyNumaflowPrefix + "mono-vertex-name"
+	// LabelKeyNumaflowMonoVertexName is the label key used to identify the pod with a specific monovertex vertex
+	LabelKeyNumaflowMonoVertexName = KeyNumaflowPrefix + "mono-vertex-name"
 
 	// LabelKeyForcePromote is the label key used to force promote the upgrading child during a progressive upgrade
 	LabelKeyForcePromote = KeyNumaplanePrefix + "force-promote"

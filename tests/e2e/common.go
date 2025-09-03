@@ -33,16 +33,15 @@ import (
 
 	argorolloutv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
-	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
-	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	kubeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/controller/config"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+	planeversiond "github.com/numaproj/numaplane/pkg/client/clientset/versioned"
+	planepkg "github.com/numaproj/numaplane/pkg/client/clientset/versioned/typed/numaplane/v1alpha1"
 )
 
 var (
@@ -52,7 +51,7 @@ var (
 	// Note: this timeout needs to be large enough for:
 	//  - progressive child resource healthiness assessment (2 minutes until assessment start time + 1 minute until end time)
 	//  - time for isbsvc to be created plus pipeline to become healthy afterward
-	DefaultTestTimeout            = 6 * time.Minute
+	DefaultTestTimeout            = 10 * time.Minute
 	DefaultConsistentCheckTimeout = 15 * time.Second // the default time for checks using "Consistently"
 	TestPollingInterval           = 10 * time.Millisecond
 
@@ -233,13 +232,6 @@ func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv
 		return metav1.ConditionUnknown
 	}
 	return c.Status
-}
-
-func getNumaflowResourceStatus(u *unstructured.Unstructured) (kubernetes.GenericStatus, error) {
-	statusMap := u.Object["status"]
-	var status kubernetes.GenericStatus
-	err := util.StructToStruct(&statusMap, &status)
-	return status, err
 }
 
 func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {

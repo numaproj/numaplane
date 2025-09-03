@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -12,9 +16,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpgradingChildDefinition creates an InterstepBufferService in an "upgrading" state with the given name
@@ -47,7 +48,8 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 
 	isbServiceRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
-	// TODO: For now, just assessing the health of the underlying Pipelines; need to also assess the health of the isbsvc itself
+	// TODO: For now, just assessing the health of the underlying Pipelines
+	// In the future, consider assessing the health of the isbsvc itself using the rolling window algorithm.
 	// Note: until we have health check for isbsvc, we don't need to worry about resource health check start time or end time
 	// If Pipelines are healthy or Pipelines are failed, that's good enough
 
@@ -55,7 +57,7 @@ func (r *ISBServiceRolloutReconciler) AssessUpgradingChild(
 	if err != nil {
 		return assessmentResult, "", err
 	}
-	// just set BasicAssessmentEndTime to now
+	// set BasicAssessmentEndTime to now
 	if assessmentResult != apiv1.AssessmentResultUnknown {
 		_ = progressive.UpdateUpgradingChildStatus(isbServiceRollout, func(status *apiv1.UpgradingChildStatus) {
 			assessmentEndTime := metav1.NewTime(time.Now())
@@ -92,7 +94,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 		return apiv1.AssessmentResultSuccess, "", nil
 	}
 
-	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline which is in fact using this isbsvc
+	// for each PipelineRollout, we need to check that its current Upgrading Status is for a Pipeline in fact using this isbsvc
 	// otherwise, it may not have yet started the upgrade process for this isbsvc
 	for _, pipelineRollout := range pipelineRollouts {
 		upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
@@ -116,7 +118,7 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences() tests for essential equality.
+// CheckForDifferences tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading InterstepBufferService
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are

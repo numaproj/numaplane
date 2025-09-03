@@ -6,12 +6,14 @@ metadata:
 spec:
   strategy:
     progressive:
-      assessmentSchedule: "120,60,10"
+      assessmentSchedule: "120,360,60,10"
     analysis:
       args:
       templates:
       - templateName: mvtx-acknowledged-messages
         clusterScope: false
+    pauseResume:
+      fastResume: true
   riders:
     - definition:
         apiVersion: autoscaling.k8s.io/v1beta2

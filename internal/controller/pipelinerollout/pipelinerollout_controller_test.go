@@ -23,9 +23,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,7 +35,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -1003,6 +1002,7 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 
 			// first delete resources (Pipeline, InterstepBufferService, PipelineRollout, ISBServiceRollout) in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().Vertices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
@@ -1032,6 +1032,24 @@ func Test_processExistingPipeline_PPND(t *testing.T) {
 			existingPipelineDef := &tc.existingPipelineDef
 			existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, &tc.existingPipelineDef)
+
+			// create the already-existing Vertices in Kubernetes
+			for _, vertexDef := range existingPipelineDef.Spec.Vertices {
+				vertex := numaflowv1.Vertex{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: ctlrcommon.DefaultTestNamespace,
+						Name:      fmt.Sprintf("%s-%s", tc.existingPipelineDef.Name, vertexDef.Name),
+						Labels: map[string]string{
+							common.LabelKeyNumaflowPipelineName:       tc.existingPipelineDef.GetName(),
+							common.LabelKeyNumaflowPipelineVertexName: vertexDef.Name,
+						},
+					},
+				}
+
+				//vertex.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(tc.existingPipelineDef.GetObjectMeta(), numaflowv1.PipelineGroupVersionKind)}
+				fmt.Printf("creating vertex named %q\n", vertex.Name)
+				ctlrcommon.CreateVertexInK8S(ctx, t, numaflowClientSet, &vertex)
+			}
 
 			// external pause requests
 			ppnd.GetPauseModule().PauseRequests = map[string]*bool{}
@@ -1385,7 +1403,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			_, _, err = r.reconcile(context.Background(), rollout, time.Now())
 			assert.NoError(t, err)
 
-			////// check results:
+			// check results:
 			// Check Phase of Rollout:
 			assert.Equal(t, tc.expectedRolloutPhase, rollout.Status.Phase)
 			// Check In-Progress Strategy

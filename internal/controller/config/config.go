@@ -328,22 +328,24 @@ func (cm *ConfigManager) GetNamespaceConfig(namespace string) *NamespaceConfig {
 
 // AssessmentSchedule is used for progressive rollout to assess the upgrading child
 type AssessmentSchedule struct {
-	// Delay indicates the amount of seconds to delay before assessing the status of the child resource to determine healthiness
+	// Delay indicates the number of seconds to delay before assessing the status of the child resource to determine healthiness
 	Delay time.Duration
-	// Period indicates the amount of seconds to perform assessments for after the first assessment has been performed
-	// (if failure is indicated before that, it will not continue however)
+	// End indicates the time delta from `Delay` that the assessment window has to be successful within
+	End time.Duration
+	// Period indicates the minimum window of time for which there must be consecutive success before we can declare
+	// the resource successful
 	Period time.Duration
 	// Interval indicates how often to assess the child status once the first assessment has been performed and before the end
 	Interval time.Duration
 }
 
-// parse the string indicating the AssessmentSchedule
-// Example: "120,60,10" => delay assessment by 120s, assess for 60s, assess every 10s
+// ParseAssessmentSchedule parses the string indicating the AssessmentSchedule
+// Example: "120,360,60,10" => delay assessment by 120s, assessment has to be successful within 360s, assessment must be successful for all checks within 60s, assess every 10s
 func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	// Split the schedule string by commas
 	parts := strings.Split(str, ",")
-	if len(parts) != 3 {
-		return AssessmentSchedule{}, fmt.Errorf("invalid schedule format: expected 3 comma-separated values")
+	if len(parts) != 4 {
+		return AssessmentSchedule{}, fmt.Errorf("invalid schedule format: expected 4 comma-separated values")
 	}
 
 	// Convert each part to an integer and then to a time.Duration
@@ -351,22 +353,28 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 	if err != nil {
 		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentDelay value: %w", err)
 	}
-	assessmentPeriodSeconds, err := strconv.Atoi(parts[1])
+	assessmentEndSeconds, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentEnd value: %w", err)
+	}
+	assessmentPeriodSeconds, err := strconv.Atoi(parts[2])
 	if err != nil {
 		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentPeriod value: %w", err)
 	}
-	assessmentIntervalSeconds, err := strconv.Atoi(parts[2])
+	assessmentIntervalSeconds, err := strconv.Atoi(parts[3])
 	if err != nil {
 		return AssessmentSchedule{}, fmt.Errorf("invalid assessmentInterval value: %w", err)
 	}
 
 	// Convert seconds to time.Duration
 	assessmentDelay := time.Duration(assessmentDelaySeconds) * time.Second
+	assessmentEnd := time.Duration(assessmentEndSeconds) * time.Second
 	assessmentPeriod := time.Duration(assessmentPeriodSeconds) * time.Second
 	assessmentInterval := time.Duration(assessmentIntervalSeconds) * time.Second
 
 	return AssessmentSchedule{
 		Delay:    assessmentDelay,
+		End:      assessmentEnd,
 		Period:   assessmentPeriod,
 		Interval: assessmentInterval,
 	}, nil
@@ -376,11 +384,11 @@ func ParseAssessmentSchedule(str string) (AssessmentSchedule, error) {
 func (config *ProgressiveConfig) GetChildStatusAssessmentSchedule(kind string) (AssessmentSchedule, error) {
 
 	for _, schedule := range config.DefaultAssessmentSchedule {
-		if strings.EqualFold(schedule.Kind, kind) { // case insensitive equals check
+		if strings.EqualFold(schedule.Kind, kind) { // case-insensitive equals check
 			return ParseAssessmentSchedule(schedule.Schedule)
 		}
 	}
-	return AssessmentSchedule{}, fmt.Errorf("No Assessment Schedule found for kind %q", kind)
+	return AssessmentSchedule{}, fmt.Errorf("no Assessment Schedule found for kind %q", kind)
 }
 
 // GetAnalysisRunTimeout parses the GlobalConfig for the analysisRunTimeout string to convert into a time.Duration

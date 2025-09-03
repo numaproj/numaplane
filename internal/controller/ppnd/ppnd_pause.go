@@ -143,12 +143,14 @@ func (pm *PauseModule) SetPipelineLifecyclePaused(ctx context.Context, c client.
 }
 
 func (pm *PauseModule) SetPipelineLifecycleRunning(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, resumeFast bool) error {
-	// set desiredPhase=Running, but also make sure to set the numaflow.numaproj.io/resume-strategy annotation to either "fast" or "slow", depending on configuration
-	resumeSpeed := "slow"
-	if resumeFast {
-		resumeSpeed = "fast"
+	// set desiredPhase=Running, but if user prefers slow resume, we need to first reset the Vertex replicas to their minimum value
+	if !resumeFast {
+		err := numaflowtypes.MinimizePipelineVertexReplicas(ctx, c, pipeline)
+		if err != nil {
+			return err
+		}
 	}
-	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}, "metadata": {"annotations": {"numaflow.numaproj.io/resume-strategy": "%s"}}}`, RunningDesiredPhase, resumeSpeed)
+	patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "%s"}}}`, RunningDesiredPhase)
 	return kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType)
 }
 

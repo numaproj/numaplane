@@ -159,7 +159,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 
 // get the Scale definitions for each Vertex
 func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
-	vertices, err := numaflowtypes.GetVertices(pipelineDef)
+	vertices, err := numaflowtypes.GetPipelineVertexDefinitions(pipelineDef)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
 	}

@@ -35,26 +35,43 @@ import (
 )
 
 const (
-	pipelineRolloutName     = "test-pipeline-rollout"
-	isbServiceRolloutName   = "test-isbservice-rollout"
-	initialJetstreamVersion = "2.10.17"
-	invalidJetstreamVersion = "0.0.0"
-	validJetstreamVersion   = "2.10.11"
-	analysisTemplateName    = "test-pipeline-template"
-	analysisRunName         = "pipeline-" + pipelineRolloutName
+	pipelineRolloutName         = "test-pipeline-rollout"
+	isbServiceRolloutName       = "test-isbservice-rollout"
+	initialJetstreamVersion     = "2.10.17"
+	analysisTemplateNameSuccess = "test-pipeline-template-success"
+	analysisTemplateNameFailure = "test-pipeline-template-failure"
+	analysisRunName             = "pipeline-" + pipelineRolloutName
 )
 
 var (
-	defaultStrategy = apiv1.PipelineStrategy{
+	defaultStrategyForSuccessCase = apiv1.PipelineStrategy{
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
-					AssessmentSchedule: "120,30,10",
+					AssessmentSchedule: "60,300,30,10",
 				},
 				Analysis: apiv1.Analysis{
 					Templates: []argov1alpha1.AnalysisTemplateRef{
 						{
-							TemplateName: analysisTemplateName,
+							TemplateName: analysisTemplateNameSuccess,
+							ClusterScope: false,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	defaultStrategyForFailureCase = apiv1.PipelineStrategy{
+		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+				Progressive: apiv1.ProgressiveStrategy{
+					AssessmentSchedule: "60,300,30,10",
+				},
+				Analysis: apiv1.Analysis{
+					Templates: []argov1alpha1.AnalysisTemplateRef{
+						{
+							TemplateName: analysisTemplateNameFailure,
 							ClusterScope: false,
 						},
 					},
@@ -198,8 +215,8 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful analysis", func() {
-		CreateAnalysisTemplate(analysisTemplateName, Namespace, initialAnalysisTemplateSpec)
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
+		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, initialAnalysisTemplateSpec)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForSuccessCase)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
@@ -209,14 +226,14 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 0))
 
 		DeletePipelineRollout(pipelineRolloutName)
-		DeleteAnalysisTemplate(analysisTemplateName)
+		DeleteAnalysisTemplate(analysisTemplateNameSuccess)
 	})
 
 	It("Should validate Pipeline upgrade using Progressive strategy - failure analysis", func() {
 		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
 		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] > 0"
-		CreateAnalysisTemplate(analysisTemplateName, Namespace, *updatedAnalysisTemplateSpec)
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
+		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, *updatedAnalysisTemplateSpec)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForFailureCase)
 
 		By("Updating the Pipeline Topology to cause a Progressive change")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
@@ -225,7 +242,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		VerifyAnalysisRunStatus("pipeline-example", GetInstanceName(analysisRunName, 1), argov1alpha1.AnalysisPhaseError)
 
 		DeletePipelineRollout(pipelineRolloutName)
-		DeleteAnalysisTemplate(analysisTemplateName)
+		DeleteAnalysisTemplate(analysisTemplateNameFailure)
 	})
 
 	It("Should delete all remaining rollout objects", func() {

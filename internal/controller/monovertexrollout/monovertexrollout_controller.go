@@ -44,6 +44,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/usde"
@@ -370,7 +371,7 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 	default:
 		if needsUpdate {
-			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef)
+			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
 			if err != nil {
 				return 0, err
 			}
@@ -538,13 +539,61 @@ func (r *MonoVertexRolloutReconciler) setChildResourcesPauseCondition(rollout *a
 
 }
 
-func (r *MonoVertexRolloutReconciler) updateMonoVertex(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) error {
-	err := kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
+func (r *MonoVertexRolloutReconciler) updateMonoVertex(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	err := performCustomMonoVertexMods(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+	if err != nil {
+		return err
+	}
+
+	err = kubernetes.UpdateResource(ctx, r.client, newMonoVertexDef)
 	if err != nil {
 		return err
 	}
 
 	monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
+	return nil
+}
+
+func performCustomMonoVertexMods(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	return performCustomResumeMod(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
+}
+
+// performCustomResumeMod checks if monovertex's desiredPhase is going from Paused to Running:
+// if their strategy says to resume gradually, we need to reset the MonoVertex's "replicas" value back to nil (i.e. min)
+func performCustomResumeMod(
+	ctx context.Context,
+	monoVertexRollout *apiv1.MonoVertexRollout,
+	newMonoVertexDef *unstructured.Unstructured,
+	existingMonoVertexDef *unstructured.Unstructured) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("monovertex", fmt.Sprintf("%s/%s", newMonoVertexDef.GetNamespace(), newMonoVertexDef.GetName()))
+
+	// does user prefer to resume gradually? (note this is the default)
+	if monoVertexRollout.Spec.Strategy == nil || !monoVertexRollout.Spec.Strategy.PauseResumeStrategy.FastResume {
+
+		// if we're in the middle of going from Paused to Running, we need to set monovertex's 'replicas' count to nil
+		// since user prefers "slow resume": this will cause replicas to reset to "min" and scale up gradually
+		desiredPhase, err := numaflowtypes.GetMonoVertexDesiredPhase(newMonoVertexDef)
+		if err != nil {
+			return err
+		}
+		pausingOrPaused := numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePausing) ||
+			numaflowtypes.CheckPipelinePhase(ctx, existingMonoVertexDef, numaflowv1.PipelinePhasePaused)
+		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && pausingOrPaused {
+			numaLogger.Debug("Unpausing monovertex; setting replicas=nil")
+			unstructured.RemoveNestedField(newMonoVertexDef.Object, "spec", "replicas")
+		}
+	}
 	return nil
 }
 
