@@ -172,7 +172,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	numaLogger := logger.FromContext(ctx)
 
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
-	currentVertexSpecs, err := numaflowtypes.GetVertices(currentPipeline)
+	currentVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(currentPipeline)
 	if err != nil {
 		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", currentPipeline.GetNamespace(), currentPipeline.GetName(), err)
 	}
@@ -332,7 +332,7 @@ func calculateScaleForRecycle(
 	numaLogger := logger.FromContext(ctx)
 
 	// get the spec for the Pipeline that we need to scale down: this tells us what all the vertices are that we need to account for
-	currentVertexSpecs, err := numaflowtypes.GetVertices(pipeline)
+	currentVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(pipeline)
 	if err != nil {
 		return nil, err
 	}
