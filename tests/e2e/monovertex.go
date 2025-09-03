@@ -522,14 +522,14 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 }
 
 func VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
+	CheckEventually(fmt.Sprintf("Verifying MVRollout InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
 		monoVertexRollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return monoVertexRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
 }
 
 func VerifyMonoVertexRolloutInProgressStrategyConsistently(monoVertexRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
+	CheckConsistently(fmt.Sprintf("Verifying MVRollout InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
 		monoVertexRollout, _ := monoVertexRolloutClient.Get(ctx, monoVertexRolloutName, metav1.GetOptions{})
 		return monoVertexRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).WithTimeout(10 * time.Second).Should(BeTrue())

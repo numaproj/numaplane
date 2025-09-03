@@ -166,14 +166,14 @@ func VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName string, succe
 }
 
 func VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckEventually(fmt.Sprintf("Verifying InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
+	CheckEventually(fmt.Sprintf("Verifying PipelineRollout InProgressStrategy is %q", string(inProgressStrategy)), func() bool {
 		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).Should(BeTrue())
 }
 
 func VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName string, inProgressStrategy apiv1.UpgradeStrategy) {
-	CheckConsistently(fmt.Sprintf("Verifying InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
+	CheckConsistently(fmt.Sprintf("Verifying PipelineRollout InProgressStrategy is consistently %q", string(inProgressStrategy)), func() bool {
 		pipelineRollout, _ := pipelineRolloutClient.Get(ctx, pipelineRolloutName, metav1.GetOptions{})
 		return pipelineRollout.Status.UpgradeInProgress == inProgressStrategy
 	}).WithTimeout(10 * time.Second).Should(BeTrue())

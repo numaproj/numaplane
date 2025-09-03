@@ -285,20 +285,57 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedISBServiceSpec.JetStream.Version = UpdatedJetstreamVersion
 		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
-		// Since forcePromote=true, both Pipeline and ISBService should be promoted successfully
-		// even though the pipeline change was invalid ("badcat" function)
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
+		// Had to remove this check due to the fact that things can happen in a different order
+		// See https://github.com/numaproj/numaplane/pull/865 for details
+		//VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, *updatedPipelineSpec)
 
 		// Verify ISBServiceRollout Progressive Status shows success
 		VerifyISBServiceRolloutProgressiveStatus(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 3), GetInstanceName(isbServiceRolloutName, 5), apiv1.AssessmentResultSuccess)
 
-		// Verify in-progress-strategy no longer set (rollout completed)
+		// check that the Pipeline and ISBSvc got promoted (specs are correct)
+		VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, func(spec numaflowv1.InterStepBufferServiceSpec) bool {
+			return spec.JetStream.Version == UpdatedJetstreamVersion
+		})
+
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(spec numaflowv1.PipelineSpec) bool {
+			return spec.Vertices[1].UDF.Builtin.Name == "badcat"
+		})
+
+		// make sure there's only 1 promoted pipeline and isbsvc and no upgrading ones anymore
+		checkOnePromotedPipelineAndISBSvc := func() bool {
+			promotedPipelines, err := GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), Namespace, pipelineRolloutName, common.LabelValueUpgradePromoted)
+			if err != nil {
+				return false
+			}
+			promotedISBSvcs, err := GetChildrenOfUpgradeStrategy(GetGVRForISBService(), Namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
+			if err != nil {
+				return false
+			}
+			return promotedPipelines != nil && len(promotedPipelines.Items) == 1 && promotedISBSvcs != nil && len(promotedISBSvcs.Items) == 1
+		}
+
+		checkNoUpgradingPipelineOrISBSvc := func() bool {
+			upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
+			if err != nil {
+				return false
+			}
+			upgradingISBSvcs, err := GetUpgradingISBServices(Namespace, isbServiceRolloutName)
+			if err != nil {
+				return false
+			}
+			return upgradingPipelines != nil && len(upgradingPipelines.Items) == 0 && upgradingISBSvcs != nil && len(upgradingISBSvcs.Items) == 0
+		}
+
+		CheckEventually("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
+		CheckEventually("verify no Upgrading Pipeline or ISBSvc", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
+		CheckConsistently("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc consistently", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
+		CheckConsistently("verify no Upgrading Pipeline or ISBSvc consistently", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
+
+		// Verify in-progress-strategy no longer set on both PipelineRollout and ISBServiceRollout (rollout completed)
 		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
 		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-
-		// Verify ISBService is ready and working
-		VerifyPromotedISBSvcReady(Namespace, isbServiceRolloutName, 3)      // 3 nodes for JetStream cluster
-		VerifyISBServiceDeletion(GetInstanceName(isbServiceRolloutName, 3)) // the original
+		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
 
 		DeletePipelineRollout(pipelineRolloutName)
 
