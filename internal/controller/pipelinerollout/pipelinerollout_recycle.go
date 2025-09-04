@@ -25,7 +25,6 @@ import (
 // If the previous upgrading pipeline explicitly said 0 pods or pause, then it implies we shouldn't run that one
 // If the new promoted pipeline explicitly says 0 pods or pause, then it implies we shouldn't run that one
 
-// TODO: consider relocating Recycle-specific functionality into its own file
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
 func (r *PipelineRolloutReconciler) Recycle(
@@ -172,6 +171,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	numaLogger := logger.FromContext(ctx)
 
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
+	// TODO: aren't we doing this in progressive code? we should have a shared function if so
 	currentVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(currentPipeline)
 	if err != nil {
 		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", currentPipeline.GetNamespace(), currentPipeline.GetName(), err)
@@ -195,11 +195,14 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 
 	// Set the desiredPhase to Running just in case it isn't (we need to make to take it out of Paused state if it's in it to give it a chance to pause again)
 	// and set the "overridden-spec" annotation to indicate that we've applied over top the original
-	err = unstructured.SetNestedField(newPipelineCopy.Object, numaflowv1.PipelinePhaseRunning, "spec", "lifecycle", "desiredPhase")
+	err = unstructured.SetNestedField(newPipelineCopy.Object, string(numaflowv1.PipelinePhaseRunning), "spec", "lifecycle", "desiredPhase")
 	if err != nil {
 		return err
 	}
 	annotations := newPipelineCopy.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
 	annotations[common.AnnotationKeyOverriddenSpec] = "true"
 	newPipelineCopy.SetAnnotations(annotations)
 
@@ -208,7 +211,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	// Create a strategic merge patch by comparing the current pipeline with the new pipeline copy
 	// We need to extract just the fields we want to update: spec, metadata.annotations
 	patchData := map[string]interface{}{
-		"spec": newPipelineCopy.Object["spec"],
+		"spec": newPipelineCopy.Object["spec"], // we assume we're the only ones who write to the Spec; therefore it's okay to copy the entire thing and use it knowing that nobody else has changed it
 		"metadata": map[string]interface{}{
 			"annotations": newPipelineCopy.GetAnnotations(),
 		},
@@ -307,15 +310,16 @@ func calculatePauseTimeForRecycle(
 	if err != nil {
 		return 0, err
 	}
-	origPauseGracePeriodSeconds, found, err := unstructured.NestedInt64(pipelineSpec, "lifecycle", "pauseGracePeriodSeconds")
+	origPauseGracePeriodSeconds, found, err := unstructured.NestedFloat64(pipelineSpec, "lifecycle", "pauseGracePeriodSeconds")
 	if err != nil {
-
+		return 0, err
 	}
 	if !found {
+		fmt.Printf("deletethis: pipelineSpec=%+v\n", pipelineSpec)
 		numaLogger.Debugf("pauseGracePeriodSeconds field not found, will use default %d seconds", defaultPauseGracePeriodSeconds)
-		origPauseGracePeriodSeconds = defaultPauseGracePeriodSeconds
+		origPauseGracePeriodSeconds = float64(defaultPauseGracePeriodSeconds)
 	}
-	newPauseGracePeriodSeconds := float64(origPauseGracePeriodSeconds) * multiplier
+	newPauseGracePeriodSeconds := origPauseGracePeriodSeconds * multiplier
 	return int64(math.Ceil(newPauseGracePeriodSeconds)), nil
 
 }
@@ -348,7 +352,8 @@ func calculateScaleForRecycle(
 	// so we can get an idea of how many need to run normally
 	historicalPodCount := pipelineRollout.Status.ProgressiveStatus.HistoricalPodCount
 	if historicalPodCount == nil {
-		return nil, fmt.Errorf("HistoricalPodCount is nil for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name)
+		numaLogger.Warnf("HistoricalPodCount is nil for PipelineRollout %s/%s", pipelineRollout.Namespace, pipelineRollout.Name) // note this will happen if progressive upgrade hasn't happened since the storage of this value was introduced
+		historicalPodCount = map[string]int{}
 	}
 
 	// Create the VertexScaleDefinitions that we'll return
@@ -373,45 +378,47 @@ func calculateScaleForRecycle(
 			if isSource {
 				newScaleValue = 0
 				numaLogger.WithValues("vertex", vertexName).Debug("Vertex is source, setting its scale to 0")
-			}
-
-			// If the Vertex was running previously in the "promoted" Pipeline, then multiply by the number that was running then
-			originalPodsRunning, found := historicalPodCount[vertexName]
-			if found {
-				newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * float64(percent) / 100.0))
-				numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "percent", percent).Debug("Setting Vertex Scale value to percent of previous running count")
 			} else {
-				// This Vertex was not running in the "promoted" Pipeline: it must be new
-				// We can set the newScaleValue from the PipelineRollout min
 
-				pipelineRolloutVertexDef, found, err := numaflowtypes.GetVertexFromPipelineSpecMap(pipelineRolloutDefinedSpec, vertexName)
-				if err != nil {
-					return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting vertex from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
-				}
-				if !found {
-					// Vertex not found in the PipelineRollout or in the Historical Pod Count
-					vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
-					if err != nil {
-						return nil, err
-					}
-					if vertexScaleDef.Min == nil {
-						newScaleValue = 1
-					} else {
-						newScaleValue = *vertexScaleDef.Min
-					}
-					numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to %d", pipelineRolloutDefinedSpec, historicalPodCount, newScaleValue)
+				// If the Vertex was running previously in the "promoted" Pipeline, then multiply by the number that was running then
+				originalPodsRunning, found := historicalPodCount[vertexName]
+				if found {
+					newScaleValue = int64(math.Ceil(float64(originalPodsRunning) * float64(percent) / 100.0))
+					numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue, "originalPodsRunning", originalPodsRunning, "percent", percent).Debug("Setting Vertex Scale value to percent of previous running count")
 				} else {
-					// set the newScaleValue from the PipelineRollout min
-					floatVal, found, err := unstructured.NestedFloat64(pipelineRolloutVertexDef, "scale", "min")
-					newScaleValue = int64(floatVal)
-					numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue).Debug("Vertex not found in Historical Pod Count, using PipelineRollout vertex min value")
+					// This Vertex was not running in the "promoted" Pipeline: the Vertex may be new, or HistoricalPodCount hasn't been stored yet on this Pipeline due to not having done a progressive upgrade since it was introduced
+					// We can set the newScaleValue from the PipelineRollout min
+
+					pipelineRolloutVertexDef, found, err := numaflowtypes.GetVertexFromPipelineSpecMap(pipelineRolloutDefinedSpec, vertexName)
 					if err != nil {
-						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v, err=%v", vertexName, pipelineRolloutDefinedSpec, err)
+						return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting vertex from PipelineRollout: %+v", vertexName, pipelineRolloutDefinedSpec)
 					}
 					if !found {
-						// If the scale.min wasn't set in PipelineRollout, it is equivalent to 1
-						numaLogger.WithValues("vertex", vertexName, "pipelineRolloutDefinedSpec", pipelineRolloutDefinedSpec, "historicalPodCount", historicalPodCount).Debug("Vertex not found in Historical Pod Count, and scale.min not defined in PipelineRollout, so setting newScaleValue to 1")
-						newScaleValue = 1
+						// Vertex not found in the PipelineRollout or in the Historical Pod Count
+						vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+						if err != nil {
+							return nil, err
+						}
+						if vertexScaleDef.Min == nil {
+							newScaleValue = 1
+						} else {
+							newScaleValue = *vertexScaleDef.Min
+						}
+						numaLogger.WithValues("vertex", vertexName).Debugf("Vertex not found in PipelineRollout %+v nor in Historical Pod Count %v, setting newScaleValue to %d", pipelineRolloutDefinedSpec, historicalPodCount, newScaleValue)
+					} else {
+						// set the newScaleValue from the PipelineRollout min
+						floatVal, found, err := unstructured.NestedFloat64(pipelineRolloutVertexDef, "scale", "min")
+						if err != nil {
+							return nil, fmt.Errorf("can't calculate scale for vertex %q, error getting scale.min from PipelineRollout: %+v, err=%v", vertexName, pipelineRolloutDefinedSpec, err)
+						}
+						if found {
+							newScaleValue = int64(floatVal)
+							numaLogger.WithValues("vertex", vertexName, "newScaleValue", newScaleValue).Debug("Vertex not found in Historical Pod Count, using PipelineRollout vertex min value")
+						} else {
+							// If the scale.min wasn't set in PipelineRollout, it is equivalent to 1
+							numaLogger.WithValues("vertex", vertexName, "pipelineRolloutDefinedSpec", pipelineRolloutDefinedSpec, "historicalPodCount", historicalPodCount).Debug("Vertex not found in Historical Pod Count, and scale.min not defined in PipelineRollout, so setting newScaleValue to 1")
+							newScaleValue = 1
+						}
 					}
 				}
 			}
