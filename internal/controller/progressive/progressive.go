@@ -489,6 +489,9 @@ func checkForUpgradeReplacement(
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
+			if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
+				reason = common.LabelValueProgressiveReplacedFailed
+			}
 			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 			if err != nil {
 				return false, false, err

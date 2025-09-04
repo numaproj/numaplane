@@ -6,7 +6,7 @@ metadata:
 spec:
   strategy:
     progressive:
-      assessmentSchedule: "120,360,60,10"
+      assessmentSchedule: "100,360,60,10"
     analysis:
       args:
       templates:
@@ -55,6 +55,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: mvtx-acknowledged-messages
+  namespace: example-namespace
   labels:
     used_by: numaplane
 spec:
