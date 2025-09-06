@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -26,6 +26,7 @@ import (
 
 const defaultNamespace = "default"
 
+var pullPolicyAlways = corev1.PullAlways
 var pipelineSpecSourceRPU = int64(5)
 var pipelineSpecSourceDuration = metav1.Duration{Duration: 2 * time.Second}
 var defaultPipelineSpec = numaflowv1.PipelineSpec{
@@ -43,8 +44,9 @@ var defaultPipelineSpec = numaflowv1.PipelineSpec{
 		{
 			Name: "cat",
 			UDF: &numaflowv1.UDF{
-				Builtin: &numaflowv1.Function{
-					Name: "cat",
+				Container: &numaflowv1.Container{
+					Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+					ImagePullPolicy: &pullPolicyAlways,
 				},
 			},
 		},
@@ -106,8 +108,8 @@ var defaultISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
 			VolumeSize: &volSize,
 		},
 		ContainerTemplate: &numaflowv1.ContainerTemplate{
-			Resources: v1.ResourceRequirements{
-				Limits: v1.ResourceList{v1.ResourceMemory: memLimit},
+			Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceMemory: memLimit},
 			},
 		},
 	},
@@ -430,7 +432,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition: *isbServiceDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
 				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
-				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = v1.ResourceList{v1.ResourceMemory: newMemLimit}
+				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: newMemLimit}
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{
@@ -450,7 +452,7 @@ func Test_ResourceNeedsUpdating(t *testing.T) {
 			newDefinition: *isbServiceDefn.DeepCopy(),
 			existingDefinition: func() unstructured.Unstructured {
 				newISBServiceSpec := defaultISBServiceSpec.DeepCopy()
-				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = v1.ResourceList{v1.ResourceMemory: newMemLimit}
+				newISBServiceSpec.JetStream.ContainerTemplate.Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: newMemLimit}
 				return makeISBServiceDefinition(*newISBServiceSpec)
 			}(),
 			usdeConfig: config.USDEConfig{

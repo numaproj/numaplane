@@ -21,14 +21,14 @@ import (
 	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
-	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
-
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
@@ -44,6 +44,7 @@ const (
 )
 
 var (
+	pullPolicyAlways              = corev1.PullAlways
 	defaultStrategyForSuccessCase = apiv1.PipelineStrategy{
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
@@ -104,8 +105,9 @@ var (
 			{
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
-					Builtin: &numaflowv1.Function{
-						Name: "cat",
+					Container: &numaflowv1.Container{
+						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
