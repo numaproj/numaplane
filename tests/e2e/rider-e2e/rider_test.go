@@ -25,7 +25,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,12 +52,13 @@ const (
 )
 
 var (
+	pullPolicyAlways           = corev1.PullAlways
 	monoVertexIndex            = 0
 	pipelineIndex              = 0
 	monoVertexSpecWithoutRider numaflowv1.MonoVertexSpec
 	monoVertexSpecWithRider    numaflowv1.MonoVertexSpec
 
-	defaultConfigMap = v1.ConfigMap{
+	defaultConfigMap = corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
@@ -127,19 +128,19 @@ func init() {
 	}
 
 	monoVertexSpecWithRider = *monoVertexSpecWithoutRider.DeepCopy()
-	monoVertexSpecWithRider.Volumes = []v1.Volume{
+	monoVertexSpecWithRider.Volumes = []corev1.Volume{
 		{
 			Name: "volume",
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "my-configmap-{{.monovertex-name}}",
 					},
 				},
 			},
 		},
 	}
-	monoVertexSpecWithRider.Source.UDSource.Container.VolumeMounts = []v1.VolumeMount{
+	monoVertexSpecWithRider.Source.UDSource.Container.VolumeMounts = []corev1.VolumeMount{
 		{
 			Name:      "volume",
 			MountPath: "/etc/config",
@@ -179,8 +180,9 @@ func init() {
 	updatedPipelineSpec.Vertices[1] = numaflowv1.AbstractVertex{
 		Name: "cat",
 		UDF: &numaflowv1.UDF{
-			Builtin: &numaflowv1.Function{
-				Name: "cat",
+			Container: &numaflowv1.Container{
+				Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+				ImagePullPolicy: &pullPolicyAlways,
 			},
 		},
 	}

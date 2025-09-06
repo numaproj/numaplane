@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -43,6 +43,7 @@ const (
 )
 
 var (
+	pullPolicyAlways           = corev1.PullAlways
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
@@ -103,8 +104,9 @@ var (
 			{
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
-					Builtin: &numaflowv1.Function{
-						Name: "cat",
+					Container: &numaflowv1.Container{
+						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -205,8 +207,8 @@ var (
 				VolumeSize: &volSize,
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
-				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
 				},
 			},
 		},
@@ -222,8 +224,8 @@ var (
 				VolumeSize: &revisedVolSize,
 			},
 			ContainerTemplate: &numaflowv1.ContainerTemplate{
-				Resources: v1.ResourceRequirements{
-					Limits: v1.ResourceList{v1.ResourceMemory: updatedMemLimit},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceMemory: updatedMemLimit},
 				},
 			},
 		},

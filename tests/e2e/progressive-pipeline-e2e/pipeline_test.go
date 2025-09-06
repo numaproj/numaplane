@@ -23,6 +23,7 @@ import (
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,7 +42,8 @@ const (
 )
 
 var (
-	defaultStrategy = apiv1.PipelineStrategy{
+	pullPolicyAlways = corev1.PullAlways
+	defaultStrategy  = apiv1.PipelineStrategy{
 		PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
 			PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
 				Progressive: apiv1.ProgressiveStrategy{
@@ -75,8 +77,9 @@ var (
 			{
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
-					Builtin: &numaflowv1.Function{
-						Name: "cat",
+					Container: &numaflowv1.Container{
+						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -137,9 +140,11 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
-			Name: "badcat",
-		}}
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image:           "quay.io/numaio/numaflow-go/map-badcat:stable",
+				ImagePullPolicy: &pullPolicyAlways,
+			}}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
 		updatedISBServiceSpec := updateISBServiceForFailure()
@@ -172,8 +177,9 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
-			Name: "badcat",
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
+			Image:           "quay.io/numaio/numaflow-go/map-badcat:stable",
+			ImagePullPolicy: &pullPolicyAlways,
 		}}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
@@ -275,8 +281,9 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
-			Name: "badcat",
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Container: &numaflowv1.Container{
+			Image:           "quay.io/numaio/numaflow-go/map-badcat:stable",
+			ImagePullPolicy: &pullPolicyAlways,
 		}}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
