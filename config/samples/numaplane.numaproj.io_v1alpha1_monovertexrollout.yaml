@@ -6,7 +6,7 @@ metadata:
 spec:
   strategy:
     progressive:
-      assessmentSchedule: "120,360,60,10"
+      assessmentSchedule: "10,360,60,10"
     analysis:
       args:
       templates:
