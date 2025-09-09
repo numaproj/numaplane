@@ -54,20 +54,35 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 	requiresPause := false
 	requiresPauseOriginalSpec := false
+	forceDrainWithNewerPipeline := false
 	if upgradeStateReason != nil {
 		switch *upgradeStateReason {
 		case common.LabelValueDeleteRecreateChild:
 			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
 			// which required that.
 			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess, common.LabelValueDiscontinueProgressive, common.LabelValueProgressiveReplaced:
+		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced:
 			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
 			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
 			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
 			requiresPause = true
+			// first attempt the pause with the original spec because it may be able to pause on its own
+			requiresPauseOriginalSpec = true
+			// if we end up force draining, we make sure to force drain with a newer version of the pipeline which is deemed "promoted"
+			forceDrainWithNewerPipeline = true
+		case common.LabelValueDiscontinueProgressive:
+			// LabelValueDiscontinueProgressive is the case of an upgrade being discontinued
+			// this generally happens if a user goes from spec A->B->A quickly before B has had a chance to be assessed
+			// We simply recycle B in that case.
+			requiresPause = true
+			// first attempt the pause with the original spec because it may be able to pause on its own
 			requiresPauseOriginalSpec = true
 		case common.LabelValueProgressiveReplacedFailed:
+			// LabelValueProgressiveReplacedFailed is the case of the "upgrading" pipeline failing and then being replaced with a newer Pipeline
+			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
 			requiresPause = true
+			// if we end up force draining, we make sure to force drain with a newer version of the pipeline which is deemed "promoted"
+			forceDrainWithNewerPipeline = true
 		}
 	}
 
@@ -112,16 +127,12 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// force drain:
 	// if no new promoted, ensure scaled to 0 and return
-	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, c)
+	promotedPipeline, err := checkForPromotedPipelineForForceDrain(ctx, pipelineRollout, pipeline, forceDrainWithNewerPipeline, c)
 	if err != nil {
-		return false, fmt.Errorf("failed to find current promoted pipeline for rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
+
 	}
-	isNewPromotedPipeline, err := ctlrcommon.IsChildNewer(pipelineRollout.Name, currentPromotedPipeline.GetName(), pipeline.GetName())
-	if err != nil {
-		return false, err
-	}
-	if !isNewPromotedPipeline {
-		numaLogger.Debug("No new promoted pipeline found, scaling current pipeline to zero")
+	if promotedPipeline == nil {
+		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
 		err = ensurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
@@ -132,10 +143,10 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 		// if we still have the original spec, we need to update with the promoted pipeline's spec
 		if originalSpec {
-			numaLogger.WithValues("promotedPipeline", currentPromotedPipeline.GetName()).Info("Found newer promoted pipeline, will force apply it")
+			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
 			// update spec with 0 scale, overridden-spec=true, desiredPhase=Running
-			forceApplySpecOnUndrainablePipeline(ctx, pipeline, currentPromotedPipeline, c)
-			return false, nil
+			err = forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
+			return false, err
 		}
 		// we need to make sure we get out of the previous Paused state
 		// TODO: what if user intended that their pipeline be paused, though?
@@ -166,12 +177,35 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 }
 
+// if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
+// if "onlyNewerPipeline" is true, it means we only look for a promoted pipeline which is newer than our original pipeline
+func checkForPromotedPipelineForForceDrain(ctx context.Context,
+	pipelineRollout *apiv1.PipelineRollout,
+	pipeline *unstructured.Unstructured,
+	onlyNewerPipeline bool,
+	c client.Client,
+) (*unstructured.Unstructured, error) {
+	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find current promoted pipeline for rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
+	}
+	isNewPromotedPipeline, err := ctlrcommon.IsChildNewer(pipelineRollout.Name, currentPromotedPipeline.GetName(), pipeline.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if (onlyNewerPipeline && isNewPromotedPipeline) || !onlyNewerPipeline {
+		return currentPromotedPipeline, nil
+	}
+	return nil, nil
+}
+
 func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *unstructured.Unstructured, newPipeline *unstructured.Unstructured, c client.Client) error {
 
 	numaLogger := logger.FromContext(ctx)
 
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
 	// TODO: aren't we doing this in progressive code? we should have a shared function if so
+	// Also, we could possibly call ensurePipelineScaledToZero() if we are okay having a separate patch
 	currentVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(currentPipeline)
 	if err != nil {
 		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", currentPipeline.GetNamespace(), currentPipeline.GetName(), err)
