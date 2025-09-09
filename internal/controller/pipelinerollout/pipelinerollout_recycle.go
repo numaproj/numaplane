@@ -259,8 +259,8 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 
 	numaLogger.WithValues("currentPipeline", currentPipeline.GetName(), "patch", string(patchBytes)).Debug("applying strategic merge patch to pipeline")
 
-	// Apply the strategic merge patch to the current pipeline
-	err = kubernetes.PatchResource(ctx, c, currentPipeline, string(patchBytes), k8stypes.StrategicMergePatchType)
+	// Apply the merge patch to the current pipeline
+	err = kubernetes.PatchResource(ctx, c, currentPipeline, string(patchBytes), k8stypes.MergePatchType)
 	if err != nil {
 		return fmt.Errorf("failed to apply patch to pipeline %s: %w", currentPipeline.GetName(), err)
 	}
