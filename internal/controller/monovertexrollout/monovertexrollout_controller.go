@@ -42,6 +42,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -438,7 +439,7 @@ func (r *MonoVertexRolloutReconciler) SetupWithManager(ctx context.Context, mgr 
 						if err != nil {
 							numaLogger.WithValues(
 								"AnalysisRun", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRun.Name),
-								"MonoVertex", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRunOwner.Name)).Warnf("Unable to get MonoVertex owner of AnalysisRun")
+								"MonoVertex", fmt.Sprintf("%s:%s", analysisRun.Namespace, analysisRunOwner.Name)).Warnf("Unable to get MonoVertex owner of AnalysisRun, err: %v", err)
 							continue
 						}
 

@@ -26,8 +26,9 @@ spec:
           rpu: 5
     - name: cat
       udf:
-        builtin:
-          name: cat
+        container:
+          image: "quay.io/numaio/numaflow-go/map-cat:stable"
+          imagePullPolicy: Always,
     - name: out
       sink:
         log: {}

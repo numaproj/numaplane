@@ -27,6 +27,7 @@ import (
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,6 +49,7 @@ import (
 )
 
 var (
+	pullPolicyAlways           = corev1.PullAlways
 	pipelineSpecSourceRPU      = int64(5)
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
@@ -68,8 +70,9 @@ var (
 			{
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
-					Builtin: &numaflowv1.Function{
-						Name: "cat",
+					Container: &numaflowv1.Container{
+						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
 			},
@@ -114,8 +117,9 @@ func init() {
 	pipelineSpecWithTopologyChange.Vertices[2] = numaflowv1.AbstractVertex{
 		Name: "cat-2",
 		UDF: &numaflowv1.UDF{
-			Builtin: &numaflowv1.Function{
-				Name: "cat",
+			Container: &numaflowv1.Container{
+				Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+				ImagePullPolicy: &pullPolicyAlways,
 			},
 		},
 	}
@@ -148,8 +152,9 @@ var specHasDesiredPhase = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -193,8 +198,9 @@ var specHasDesiredPhaseDifferentUDF = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "SOMETHING_ELSE"
+			"container": {
+				"image": "SOMETHING_ELSE",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -239,8 +245,9 @@ var specHasDesiredPhaseAndOtherLifecycleField = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -281,8 +288,9 @@ var specNoLifecycle = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -325,8 +333,9 @@ var specNoDesiredPhase = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -367,8 +376,9 @@ var specNoScale = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -410,8 +420,9 @@ var specWithEmptyScale = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -456,8 +467,9 @@ var specWithNonEmptyScale = `
 		{
 		  "name": "cat",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -1456,8 +1468,9 @@ func TestGetScaleValuesFromPipelineSpec(t *testing.T) {
 		  "scale": {
 		  },
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -1722,16 +1735,18 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 		  "scale": {
 		  },
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
 		{
 		  "name": "cat-2",
 		  "udf": {
-			"builtin": {
-			  "name": "cat"
+			"container": {
+				"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+				"imagePullPolicy": "Always,"
 			}
 		  }
 		},
@@ -1798,9 +1813,10 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 			"max": 5
 			},
 			"udf": {
-			"builtin": {
-				"name": "cat"
-			}
+				"container": {
+					"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+					"imagePullPolicy": "Always,"
+				}
 			}
 		},
 		{
@@ -1809,9 +1825,10 @@ func Test_applyScaleValuesToPipelineDefinition(t *testing.T) {
 			"min": 1
 			},
 			"udf": {
-			"builtin": {
-				"name": "cat"
-			}
+				"container": {
+					"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+					"imagePullPolicy": "Always,"
+				}
 			}
 		},
 		{
@@ -1982,8 +1999,9 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 							"lookbackSeconds": 1
 						},
 						"udf": {
-							"builtin": {
-								"name": "cat"
+							"container": {
+								"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+								"imagePullPolicy": "Always,"
 							}
 						}
 					},
@@ -2046,8 +2064,9 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 							"max": 5
 						},
 						"udf": {
-							"builtin": {
-								"name": "cat"
+							"container": {
+								"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+								"imagePullPolicy": "Always,"
 							}
 						}
 					},

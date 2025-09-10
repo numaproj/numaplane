@@ -208,14 +208,14 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
 	// TODO: aren't we doing this in progressive code? we should have a shared function if so
 	// Also, we could possibly call ensurePipelineScaledToZero() if we are okay having a separate patch
-	currentVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(currentPipeline)
+	newVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(newPipeline)
 	if err != nil {
-		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", currentPipeline.GetNamespace(), currentPipeline.GetName(), err)
+		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", newPipeline.GetNamespace(), newPipeline.GetName(), err)
 	}
 	zero := int64(0)
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(currentVertexSpecs))
-	for vertexIndex, currentVertexSpec := range currentVertexSpecs {
-		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
+	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(newVertexSpecs))
+	for vertexIndex, newVertexSpec := range newVertexSpecs {
+		if vertexAsMap, ok := newVertexSpec.(map[string]any); ok {
 			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 				VertexName: vertexAsMap["name"].(string),
 				ScaleDefinition: &apiv1.ScaleDefinition{

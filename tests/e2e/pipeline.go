@@ -615,7 +615,7 @@ func VerifyPipelineProgressiveSuccess(pipelineRolloutName, promotedPipelineName,
 	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionTrue)
 }
 
-func VerifyPipelineProgressiveFailure(pipelineRolloutName string, promotedPipelineName string, upgradingPipelineName string, promotedPipelineSpec numaflowv1.PipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
+func VerifyPipelineProgressiveFailure(pipelineRolloutName, promotedPipelineName, upgradingPipelineName string, promotedPipelineSpec, upgradingPipelineSpec numaflowv1.PipelineSpec) {
 	VerifyPromotedPipelineScaledDownForProgressive(pipelineRolloutName, promotedPipelineName)
 	VerifyPipelineRolloutProgressiveStatus(pipelineRolloutName, promotedPipelineName, upgradingPipelineName, true, apiv1.AssessmentResultFailure, false)
 

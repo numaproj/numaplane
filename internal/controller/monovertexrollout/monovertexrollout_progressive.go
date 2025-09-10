@@ -66,7 +66,7 @@ func (r *MonoVertexRolloutReconciler) AssessUpgradingChild(
 				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 				status.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			})
-			return apiv1.AssessmentResultFailure, "Assessment window ended", nil
+			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
 		}
 
 		// perform basic resource health check
