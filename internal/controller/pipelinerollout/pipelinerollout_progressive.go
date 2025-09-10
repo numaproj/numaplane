@@ -87,7 +87,7 @@ func (r *PipelineRolloutReconciler) AssessUpgradingChild(
 				status.BasicAssessmentEndTime = &metav1.Time{Time: currentTime}
 				status.BasicAssessmentResult = apiv1.AssessmentResultFailure
 			})
-			return apiv1.AssessmentResultFailure, "Assessment window ended", nil
+			return apiv1.AssessmentResultFailure, "Basic Resource Health Check failed", nil
 		}
 
 		// function for checking readiness of Pipeline Vertex replicas
