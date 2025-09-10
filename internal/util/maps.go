@@ -19,6 +19,8 @@ package util
 import (
 	"maps"
 	"strings"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func MergeMaps(existing, new map[string]string) map[string]string {
@@ -38,7 +40,24 @@ func CompareMaps(existing, new map[string]string) bool {
 	if existing == nil || new == nil {
 		return len(existing) == len(new)
 	}
-	return CompareStructNumTypeAgnostic(existing, new)
+	return cmp.Equal(existing, new)
+}
+
+func IsMapSubset(requiredKVPairs map[string]string, mapToCheck map[string]string) bool {
+
+	if requiredKVPairs == nil {
+		return true
+	}
+	if mapToCheck == nil {
+		return false
+	}
+
+	for key, value := range requiredKVPairs {
+		if mapToCheck[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 // CompareMapsWithExceptions compares two maps but ignoring any differences where the keys are prefixed with any of the 'prefixExceptions'

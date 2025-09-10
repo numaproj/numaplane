@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -218,6 +219,50 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, fro
 		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
 
 	return !specsEqual || metadataRisk, nil
+}
+
+// TODO: remove function above and just use this one
+func (r *PipelineRolloutReconciler) CheckForDifferencesNew(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+
+	isbsvcName, err := numaflowtypes.GetPipelineISBSVCName(existingPipeline)
+	if err != nil {
+		return false, err
+	}
+
+	// In order to effectively compare, we need to create a Pipeline Definition from the PipelineRollout which uses the same name and isbsvc name as our current Pipeline
+	// (so that won't be interpreted as a difference)
+	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata)
+	if err != nil {
+		return false, err
+	}
+	existingCopy := existingPipeline.DeepCopy()
+	rolloutDefCopy := rolloutBasedPipelineDef.DeepCopy()
+
+	err = numaflowtypes.PipelineWithoutScaleMinMax(existingCopy)
+	if err != nil {
+		return false, err
+	}
+	err = numaflowtypes.PipelineWithoutScaleMinMax(rolloutDefCopy)
+	if err != nil {
+		return false, err
+	}
+
+	specsEqual := util.CompareStructNumTypeAgnostic(existingCopy.Object["spec"], rolloutDefCopy.Object["spec"])
+	// just look specifically for metadata fields that are specified in the rollout object
+	// anything else could be updated by some platform and not by the user, which would cause an issue
+	requiredLabels := rolloutBasedPipelineDef.GetLabels()
+	actualLabels := existingPipeline.GetLabels()
+	requiredAnnotations := rolloutBasedPipelineDef.GetAnnotations()
+	actualAnnotations := existingPipeline.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, existingCopy.Object["spec"], rolloutDefCopy.Object["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+
+	return !specsEqual || !labelsFound || !annotationsFound, nil
 }
 
 /*

@@ -54,26 +54,18 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 	requiresPause := false
 	requiresPauseOriginalSpec := false
-	forceDrainWithNewerPipeline := false
 	if upgradeStateReason != nil {
 		switch *upgradeStateReason {
 		case common.LabelValueDeleteRecreateChild:
 			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
 			// which required that.
 			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced:
+		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced, common.LabelValueDiscontinueProgressive:
 			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
 			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
-			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
-			requiresPause = true
-			// first attempt the pause with the original spec because it may be able to pause on its own
-			requiresPauseOriginalSpec = true
-			// if we end up force draining, we make sure to force drain with a newer version of the pipeline which is deemed "promoted"
-			forceDrainWithNewerPipeline = true
-		case common.LabelValueDiscontinueProgressive:
 			// LabelValueDiscontinueProgressive is the case of an upgrade being discontinued
 			// this generally happens if a user goes from spec A->B->A quickly before B has had a chance to be assessed
-			// We simply recycle B in that case.
+			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
 			requiresPause = true
 			// first attempt the pause with the original spec because it may be able to pause on its own
 			requiresPauseOriginalSpec = true
@@ -81,8 +73,6 @@ func (r *PipelineRolloutReconciler) Recycle(
 			// LabelValueProgressiveReplacedFailed is the case of the "upgrading" pipeline failing and then being replaced with a newer Pipeline
 			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
 			requiresPause = true
-			// if we end up force draining, we make sure to force drain with a newer version of the pipeline which is deemed "promoted"
-			forceDrainWithNewerPipeline = true
 		}
 	}
 
@@ -127,7 +117,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// force drain:
 	// if no new promoted, ensure scaled to 0 and return
-	promotedPipeline, err := checkForPromotedPipelineForForceDrain(ctx, pipelineRollout, pipeline, forceDrainWithNewerPipeline, c)
+	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
 	if err != nil {
 
 	}
@@ -178,25 +168,37 @@ func (r *PipelineRolloutReconciler) Recycle(
 }
 
 // if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
-// if "onlyNewerPipeline" is true, it means we only look for a promoted pipeline which is newer than our original pipeline
-func checkForPromotedPipelineForForceDrain(ctx context.Context,
+// generally we try to only use "promoted" Pipelines which are "current", meaning they match the PipelineRollout spec
+func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx context.Context,
 	pipelineRollout *apiv1.PipelineRollout,
-	pipeline *unstructured.Unstructured,
-	onlyNewerPipeline bool,
-	c client.Client,
 ) (*unstructured.Unstructured, error) {
-	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, c)
+	currentPromotedPipeline, err := ctlrcommon.FindMostCurrentChildOfUpgradeState(ctx, pipelineRollout, common.LabelValueUpgradePromoted, nil, true, r.client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find current promoted pipeline for rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
+		return nil, fmt.Errorf("failed to find current promoted pipeline for Rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
 	}
-	isNewPromotedPipeline, err := ctlrcommon.IsChildNewer(pipelineRollout.Name, currentPromotedPipeline.GetName(), pipeline.GetName())
+
+	// Compare the rollout definition to the "promoted" pipeline
+	// In order to compare, we need to update the rollout definition to use the identical isbsvc name as the "promoted" pipeline so we can ignore that
+
+	/*currentPromotedPipelineISBSvc, err := numaflowtypes.GetPipelineISBSVCName(currentPromotedPipeline)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get isbsvc for current promoted pipeline %s/%s: %v", currentPromotedPipeline.GetNamespace(), currentPromotedPipeline.GetName(), err)
+	}
+
+	rolloutDefinitionPipeline, err := r.makePipelineDefinition(pipelineRollout, currentPromotedPipeline.GetName(), currentPromotedPipelineISBSvc, pipelineRollout.Spec.Pipeline.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pipeline definition based on Rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
+	}*/
+
+	different, err := r.CheckForDifferencesNew(ctx, currentPromotedPipeline, pipelineRollout)
 	if err != nil {
 		return nil, err
 	}
-	if (onlyNewerPipeline && isNewPromotedPipeline) || !onlyNewerPipeline {
+	if different {
+		return nil, nil
+	} else {
 		return currentPromotedPipeline, nil
 	}
-	return nil, nil
 }
 
 func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *unstructured.Unstructured, newPipeline *unstructured.Unstructured, c client.Client) error {
