@@ -83,10 +83,10 @@ type progressiveController interface {
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
 	// ProcessPromotedChildPreRecycle performs operations on the promoted child prior to its being recycled
-	ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
+	//ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
 
 	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
-	ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+	//ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -480,10 +480,10 @@ func checkForUpgradeReplacement(
 	if differentFromExistingUpgrading {
 
 		// prepare existing upgrading child for Recycle
-		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
+		/*err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
 		if err != nil {
 			return false, false, err
-		}
+		}*/
 
 		if differentFromPromoted {
 
@@ -712,10 +712,10 @@ func declareSuccess(
 		return false, err
 	}
 
-	err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
+	/*err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
 	if err != nil {
 		return false, err
-	}
+	}*/
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err

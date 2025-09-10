@@ -396,7 +396,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 
 // ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
 // (due to being replaced by a new Promoted child)
-func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
+/*func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
 	ctx context.Context,
 	pipelineRollout progressive.ProgressiveRolloutObject,
 	promotedPipelineDef *unstructured.Unstructured,
@@ -427,7 +427,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
 
 	numaLogger.Debug("completed pre-recycle processing of promoted pipeline")
 	return nil
-}
+}*/
 
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	ctx context.Context,
@@ -641,7 +641,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 
 // ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
 // (due to being replaced by a new Upgrading child)
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
+/*func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
 	upgradingPipelineDef *unstructured.Unstructured,
@@ -668,7 +668,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
 	}
 	numaLogger.Debug("completed pre-recycle processing of upgrading pipeline")
 	return nil
-}
+}*/
 
 /*
 computePromotedPipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout

@@ -271,17 +271,6 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	return false, nil
 }
 
-// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
-// (due to being replaced by a new Promoted child)
-func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	promotedMonoVertexDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	return nil
-}
-
 /*
 ProcessUpgradingChildPostFailure handles the failure of an upgrading monovertex (anything specific to MonoVertex)
 It performs the following post-failure operations:
@@ -551,17 +540,6 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
 
 	return false, nil
-}
-
-// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
-// (due to being replaced by a new Upgrading child)
-func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingMonoVertexDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	return nil
 }
 
 /*
