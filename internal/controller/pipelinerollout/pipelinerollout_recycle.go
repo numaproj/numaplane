@@ -475,7 +475,8 @@ func calculateScaleForRecycle(
 
 // return the percent by which the PipelineRollout should scale down if defined; otherwise, return the one defined by config file
 func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) int32 {
-	if pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor != nil {
+	strategy := pipelineRollout.Spec.Strategy
+	if strategy != nil && strategy.RecycleStrategy.ScaleFactor != nil {
 		return *pipelineRollout.Spec.Strategy.RecycleStrategy.ScaleFactor
 	}
 
