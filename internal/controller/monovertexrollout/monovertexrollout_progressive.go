@@ -141,27 +141,14 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
-// that would be produced by the Rollout definition.
-// This implements a function of the progressiveController interface
-// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+// CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
-	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
-
-	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
-	// (so that won't be interpreted as a difference)
-	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata)
-	if err != nil {
-		return false, err
-	}
-
 	// remove certain fields (which numaplane needs to set) from comparison to test for equality
-	removeFunc := func(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
+	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
 		var specAsMap map[string]any
 
-		if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+		if err := util.StructToStruct(monoVertex["spec"], &specAsMap); err != nil {
 			return nil, err
 		}
 
@@ -178,22 +165,23 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, e
 		return specAsMap, nil
 	}
 
-	from, err := removeFunc(existingMonoVertex)
+	from, err := removeFunc(monoVertexDef.Object)
 	if err != nil {
 		return false, err
 	}
-	to, err := removeFunc(rolloutBasedMVDef)
+	to, err := removeFunc(requiredSpec)
 	if err != nil {
 		return false, err
 	}
 
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
-	// just look specifically for metadata fields that are specified in the rollout object
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	requiredLabels := rolloutBasedMVDef.GetLabels()
-	actualLabels := existingMonoVertex.GetLabels()
-	requiredAnnotations := rolloutBasedMVDef.GetAnnotations()
-	actualAnnotations := existingMonoVertex.GetAnnotations()
+
+	// Check required metadata (labels and annotations)
+
+	requiredLabels := requiredMetadata.Labels
+	actualLabels := monoVertexDef.GetLabels()
+	requiredAnnotations := requiredMetadata.Annotations
+	actualAnnotations := monoVertexDef.GetAnnotations()
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -201,6 +189,23 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, e
 
 	return !specsEqual || !labelsFound || !annotationsFound, nil
 
+}
+
+// CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface
+// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
+func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
+	// (so that won't be interpreted as a difference)
+	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata)
+	if err != nil {
+		return false, err
+	}
+
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, monoVertexRollout.Spec.MonoVertex.Metadata)
 }
 
 /*

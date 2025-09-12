@@ -972,7 +972,7 @@ func Test_CheckForDifferences(t *testing.T) {
 					},
 				},
 			}
-			needsUpdate, err := reconciler.CheckForDifferences(ctx, tt.from, mvRollout)
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout)
 
 			if tt.expectedError {
 				assert.Error(t, err)

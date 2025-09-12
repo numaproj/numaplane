@@ -582,7 +582,7 @@ func Test_CheckForDifferences(t *testing.T) {
 				},
 			}
 
-			needsUpdating, err := r.CheckForDifferences(context.Background(), obj1, pipelineRollout)
+			needsUpdating, err := r.CheckForDifferencesWithRolloutDef(context.Background(), obj1, pipelineRollout)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

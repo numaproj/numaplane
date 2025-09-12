@@ -190,42 +190,44 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferencesOrig tests for essential equality.
-// This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
-// should be replaced with a new one.
-// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
-// configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-/*func (r *PipelineRolloutReconciler) CheckForDifferencesOrig(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	fromCopy := from.DeepCopy()
-	toCopy := to.DeepCopy()
+	pipelineCopy := pipelineDef.DeepCopy()
 
-	err := numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
+	var requiredSpecCopy map[string]interface{}
+	if err := util.StructToStruct(requiredSpec, &requiredSpecCopy); err != nil {
+		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
+	}
+
+	err := numaflowtypes.PipelineWithoutScaleMinMax(pipelineCopy.Object)
 	if err != nil {
 		return false, err
 	}
-	err = numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
+	err = numaflowtypes.PipelineWithoutScaleMinMax(requiredSpecCopy)
 	if err != nil {
 		return false, err
 	}
 
-	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
-	// just look specifically for metadata fields that can result in Progressive
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
+	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
+	// Check required metadata (labels and annotations)
+	requiredLabels := requiredMetadata.Labels
+	actualLabels := pipelineDef.GetLabels()
+	requiredAnnotations := requiredMetadata.Annotations
+	actualAnnotations := pipelineDef.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || metadataRisk, nil
-}*/
+	return !specsEqual || !labelsFound || !annotationsFound, nil
+}
 
-// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
+// CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
 // that would be produced by the Rollout definition.
 // This implements a function of the progressiveController interface
 // In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 
@@ -240,31 +242,7 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, exi
 	if err != nil {
 		return false, err
 	}
-	existingCopy := existingPipeline.DeepCopy()
-	rolloutDefCopy := rolloutBasedPipelineDef.DeepCopy()
-
-	err = numaflowtypes.PipelineWithoutScaleMinMax(existingCopy)
-	if err != nil {
-		return false, err
-	}
-	err = numaflowtypes.PipelineWithoutScaleMinMax(rolloutDefCopy)
-	if err != nil {
-		return false, err
-	}
-
-	specsEqual := util.CompareStructNumTypeAgnostic(existingCopy.Object["spec"], rolloutDefCopy.Object["spec"])
-	// just look specifically for metadata fields that are specified in the rollout object
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	requiredLabels := rolloutBasedPipelineDef.GetLabels()
-	actualLabels := existingPipeline.GetLabels()
-	requiredAnnotations := rolloutBasedPipelineDef.GetAnnotations()
-	actualAnnotations := existingPipeline.GetAnnotations()
-	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
-	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
-	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, existingCopy.Object["spec"], rolloutDefCopy.Object["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
-
-	return !specsEqual || !labelsFound || !annotationsFound, nil
+	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, pipelineRollout.Spec.Pipeline.Metadata)
 }
 
 /*

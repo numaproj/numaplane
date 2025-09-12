@@ -290,6 +290,10 @@ func (pipelineRollout *PipelineRollout) SetPromotedChildStatus(status *PromotedC
 	pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
 }
 
+func (pipelineRollout *PipelineRollout) GetChildMetadata() Metadata {
+	return pipelineRollout.Spec.Pipeline.Metadata
+}
+
 func init() {
 	SchemeBuilder.Register(&PipelineRollout{}, &PipelineRolloutList{})
 }

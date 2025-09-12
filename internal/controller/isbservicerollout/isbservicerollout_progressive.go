@@ -118,33 +118,35 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
-// that would be produced by the Rollout definition.
-// This implements a function of the progressiveController interface.
-func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, existingISBSvc *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+// CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
+func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
+	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
+	// Check required metadata (labels and annotations)
+	requiredLabels := requiredMetadata.Labels
+	actualLabels := isbsvcDef.GetLabels()
+	requiredAnnotations := requiredMetadata.Annotations
+	actualAnnotations := isbsvcDef.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, isbsvcDef.Object["spec"], requiredSpec, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+
+	return !specsEqual || !labelsFound || !annotationsFound, nil
+}
+
+// CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface.
+func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingISBSvc *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
 	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata)
 	if err != nil {
 		return false, err
 	}
-
-	specsEqual := util.CompareStructNumTypeAgnostic(existingISBSvc.Object["spec"], rolloutBasedISBSvcDef.Object["spec"])
-
-	// just look specifically for metadata fields that are specified in the rollout object
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	requiredLabels := rolloutBasedISBSvcDef.GetLabels()
-	actualLabels := existingISBSvc.GetLabels()
-	requiredAnnotations := rolloutBasedISBSvcDef.GetAnnotations()
-	actualAnnotations := existingISBSvc.GetAnnotations()
-	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
-	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
-	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
-		specsEqual, labelsFound, annotationsFound, existingISBSvc.Object["spec"], rolloutBasedISBSvcDef.Object["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
-
-	return !specsEqual || !labelsFound || !annotationsFound, nil
+	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, isbsvcRollout.Spec.InterStepBufferService.Metadata)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

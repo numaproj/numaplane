@@ -48,7 +48,11 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+	return false, nil
+}
+
+func (fpc fakeProgressiveController) CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	return false, nil
 }
 
@@ -115,12 +119,6 @@ func Test_processUpgradingChild(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
-
-	//globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	assert.NoError(t, err)
-
-	//assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
-	assert.NoError(t, err)
 
 	defaultExistingPromotedChildDef := createMonoVertex("test")
 

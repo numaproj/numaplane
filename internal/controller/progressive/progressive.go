@@ -49,7 +49,10 @@ type progressiveController interface {
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition
-	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error)
+	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error)
+
+	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
+	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error)
@@ -107,6 +110,8 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+
+	GetChildMetadata() apiv1.Metadata
 }
 
 // return:
@@ -471,6 +476,7 @@ func checkForUpgradeReplacement(
 		return false, false, err
 	}
 
+	// TODO: should we compare with the promoted child using our "upgrading" isbsvc name or our "promoted" isbsvc name?
 	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDef)
 	if err != nil {
 		return false, false, err
@@ -538,14 +544,14 @@ func checkForUpgradeReplacement(
 func checkForDifferences(
 	ctx context.Context,
 	controller progressiveController,
-	rolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
 	existingChildDef *unstructured.Unstructured,
 	existingIsUpgrading bool, // is the existing child "Upgrading" (vs "Promoted")?
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 
 	needsUpdating := false
 
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, rolloutObject)
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, rolloutObject.GetChildMetadata())
 	if err != nil {
 		return false, err
 	}
