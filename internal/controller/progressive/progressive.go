@@ -476,7 +476,6 @@ func checkForUpgradeReplacement(
 		return false, false, err
 	}
 
-	// TODO: should we compare with the promoted child using our "upgrading" isbsvc name or our "promoted" isbsvc name?
 	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDef)
 	if err != nil {
 		return false, false, err
