@@ -943,6 +943,8 @@ func Test_CheckForDifferences(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &MonoVertexRolloutReconciler{}
 
+			// Create the RolloutObject with the defined spec and metadata
+
 			// Extract spec from unstructured object and convert to RawExtension
 			specData, found, err := unstructured.NestedMap(tt.to.Object, "spec")
 			if err != nil {
