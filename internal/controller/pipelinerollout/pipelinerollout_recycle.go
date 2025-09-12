@@ -179,18 +179,7 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 	// Compare the rollout definition to the "promoted" pipeline
 	// In order to compare, we need to update the rollout definition to use the identical isbsvc name as the "promoted" pipeline so we can ignore that
-
-	/*currentPromotedPipelineISBSvc, err := numaflowtypes.GetPipelineISBSVCName(currentPromotedPipeline)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get isbsvc for current promoted pipeline %s/%s: %v", currentPromotedPipeline.GetNamespace(), currentPromotedPipeline.GetName(), err)
-	}
-
-	rolloutDefinitionPipeline, err := r.makePipelineDefinition(pipelineRollout, currentPromotedPipeline.GetName(), currentPromotedPipelineISBSvc, pipelineRollout.Spec.Pipeline.Metadata)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Pipeline definition based on Rollout %s/%s: %w", pipelineRollout.Namespace, pipelineRollout.Name, err)
-	}*/
-
-	different, err := r.CheckForDifferencesNew(ctx, currentPromotedPipeline, pipelineRollout)
+	different, err := r.CheckForDifferences(ctx, currentPromotedPipeline, pipelineRollout)
 	if err != nil {
 		return nil, err
 	}

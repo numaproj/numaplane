@@ -11,9 +11,9 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -141,14 +141,21 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests for essential equality.
-// This implements a function of the progressiveController interface, used to determine if a previously Upgrading MonoVertex
-// should be replaced with a new one.
-// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
-// configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface
+// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
+
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
+	// (so that won't be interpreted as a difference)
+	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata)
+	if err != nil {
+		return false, err
+	}
 
 	// remove certain fields (which numaplane needs to set) from comparison to test for equality
 	removeFunc := func(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
@@ -171,23 +178,28 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, f
 		return specAsMap, nil
 	}
 
-	fromNew, err := removeFunc(from)
+	from, err := removeFunc(existingMonoVertex)
 	if err != nil {
 		return false, err
 	}
-	toNew, err := removeFunc(to)
+	to, err := removeFunc(rolloutBasedMVDef)
 	if err != nil {
 		return false, err
 	}
 
-	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
-	// just look specifically for metadata fields that can result in Progressive
+	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
+	// just look specifically for metadata fields that are specified in the rollout object
 	// anything else could be updated by some platform and not by the user, which would cause an issue
-	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, metadataRisk, fromNew, toNew)
+	requiredLabels := rolloutBasedMVDef.GetLabels()
+	actualLabels := existingMonoVertex.GetLabels()
+	requiredAnnotations := rolloutBasedMVDef.GetAnnotations()
+	actualAnnotations := existingMonoVertex.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, from, to, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || metadataRisk, nil
+	return !specsEqual || !labelsFound || !annotationsFound, nil
 
 }
 

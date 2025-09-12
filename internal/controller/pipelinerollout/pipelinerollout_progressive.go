@@ -18,7 +18,6 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -191,13 +190,13 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests for essential equality.
+// CheckForDifferencesOrig tests for essential equality.
 // This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
 // should be replaced with a new one.
 // What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
 // configured as "progressive", in the off chance that changing one of those fixes a problem.
 // However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+/*func (r *PipelineRolloutReconciler) CheckForDifferencesOrig(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	fromCopy := from.DeepCopy()
 	toCopy := to.DeepCopy()
@@ -219,10 +218,13 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, fro
 		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
 
 	return !specsEqual || metadataRisk, nil
-}
+}*/
 
-// TODO: remove function above and just use this one
-func (r *PipelineRolloutReconciler) CheckForDifferencesNew(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface
+// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)

@@ -10,9 +10,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -118,23 +118,33 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests for essential equality.
-// This implements a function of the progressiveController interface, used to determine if a previously Upgrading InterstepBufferService
-// should be replaced with a new one.
-// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
-// configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// CheckForDifferences tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface.
+func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, existingISBSvc *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	specsEqual := util.CompareStructNumTypeAgnostic(from.Object["spec"], to.Object["spec"])
-	// just look specifically for metadata fields that can result in Progressive
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, metadataRisk, from.Object["spec"], to.Object["spec"])
+	isbsvcRollout := rolloutObject.(*apiv1.ISBServiceRollout)
 
-	return !specsEqual || metadataRisk, nil
+	rolloutBasedISBSvcDef, err := r.makeISBServiceDefinition(isbsvcRollout, existingISBSvc.GetName(), isbsvcRollout.Spec.InterStepBufferService.Metadata)
+	if err != nil {
+		return false, err
+	}
+
+	specsEqual := util.CompareStructNumTypeAgnostic(existingISBSvc.Object["spec"], rolloutBasedISBSvcDef.Object["spec"])
+
+	// just look specifically for metadata fields that are specified in the rollout object
+	// anything else could be updated by some platform and not by the user, which would cause an issue
+	requiredLabels := rolloutBasedISBSvcDef.GetLabels()
+	actualLabels := existingISBSvc.GetLabels()
+	requiredAnnotations := rolloutBasedISBSvcDef.GetAnnotations()
+	actualAnnotations := existingISBSvc.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, existingISBSvc.Object["spec"], rolloutBasedISBSvcDef.Object["spec"], requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+
+	return !specsEqual || !labelsFound || !annotationsFound, nil
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

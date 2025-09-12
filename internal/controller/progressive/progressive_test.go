@@ -48,7 +48,7 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferencesOrig(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
 	return false, nil
 }
 

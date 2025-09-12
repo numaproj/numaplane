@@ -533,30 +533,21 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedError:         false,
 		},
 		{
-			name:                  "Different Labels",
+			name:                  "Required Labels not Present",
 			spec1:                 specNoScale,
 			spec2:                 specNoScale,
 			labels1:               map[string]string{"app": "test1"},
 			labels2:               map[string]string{"app": "test2"},
-			expectedNeedsUpdating: false,
+			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 		{
-			name:                  "Different Annotations",
+			name:                  "Required Annotations Present",
 			spec1:                 specNoScale,
 			spec2:                 specNoScale,
 			annotations1:          map[string]string{"key1": "test1"},
 			annotations2:          nil,
 			expectedNeedsUpdating: false,
-			expectedError:         false,
-		},
-		{
-			name:                  "Numaflow Instance Annotation",
-			spec1:                 specNoScale,
-			spec2:                 specNoScale,
-			annotations1:          map[string]string{common.AnnotationKeyNumaflowInstanceID: "1"},
-			annotations2:          nil,
-			expectedNeedsUpdating: true,
 			expectedError:         false,
 		},
 	}
@@ -575,19 +566,23 @@ func Test_CheckForDifferences(t *testing.T) {
 				obj1.SetAnnotations(tc.annotations1)
 			}
 
-			obj2 := &unstructured.Unstructured{Object: make(map[string]interface{})}
-			var yaml2Spec map[string]interface{}
-			err = json.Unmarshal([]byte(tc.spec2), &yaml2Spec)
-			assert.NoError(t, err)
-			obj2.Object["spec"] = yaml2Spec
-			if tc.labels2 != nil {
-				obj2.SetLabels(tc.labels2)
-			}
-			if tc.annotations2 != nil {
-				obj2.SetAnnotations(tc.annotations2)
+			// Create the RolloutObject with the defined spec and metadata
+
+			pipelineRollout := &apiv1.PipelineRollout{
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{
+							Raw: []byte(tc.spec2),
+						},
+						Metadata: apiv1.Metadata{
+							Annotations: tc.annotations2,
+							Labels:      tc.labels2,
+						},
+					},
+				},
 			}
 
-			needsUpdating, err := r.CheckForDifferences(context.Background(), obj1, obj2)
+			needsUpdating, err := r.CheckForDifferences(context.Background(), obj1, pipelineRollout)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
