@@ -141,12 +141,15 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 
-		pipelineDrained := []bool{false, false, false}
+		pipelineDrained := map[int]bool{
+			1: false,
+			2: false,
+		}
 
-		// verify that pipelines 0-2 are all drainedOnPause
-		CheckEventually("Verifying that the Pipelines have been drained", func() bool {
+		// verify that pipelines 1-2 are drainedOnPause
+		CheckEventually("Verifying that the failed Pipelines have been drained", func() bool {
 			// if at any point the pipeline is drained, update the value in pipelineDrained array
-			for index := 0; index < 3; index++ {
+			for index := 1; index <= 2; index++ {
 				pipelineName := GetInstanceName(pipelineRolloutName, index)
 				pipeline, err := GetPipelineByName(Namespace, pipelineName)
 				if err != nil {
@@ -162,10 +165,16 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 				}
 			}
 
-			return pipelineDrained[0] && pipelineDrained[1] && pipelineDrained[2]
+			return pipelineDrained[1] && pipelineDrained[2]
 
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Not all 3 Pipelines were drainedOnPause=true: %v", pipelineDrained))
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pipelineDrained))
+
+		// verify that pipelines are deleted
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 2))
 	})
+
+	// TODO: do one more test of upgrading to a good pipeline and make sure our original is drained
 
 })
 
