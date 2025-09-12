@@ -65,6 +65,28 @@ func VerifyPromotedPipelineSpec(namespace string, pipelineRolloutName string, f 
 	}).Should(BeTrue())
 }
 
+func VerifyPipelineSpecStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
+
+	var retrievedPipelineSpec numaflowv1.PipelineSpec
+	var retrievedPipelineStatus numaflowv1.PipelineStatus
+	CheckEventually("verifying Pipeline Spec", func() bool {
+		pipeline, err := GetPipelineByName(namespace, pipelineName)
+		if err != nil {
+			return false
+		}
+
+		if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
+			return false
+		}
+
+		if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
+			return false
+		}
+
+		return f(retrievedPipelineSpec, retrievedPipelineStatus)
+	}).Should(BeTrue())
+}
+
 func VerifyPromotedPipelineStatusEventually(namespace string, pipelineRolloutName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 	CheckEventually("verify pipeline status", func() bool {
 		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPromotedPipelineSpecAndStatus(namespace, pipelineRolloutName)
@@ -566,6 +588,12 @@ func VerifyPromotedPipelineStaysPaused(pipelineRolloutName string) {
 	pipeline, err := GetPromotedPipeline(Namespace, pipelineRolloutName)
 	Expect(err).ShouldNot(HaveOccurred())
 	verifyPodsRunning(Namespace, 0, getVertexLabelSelector(pipeline.GetName()))
+}
+
+func VerifyPipelineDrainedOnPause(pipelineName string) {
+	VerifyPipelineSpecStatus(Namespace, pipelineName, func(spec numaflowv1.PipelineSpec, status numaflowv1.PipelineStatus) bool {
+		return status.DrainedOnPause
+	})
 }
 
 func VerifyPipelineDeletion(pipelineName string) {

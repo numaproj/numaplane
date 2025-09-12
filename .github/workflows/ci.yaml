@@ -130,6 +130,8 @@ jobs:
             case: "progressive-analysis-monovertex"
           - strategy: "progressive"
             case: "progressive-analysis-pipeline"
+          - strategy: "progressive"
+            case: "force-drain"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
