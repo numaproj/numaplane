@@ -157,7 +157,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 				},
 			},
 		}
-		time.Sleep(15 * time.Second)
+		time.Sleep(30 * time.Second)
 		updatePipeline(failedPipelineSpec2)
 
 		// verify it was assessed as failed
