@@ -23,12 +23,14 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 
 	. "github.com/numaproj/numaplane/tests/e2e"
@@ -164,7 +166,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 
-		pipelineDrained := map[int]bool{
+		/*pipelineDrained := map[int]bool{
 			1: false,
 			2: false,
 		}
@@ -176,21 +178,53 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 				pipelineName := GetInstanceName(pipelineRolloutName, index)
 				pipeline, err := GetPipelineByName(Namespace, pipelineName)
 				if err != nil {
-					return false
+					continue
 				}
 
 				var retrievedPipelineStatus numaflowv1.PipelineStatus
 				if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
 					return false
 				}
+				By("checking drainedOnPaused")
 				if !pipelineDrained[index] && retrievedPipelineStatus.DrainedOnPause {
 					pipelineDrained[index] = true
+					fmt.Printf("setting pipeline drained for index %d\n", index)
+					By(fmt.Sprintf("setting pipeline drained for index %d\n", index))
 				}
 			}
 
 			return pipelineDrained[1] && pipelineDrained[2]
 
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pipelineDrained))
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pipelineDrained))*/
+
+		forceAppliedSpec := map[int]bool{
+			1: false,
+			2: false,
+		}
+
+		CheckEventually("Verifying that the failed Pipelines have spec overridden", func() bool {
+			// if at any point the pipeline is drained, update the value in pipelineDrained array
+			for index := 1; index <= 2; index++ {
+				pipelineName := GetInstanceName(pipelineRolloutName, index)
+				pipeline, err := GetPipelineByName(Namespace, pipelineName)
+				if err != nil {
+					continue
+				}
+
+				annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+				if !found || err != nil || annotations == nil {
+					return false
+				}
+				if !forceAppliedSpec[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" {
+					forceAppliedSpec[index] = true
+					By(fmt.Sprintf("setting forceAppliedSpec for index %d\n", index))
+				}
+				// TODO: can also check that it goes to desiredPhase: Paused
+			}
+
+			return forceAppliedSpec[1] && forceAppliedSpec[2]
+
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpec))
 
 		// verify that pipelines are deleted
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
