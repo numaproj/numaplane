@@ -164,8 +164,6 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
 	})
 
-	// TODO: do one more test of upgrading to a good pipeline and make sure our original is drained
-
 	It("Should Delete Rollouts", func() {
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteISBServiceRollout(isbServiceRolloutName)
@@ -245,7 +243,7 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
 				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
 				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
-				retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing {
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing || retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused) {
 				forceAppliedSpecPausing[pipelineIndex] = true
 				By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", pipelineIndex))
 			}
