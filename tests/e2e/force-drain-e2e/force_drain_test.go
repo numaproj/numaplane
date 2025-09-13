@@ -114,9 +114,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
 		failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
 		failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
-			UDF: &numaflowv1.UDF{
-				Container: &numaflowv1.Container{
-					Image: "badpath1",
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					UDSink: &numaflowv1.UDSink{
+						Container: &numaflowv1.Container{
+							Image: "badpath1",
+						},
+					},
 				},
 			},
 		}
@@ -126,9 +131,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// this will be a failed Pipeline which will be assessed as Failed
 		failedPipelineSpec2 := initialPipelineSpec.DeepCopy()
 		failedPipelineSpec2.Vertices[1] = numaflowv1.AbstractVertex{
-			UDF: &numaflowv1.UDF{
-				Container: &numaflowv1.Container{
-					Image: "badpath2",
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					UDSink: &numaflowv1.UDSink{
+						Container: &numaflowv1.Container{
+							Image: "badpath2",
+						},
+					},
 				},
 			},
 		}

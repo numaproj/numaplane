@@ -22,8 +22,9 @@ import (
 )
 
 // TODO: need to figure out how to handle users who have explicitly paused their pipelines or taken those pipelines down to 0 Pods
-// If the previous upgrading pipeline explicitly said 0 pods or pause, then it implies we shouldn't run that one
-// If the new promoted pipeline explicitly says 0 pods or pause, then it implies we shouldn't run that one
+// Say the PipelineRollout says either desiredPhase: Paused or scale=0: Maybe we keep waiting for a promoted pipeline to arrive for
+// some amount of time but then after a certain period of time we stop waiting
+// A future enhancement could be to delete any pipelines that spent their whole life paused
 
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
@@ -142,7 +143,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		// we need to make sure we get out of the previous Paused state
 		// TODO: what if user intended that their pipeline be paused, though?
 		// if desiredPhase==Running and phase==Paused, return
-		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+		/*desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 		if err != nil {
 			return false, err
 		}
@@ -150,6 +151,15 @@ func (r *PipelineRolloutReconciler) Recycle(
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
 			numaLogger.WithValues("desiredPhase", desiredPhase, "currentPhase", "Paused").Debug("Pipeline transitioning from paused to running, waiting for completion")
 			return false, nil
+		}*/
+
+		// we need to verify that observedGeneration==generation in order to confirm that the 'phase' we read represents the new overridden spec
+		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckObservedGeneration(ctx, pipeline)
+		if err != nil {
+			return false, fmt.Errorf("error checking pipeline %s/%s observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		if !pipelineReconciled {
+			numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
 		}
 
 		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)

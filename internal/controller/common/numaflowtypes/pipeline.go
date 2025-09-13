@@ -151,6 +151,15 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
 }
 
+// CheckObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
+func CheckObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
+	pipelineStatus, err := ParsePipelineStatus(pipeline)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
+	}
+	return pipelineStatus.ObservedGeneration >= pipeline.GetGeneration(), pipeline.GetGeneration(), pipelineStatus.ObservedGeneration, nil
+}
+
 // either pipeline must be:
 //   - Paused
 //   - Failed (contract with Numaflow is that unpausible Pipelines are "Failed" pipelines)
