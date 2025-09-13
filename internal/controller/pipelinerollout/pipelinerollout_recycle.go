@@ -143,7 +143,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		// we need to make sure we get out of the previous Paused state
 		// TODO: what if user intended that their pipeline be paused, though?
 		// if desiredPhase==Running and phase==Paused, return
-		/*desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 		if err != nil {
 			return false, err
 		}
@@ -151,7 +151,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
 			numaLogger.WithValues("desiredPhase", desiredPhase, "currentPhase", "Paused").Debug("Pipeline transitioning from paused to running, waiting for completion")
 			return false, nil
-		}*/
+		}
 
 		// we need to verify that observedGeneration==generation in order to confirm that the 'phase' we read represents the new overridden spec
 		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckObservedGeneration(ctx, pipeline)
@@ -160,6 +160,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 		if !pipelineReconciled {
 			numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
+			return false, nil
 		}
 
 		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)

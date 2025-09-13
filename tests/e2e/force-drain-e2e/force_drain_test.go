@@ -26,8 +26,10 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
@@ -49,16 +51,20 @@ var (
 		},
 	}
 
-	pipelineSpecSourceRPU      = int64(5)
+	pipelineSpecSourceRPU      = int64(1000)
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	pullPolicyAlways    = corev1.PullAlways
 	fourPods            = int32(4)
 	fivePods            = int32(5)
 	onePod              = int32(1)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
+		Lifecycle: numaflowv1.Lifecycle{
+			PauseGracePeriodSeconds: ptr.To(int64(60)),
+		},
 		Vertices: []numaflowv1.AbstractVertex{
 			{
 				Name: "in",
@@ -71,18 +77,32 @@ var (
 				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
+				Name: "cat",
+				UDF: &numaflowv1.UDF{
+					Container: &numaflowv1.Container{
+						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						ImagePullPolicy: &pullPolicyAlways,
+					},
+				},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+			},
+			{
 				Name: "out",
 				Sink: &numaflowv1.Sink{
 					AbstractSink: numaflowv1.AbstractSink{
 						Log: &numaflowv1.Log{},
 					},
 				},
-				Scale: numaflowv1.Scale{ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 		},
 		Edges: []numaflowv1.Edge{
 			{
 				From: "in",
+				To:   "cat",
+			},
+			{
+				From: "cat",
 				To:   "out",
 			},
 		},
@@ -114,35 +134,28 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
 		failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
 		failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
-			Name: "out",
-			Sink: &numaflowv1.Sink{
-				AbstractSink: numaflowv1.AbstractSink{
-					UDSink: &numaflowv1.UDSink{
-						Container: &numaflowv1.Container{
-							Image: "badpath1",
-						},
-					},
+			Name: "cat",
+			UDF: &numaflowv1.UDF{
+				Container: &numaflowv1.Container{
+					Image: "badpath1",
 				},
 			},
 		}
+
 		time.Sleep(5 * time.Second)
 		updatePipeline(failedPipelineSpec1)
 
 		// this will be a failed Pipeline which will be assessed as Failed
 		failedPipelineSpec2 := initialPipelineSpec.DeepCopy()
 		failedPipelineSpec2.Vertices[1] = numaflowv1.AbstractVertex{
-			Name: "out",
-			Sink: &numaflowv1.Sink{
-				AbstractSink: numaflowv1.AbstractSink{
-					UDSink: &numaflowv1.UDSink{
-						Container: &numaflowv1.Container{
-							Image: "badpath2",
-						},
-					},
+			Name: "cat",
+			UDF: &numaflowv1.UDF{
+				Container: &numaflowv1.Container{
+					Image: "badpath2",
 				},
 			},
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(15 * time.Second)
 		updatePipeline(failedPipelineSpec2)
 
 		// verify it was assessed as failed
