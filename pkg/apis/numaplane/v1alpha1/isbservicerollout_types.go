@@ -201,6 +201,10 @@ func (isbServiceRollout *ISBServiceRollout) SetPromotedChildStatus(status *Promo
 	isbServiceRollout.Status.ProgressiveStatus.PromotedISBServiceStatus.PromotedChildStatus = *status.DeepCopy()
 }
 
+func (isbServiceRollout *ISBServiceRollout) GetChildMetadata() Metadata {
+	return isbServiceRollout.Spec.InterStepBufferService.Metadata
+}
+
 func init() {
 	SchemeBuilder.Register(&ISBServiceRollout{}, &ISBServiceRolloutList{})
 }

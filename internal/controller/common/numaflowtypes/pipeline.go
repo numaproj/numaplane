@@ -104,6 +104,18 @@ func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollou
 
 }
 
+func GetPipelineSpecFromRollout(
+	pipelineName string,
+	pipelineRollout *apiv1.PipelineRollout,
+) (map[string]interface{}, error) {
+	args := map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	return util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+}
+
 func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {
 	if pipeline == nil || len(pipeline.Object) == 0 {
 		return PipelineStatus{}, nil
@@ -137,6 +149,15 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	pipelinePhase := pipelineStatus.Phase
 
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+}
+
+// CheckObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
+func CheckObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
+	pipelineStatus, err := ParsePipelineStatus(pipeline)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
+	}
+	return pipelineStatus.ObservedGeneration >= pipeline.GetGeneration(), pipeline.GetGeneration(), pipelineStatus.ObservedGeneration, nil
 }
 
 // either pipeline must be:
@@ -222,9 +243,9 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	}
 }
 
-func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
+func PipelineWithoutScaleMinMax(pipeline map[string]interface{}) error {
 	// for each Vertex, remove the scale min and max:
-	vertices, _, _ := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	vertices, _, _ := unstructured.NestedSlice(pipeline, "spec", "vertices")
 
 	modifiedVertices := make([]interface{}, 0)
 	for _, vertex := range vertices {
@@ -243,11 +264,38 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 		}
 	}
 
-	err := unstructured.SetNestedSlice(pipeline.Object, modifiedVertices, "spec", "vertices")
+	err := unstructured.SetNestedSlice(pipeline, modifiedVertices, "spec", "vertices")
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func GetVertexFromPipelineSpecMap(
+	pipelineSpec map[string]interface{},
+	vertexName string,
+) (map[string]interface{}, bool, error) {
+	// TODO: replace this with GetPipelineVertexDefinitions() call
+	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if err != nil {
+		return nil, false, fmt.Errorf("error while getting vertices of pipeline: %v", err)
+	}
+	if !found {
+		return nil, false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
+	}
+
+	// find the vertex
+	for _, vertex := range vertices {
+
+		vertexAsMap := vertex.(map[string]interface{})
+		name := vertexAsMap["name"].(string)
+		if name == vertexName {
+			return vertex.(map[string]interface{}), true, nil
+		}
+	}
+
+	// Vertex not found
+	return nil, false, nil
 }
 
 func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interface{}, error) {
