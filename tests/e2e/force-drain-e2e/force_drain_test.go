@@ -197,7 +197,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pipelineDrained))*/
 
-		forceAppliedSpec := map[int]bool{
+		forceAppliedSpecPausing := map[int]bool{
 			1: false,
 			2: false,
 		}
@@ -211,20 +211,26 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 					continue
 				}
 
+				var retrievedPipelineSpec numaflowv1.PipelineSpec
+				if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
+					return false
+				}
+
 				annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
 				if !found || err != nil || annotations == nil {
 					return false
 				}
-				if !forceAppliedSpec[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" {
-					forceAppliedSpec[index] = true
-					By(fmt.Sprintf("setting forceAppliedSpec for index %d\n", index))
+				// TODO: what if we try to check for phase==Pausing?
+				if !forceAppliedSpecPausing[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" && retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused {
+					forceAppliedSpecPausing[index] = true
+					By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", index))
 				}
-				// TODO: can also check that it goes to desiredPhase: Paused
+
 			}
 
-			return forceAppliedSpec[1] && forceAppliedSpec[2]
+			return forceAppliedSpecPausing[1] && forceAppliedSpecPausing[2]
 
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpec))
+		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpecPausing))
 
 		// verify that pipelines are deleted
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
