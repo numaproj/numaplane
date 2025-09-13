@@ -23,7 +23,6 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -58,6 +57,7 @@ var (
 		Duration: time.Second,
 	}
 	pullPolicyAlways    = corev1.PullAlways
+	validImagePath      = "quay.io/numaio/numaflow-go/map-cat:stable"
 	fourPods            = int32(4)
 	fivePods            = int32(5)
 	onePod              = int32(1)
@@ -82,7 +82,7 @@ var (
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
 					Container: &numaflowv1.Container{
-						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						Image:           validImagePath,
 						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
@@ -127,121 +127,41 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
-	})
-
-	It("Should create various Pipelines which will need to be drained and deleted", func() {
 		// this will be the original successful Pipeline to drain
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+	})
 
-		// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
-		failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
-		failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
-			Name: "cat",
-			UDF: &numaflowv1.UDF{
-				Container: &numaflowv1.Container{
-					Image: "badpath1",
-				},
-			},
-		}
+	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
 
-		time.Sleep(5 * time.Second)
-		updatePipeline(failedPipelineSpec1)
-
-		// this will be a failed Pipeline which will be assessed as Failed
-		failedPipelineSpec2 := initialPipelineSpec.DeepCopy()
-		failedPipelineSpec2.Vertices[1] = numaflowv1.AbstractVertex{
-			Name: "cat",
-			UDF: &numaflowv1.UDF{
-				Container: &numaflowv1.Container{
-					Image: "badpath2",
-				},
-			},
-		}
-		time.Sleep(30 * time.Second)
-		updatePipeline(failedPipelineSpec2)
-
-		// verify it was assessed as failed
-		VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
+		updateToFailedPipelines()
 
 		// restore PipelineRollout back to original spec
 		updatePipeline(&initialPipelineSpec)
 
-		/*pipelineDrained := map[int]bool{
-			1: false,
-			2: false,
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
+	})
+
+	It("Should create 2 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
+
+		updateToFailedPipelines()
+
+		// updated Pipeline inserts another "cat" vertex in the middle
+		updatedPipelineSpec := initialPipelineSpec
+		catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
+		catVertex.Name = "cat2"
+		outVertex := initialPipelineSpec.Vertices[2].DeepCopy()
+		updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, *outVertex)
+		updatedPipelineSpec.Vertices[2] = *catVertex
+		updatedPipelineSpec.Edges = []numaflowv1.Edge{
+			{From: "in", To: "cat"},
+			{From: "cat", To: "cat2"},
+			{From: "cat2", To: "out"},
 		}
 
-		// verify that pipelines 1-2 are drainedOnPause
-		CheckEventually("Verifying that the failed Pipelines have been drained", func() bool {
-			// if at any point the pipeline is drained, update the value in pipelineDrained array
-			for index := 1; index <= 2; index++ {
-				pipelineName := GetInstanceName(pipelineRolloutName, index)
-				pipeline, err := GetPipelineByName(Namespace, pipelineName)
-				if err != nil {
-					continue
-				}
+		// restore PipelineRollout back to original spec
+		updatePipeline(&updatedPipelineSpec)
 
-				var retrievedPipelineStatus numaflowv1.PipelineStatus
-				if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
-					return false
-				}
-				By("checking drainedOnPaused")
-				if !pipelineDrained[index] && retrievedPipelineStatus.DrainedOnPause {
-					pipelineDrained[index] = true
-					fmt.Printf("setting pipeline drained for index %d\n", index)
-					By(fmt.Sprintf("setting pipeline drained for index %d\n", index))
-				}
-			}
-
-			return pipelineDrained[1] && pipelineDrained[2]
-
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pipelineDrained))*/
-
-		forceAppliedSpecPausing := map[int]bool{
-			1: false,
-			2: false,
-		}
-
-		CheckEventually("Verifying that the failed Pipelines have spec overridden", func() bool {
-			// if at any point the pipeline is drained, update the value in pipelineDrained array
-			for index := 1; index <= 2; index++ {
-				pipelineName := GetInstanceName(pipelineRolloutName, index)
-				pipeline, err := GetPipelineByName(Namespace, pipelineName)
-				if err != nil {
-					continue
-				}
-
-				var retrievedPipelineSpec numaflowv1.PipelineSpec
-				if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
-					return false
-				}
-
-				var retrievedPipelineStatus numaflowv1.PipelineStatus
-				if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
-					return false
-				}
-
-				annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
-				if !found || err != nil || annotations == nil {
-					return false
-				}
-				// TODO: what if we try to check for phase==Pausing?
-				if !forceAppliedSpecPausing[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" &&
-					retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
-					retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing {
-					forceAppliedSpecPausing[index] = true
-					By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", index))
-				}
-
-			}
-
-			return forceAppliedSpecPausing[1] && forceAppliedSpecPausing[2]
-
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpecPausing))
-
-		// verify that pipelines are deleted
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 2))
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
 	})
 
 	// TODO: do one more test of upgrading to a good pipeline and make sure our original is drained
@@ -252,6 +172,101 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+// update twice:
+// the first pipeline will be failed but it will be replaced before it's assessed
+// the second pipeline will actually be assessed as Failed
+// We test both since they take slightly different paths in the recycle code
+func updateToFailedPipelines() {
+	// this will be a failed Pipeline which will be replaced before it has a chance to be assessed
+	failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
+	failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
+		Name: "cat",
+		UDF: &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image: "badpath1",
+			},
+		},
+	}
+
+	time.Sleep(5 * time.Second)
+	updatePipeline(failedPipelineSpec1)
+
+	// this will be a failed Pipeline which will be assessed as Failed
+	failedPipelineSpec2 := initialPipelineSpec.DeepCopy()
+	failedPipelineSpec2.Vertices[1] = numaflowv1.AbstractVertex{
+		Name: "cat",
+		UDF: &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image: "badpath2",
+			},
+		},
+	}
+	time.Sleep(30 * time.Second)
+	updatePipeline(failedPipelineSpec2)
+
+	// verify it was assessed as failed
+	VerifyPipelineRolloutProgressiveCondition(pipelineRolloutName, metav1.ConditionFalse)
+}
+
+func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
+
+	forceAppliedSpecPausing := map[int]bool{}
+
+	for _, pipelineIndex := range pipelineIndices {
+		forceAppliedSpecPausing[pipelineIndex] = false
+	}
+
+	CheckEventually("Verifying that the failed Pipelines have spec overridden", func() bool {
+		// if at any point the pipeline is pausing with its spec overridden, update the value in the forceAppliedSpecPausing array
+		for _, pipelineIndex := range pipelineIndices {
+			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+			pipeline, err := GetPipelineByName(Namespace, pipelineName)
+			if err != nil {
+				continue
+			}
+
+			var retrievedPipelineSpec numaflowv1.PipelineSpec
+			if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
+				return false
+			}
+
+			var retrievedPipelineStatus numaflowv1.PipelineStatus
+			if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
+				return false
+			}
+
+			annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+			if !found || err != nil || annotations == nil {
+				return false
+			}
+
+			if !forceAppliedSpecPausing[pipelineIndex] && /*annotations[common.AnnotationKeyOverriddenSpec] == "true"*/
+				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
+				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
+				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
+				retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing {
+				forceAppliedSpecPausing[pipelineIndex] = true
+				By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", pipelineIndex))
+			}
+
+		}
+
+		// check if all Pipelines have met the criteria
+		for _, pipelineIndex := range pipelineIndices {
+			if !forceAppliedSpecPausing[pipelineIndex] {
+				return false
+			}
+		}
+		return true
+
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpecPausing))
+
+	// verify that pipelines are deleted
+	for _, pipelineIndex := range pipelineIndices {
+		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, pipelineIndex))
+	}
+}
 
 func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
 	rawSpec, err := json.Marshal(pipelineSpec)
