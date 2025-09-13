@@ -216,12 +216,19 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 					return false
 				}
 
+				var retrievedPipelineStatus numaflowv1.PipelineStatus
+				if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
+					return false
+				}
+
 				annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
 				if !found || err != nil || annotations == nil {
 					return false
 				}
 				// TODO: what if we try to check for phase==Pausing?
-				if !forceAppliedSpecPausing[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" && retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused {
+				if !forceAppliedSpecPausing[index] && annotations[common.AnnotationKeyOverriddenSpec] == "true" &&
+					retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
+					retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing {
 					forceAppliedSpecPausing[index] = true
 					By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", index))
 				}
@@ -239,6 +246,11 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 	// TODO: do one more test of upgrading to a good pipeline and make sure our original is drained
 
+	It("Should Delete Rollouts", func() {
+		DeletePipelineRollout(pipelineRolloutName)
+		DeleteISBServiceRollout(isbServiceRolloutName)
+		DeleteNumaflowControllerRollout()
+	})
 })
 
 func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
