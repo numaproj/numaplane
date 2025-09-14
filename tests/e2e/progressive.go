@@ -221,7 +221,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 
 		// make sure the min/max from the promoted pipeline matches the Status
 		// and make sure min=max
-		if len(vertexScaleDefinitions) != len(prProgressiveStatus.PromotedPipelineStatus.ScaleValues) {
+		if prProgressiveStatus.PromotedPipelineStatus == nil || len(vertexScaleDefinitions) != len(prProgressiveStatus.PromotedPipelineStatus.ScaleValues) {
 			return false
 		}
 
