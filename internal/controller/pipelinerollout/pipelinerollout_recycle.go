@@ -101,6 +101,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 		numaLogger.Debug("Pipeline is not supposed to run, per definition: will not drain it yet")
+		return false, nil
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
