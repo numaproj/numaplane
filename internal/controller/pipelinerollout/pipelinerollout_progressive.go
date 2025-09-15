@@ -281,6 +281,8 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, err
 	}
 
+	fmt.Printf("deletethis: historical pod count (from ProcessPromotedChildPreUpgrade()) = %+v\n", pipelineRO.Status.ProgressiveStatus.HistoricalPodCount)
+
 	numaLogger.Debugf("completed pre-upgrade processing of promoted pipeline, requeue=%t", requeue)
 
 	return requeue, nil
@@ -743,10 +745,13 @@ func computePromotedPipelineVerticesScaleValues(
 
 	promotedPipelineStatus.ScaleValues = scaleValuesMap
 
+	fmt.Println("deletethis")
+
 	// set the HistoricalPodCount to reflect the Initial values
 	// (this duplication is needed since the PromotedPipelineStatus can be cleared)
 	pipelineProgressiveStatus.HistoricalPodCount = map[string]int{}
 	for vertex, scaleValues := range scaleValuesMap {
+		fmt.Printf("deletethis: setting historical pod count for vertex %s\n", vertex)
 		pipelineProgressiveStatus.HistoricalPodCount[vertex] = int(scaleValues.Initial)
 	}
 
