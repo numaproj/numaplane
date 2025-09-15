@@ -57,6 +57,7 @@ var (
 	pipelineSpecSourceDuration = metav1.Duration{
 		Duration: time.Second,
 	}
+	validImagePath       = "quay.io/numaio/numaflow-go/map-cat:stable"
 	sourceVertexScaleMin = int32(5)
 	sourceVertexScaleMax = int32(9)
 	numVertices          = int32(1)
@@ -78,7 +79,7 @@ var (
 				Name: "cat",
 				UDF: &numaflowv1.UDF{
 					Container: &numaflowv1.Container{
-						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
+						Image:           validImagePath,
 						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
@@ -160,15 +161,16 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedISBServiceSpec.JetStream.Version = validJetstreamVersion
 		UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 2), false, *updatedPipelineSpec)
-		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, 1))
+		// check that the Pipeline and ISBSvc got promoted (specs are correct)
+		VerifyPromotedISBServiceSpec(Namespace, isbServiceRolloutName, func(spec numaflowv1.InterStepBufferServiceSpec) bool {
+			return spec.JetStream.Version == UpdatedJetstreamVersion
+		})
 
-		// Verify ISBServiceRollout Progressive Status
-		VerifyISBServiceProgressiveSuccess(isbServiceRolloutName, GetInstanceName(isbServiceRolloutName, 0), GetInstanceName(isbServiceRolloutName, 2))
+		VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(spec numaflowv1.PipelineSpec) bool {
+			return spec.Vertices[1].UDF.Container.Image == validImagePath
+		})
 
-		// Verify in-progress-strategy no longer set
-		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineISBSvcFinalProgressiveState()
 
 		DeletePipelineRollout(pipelineRolloutName)
 	})
@@ -286,9 +288,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 				Image:           "badcat",
 				ImagePullPolicy: &pullPolicyAlways,
 			},
-			//Builtin: &numaflowv1.Function{
-			//	Name: "badcat",
-			//}
 		}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
@@ -313,41 +312,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			return spec.Vertices[1].UDF.Container.Image == "badcat"
 		})
 
-		// make sure there's only 1 promoted pipeline and isbsvc and no upgrading ones anymore
-		checkOnePromotedPipelineAndISBSvc := func() bool {
-			promotedPipelines, err := GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), Namespace, pipelineRolloutName, common.LabelValueUpgradePromoted)
-			if err != nil {
-				return false
-			}
-			promotedISBSvcs, err := GetChildrenOfUpgradeStrategy(GetGVRForISBService(), Namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
-			if err != nil {
-				return false
-			}
-			return promotedPipelines != nil && len(promotedPipelines.Items) == 1 && promotedISBSvcs != nil && len(promotedISBSvcs.Items) == 1
-		}
-
-		checkNoUpgradingPipelineOrISBSvc := func() bool {
-			upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
-			if err != nil {
-				return false
-			}
-			upgradingISBSvcs, err := GetUpgradingISBServices(Namespace, isbServiceRolloutName)
-			if err != nil {
-				return false
-			}
-			return upgradingPipelines != nil && len(upgradingPipelines.Items) == 0 && upgradingISBSvcs != nil && len(upgradingISBSvcs.Items) == 0
-		}
-
-		CheckEventually("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
-		CheckEventually("verify no Upgrading Pipeline or ISBSvc", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
-		CheckConsistently("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc consistently", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
-		CheckConsistently("verify no Upgrading Pipeline or ISBSvc consistently", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
-
-		// Verify in-progress-strategy no longer set on both PipelineRollout and ISBServiceRollout (rollout completed)
-		VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
-		VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+		verifyPipelineISBSvcFinalProgressiveState()
 
 		DeletePipelineRollout(pipelineRolloutName)
 
@@ -366,4 +331,43 @@ func updateISBServiceForFailure() *numaflowv1.InterStepBufferServiceSpec {
 	UpdateISBService(isbServiceRolloutName, *updatedISBServiceSpec)
 
 	return updatedISBServiceSpec
+}
+
+func verifyPipelineISBSvcFinalProgressiveState() {
+	// make sure there's only 1 promoted pipeline and isbsvc and no upgrading ones anymore
+	checkOnePromotedPipelineAndISBSvc := func() bool {
+		promotedPipelines, err := GetChildrenOfUpgradeStrategy(GetGVRForPipeline(), Namespace, pipelineRolloutName, common.LabelValueUpgradePromoted)
+		if err != nil {
+			return false
+		}
+		promotedISBSvcs, err := GetChildrenOfUpgradeStrategy(GetGVRForISBService(), Namespace, isbServiceRolloutName, common.LabelValueUpgradePromoted)
+		if err != nil {
+			return false
+		}
+		return promotedPipelines != nil && len(promotedPipelines.Items) == 1 && promotedISBSvcs != nil && len(promotedISBSvcs.Items) == 1
+	}
+
+	checkNoUpgradingPipelineOrISBSvc := func() bool {
+		upgradingPipelines, err := GetUpgradingPipelines(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		upgradingISBSvcs, err := GetUpgradingISBServices(Namespace, isbServiceRolloutName)
+		if err != nil {
+			return false
+		}
+		return upgradingPipelines != nil && len(upgradingPipelines.Items) == 0 && upgradingISBSvcs != nil && len(upgradingISBSvcs.Items) == 0
+	}
+
+	CheckEventually("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
+	CheckEventually("verify no Upgrading Pipeline or ISBSvc", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
+	CheckConsistently("verify only 1 Promoted Pipeline and 1 Promoted ISBSvc consistently", checkOnePromotedPipelineAndISBSvc).Should(BeTrue())
+	CheckConsistently("verify no Upgrading Pipeline or ISBSvc consistently", checkNoUpgradingPipelineOrISBSvc).Should(BeTrue())
+
+	// Verify in-progress-strategy no longer set on both PipelineRollout and ISBServiceRollout (rollout completed)
+	VerifyISBServiceRolloutInProgressStrategy(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyISBServiceRolloutInProgressStrategyConsistently(isbServiceRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+	VerifyPipelineRolloutInProgressStrategyConsistently(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)
+
 }
