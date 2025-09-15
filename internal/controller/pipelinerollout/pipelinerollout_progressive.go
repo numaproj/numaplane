@@ -276,7 +276,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline pre-upgrade", pipelineRollout)
 	}
 
-	requeue, err := computePromotedPipelineVerticesScaleValues(ctx, pipelineRO.Status.ProgressiveStatus, promotedPipelineDef, c)
+	requeue, err := computePromotedPipelineVerticesScaleValues(ctx, &pipelineRO.Status.ProgressiveStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -667,7 +667,7 @@ Returns:
 */
 func computePromotedPipelineVerticesScaleValues(
 	ctx context.Context,
-	pipelineProgressiveStatus apiv1.PipelineProgressiveStatus,
+	pipelineProgressiveStatus *apiv1.PipelineProgressiveStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
