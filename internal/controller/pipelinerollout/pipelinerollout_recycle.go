@@ -82,6 +82,27 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return true, err
 	}
 
+	// First check if the PipelineRollout is configured to run
+	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
+	pipelineSpec, err := numaflowtypes.GetPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
+	if err != nil {
+		return false, err
+	}
+	pipelineRolloutDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
+	pipelineRolloutDef.Object["spec"] = pipelineSpec
+	setToRun, err := numaflowtypes.CheckPipelineSetToRun(ctx, pipelineRolloutDef)
+	if err != nil {
+		return false, err
+	}
+	if !setToRun {
+		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		if err != nil {
+			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		numaLogger.Debug("Pipeline is not supposed to run, per definition: will not drain it yet")
+	}
+
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
 	originalSpec := true
 	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
