@@ -560,6 +560,25 @@ func createScaledDownUpgradingPipelineDef(
 	return applyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
 }
 
+func scalePipelineDefVerticesToZero(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+) error {
+	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
+	if err != nil {
+		return err
+	}
+	zero := int64(0)
+	for i := range vertexScaleDefinitions {
+		vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+	}
+	err = applyScaleValuesToPipelineDefinition(ctx, pipelineDef, vertexScaleDefinitions)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func scalePipelineVerticesToZero(
 	ctx context.Context,
 	pipelineDef *unstructured.Unstructured,

@@ -282,7 +282,6 @@ func GetVertexFromPipelineSpecMap(
 	pipelineSpec map[string]interface{},
 	vertexName string,
 ) (map[string]interface{}, bool, error) {
-	// TODO: replace this with GetPipelineVertexDefinitions() call
 	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
 	if err != nil {
 		return nil, false, fmt.Errorf("error while getting vertices of pipeline: %v", err)

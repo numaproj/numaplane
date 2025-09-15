@@ -20,11 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TODO: need to figure out how to handle users who have explicitly paused their pipelines or taken those pipelines down to 0 Pods
-// Say the PipelineRollout says either desiredPhase: Paused or scale=0: Maybe we keep waiting for a promoted pipeline to arrive for
-// some amount of time but then after a certain period of time we stop waiting
-// A future enhancement could be to delete any pipelines that spent their whole life paused
-
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
 func (r *PipelineRolloutReconciler) Recycle(
@@ -45,7 +40,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// Use the "upgrade-strategy-reason" Label to determine how
 	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
 	// if upgrade-strategy-reason="progressive success", then either just pause, or pause and drain,
-	//    depending on PipelineRollout specification (TODO: https://github.com/numaproj/numaplane/issues/512)
+	//    depending on PipelineRollout specification
 	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
@@ -84,6 +79,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// First check if the PipelineRollout is configured to run
 	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
+	// TODO: reduce the number of Pipelines which are in this state by deleting any pipeline which has always been paused or scaled to 0 its entire life, in which case there's
+	// no risk of there being data in it to drain
 	pipelineSpec, err := numaflowtypes.GetPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
 	if err != nil {
 		return false, err
@@ -228,28 +225,8 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	numaLogger := logger.FromContext(ctx)
 
 	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
-	// TODO: aren't we doing this in progressive code? we should have a shared function if so
-	// Also, we could possibly call ensurePipelineScaledToZero() if we are okay having a separate patch
-	newVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(newPipeline)
-	if err != nil {
-		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", newPipeline.GetNamespace(), newPipeline.GetName(), err)
-	}
-	zero := int64(0)
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(newVertexSpecs))
-	for vertexIndex, newVertexSpec := range newVertexSpecs {
-		if vertexAsMap, ok := newVertexSpec.(map[string]any); ok {
-			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-				VertexName: vertexAsMap["name"].(string),
-				ScaleDefinition: &apiv1.ScaleDefinition{
-					Min: &zero,
-					Max: &zero,
-				},
-			}
-		}
-	}
-
 	newPipelineCopy := newPipeline.DeepCopy()
-	err = applyScaleValuesToPipelineDefinition(ctx, newPipelineCopy, vertexScaleDefinitions)
+	err := scalePipelineDefVerticesToZero(ctx, newPipelineCopy)
 	if err != nil {
 		return err
 	}
