@@ -330,9 +330,8 @@ spec:
                   historicalPodCount:
                     additionalProperties:
                       type: integer
-                    description: |-
-                      HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
-                      TODO: what are the consequences of not deleting the PromotedPipelineStatus (in which case maybe we don't need this?)
+                    description: HistoricalPodCount keeps track of per-vertex pod
+                      count from the last "promoted" pipeline
                     type: object
                   promotedPipelineStatus:
                     description: PromotedPipelineStatus stores information regarding
