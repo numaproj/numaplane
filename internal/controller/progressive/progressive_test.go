@@ -19,6 +19,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -795,7 +796,7 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 			obj := map[string]interface{}{}
 			err := json.Unmarshal([]byte(tc.objAsJson), &obj)
 			assert.NoError(t, err)
-			scaleDefinition, err := ExtractScaleMinMax(obj, tc.path)
+			scaleDefinition, err := numaflowtypes.ExtractScaleMinMax(obj, tc.path)
 			if !tc.expectedErr {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedScaleDefinition, scaleDefinition)

@@ -522,7 +522,7 @@ func createScaledDownUpgradingPipelineDef(
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
 		vertexName := vertexAsMap["name"].(string)
-		originalScaleMinMax, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+		originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 		if err != nil {
 			return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
 		}
@@ -1021,7 +1021,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 				return nil, errors.New("a vertex must have a name")
 			}
 
-			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			vertexScaleDef, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return nil, err
 			}

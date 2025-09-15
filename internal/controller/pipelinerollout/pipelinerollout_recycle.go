@@ -12,7 +12,6 @@ import (
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
-	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -154,7 +153,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 
 		// we need to verify that observedGeneration==generation in order to confirm that the 'phase' we read represents the new overridden spec
-		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckObservedGeneration(ctx, pipeline)
+		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineObservedGeneration(ctx, pipeline)
 		if err != nil {
 			return false, fmt.Errorf("error checking pipeline %s/%s observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
@@ -437,7 +436,7 @@ func calculateScaleForRecycle(
 					}
 					if !found {
 						// Vertex not found in the PipelineRollout or in the Historical Pod Count
-						vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+						vertexScaleDef, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 						if err != nil {
 							return nil, err
 						}

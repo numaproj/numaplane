@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
@@ -449,7 +450,7 @@ func scaleDownUpgradingMonoVertex(
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex as string: %w", err)
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMaxString
-	originalScaleMinMax, err := progressive.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
@@ -510,7 +511,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*apiv1.ScaleDefinition, error) {
-	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
+	return numaflowtypes.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 
 /*

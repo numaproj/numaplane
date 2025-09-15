@@ -1,17 +1,14 @@
 package e2e
 
 import (
-	"errors"
 	"fmt"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
-	"github.com/numaproj/numaplane/internal/controller/progressive"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -156,37 +153,6 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].ScaleTo == expectedScaleTo
 	}).Should(BeTrue())
 }
-
-// get the Scale definitions for each Vertex
-func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
-	vertices, err := numaflowtypes.GetPipelineVertexDefinitions(pipelineDef)
-	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
-	}
-
-	scaleDefinitions := []apiv1.VertexScaleDefinition{}
-
-	for _, vertex := range vertices {
-		if vertexAsMap, ok := vertex.(map[string]any); ok {
-
-			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
-			if err != nil {
-				return nil, err
-			}
-			if !foundVertexName {
-				return nil, errors.New("a vertex must have a name")
-			}
-
-			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
-			if err != nil {
-				return nil, err
-			}
-			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
-		}
-	}
-	return scaleDefinitions, nil
-}
-
 func VerifyPromotedPipelineScaledDownForProgressive(
 	pipelineRolloutName string,
 	expectedPromotedPipelineName string,
@@ -214,7 +180,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
-		vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(promotedPipeline)
+		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(promotedPipeline)
 		if err != nil {
 			return false
 		}
@@ -282,7 +248,7 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 		if err != nil {
 			return false
 		}
-		upgradingScaleDefinitions, err := GetScaleValuesFromPipelineSpec(upgradingPipeline)
+		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(upgradingPipeline)
 		if err != nil {
 			return false
 		}
@@ -322,7 +288,7 @@ func VerifyUpgradingPipelineScaledToZeroForProgressive(
 		if err != nil {
 			return false
 		}
-		upgradingScaleDefinitions, err := GetScaleValuesFromPipelineSpec(upgradingPipeline)
+		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(upgradingPipeline)
 		if err != nil {
 			return false
 		}
@@ -367,7 +333,7 @@ func VerifyPromotedPipelineScaledUpForProgressive(
 		if err != nil {
 			return false
 		}
-		vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(promotedPipeline)
+		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(promotedPipeline)
 		if err != nil {
 			return false
 		}
