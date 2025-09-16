@@ -149,7 +149,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// updated Pipeline inserts another "cat" vertex in the middle
 		updatedPipelineSpec := initialPipelineSpec
-		catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
+		/*catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
 		catVertex.Name = "cat2"
 		outVertex := initialPipelineSpec.Vertices[2].DeepCopy()
 		updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, *outVertex)
@@ -158,6 +158,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 			{From: "in", To: "cat"},
 			{From: "cat", To: "cat2"},
 			{From: "cat2", To: "out"},
+		}*/
+		updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					Blackhole: &numaflowv1.Blackhole{},
+				},
+			},
 		}
 
 		// restore PipelineRollout back to original spec
