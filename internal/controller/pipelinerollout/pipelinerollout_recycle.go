@@ -159,7 +159,6 @@ func (r *PipelineRolloutReconciler) Recycle(
 			return false, err
 		}
 		// we need to make sure we get out of the previous Paused state
-		// TODO: what if user intended that their pipeline be paused, though?
 		// if desiredPhase==Running and phase==Paused, return
 		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 		if err != nil {
