@@ -302,15 +302,23 @@ func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, po
 				}
 				data := s.Bytes()
 
+				// TODO: just temporary - change it back
 				var fileName string
 				if strings.Contains(podName, "pipeline") {
-					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsPipelineOutputPath, podName, containerName)
+					fmt.Printf("Won't open log file: %v\n", err)
+					return
+					//fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsPipelineOutputPath, podName, containerName)
 				} else if strings.Contains(podName, "isbsvc") {
-					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsISBServiceOutputPath, podName, containerName)
+					fmt.Printf("Won't open log file: %v\n", err)
+					return
+					//fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsISBServiceOutputPath, podName, containerName)
 				} else if strings.Contains(podName, "numaflow") {
 					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsNumaflowControllerOutputPath, podName, containerName)
 				} else if strings.Contains(podName, "monovertex") {
-					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsMonoVertexOutputPath, podName, containerName)
+
+					fmt.Printf("Won't open log file: %v\n", err)
+					return
+					//fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsMonoVertexOutputPath, podName, containerName)
 				} else if strings.Contains(podName, "numaplane") {
 					fileName = fmt.Sprintf("%s/%s-%s.log", PodLogsNumaplaneControllerOutputPath, podName, containerName)
 				}

@@ -135,7 +135,7 @@ func TestForceDrainE2E(t *testing.T) {
 var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create NumaflowControllerRollout and ISBServiceRollout", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(UpdatedNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
 		// this will be the original successful Pipeline to drain
