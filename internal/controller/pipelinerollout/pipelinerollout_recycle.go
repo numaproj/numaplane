@@ -314,6 +314,17 @@ func drainRecyclablePipeline(
 			return false, false, false, err
 		}
 
+		// Make sure Numaflow reconciles the scale values before we set desiredPhase=Paused
+		// (this is essential to make sure Numaflow will scale vertices > 0 if they were previously at 0)
+		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineLiveObservedGeneration(ctx, pipeline)
+		if err != nil {
+			return false, false, false, fmt.Errorf("error checking pipeline %s/%s live observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		if !pipelineReconciled {
+			numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
+			return false, false, false, nil
+		}
+
 		// patch the pipeline to set desiredPhase=Paused and set the new pause time
 		patchJson := fmt.Sprintf(`{"spec": {"lifecycle": {"desiredPhase": "Paused", "pauseGracePeriodSeconds": %d}}}`, newPauseGracePeriodSeconds)
 		numaLogger.WithValues("pipeline", pipeline.GetName(), "patchJson", patchJson).Debug("patching pipeline lifecycle")
