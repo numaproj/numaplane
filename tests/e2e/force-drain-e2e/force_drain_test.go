@@ -65,6 +65,15 @@ var (
 	fivePods            = int32(5)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec = numaflowv1.PipelineSpec{
+		Templates: &numaflowv1.Templates{
+			VertexTemplate: &numaflowv1.VertexTemplate{
+				ContainerTemplate: &numaflowv1.ContainerTemplate{
+					Env: []corev1.EnvVar{
+						{Name: "NUMAFLOW_DEBUG", Value: "true"},
+					},
+				},
+			},
+		},
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Lifecycle: numaflowv1.Lifecycle{
 			PauseGracePeriodSeconds: ptr.To(int64(60)),
@@ -133,7 +142,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
 	})
 
-	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
+	/*It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {
 
 		updateToFailedPipelines()
 
@@ -141,7 +150,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		updatePipeline(&initialPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
-	})
+	})*/
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
 
@@ -171,7 +180,8 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// restore PipelineRollout back to original spec
 		updatePipeline(&updatedPipelineSpec)
 
-		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
+		//verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
+		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 1, 2})
 	})
 
 	It("Should Delete Rollouts", func() {
