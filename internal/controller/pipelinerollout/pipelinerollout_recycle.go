@@ -22,6 +22,8 @@ import (
 
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
+// For Pipelines, for the Progressive case, we first drain the Pipeline here before we delete it. (For PPND case, it will have been drained prior to this function.)
+// And if the Pipeline can't drain by itself (in the case it's unhealthy), we "force drain" it by applying a new spec over top it.
 func (r *PipelineRolloutReconciler) Recycle(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured,
@@ -39,9 +41,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// Need to determine how to delete the pipeline
 	// Use the "upgrade-strategy-reason" Label to determine how
 	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
-	// if upgrade-strategy-reason="progressive success", then either just pause, or pause and drain,
-	//    depending on PipelineRollout specification
-	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
+	// for the progressive upgrade-strategy-reasons, we drain first
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
 		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
@@ -66,8 +66,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 			requiresPauseOriginalSpec = true
 		case common.LabelValueProgressiveReplacedFailed:
 			// LabelValueProgressiveReplacedFailed is the case of the "upgrading" pipeline failing and then being replaced with a newer Pipeline
-			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
 			requiresPause = true
+			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
+			requiresPauseOriginalSpec = false
 		}
 	}
 
@@ -97,10 +98,11 @@ func (r *PipelineRolloutReconciler) Recycle(
 		originalSpec = false
 	}
 
-	// if pausing original spec first:
-	//   desiredPhase:Paused + min scale -> phase:Paused + min scale -> desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
-	// else:
-	//.  desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// if requiresPauseOriginalSpec==true, it means we first attempt to pause with our original spec, and only if that is not able to drain fully, we do force draining
+	// if requiresPauseOriginalSpec==false, we are pretty sure the first attempt will fail, so we go straight to force draining
+	// In either case, before Force Draining, we need to wait until there's a new promoted Pipeline we can use
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
 	// make sure we pause it and check on it
@@ -115,17 +117,17 @@ func (r *PipelineRolloutReconciler) Recycle(
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
 				return true, err
-			} // else implicitly fall through
+			} // else implicitly fall through to force draining
 
 		} else if failed {
-			numaLogger.Debug("Pipeline is in Failed phase; will force drain")
+			numaLogger.Debug("Pipeline is in Failed phase; will force drain") // fall through to force draining
 		} else {
 			return false, nil
 		}
 	}
 
 	// force drain:
-	// if no new promoted, ensure scaled to 0 and return
+	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
 	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
 	if err != nil {
 		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
@@ -156,11 +158,12 @@ func forceDrain(ctx context.Context,
 	// if we still have the original spec, we need to update with the promoted pipeline's spec
 	if originalSpec {
 		numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
-		// update spec with 0 scale, overridden-spec=true, desiredPhase=Running
+		// update spec with desiredPhase=Running and scaled to 0 initially, plus update the annotation to indicate that we've overridden the spec
 		err := forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
 		return false, err
 	}
-	// we need to make sure we get out of the previous Paused state
+
+	// we need to make sure we get out of the previous Paused state before we Pause again, just to make sure that Numaflow will restart the pause
 	// if desiredPhase==Running and phase==Paused, return
 	desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
 	if err != nil {
@@ -172,7 +175,7 @@ func forceDrain(ctx context.Context,
 		return false, nil
 	}
 
-	// we need to verify that observedGeneration==generation in order to confirm that the 'phase' we read represents the new overridden spec
+	// just to be sure, we also verify that observedGeneration==generation in order to confirm that numaflow has reconciled our previous changes first before we set desiredPhase=Running
 	pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineObservedGeneration(ctx, pipeline)
 	if err != nil {
 		return false, fmt.Errorf("error checking pipeline %s/%s observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
