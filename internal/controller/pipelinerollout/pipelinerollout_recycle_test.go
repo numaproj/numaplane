@@ -18,6 +18,7 @@ package pipelinerollout
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -278,7 +279,12 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 func Test_Recycle(t *testing.T) {
 	ctx := context.Background()
 
-	pipelineSpecJSON := `{
+	originalPauseGracePeriodSeconds := float64(60)
+	pipelineSpecJSON := fmt.Sprintf(`{
+	   "lifecycle":
+		{
+		    "pauseGracePeriodSeconds": %f
+		},
 		"vertices": [
 			{
 				"name": "in",
@@ -306,22 +312,24 @@ func Test_Recycle(t *testing.T) {
 				"to": "out"
 			}
 		]
-	}`
+	}`, originalPauseGracePeriodSeconds)
 
 	tests := []struct {
 		name                   string
 		upgradeStateReason     string
 		overriddenSpecExists   bool
 		pipelinePhase          string
+		originalDesiredPhase   string
 		vertexScaleDefinitions []apiv1.VertexScaleDefinition
 		expectedDeleted        bool
 		expectedError          bool
 	}{
 		{
-			name:                 "delete recreate - should delete immediately",
+			name:                 "delete recreate - should delete immediately with Running desiredPhase",
 			upgradeStateReason:   string(common.LabelValueDeleteRecreateChild),
 			overriddenSpecExists: false,
 			pipelinePhase:        "Running",
+			originalDesiredPhase: "Running",
 			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -351,7 +359,7 @@ func Test_Recycle(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create the Pipeline object
-			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions)
+			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds, tc.originalDesiredPhase)
 
 			// Create the PipelineRollout object
 			pipelineRollout := &apiv1.PipelineRollout{
@@ -410,7 +418,7 @@ func int64Ptr(i int64) *int64 {
 }
 
 // Helper function to create a test Pipeline
-func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition) *unstructured.Unstructured {
+func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64, originalDesiredPhase string) *unstructured.Unstructured {
 	pipeline := &unstructured.Unstructured{}
 	pipeline.SetAPIVersion("numaflow.numaproj.io/v1alpha1")
 	pipeline.SetKind("Pipeline")
@@ -470,7 +478,15 @@ func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists b
 	}
 
 	// Set spec
-	err := unstructured.SetNestedSlice(pipeline.Object, vertices, "spec", "vertices")
+	err := unstructured.SetNestedField(pipeline.Object, pauseGracePeriodSeconds, "spec", "lifecycle", "pauseGracePeriodSeconds")
+	if err != nil {
+		panic(err)
+	}
+	err = unstructured.SetNestedField(pipeline.Object, originalDesiredPhase, "spec", "lifecycle", "desiredPhase")
+	if err != nil {
+		panic(err)
+	}
+	err = unstructured.SetNestedSlice(pipeline.Object, vertices, "spec", "vertices")
 	if err != nil {
 		panic(err)
 	}
