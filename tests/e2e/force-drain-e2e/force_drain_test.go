@@ -262,8 +262,8 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
 				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
 				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
-				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
-					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause)) {
+				//(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause) {
 				forceAppliedSpecPausing[pipelineIndex] = true
 				By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", pipelineIndex))
 			}
