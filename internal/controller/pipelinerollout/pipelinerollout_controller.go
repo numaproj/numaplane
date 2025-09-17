@@ -1110,11 +1110,6 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	return pipelineDef, nil
 }
 
-func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
-	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
-	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
-}
-
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
 	for _, cond := range conditions {
 		switch cond.Type {

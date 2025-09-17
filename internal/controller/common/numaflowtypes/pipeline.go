@@ -158,6 +158,15 @@ func CheckPipelineSetToRun(ctx context.Context, pipeline *unstructured.Unstructu
 	return desiredPhase == string(numaflowv1.PipelinePhaseRunning), err
 }
 
+// CheckPipelineLiveObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
+func CheckPipelineLiveObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipeline, "pipelines")
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("failed to check observed generation of live Pipeline: %v", err)
+	}
+	return CheckPipelineObservedGeneration(ctx, existingPipelineDef)
+}
+
 // CheckPipelineObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
 func CheckPipelineObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
 	pipelineStatus, err := ParsePipelineStatus(pipeline)
@@ -282,7 +291,6 @@ func GetVertexFromPipelineSpecMap(
 	pipelineSpec map[string]interface{},
 	vertexName string,
 ) (map[string]interface{}, bool, error) {
-	// TODO: replace this with GetPipelineVertexDefinitions() call
 	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
 	if err != nil {
 		return nil, false, fmt.Errorf("error while getting vertices of pipeline: %v", err)

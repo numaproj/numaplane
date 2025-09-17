@@ -58,11 +58,22 @@ var (
 	}
 	pullPolicyAlways    = corev1.PullAlways
 	validImagePath      = "quay.io/numaio/numaflow-go/map-cat:stable"
+	onePod              = int32(1)
+	twoPods             = int32(2)
+	threePods           = int32(3)
 	fourPods            = int32(4)
 	fivePods            = int32(5)
-	onePod              = int32(1)
 	zeroReplicaSleepSec = uint32(15) // if for some reason the Vertex has 0 replicas, this will cause Numaflow to scale it back up
 	initialPipelineSpec = numaflowv1.PipelineSpec{
+		Templates: &numaflowv1.Templates{
+			VertexTemplate: &numaflowv1.VertexTemplate{
+				ContainerTemplate: &numaflowv1.ContainerTemplate{
+					Env: []corev1.EnvVar{
+						{Name: "NUMAFLOW_DEBUG", Value: "true"},
+					},
+				},
+			},
+		},
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Lifecycle: numaflowv1.Lifecycle{
 			PauseGracePeriodSeconds: ptr.To(int64(60)),
@@ -76,7 +87,7 @@ var (
 						Duration: &pipelineSpecSourceDuration,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &twoPods, Max: &threePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "cat",
@@ -86,7 +97,7 @@ var (
 						ImagePullPolicy: &pullPolicyAlways,
 					},
 				},
-				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+				Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
 			},
 			{
 				Name: "out",
@@ -124,7 +135,7 @@ func TestForceDrainE2E(t *testing.T) {
 var _ = Describe("Force Drain e2e", Serial, func() {
 
 	It("Should create NumaflowControllerRollout and ISBServiceRollout", func() {
-		CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
+		CreateNumaflowControllerRollout(UpdatedNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
 		// this will be the original successful Pipeline to drain
@@ -147,7 +158,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		// updated Pipeline inserts another "cat" vertex in the middle
 		updatedPipelineSpec := initialPipelineSpec
-		catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
+		/*catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
 		catVertex.Name = "cat2"
 		outVertex := initialPipelineSpec.Vertices[2].DeepCopy()
 		updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, *outVertex)
@@ -156,6 +167,14 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 			{From: "in", To: "cat"},
 			{From: "cat", To: "cat2"},
 			{From: "cat2", To: "out"},
+		}*/
+		updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
+			Name: "out",
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					Blackhole: &numaflowv1.Blackhole{},
+				},
+			},
 		}
 
 		// restore PipelineRollout back to original spec
@@ -239,10 +258,12 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				return false
 			}
 
-			if !forceAppliedSpecPausing[pipelineIndex] && /*annotations[common.AnnotationKeyOverriddenSpec] == "true"*/
+			if !forceAppliedSpecPausing[pipelineIndex] &&
 				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
 				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
 				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
+				// we check for either Pausing or Paused w/ drainedOnPause
+				// just the latter would be a better check, but sometimes the test isn't quick enough to catch it before the pipeline is deleted
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
 					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause)) {
 				forceAppliedSpecPausing[pipelineIndex] = true

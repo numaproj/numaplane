@@ -20,13 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TODO: need to figure out how to handle users who have explicitly paused their pipelines or taken those pipelines down to 0 Pods
-// Say the PipelineRollout says either desiredPhase: Paused or scale=0: Maybe we keep waiting for a promoted pipeline to arrive for
-// some amount of time but then after a certain period of time we stop waiting
-// A future enhancement could be to delete any pipelines that spent their whole life paused
-
 // Recycle deletes child; returns true if it was in fact deleted
 // This implements a function of the RolloutController interface
+// For Pipelines, for the Progressive case, we first drain the Pipeline here before we delete it. (For PPND case, it will have been drained prior to this function.)
+// And if the Pipeline can't drain by itself (in the case it's unhealthy), we "force drain" it by applying a new spec over top it.
 func (r *PipelineRolloutReconciler) Recycle(
 	ctx context.Context,
 	pipeline *unstructured.Unstructured,
@@ -44,9 +41,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	// Need to determine how to delete the pipeline
 	// Use the "upgrade-strategy-reason" Label to determine how
 	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
-	// if upgrade-strategy-reason="progressive success", then either just pause, or pause and drain,
-	//    depending on PipelineRollout specification (TODO: https://github.com/numaproj/numaplane/issues/512)
-	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
+	// for the progressive upgrade-strategy-reasons, we drain first
 	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
 	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
 		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
@@ -71,8 +66,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 			requiresPauseOriginalSpec = true
 		case common.LabelValueProgressiveReplacedFailed:
 			// LabelValueProgressiveReplacedFailed is the case of the "upgrading" pipeline failing and then being replaced with a newer Pipeline
-			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
 			requiresPause = true
+			// We don't attempt to pause it with the original spec first since it's failed and is very unlikely to be able to pause on its own.
+			requiresPauseOriginalSpec = false
 		}
 	}
 
@@ -84,32 +80,25 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// First check if the PipelineRollout is configured to run
 	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
-	pipelineSpec, err := numaflowtypes.GetPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
+	// TODO: reduce the number of Pipelines which are in this state by deleting any pipeline which has always been paused or scaled to 0 its entire life, in which case there's
+	// no risk of there being data in it to drain
+	pauseDesired, err := checkUserDesiresPause(ctx, pipelineRollout, pipeline, c)
 	if err != nil {
 		return false, err
 	}
-	pipelineRolloutDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
-	pipelineRolloutDef.Object["spec"] = pipelineSpec
-	setToRun, err := numaflowtypes.CheckPipelineSetToRun(ctx, pipelineRolloutDef)
-	if err != nil {
-		return false, err
-	}
-	if !setToRun {
-		err = ensurePipelineScaledToZero(ctx, pipeline, c)
-		if err != nil {
-			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
+	if pauseDesired {
 		numaLogger.Debug("Pipeline is not supposed to run, per definition: will not drain it yet")
 		return false, nil
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
-	originalSpec := true
-	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
-	if found {
-		originalSpec = false
-	}
+	originalSpec := !isPipelineSpecOverridden(pipeline)
+
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// if requiresPauseOriginalSpec==true, it means we first attempt to pause with our original spec, and only if that is not able to drain fully, we do force draining
+	// if requiresPauseOriginalSpec==false, we are pretty sure the first attempt will fail, so we go straight to force draining
+	// In either case, before Force Draining, we need to wait until there's a new promoted Pipeline we can use
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// if the recycling strategy requires pausing with the original spec and we still have the original spec, then
 	// make sure we pause it and check on it
@@ -124,22 +113,17 @@ func (r *PipelineRolloutReconciler) Recycle(
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
 				return true, err
-			} // else implicitly fall through
+			} // else implicitly fall through to force draining
 
 		} else if failed {
-			numaLogger.Debug("Pipeline is in Failed phase; will force drain")
+			numaLogger.Debug("Pipeline is in Failed phase; will force drain") // fall through to force draining
 		} else {
 			return false, nil
 		}
 	}
 
-	// if pausing original spec first:
-	//   desiredPhase:Paused + min scale -> phase:Paused + min scale -> desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
-	// else:
-	//.  desiredPhase:Running + 0 scale -> phase:Running + 0 scale -> desiredPhase:Pausing + min scale -> phase:Paused + min scale
-
 	// force drain:
-	// if no new promoted, ensure scaled to 0 and return
+	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
 	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
 	if err != nil {
 		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
@@ -153,51 +137,73 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 		return false, nil
 	} else {
+		return forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
+	}
 
-		// if we still have the original spec, we need to update with the promoted pipeline's spec
-		if originalSpec {
-			numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
-			// update spec with 0 scale, overridden-spec=true, desiredPhase=Running
-			err = forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
-			return false, err
-		}
-		// we need to make sure we get out of the previous Paused state
-		// TODO: what if user intended that their pipeline be paused, though?
-		// if desiredPhase==Running and phase==Paused, return
-		desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
-		if err != nil {
-			return false, err
-		}
-		isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
-		if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
-			numaLogger.WithValues("desiredPhase", desiredPhase, "currentPhase", "Paused").Debug("Pipeline transitioning from paused to running, waiting for completion")
-			return false, nil
-		}
+}
 
-		// we need to verify that observedGeneration==generation in order to confirm that the 'phase' we read represents the new overridden spec
-		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineObservedGeneration(ctx, pipeline)
-		if err != nil {
-			return false, fmt.Errorf("error checking pipeline %s/%s observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
-		if !pipelineReconciled {
-			numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
-			return false, nil
-		}
+// apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
+// The new spec will enable it to drain.
+// Then pause it.
+func forceDrain(ctx context.Context,
+	// the pipeline whose spec will be updated
+	pipeline *unstructured.Unstructured,
+	// the definition of the pipeline whose spec will be used
+	promotedPipeline *unstructured.Unstructured,
+	// the PipelineRollout parent
+	pipelineRollout *apiv1.PipelineRollout,
+	// this function may be called multiple times
+	// if originalSpec is true, we still need to update the spec
+	// if false, just continue with the remaining process
+	originalSpec bool,
+	c client.Client,
+) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
 
-		paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
-		if err != nil {
-			return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
-		numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
-		if paused || failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-			numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Infof("Pipeline has the promoted pipeline's spec and has either paused or failed, now deleting it")
-			err = kubernetes.DeleteResource(ctx, c, pipeline)
-			return true, err
-		}
+	// if we still have the original spec, we need to update with the promoted pipeline's spec
+	if originalSpec {
+		numaLogger.WithValues("promotedPipeline", promotedPipeline.GetName()).Info("Found promoted pipeline, will force apply it")
+		// update spec with desiredPhase=Running and scaled to 0 initially, plus update the annotation to indicate that we've overridden the spec
+		err := forceApplySpecOnUndrainablePipeline(ctx, pipeline, promotedPipeline, c)
+		return false, err
+	}
+
+	// we need to make sure we get out of the previous Paused state before we Pause again, just to make sure that Numaflow will restart the pause
+	// if desiredPhase==Running and phase==Paused, return
+	desiredPhase, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
+	if err != nil {
+		return false, err
+	}
+	isPaused := numaflowtypes.CheckPipelinePhase(ctx, pipeline, numaflowv1.PipelinePhasePaused)
+	if desiredPhase == string(numaflowv1.PipelinePhaseRunning) && isPaused {
+		numaLogger.WithValues("desiredPhase", desiredPhase, "currentPhase", "Paused").Debug("Pipeline transitioning from paused to running, waiting for completion")
+		return false, nil
+	}
+
+	// just to be sure, we also verify that observedGeneration==generation in order to confirm that numaflow has reconciled our previous changes first before we set desiredPhase=Running
+	pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineObservedGeneration(ctx, pipeline)
+	if err != nil {
+		return false, fmt.Errorf("error checking pipeline %s/%s observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	if !pipelineReconciled {
+		numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
+		return false, nil
+	}
+
+	// perform the drain
+	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
+	if err != nil {
+		return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
+	// if it's either paused or failed, delete it
+	if paused || failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
+		numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Infof("Pipeline has the promoted pipeline's spec and has either paused or failed, now deleting it")
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return true, err
 	}
 
 	return false, nil
-
 }
 
 // if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
@@ -223,33 +229,21 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 	}
 }
 
-func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *unstructured.Unstructured, newPipeline *unstructured.Unstructured, c client.Client) error {
+// Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
+// (it will be set to Paused later)
+func forceApplySpecOnUndrainablePipeline(
+	ctx context.Context,
+	// the pipeline that will be updated
+	currentPipeline *unstructured.Unstructured,
+	// spec from the new pipeline which will be applied
+	newPipeline *unstructured.Unstructured,
+	c client.Client) error {
 
 	numaLogger := logger.FromContext(ctx)
 
-	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
-	// TODO: aren't we doing this in progressive code? we should have a shared function if so
-	// Also, we could possibly call ensurePipelineScaledToZero() if we are okay having a separate patch
-	newVertexSpecs, err := numaflowtypes.GetPipelineVertexDefinitions(newPipeline)
-	if err != nil {
-		return fmt.Errorf("failed to get vertices from pipeline %s/%s: %w", newPipeline.GetNamespace(), newPipeline.GetName(), err)
-	}
-	zero := int64(0)
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(newVertexSpecs))
-	for vertexIndex, newVertexSpec := range newVertexSpecs {
-		if vertexAsMap, ok := newVertexSpec.(map[string]any); ok {
-			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
-				VertexName: vertexAsMap["name"].(string),
-				ScaleDefinition: &apiv1.ScaleDefinition{
-					Min: &zero,
-					Max: &zero,
-				},
-			}
-		}
-	}
-
+	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
-	err = applyScaleValuesToPipelineDefinition(ctx, newPipelineCopy, vertexScaleDefinitions)
+	err := scalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
 	if err != nil {
 		return err
 	}
@@ -260,12 +254,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	if err != nil {
 		return err
 	}
-	annotations := newPipelineCopy.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[common.AnnotationKeyOverriddenSpec] = "true"
-	newPipelineCopy.SetAnnotations(annotations)
+	markPipelineSpecOverridden(newPipelineCopy)
 
 	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
 
@@ -298,6 +287,8 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 
 // make sure Pipeline's desiredPhase==Paused and if not set it
 // make sure its scale and pauseGracePeriodSeconds is adjusted if necessary
+// The scale is reduced to avoid too many pods running for the user.
+// The pauseGracePeriodSeconds is increased to allow more time for pausing given the reduction in Pods.
 // return:
 // - whether phase==Paused
 // - whether fully drained
@@ -333,6 +324,17 @@ func drainRecyclablePipeline(
 		err = applyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
 		if err != nil {
 			return false, false, false, err
+		}
+
+		// Make sure Numaflow reconciles the scale values before we set desiredPhase=Paused
+		// (this is essential to make sure Numaflow will scale vertices > 0 if they were previously at 0)
+		pipelineReconciled, generation, observedGeneration, err := numaflowtypes.CheckPipelineLiveObservedGeneration(ctx, pipeline)
+		if err != nil {
+			return false, false, false, fmt.Errorf("error checking pipeline %s/%s live observed generation: %v", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		if !pipelineReconciled {
+			numaLogger.WithValues("generation", generation, "observedGeneration", observedGeneration).Debug("waiting for pipeline observedGeneration to match generation")
+			return false, false, false, nil
 		}
 
 		// patch the pipeline to set desiredPhase=Paused and set the new pause time
@@ -378,7 +380,6 @@ func calculatePauseTimeForRecycle(
 		return 0, err
 	}
 	if !found {
-		fmt.Printf("deletethis: pipelineSpec=%+v\n", pipelineSpec)
 		numaLogger.Debugf("pauseGracePeriodSeconds field not found, will use default %d seconds", defaultPauseGracePeriodSeconds)
 		origPauseGracePeriodSeconds = float64(defaultPauseGracePeriodSeconds)
 	}
@@ -514,4 +515,43 @@ func getRecycleScaleFactor(pipelineRollout *apiv1.PipelineRollout) int32 {
 	}
 	// not defined, return default
 	return 50
+}
+
+// if the user has set desiredPhase=Paused or any Vertex to scale.max=0, it means the user prefers not to run their Pipeline
+// so we should hold off on draining it until they set the PipelineRollout back for running again
+// Scale it to zero in the meantime (if it's not)
+func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured, c client.Client) (bool, error) {
+	pipelineSpec, err := numaflowtypes.GetPipelineSpecFromRollout(pipeline.GetName(), pipelineRollout)
+	if err != nil {
+		return false, err
+	}
+	pipelineRolloutDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
+	pipelineRolloutDef.Object["spec"] = pipelineSpec
+	setToRun, err := numaflowtypes.CheckPipelineSetToRun(ctx, pipelineRolloutDef)
+	if err != nil {
+		return false, err
+	}
+	if !setToRun {
+		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		if err != nil {
+			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
+	annotations := pipeline.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[common.AnnotationKeyOverriddenSpec] = "true"
+	pipeline.SetAnnotations(annotations)
+}
+
+func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
+	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
+	return found
 }
