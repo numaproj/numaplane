@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -280,54 +281,64 @@ func Test_Recycle(t *testing.T) {
 	ctx := context.Background()
 
 	originalPauseGracePeriodSeconds := float64(60)
-	pipelineSpecJSON := fmt.Sprintf(`{
-	   "lifecycle":
-		{
-		    "pauseGracePeriodSeconds": %f
-		},
-		"vertices": [
+	createTestPipelineJSON := func(imagePath string) string {
+		return fmt.Sprintf(`{
+		"lifecycle":
 			{
-				"name": "in",
-				"source": {
-					"generator": {
-						"rpu": 5,
-						"duration": "1s"
+				"pauseGracePeriodSeconds": %f
+			},
+			"vertices": [
+				{
+					"name": "in",
+					"source": {
+						"generator": {
+							"rpu": 5,
+							"duration": "1s"
+						}
+					},
+					"scale": {
+						"min": 1,
+						"max": 3
 					}
 				},
-				"scale": {
-					"min": 1,
-					"max": 3
+				{
+					"name": "out",
+					"sink": {
+						"log": {}
+					}
 				}
-			},
-			{
-				"name": "out",
-				"sink": {
-					"log": {}
+			],
+			"edges": [
+				{
+					"from": "in",
+					"to": "out"
 				}
-			}
-		],
-		"edges": [
-			{
-				"from": "in",
-				"to": "out"
-			}
-		]
-	}`, originalPauseGracePeriodSeconds)
+			]
+		}`, originalPauseGracePeriodSeconds)
+	}
+
+	goodImagePath := "quay.io/repo/image:good"
+	//badImagePath := "quay.io/repo/image:bad"
+	previousImagePath := "quay.io/repo/image:old"
+	goodPipelineSpecJSON := createTestPipelineJSON(goodImagePath)
+	//badPipelineSpecJSON := createTestPipelineJSON(badImagePath)
+	previousPipelineSpecJSON := createTestPipelineJSON(previousImagePath)
 
 	tests := []struct {
 		name                   string
 		upgradeStateReason     string
-		overriddenSpecExists   bool
+		specHasBeenOverridden  bool
 		pipelinePhase          string
 		vertexScaleDefinitions []apiv1.VertexScaleDefinition
+		newPromotedPipeline    bool
 		expectedDeleted        bool
 		expectedError          bool
 	}{
 		{
-			name:                 "delete recreate - should delete immediately",
-			upgradeStateReason:   string(common.LabelValueDeleteRecreateChild),
-			overriddenSpecExists: false,
-			pipelinePhase:        "Running",
+			name:                  "delete recreate - should delete immediately",
+			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
+			specHasBeenOverridden: false,
+			pipelinePhase:         "Running",
 			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -356,8 +367,8 @@ func Test_Recycle(t *testing.T) {
 			err := apiv1.AddToScheme(scheme)
 			assert.NoError(t, err)
 
-			// Create the Pipeline object
-			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds)
+			// Create the Pipeline which needs to be recycled
+			pipeline := createTestPipeline("test-pipeline", "test-pipeline-2", tc.pipelinePhase, tc.upgradeStateReason, tc.specHasBeenOverridden, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds)
 
 			// Create the PipelineRollout object
 			pipelineRollout := &apiv1.PipelineRollout{
@@ -368,7 +379,7 @@ func Test_Recycle(t *testing.T) {
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{
-							Raw: []byte(pipelineSpecJSON),
+							Raw: []byte(goodPipelineSpecJSON),
 						},
 					},
 				},
@@ -382,10 +393,24 @@ func Test_Recycle(t *testing.T) {
 				},
 			}
 
+			// Either "promoted" Pipeline is new or it's older
+			var promotedPipelineSpec string
+			var promotedPipelineName string
+			if tc.newPromotedPipeline {
+				promotedPipelineSpec = goodPipelineSpecJSON
+				promotedPipelineName = "test-pipeline-3"
+			} else {
+				promotedPipelineSpec = previousPipelineSpecJSON
+				promotedPipelineName = "test-pipeline-0"
+			}
+
+			promotedPipeline, err := ctlrcommon.CreateTestPipelineUnstructured(promotedPipelineName, promotedPipelineSpec)
+			assert.NoError(t, err)
+
 			// Create fake client with the objects
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(pipeline, pipelineRollout).
+				WithObjects(pipeline, pipelineRollout, promotedPipeline).
 				Build()
 
 			// Create the reconciler
@@ -416,16 +441,16 @@ func int64Ptr(i int64) *int64 {
 }
 
 // Helper function to create a test Pipeline
-func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64) *unstructured.Unstructured {
+func createTestPipeline(pipelineRolloutName string, pipelineName string, phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64) *unstructured.Unstructured {
 	pipeline := &unstructured.Unstructured{}
 	pipeline.SetAPIVersion("numaflow.numaproj.io/v1alpha1")
 	pipeline.SetKind("Pipeline")
-	pipeline.SetName("test-pipeline-0")
+	pipeline.SetName(pipelineName)
 	pipeline.SetNamespace("default")
 
 	// Set labels
 	labels := map[string]string{
-		common.LabelKeyParentRollout:      "test-pipeline",
+		common.LabelKeyParentRollout:      pipelineRolloutName,
 		common.LabelKeyUpgradeState:       string(common.LabelValueUpgradeRecyclable),
 		common.LabelKeyUpgradeStateReason: upgradeStateReason,
 	}
