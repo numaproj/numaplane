@@ -579,6 +579,49 @@ func scalePipelineDefVerticesToZero(
 	return nil
 }
 
+func scalePipelineDefSourceVerticesToZero(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+) error {
+	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
+	if err != nil {
+		return err
+	}
+
+	zero := int64(0)
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexName := scaleDef.VertexName
+
+		// look for this vertex's entire definition so we can determine if it's a source or not
+		pipelineSpec, exists, err := unstructured.NestedMap(pipelineDef.Object, "spec")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("spec not found in pipeline %s/%s", pipelineDef.GetNamespace(), pipelineDef.GetName())
+		}
+		vertexDef, found, err := numaflowtypes.GetVertexFromPipelineSpecMap(pipelineSpec, vertexName)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("vertex definition not found in pipeline %s/%s for vertex %s", pipelineDef.GetNamespace(), pipelineDef.GetName(), vertexName)
+		}
+		_, isSource, err := unstructured.NestedMap(vertexDef, "source")
+		if err != nil {
+			return err
+		}
+		if isSource {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+		}
+	}
+	err = applyScaleValuesToPipelineDefinition(ctx, pipelineDef, vertexScaleDefinitions)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func scalePipelineVerticesToZero(
 	ctx context.Context,
 	pipelineDef *unstructured.Unstructured,

@@ -258,12 +258,14 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				return false
 			}
 
-			if !forceAppliedSpecPausing[pipelineIndex] && /*annotations[common.AnnotationKeyOverriddenSpec] == "true"*/
+			if !forceAppliedSpecPausing[pipelineIndex] &&
 				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
 				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
 				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
-				//(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
-				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause) {
+				// we check for either Pausing or Paused w/ drainedOnPause
+				// just the latter would be a better check, but sometimes the test isn't quick enough to catch it before the pipeline is deleted
+				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
+					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause)) {
 				forceAppliedSpecPausing[pipelineIndex] = true
 				By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", pipelineIndex))
 			}

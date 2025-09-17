@@ -92,11 +92,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
-	originalSpec := true
-	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
-	if found {
-		originalSpec = false
-	}
+	originalSpec := !isPipelineSpecOverridden(pipeline)
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// if requiresPauseOriginalSpec==true, it means we first attempt to pause with our original spec, and only if that is not able to drain fully, we do force draining
@@ -146,10 +142,19 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 }
 
+// apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
+// The new spec will enable it to drain.
+// Then pause it.
 func forceDrain(ctx context.Context,
+	// the pipeline whose spec will be updated
 	pipeline *unstructured.Unstructured,
+	// the definition of the pipeline whose spec will be used
 	promotedPipeline *unstructured.Unstructured,
+	// the PipelineRollout parent
 	pipelineRollout *apiv1.PipelineRollout,
+	// this function may be called multiple times
+	// if originalSpec is true, we still need to update the spec
+	// if false, just continue with the remaining process
 	originalSpec bool,
 	c client.Client,
 ) (bool, error) {
@@ -185,11 +190,13 @@ func forceDrain(ctx context.Context,
 		return false, nil
 	}
 
+	// perform the drain
 	paused, drained, failed, err := drainRecyclablePipeline(ctx, pipeline, pipelineRollout, c)
 	if err != nil {
 		return false, fmt.Errorf("failed to drain recyclable pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 	}
 	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
+	// if it's either paused or failed, delete it
 	if paused || failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
 		numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Infof("Pipeline has the promoted pipeline's spec and has either paused or failed, now deleting it")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
@@ -222,13 +229,21 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 	}
 }
 
-func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *unstructured.Unstructured, newPipeline *unstructured.Unstructured, c client.Client) error {
+// Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
+// (it will be set to Paused later)
+func forceApplySpecOnUndrainablePipeline(
+	ctx context.Context,
+	// the pipeline that will be updated
+	currentPipeline *unstructured.Unstructured,
+	// spec from the new pipeline which will be applied
+	newPipeline *unstructured.Unstructured,
+	c client.Client) error {
 
 	numaLogger := logger.FromContext(ctx)
 
-	// take the newPipeline Spec, make a copy, and set its scale.min and max to 0
+	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
-	err := scalePipelineDefVerticesToZero(ctx, newPipelineCopy)
+	err := scalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
 	if err != nil {
 		return err
 	}
@@ -239,12 +254,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 	if err != nil {
 		return err
 	}
-	annotations := newPipelineCopy.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[common.AnnotationKeyOverriddenSpec] = "true"
-	newPipelineCopy.SetAnnotations(annotations)
+	markPipelineSpecOverridden(newPipelineCopy)
 
 	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
 
@@ -277,6 +287,8 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline *u
 
 // make sure Pipeline's desiredPhase==Paused and if not set it
 // make sure its scale and pauseGracePeriodSeconds is adjusted if necessary
+// The scale is reduced to avoid too many pods running for the user.
+// The pauseGracePeriodSeconds is increased to allow more time for pausing given the reduction in Pods.
 // return:
 // - whether phase==Paused
 // - whether fully drained
@@ -368,7 +380,6 @@ func calculatePauseTimeForRecycle(
 		return 0, err
 	}
 	if !found {
-		fmt.Printf("deletethis: pipelineSpec=%+v\n", pipelineSpec)
 		numaLogger.Debugf("pauseGracePeriodSeconds field not found, will use default %d seconds", defaultPauseGracePeriodSeconds)
 		origPauseGracePeriodSeconds = float64(defaultPauseGracePeriodSeconds)
 	}
@@ -529,4 +540,18 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 		return true, nil
 	}
 	return false, nil
+}
+
+func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
+	annotations := pipeline.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[common.AnnotationKeyOverriddenSpec] = "true"
+	pipeline.SetAnnotations(annotations)
+}
+
+func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
+	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
+	return found
 }

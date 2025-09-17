@@ -2186,3 +2186,121 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 		})
 	}
 }
+
+func Test_scalePipelineDefSourceVerticesToZero(t *testing.T) {
+	tests := []struct {
+		name                      string
+		pipelineDef               string
+		expectError               bool
+		expectedResultPipelineDef string
+	}{
+		{
+			name: "Multiple source vertices",
+			pipelineDef: `
+{
+  "vertices": [
+	{
+	  "name": "source1",
+	  "scale": {
+		"min": 3,
+		"max": 6
+	  },
+	  "source": {
+		"generator": {
+		  "rpu": 10,
+		  "duration": "2s"
+		}
+	  }
+	},
+	{
+	  "name": "source2",
+	  "source": {
+		"http": {}
+	  }
+	},
+	{
+	  "name": "processor",
+	  "scale": {
+		"min": 2,
+		"max": 5
+	  },
+	  "sink": {
+		"log": {}
+	  }
+	}
+  ]
+}
+`,
+			expectError: false,
+			expectedResultPipelineDef: `
+{
+  "vertices": [
+	{
+	  "name": "source1",
+	  "scale": {
+		"min": 0,
+		"max": 0
+	  },
+	  "source": {
+		"generator": {
+		  "rpu": 10,
+		  "duration": "2s"
+		}
+	  }
+	},
+	{
+	  "name": "source2",
+	  "scale": {
+		"min": 0,
+		"max": 0
+	  },
+	  "source": {
+		"http": {}
+	  }
+	},
+	{
+	  "name": "processor",
+	  "scale": {
+		"min": 2,
+		"max": 5
+	  },
+	  "sink": {
+		"log": {}
+	  }
+	}
+  ]
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			// Create unstructured object with the pipeline definition
+			obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			var spec map[string]interface{}
+			err := json.Unmarshal([]byte(tt.pipelineDef), &spec)
+			assert.NoError(t, err)
+
+			obj.Object["spec"] = spec
+			obj.SetName("test-pipeline")
+			obj.SetNamespace("test-namespace")
+
+			// Call the function under test
+			err = scalePipelineDefSourceVerticesToZero(ctx, obj)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Verify the result matches expected output
+				expectedSpecMap := map[string]interface{}{}
+				err = json.Unmarshal([]byte(tt.expectedResultPipelineDef), &expectedSpecMap)
+				assert.NoError(t, err)
+				assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, obj.Object["spec"]))
+			}
+		})
+	}
+}
