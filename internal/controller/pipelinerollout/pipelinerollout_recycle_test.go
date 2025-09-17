@@ -319,17 +319,15 @@ func Test_Recycle(t *testing.T) {
 		upgradeStateReason     string
 		overriddenSpecExists   bool
 		pipelinePhase          string
-		originalDesiredPhase   string
 		vertexScaleDefinitions []apiv1.VertexScaleDefinition
 		expectedDeleted        bool
 		expectedError          bool
 	}{
 		{
-			name:                 "delete recreate - should delete immediately with Running desiredPhase",
+			name:                 "delete recreate - should delete immediately",
 			upgradeStateReason:   string(common.LabelValueDeleteRecreateChild),
 			overriddenSpecExists: false,
 			pipelinePhase:        "Running",
-			originalDesiredPhase: "Running",
 			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -359,7 +357,7 @@ func Test_Recycle(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create the Pipeline object
-			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds, tc.originalDesiredPhase)
+			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds)
 
 			// Create the PipelineRollout object
 			pipelineRollout := &apiv1.PipelineRollout{
@@ -418,7 +416,7 @@ func int64Ptr(i int64) *int64 {
 }
 
 // Helper function to create a test Pipeline
-func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64, originalDesiredPhase string) *unstructured.Unstructured {
+func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64) *unstructured.Unstructured {
 	pipeline := &unstructured.Unstructured{}
 	pipeline.SetAPIVersion("numaflow.numaproj.io/v1alpha1")
 	pipeline.SetKind("Pipeline")
@@ -478,11 +476,7 @@ func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists b
 	}
 
 	// Set spec
-	err := unstructured.SetNestedField(pipeline.Object, pauseGracePeriodSeconds, "spec", "lifecycle", "pauseGracePeriodSeconds")
-	if err != nil {
-		panic(err)
-	}
-	err = unstructured.SetNestedField(pipeline.Object, originalDesiredPhase, "spec", "lifecycle", "desiredPhase")
+	err := unstructured.SetNestedField(pipeline.Object, pauseGracePeriodSeconds, "lifecycle", "pauseGracePeriodSeconds")
 	if err != nil {
 		panic(err)
 	}
