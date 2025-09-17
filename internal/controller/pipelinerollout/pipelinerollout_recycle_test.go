@@ -20,11 +20,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/numaproj/numaplane/internal/common"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func Test_calculateScaleForRecycle(t *testing.T) {
@@ -268,4 +272,225 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test_Recycle tests the Recycle function with various input scenarios
+func Test_Recycle(t *testing.T) {
+	ctx := context.Background()
+
+	pipelineSpecJSON := `{
+		"vertices": [
+			{
+				"name": "in",
+				"source": {
+					"generator": {
+						"rpu": 5,
+						"duration": "1s"
+					}
+				},
+				"scale": {
+					"min": 1,
+					"max": 3
+				}
+			},
+			{
+				"name": "out",
+				"sink": {
+					"log": {}
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "in",
+				"to": "out"
+			}
+		]
+	}`
+
+	tests := []struct {
+		name                   string
+		upgradeStateReason     string
+		overriddenSpecExists   bool
+		pipelinePhase          string
+		vertexScaleDefinitions []apiv1.VertexScaleDefinition
+		expectedDeleted        bool
+		expectedError          bool
+	}{
+		{
+			name:                 "delete recreate - should delete immediately",
+			upgradeStateReason:   string(common.LabelValueDeleteRecreateChild),
+			overriddenSpecExists: false,
+			pipelinePhase:        "Running",
+			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(1),
+						Max: int64Ptr(3),
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(1),
+						Max: int64Ptr(2),
+					},
+				},
+			},
+			expectedDeleted: true, // Delete recreate should delete immediately
+			expectedError:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a fake client
+			scheme := runtime.NewScheme()
+			err := apiv1.AddToScheme(scheme)
+			assert.NoError(t, err)
+
+			// Create the Pipeline object
+			pipeline := createTestPipeline(tc.pipelinePhase, tc.upgradeStateReason, tc.overriddenSpecExists, tc.vertexScaleDefinitions)
+
+			// Create the PipelineRollout object
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pipeline",
+					Namespace: "default",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{
+							Raw: []byte(pipelineSpecJSON),
+						},
+					},
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						HistoricalPodCount: map[string]int{
+							"in":  2,
+							"out": 1,
+						},
+					},
+				},
+			}
+
+			// Create fake client with the objects
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pipeline, pipelineRollout).
+				Build()
+
+			// Create the reconciler
+			reconciler := &PipelineRolloutReconciler{
+				client:        fakeClient,
+				scheme:        scheme,
+				customMetrics: &metrics.CustomMetrics{},
+				recorder:      record.NewFakeRecorder(10),
+			}
+
+			// Call the Recycle function
+			deleted, err := reconciler.Recycle(ctx, pipeline, fakeClient)
+
+			// Verify results
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedDeleted, deleted)
+			}
+		})
+	}
+}
+
+// Helper function to create int64 pointer
+func int64Ptr(i int64) *int64 {
+	return &i
+}
+
+// Helper function to create a test Pipeline
+func createTestPipeline(phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition) *unstructured.Unstructured {
+	pipeline := &unstructured.Unstructured{}
+	pipeline.SetAPIVersion("numaflow.numaproj.io/v1alpha1")
+	pipeline.SetKind("Pipeline")
+	pipeline.SetName("test-pipeline-0")
+	pipeline.SetNamespace("default")
+
+	// Set labels
+	labels := map[string]string{
+		common.LabelKeyParentRollout:      "test-pipeline",
+		common.LabelKeyUpgradeState:       string(common.LabelValueUpgradeRecyclable),
+		common.LabelKeyUpgradeStateReason: upgradeStateReason,
+	}
+	pipeline.SetLabels(labels)
+
+	// Set annotations if needed
+	if overriddenSpecExists {
+		annotations := map[string]string{
+			common.AnnotationKeyOverriddenSpec: "true",
+		}
+		pipeline.SetAnnotations(annotations)
+	}
+
+	// Create vertices based on the scale definitions
+	vertices := []interface{}{}
+	for _, vsd := range vertexScaleDefinitions {
+		vertex := map[string]interface{}{
+			"name": vsd.VertexName,
+		}
+
+		// Add source or sink based on vertex name
+		if vsd.VertexName == "in" {
+			vertex["source"] = map[string]interface{}{
+				"generator": map[string]interface{}{
+					"rpu":      int64(5),
+					"duration": "1s",
+				},
+			}
+		} else if vsd.VertexName == "out" {
+			vertex["sink"] = map[string]interface{}{
+				"log": map[string]interface{}{},
+			}
+		}
+
+		// Add scale if provided
+		if vsd.ScaleDefinition != nil {
+			scale := map[string]interface{}{}
+			if vsd.ScaleDefinition.Min != nil {
+				scale["min"] = int64(*vsd.ScaleDefinition.Min)
+			}
+			if vsd.ScaleDefinition.Max != nil {
+				scale["max"] = int64(*vsd.ScaleDefinition.Max)
+			}
+			vertex["scale"] = scale
+		}
+
+		vertices = append(vertices, vertex)
+	}
+
+	// Set spec
+	err := unstructured.SetNestedSlice(pipeline.Object, vertices, "spec", "vertices")
+	if err != nil {
+		panic(err)
+	}
+
+	edges := []interface{}{
+		map[string]interface{}{
+			"from": "in",
+			"to":   "out",
+		},
+	}
+	err = unstructured.SetNestedSlice(pipeline.Object, edges, "spec", "edges")
+	if err != nil {
+		panic(err)
+	}
+
+	// Set status
+	err = unstructured.SetNestedField(pipeline.Object, phase, "status", "phase")
+	if err != nil {
+		panic(err)
+	}
+
+	return pipeline
 }
