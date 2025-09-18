@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -262,4 +263,15 @@ func CalculateHash(ctx context.Context, resource unstructured.Unstructured) (str
 	hashVal := hex.EncodeToString(h.Sum(nil))
 	numaLogger.WithValues("resource name", resource.GetName(), "hash", hashVal).Debugf("derived hash from resource: %+v", resource)
 	return hashVal, nil
+}
+
+func RawExtensionToUnstructured(rawExtension runtime.RawExtension) (*unstructured.Unstructured, error) {
+	var asMap map[string]interface{}
+	if err := util.StructToStruct(rawExtension, &asMap); err != nil {
+		return nil, err
+	}
+
+	unstruc := &unstructured.Unstructured{}
+	unstruc.Object = asMap
+	return unstruc, nil
 }

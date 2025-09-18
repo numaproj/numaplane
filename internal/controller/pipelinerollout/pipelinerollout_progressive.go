@@ -1004,7 +1004,13 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
 	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
 	for _, rider := range pipelineRollout.Spec.Riders {
-		gvk := rider.Definition.Object.GetObjectKind().GroupVersionKind()
+
+		unstruc, err := kubernetes.RawExtensionToUnstructured(rider.Definition)
+		if err != nil {
+			numaLogger.Errorf(err, "Failed to convert rider definition to map")
+			continue
+		}
+		gvk := unstruc.GroupVersionKind()
 		if gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler" {
 			numaLogger.Debug("PipelineRollout %s/%s contains HPA Rider: Full Progressive Rollout is unsupported")
 			return true

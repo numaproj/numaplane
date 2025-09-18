@@ -734,7 +734,23 @@ func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context
 	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
 	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
 	for _, rider := range monoVertexRollout.Spec.Riders {
-		gvk := rider.Definition.Object.GetObjectKind().GroupVersionKind()
+
+		unstruc, err := kubernetes.RawExtensionToUnstructured(rider.Definition)
+		if err != nil {
+			numaLogger.Errorf(err, "Failed to convert rider definition to map")
+			continue
+		}
+
+		/*var asMap map[string]interface{}
+		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
+			numaLogger.Errorf(err, "Failed to convert rider definition to map")
+			continue
+		}
+
+		unstruc := unstructured.Unstructured{}
+		unstruc.Object = asMap*/
+		gvk := unstruc.GroupVersionKind()
+
 		if gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler" {
 			numaLogger.Debug("MonoVertexRollout %s/%s contains HPA Rider: Full Progressive Rollout is unsupported")
 			return true
