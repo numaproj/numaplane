@@ -34,7 +34,7 @@ type NumaplaneV1alpha1Interface interface {
 	PipelineRolloutsGetter
 }
 
-// NumaplaneV1alpha1Client is used to interact with features provided by the numaplane.numaproj.io group.
+// NumaplaneV1alpha1Client is used to interact with features provided by the numaplane group.
 type NumaplaneV1alpha1Client struct {
 	restClient rest.Interface
 }

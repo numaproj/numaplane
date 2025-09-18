@@ -51,7 +51,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=numaplane.numaproj.io, Version=v1alpha1
+	// Group=numaplane, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("isbservicerollouts"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Numaplane().V1alpha1().ISBServiceRollouts().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("monovertexrollouts"):
