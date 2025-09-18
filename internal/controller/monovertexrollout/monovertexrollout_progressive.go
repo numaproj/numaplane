@@ -740,15 +740,6 @@ func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context
 			numaLogger.Errorf(err, "Failed to convert rider definition to map")
 			continue
 		}
-
-		/*var asMap map[string]interface{}
-		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
-			numaLogger.Errorf(err, "Failed to convert rider definition to map")
-			continue
-		}
-
-		unstruc := unstructured.Unstructured{}
-		unstruc.Object = asMap*/
 		gvk := unstruc.GroupVersionKind()
 
 		if gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler" {
