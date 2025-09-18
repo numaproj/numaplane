@@ -24,7 +24,35 @@ spec:
             apiVersion: numaproj.io/v1alpha1
             kind: Vertex
             name: '{{.pipeline-name}}-{{.vertex-name}}'
-          # todo: add more fields here...
+    - perVertex: true
+      definition:
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata: 
+          name: hpa
+        spec:
+          minReplicas: 1
+          maxReplicas: 10
+          metrics:
+          - object:
+              metric:
+                name: namespace_app_monovertex_container_cpu_utilization
+                selector:
+                  matchLabels:
+                    container: udsource
+              target:
+                type: Value
+                value: 80
+              describedObject:
+                apiVersion: apps/v1
+                kind: Deployment 
+                name: '{{.pipeline-name}}-{{.vertex-name}}'
+            type: Object
+          scaleTargetRef:
+            apiVersion: numaflow.numaproj.io/v1alpha1
+            kind: Vertex
+            name: '{{.pipeline-name}}-{{.vertex-name}}'
+
   pipeline:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
     #metadata:
@@ -49,9 +77,9 @@ spec:
             min: 3
             max: 5
           udf:
-            Container:
+            container:
               image: "quay.io/numaio/numaflow-go/map-cat:stable" # A built-in UDF which simply cats the message
-              imagePullPolicy: Always,
+              imagePullPolicy: Always
         - name: out
           sink:
             # A simple log printing sink
