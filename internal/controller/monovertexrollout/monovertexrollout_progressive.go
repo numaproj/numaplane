@@ -727,3 +727,19 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	}
 	return scaleValue
 }
+
+func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
+	numaLogger := logger.FromContext(ctx)
+
+	// Temporary: we cannot support Progressive rollout assessment for HPA: See issue https://github.com/numaproj/numaplane/issues/868
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+	for _, rider := range monoVertexRollout.Spec.Riders {
+		gvk := rider.Definition.Object.GetObjectKind().GroupVersionKind()
+		if gvk.Group == "autoscaling" && gvk.Kind == "HorizontalPodAutoscaler" {
+			numaLogger.Debug("MonoVertexRollout %s/%s contains HPA Rider: Full Progressive Rollout is unsupported")
+			return true
+		}
+	}
+
+	return false
+}

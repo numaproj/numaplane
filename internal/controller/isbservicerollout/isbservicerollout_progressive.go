@@ -226,3 +226,8 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreRecycle(
 ) error {
 	return nil
 }
+
+func (r *ISBServiceRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
+
+	return false
+}
