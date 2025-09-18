@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -181,7 +182,7 @@ func Test_calculateScaleForRecycle(t *testing.T) {
 					"apiVersion": "numaflow.numaproj.io/v1alpha1",
 					"kind":       "Pipeline",
 					"metadata": map[string]interface{}{
-						"name":      "test-pipeline",
+						"name":      pipelineRolloutName,
 						"namespace": "test-namespace",
 					},
 					"spec": map[string]interface{}{
@@ -302,11 +303,11 @@ func Test_Recycle(t *testing.T) {
 	originalPauseGracePeriodSeconds := float64(60)
 
 	tests := []struct {
-		name                   string
-		upgradeStateReason     string
-		specHasBeenOverridden  bool
-		pipelinePhase          string
-		vertexScaleDefinitions []apiv1.VertexScaleDefinition
+		name                  string
+		upgradeStateReason    string
+		specHasBeenOverridden bool
+		pipelinePhase         string
+		isNewPromotedPipeline bool
 
 		expectedDeleted                bool
 		expectedError                  bool
@@ -318,49 +319,17 @@ func Test_Recycle(t *testing.T) {
 			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
 			specHasBeenOverridden: false,
 			pipelinePhase:         "Running",
-			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
-				{
-					VertexName: "in",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(1),
-						Max: int64Ptr(3),
-					},
-				},
-				{
-					VertexName: "out",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(1),
-						Max: int64Ptr(2),
-					},
-				},
-			},
-			expectedDeleted: true, // Delete recreate should delete immediately
-			expectedError:   false,
+			expectedDeleted:       true, // Delete recreate should delete immediately
+			expectedError:         false,
 		},
 		{
 			name:                  "progressive success - should set desiredPhase to Paused and scale down vertices",
 			upgradeStateReason:    string(common.LabelValueProgressiveSuccess),
 			specHasBeenOverridden: false,
 			pipelinePhase:         "Running",
-			vertexScaleDefinitions: []apiv1.VertexScaleDefinition{
-				{
-					VertexName: "in",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(3),
-						Max: int64Ptr(5),
-					},
-				},
-				{
-					VertexName: "out",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(2),
-						Max: int64Ptr(4),
-					},
-				},
-			},
-			expectedDeleted:      false, // Should not delete immediately, should pause first
-			expectedError:        false,
-			expectedDesiredPhase: "Paused",
+			expectedDeleted:       false, // Should not delete immediately, should pause first
+			expectedError:         false,
+			expectedDesiredPhase:  "Paused",
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -388,23 +357,65 @@ func Test_Recycle(t *testing.T) {
 
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 
-			// Create the Pipeline as a typed object first
-			pipeline := createTestTypedPipeline("test-pipeline", "test-pipeline-2", tc.pipelinePhase, tc.upgradeStateReason, tc.specHasBeenOverridden, tc.vertexScaleDefinitions, originalPauseGracePeriodSeconds)
-			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipeline)
+			// Create a PipelineRollout
+			pipelineRolloutName := "test-pipeline"
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pipelineRolloutName,
+					Namespace: ctlrcommon.DefaultTestNamespace,
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{
+							Raw: []byte(`{
+								"vertices": [
+									{"name": "in", "source": {"generator": {"rpu": 5, "duration": "1s"}}, "scale": {"min": 3, "max": 5}},
+									{"name": "out", "sink": {"log": {}}, "scale": {"min": 2, "max": 4}}
+								],
+								"edges": [{"from": "in", "to": "out"}]
+							}`),
+						},
+					},
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						HistoricalPodCount: map[string]int{
+							"in":  1,
+							"out": 3,
+						},
+					},
+				},
+			}
 
-			// Convert the typed pipeline to unstructured for the Recycle function
+			// Create the PipelineRollout in Kubernetes so the Recycle function can find it
+			ctlrcommon.CreatePipelineRolloutInK8S(ctx, t, client, pipelineRollout)
+
+			newImage := "quay.io/repo/image:new"
+			recyclableImage := "quay.io/repo/image:recyclable"
+			oldImage := "quay.io/repo/image:old"
+
+			recyclablePipelineName := "test-pipeline-2"
+
+			// Create the Pipeline we're recycling
+			pipeline := createPipelineForRecycleTest(pipelineRolloutName, recyclablePipelineName, tc.pipelinePhase, "recyclable", tc.upgradeStateReason, recyclableImage, tc.specHasBeenOverridden, originalPauseGracePeriodSeconds)
+			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipeline)
+			// Convert it to Unstructured for the Recycle function
 			var pipelineUnstructured unstructured.Unstructured
 			err := util.StructToStruct(pipeline, &pipelineUnstructured.Object)
 			assert.NoError(t, err)
 
-			// Create a PipelineRollout with historical pod count data for the progressive test case
-			var pipelineRollout *apiv1.PipelineRollout
-			if tc.upgradeStateReason == string(common.LabelValueProgressiveSuccess) {
-				pipelineRollout = createTestPipelineRollout("test-pipeline", tc.vertexScaleDefinitions)
-				// Create the PipelineRollout in Kubernetes so the Recycle function can find it
-				err = client.Create(ctx, pipelineRollout)
-				assert.NoError(t, err)
+			// Create the "promoted" Pipeline, which may either be old or new
+			var promotedPipelineName string
+			var promotedPipelinePath string
+			if tc.isNewPromotedPipeline {
+				promotedPipelineName = "test-pipeline-3"
+				promotedPipelinePath = newImage
+			} else {
+				promotedPipelineName = "test-pipeline-0"
+				promotedPipelinePath = oldImage
 			}
+			promotedPipeline := createPipelineForRecycleTest(pipelineRolloutName, promotedPipelineName, tc.pipelinePhase, "promoted", "", promotedPipelinePath, false, originalPauseGracePeriodSeconds)
+			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, promotedPipeline)
 
 			// Create a PipelineRolloutReconciler instance
 			reconciler := &PipelineRolloutReconciler{}
@@ -415,7 +426,7 @@ func Test_Recycle(t *testing.T) {
 			assert.Equal(t, tc.expectedDeleted, deleted)
 
 			// Retrieve the updated Pipeline from Kubernetes
-			updatedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Get(ctx, "test-pipeline-2", metav1.GetOptions{})
+			updatedPipeline, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).Get(ctx, recyclablePipelineName, metav1.GetOptions{})
 			if tc.expectedDeleted {
 				// If we expected deletion, the pipeline should not exist
 				assert.Error(t, err, "Expected pipeline to be deleted")
@@ -495,153 +506,89 @@ func int32Ptr(i int32) *int32 {
 	return &i
 }
 
-// Helper function to create a test Pipeline
-func createTestPipeline(pipelineRolloutName string, pipelineName string, phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64) *unstructured.Unstructured {
-	pipeline := &unstructured.Unstructured{}
-	pipeline.SetAPIVersion("numaflow.numaproj.io/v1alpha1")
-	pipeline.SetKind("Pipeline")
-	pipeline.SetName(pipelineName)
-	pipeline.SetNamespace(ctlrcommon.DefaultTestNamespace)
-
-	// Set labels
-	labels := map[string]string{
-		common.LabelKeyParentRollout:      pipelineRolloutName,
-		common.LabelKeyUpgradeState:       string(common.LabelValueUpgradeRecyclable),
-		common.LabelKeyUpgradeStateReason: upgradeStateReason,
-	}
-	pipeline.SetLabels(labels)
-
-	// Set annotations if needed
-	if overriddenSpecExists {
-		annotations := map[string]string{
-			common.AnnotationKeyOverriddenSpec: "true",
+/*
+	func createRecyclablePipeline(pipelineRolloutName string, pipelineName string, phase, upgradeStateReason string, overriddenSpec bool, pauseGracePeriodSeconds float64) *numaflowv1.Pipeline {
+		pauseGracePeriodSecondsInt64 := int64(pauseGracePeriodSeconds)
+		pipelineSpecSourceRPU := int64(5)
+		pipelineSpecSourceDuration := metav1.Duration{
+			Duration: time.Second,
 		}
-		pipeline.SetAnnotations(annotations)
-	}
+		one := int32(1)
+		five := int32(5)
 
-	// Create vertices based on the scale definitions
-	vertices := []interface{}{}
-	for _, vsd := range vertexScaleDefinitions {
-		vertex := map[string]interface{}{
-			"name": vsd.VertexName,
-		}
-
-		// Add source or sink based on vertex name
-		if vsd.VertexName == "in" {
-			vertex["source"] = map[string]interface{}{
-				"generator": map[string]interface{}{
-					"rpu":      int64(5),
-					"duration": "1s",
+		pipeline := &numaflowv1.Pipeline{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "numaflow.numaproj.io/v1alpha1",
+				Kind:       "Pipeline",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pipelineName,
+				Namespace: ctlrcommon.DefaultTestNamespace,
+				Labels: map[string]string{
+					common.LabelKeyParentRollout:      pipelineRolloutName,
+					common.LabelKeyUpgradeState:       string(common.LabelValueUpgradeRecyclable),
+					common.LabelKeyUpgradeStateReason: upgradeStateReason,
 				},
-			}
-		} else if vsd.VertexName == "out" {
-			vertex["sink"] = map[string]interface{}{
-				"log": map[string]interface{}{},
-			}
-		}
-
-		// Add scale if provided
-		if vsd.ScaleDefinition != nil {
-			scale := map[string]interface{}{}
-			if vsd.ScaleDefinition.Min != nil {
-				scale["min"] = int64(*vsd.ScaleDefinition.Min)
-			}
-			if vsd.ScaleDefinition.Max != nil {
-				scale["max"] = int64(*vsd.ScaleDefinition.Max)
-			}
-			vertex["scale"] = scale
-		}
-
-		vertices = append(vertices, vertex)
-	}
-
-	// Set spec
-	err := unstructured.SetNestedField(pipeline.Object, pauseGracePeriodSeconds, "lifecycle", "pauseGracePeriodSeconds")
-	if err != nil {
-		panic(err)
-	}
-	err = unstructured.SetNestedSlice(pipeline.Object, vertices, "spec", "vertices")
-	if err != nil {
-		panic(err)
-	}
-
-	edges := []interface{}{
-		map[string]interface{}{
-			"from": "in",
-			"to":   "out",
-		},
-	}
-	err = unstructured.SetNestedSlice(pipeline.Object, edges, "spec", "edges")
-	if err != nil {
-		panic(err)
-	}
-
-	// Set generation and observedGeneration for the CheckPipelineLiveObservedGeneration check
-	pipeline.SetGeneration(1)
-
-	// Set status
-	err = unstructured.SetNestedField(pipeline.Object, phase, "status", "phase")
-	if err != nil {
-		panic(err)
-	}
-
-	// Set observedGeneration to match generation so the check passes
-	err = unstructured.SetNestedField(pipeline.Object, int64(1), "status", "observedGeneration")
-	if err != nil {
-		panic(err)
-	}
-
-	return pipeline
-}
-
-// Helper function to create a test PipelineRollout with historical pod count data
-func createTestPipelineRollout(pipelineRolloutName string, vertexScaleDefinitions []apiv1.VertexScaleDefinition) *apiv1.PipelineRollout {
-	// Create historical pod count data based on the vertex scale definitions
-	historicalPodCount := make(map[string]int)
-	for _, vsd := range vertexScaleDefinitions {
-		// Set historical pod count to simulate previous running state
-		// For "in" vertex, set to 2 pods, for "out" vertex set to 1 pod
-		if vsd.VertexName == "in" {
-			historicalPodCount[vsd.VertexName] = 2
-		} else if vsd.VertexName == "out" {
-			historicalPodCount[vsd.VertexName] = 1
-		} else {
-			// Default to 3 pods for other vertices
-			historicalPodCount[vsd.VertexName] = 3
-		}
-	}
-
-	pipelineRollout := &apiv1.PipelineRollout{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pipelineRolloutName,
-			Namespace: ctlrcommon.DefaultTestNamespace,
-		},
-		Spec: apiv1.PipelineRolloutSpec{
-			Pipeline: apiv1.Pipeline{
-				Spec: runtime.RawExtension{
-					Raw: []byte(`{
-						"vertices": [
-							{"name": "in", "source": {"generator": {"rpu": 5, "duration": "1s"}}, "scale": {"min": 3, "max": 5}},
-							{"name": "out", "sink": {"log": {}}, "scale": {"min": 2, "max": 4}}
-						],
-						"edges": [{"from": "in", "to": "out"}]
-					}`),
+				Generation: 1,
+			},
+			Spec: numaflowv1.PipelineSpec{
+				Lifecycle: numaflowv1.Lifecycle{
+					PauseGracePeriodSeconds: &pauseGracePeriodSecondsInt64,
+				},
+				Vertices: []numaflowv1.AbstractVertex{
+					{
+						Name: "in",
+						Source: &numaflowv1.Source{
+							Generator: &numaflowv1.GeneratorSource{
+								RPU:      &pipelineSpecSourceRPU,
+								Duration: &pipelineSpecSourceDuration,
+							},
+						},
+					},
+					{
+						Name: "out",
+						Sink: &numaflowv1.Sink{
+							AbstractSink: numaflowv1.AbstractSink{
+								Log: &numaflowv1.Log{},
+							},
+						},
+						Scale: numaflowv1.Scale{
+							Min: &one,
+							Max: &five,
+						},
+					},
+				},
+				Edges: []numaflowv1.Edge{
+					{
+						From: "in",
+						To:   "out",
+					},
 				},
 			},
-		},
-		Status: apiv1.PipelineRolloutStatus{
-			ProgressiveStatus: apiv1.PipelineProgressiveStatus{
-				HistoricalPodCount: historicalPodCount,
+			Status: numaflowv1.PipelineStatus{
+				Phase:              numaflowv1.PipelinePhase(phase),
+				ObservedGeneration: 1,
 			},
-		},
+		}
+
+		// Set annotations if needed
+		if overriddenSpec {
+			pipeline.Annotations = map[string]string{
+				common.AnnotationKeyOverriddenSpec: "true",
+			}
+		}
+
+		return pipeline
 	}
-
-	return pipelineRollout
-}
-
-// Helper function to create a typed test Pipeline directly
-func createTestTypedPipeline(pipelineRolloutName string, pipelineName string, phase, upgradeStateReason string, overriddenSpecExists bool, vertexScaleDefinitions []apiv1.VertexScaleDefinition, pauseGracePeriodSeconds float64) *numaflowv1.Pipeline {
+*/
+func createPipelineForRecycleTest(pipelineRolloutName string, pipelineName string, phase string, upgradeState string, upgradeStateReason string, sinkImagePath string, overriddenSpec bool, pauseGracePeriodSeconds float64) *numaflowv1.Pipeline {
 	pauseGracePeriodSecondsInt64 := int64(pauseGracePeriodSeconds)
+	pipelineSpecSourceRPU := int64(5)
+	pipelineSpecSourceDuration := metav1.Duration{
+		Duration: time.Second,
+	}
+	one := int32(1)
+	five := int32(5)
 
 	pipeline := &numaflowv1.Pipeline{
 		TypeMeta: metav1.TypeMeta{
@@ -653,7 +600,7 @@ func createTestTypedPipeline(pipelineRolloutName string, pipelineName string, ph
 			Namespace: ctlrcommon.DefaultTestNamespace,
 			Labels: map[string]string{
 				common.LabelKeyParentRollout:      pipelineRolloutName,
-				common.LabelKeyUpgradeState:       string(common.LabelValueUpgradeRecyclable),
+				common.LabelKeyUpgradeState:       upgradeState,
 				common.LabelKeyUpgradeStateReason: upgradeStateReason,
 			},
 			Generation: 1,
@@ -661,6 +608,39 @@ func createTestTypedPipeline(pipelineRolloutName string, pipelineName string, ph
 		Spec: numaflowv1.PipelineSpec{
 			Lifecycle: numaflowv1.Lifecycle{
 				PauseGracePeriodSeconds: &pauseGracePeriodSecondsInt64,
+			},
+			Vertices: []numaflowv1.AbstractVertex{
+				{
+					Name: "in",
+					Source: &numaflowv1.Source{
+						Generator: &numaflowv1.GeneratorSource{
+							RPU:      &pipelineSpecSourceRPU,
+							Duration: &pipelineSpecSourceDuration,
+						},
+					},
+				},
+				{
+					Name: "out",
+					Sink: &numaflowv1.Sink{
+						AbstractSink: &numaflowv1.AbstractSink{
+							UDSink: &numaflowv1.UDSink{
+								Container: &numaflowv1.Container{
+									Image: sinkImagePath,
+								},
+							},
+						},
+					},
+					Scale: numaflowv1.Scale{
+						Min: &one,
+						Max: &five,
+					},
+				},
+			},
+			Edges: []numaflowv1.Edge{
+				{
+					From: "in",
+					To:   "out",
+				},
 			},
 		},
 		Status: numaflowv1.PipelineStatus{
@@ -670,61 +650,11 @@ func createTestTypedPipeline(pipelineRolloutName string, pipelineName string, ph
 	}
 
 	// Set annotations if needed
-	if overriddenSpecExists {
+	if overriddenSpec {
 		pipeline.Annotations = map[string]string{
 			common.AnnotationKeyOverriddenSpec: "true",
 		}
 	}
-
-	// Create vertices based on the scale definitions
-	vertices := []numaflowv1.AbstractVertex{}
-	for _, vsd := range vertexScaleDefinitions {
-		vertex := numaflowv1.AbstractVertex{
-			Name: vsd.VertexName,
-		}
-
-		// Add source or sink based on vertex name
-		if vsd.VertexName == "in" {
-			vertex.Source = &numaflowv1.Source{
-				Generator: &numaflowv1.GeneratorSource{
-					RPU:      int64Ptr(5),
-					Duration: &metav1.Duration{Duration: 1000000000}, // 1s in nanoseconds
-				},
-			}
-		} else if vsd.VertexName == "out" {
-			vertex.Sink = &numaflowv1.Sink{
-				AbstractSink: numaflowv1.AbstractSink{
-					Log: &numaflowv1.Log{},
-				},
-			}
-		}
-
-		// Add scale if provided
-		if vsd.ScaleDefinition != nil {
-			vertex.Scale = numaflowv1.Scale{}
-			if vsd.ScaleDefinition.Min != nil {
-				minInt32 := int32(*vsd.ScaleDefinition.Min)
-				vertex.Scale.Min = &minInt32
-			}
-			if vsd.ScaleDefinition.Max != nil {
-				maxInt32 := int32(*vsd.ScaleDefinition.Max)
-				vertex.Scale.Max = &maxInt32
-			}
-		}
-
-		vertices = append(vertices, vertex)
-	}
-
-	pipeline.Spec.Vertices = vertices
-
-	// Add edges
-	edges := []numaflowv1.Edge{
-		{
-			From: "in",
-			To:   "out",
-		},
-	}
-	pipeline.Spec.Edges = edges
 
 	return pipeline
 }
