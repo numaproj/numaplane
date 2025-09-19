@@ -99,14 +99,6 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 }
 
-func (fpc fakeProgressiveController) ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
-}
-
-func (fpc fakeProgressiveController) ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
-}
-
 func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
 	return false
 }

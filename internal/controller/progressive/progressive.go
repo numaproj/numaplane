@@ -83,12 +83,6 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
-	// ProcessPromotedChildPreRecycle performs operations on the promoted child prior to its being recycled
-	//ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
-
-	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
-	//ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
-
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 }
@@ -485,12 +479,6 @@ func checkForUpgradeReplacement(
 
 	if differentFromExistingUpgrading {
 
-		// prepare existing upgrading child for Recycle
-		/*err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
-		if err != nil {
-			return false, false, err
-		}*/
-
 		if differentFromPromoted {
 
 			// recycle the old one
@@ -718,10 +706,6 @@ func declareSuccess(
 		return false, err
 	}
 
-	/*err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
-	if err != nil {
-		return false, err
-	}*/
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err

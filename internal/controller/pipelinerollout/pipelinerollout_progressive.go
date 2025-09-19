@@ -374,41 +374,6 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 	return false, nil
 }
 
-// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
-// (due to being replaced by a new Promoted child)
-/*func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
-	ctx context.Context,
-	pipelineRollout progressive.ProgressiveRolloutObject,
-	promotedPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-
-	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostFailure").WithName("PipelineRollout").
-		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
-
-	numaLogger.Debug("started pre-recycle processing of promoted pipeline")
-
-	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline post-upgrade", pipelineRollout)
-	}
-
-	// Prior to draining the Pipeline, which we do during recycling, we need to make sure we scale it back up to original scale
-	// Original scale can help us to drain it faster.
-	// Moreover, if a Vertex was scaled to 0 pods, we need to scale it back up in order for it to drain at all
-
-	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
-		numaLogger.Error(errors.New("rollout does not have promotedChildStatus set"), "Can't scale Promoted Pipeline back to original scale prior to draining")
-	} else {
-		if err := scalePromotedPipelineToOriginalScale(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c); err != nil {
-			numaLogger.Error(err, "Can't scale Promoted Pipeline back to original scale prior to draining")
-		}
-	}
-
-	numaLogger.Debug("completed pre-recycle processing of promoted pipeline")
-	return nil
-}*/
-
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
 	ctx context.Context,
 	rolloutObject progressive.ProgressiveRolloutObject,
@@ -560,6 +525,7 @@ func createScaledDownUpgradingPipelineDef(
 	return applyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
 }
 
+// scale any Source Vertices in the Pipeline definition to min=max=0
 func scalePipelineDefSourceVerticesToZero(
 	ctx context.Context,
 	pipelineDef *unstructured.Unstructured,
@@ -661,37 +627,6 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 ) (bool, error) {
 	return false, nil
 }
-
-// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
-// (due to being replaced by a new Upgrading child)
-/*func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	numaLogger := logger.FromContext(ctx)
-
-	numaLogger.Debug("started pre-recycle processing of upgrading pipeline")
-	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-recycle", rolloutObject)
-	}
-
-	// For each Pipeline vertex, patch to the original scale definition
-	// This enables the Pipeline to drain faster than it otherwise would. (Note that draining will immediately take the Source down to 0)
-	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
-	if upgradingPipelineStatus == nil {
-		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
-	}
-
-	err := applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
-	if err != nil {
-		numaLogger.Error(err, "failed to perform pre-recycle processing of upgrading pipeline")
-	}
-	numaLogger.Debug("completed pre-recycle processing of upgrading pipeline")
-	return nil
-}*/
 
 /*
 computePromotedPipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
@@ -1074,6 +1009,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 	return scaleDefinitions, nil
 }
 
+// determine if all Pipeline Vertices have max=0
 func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	scaledToZero := true
 
@@ -1082,11 +1018,11 @@ func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstr
 		return false, err
 	}
 	for _, vertexScale := range scaleDefinitions {
-		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Min == nil || vertexScale.ScaleDefinition.Max == nil {
+		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Max == nil { // by default if max isn't set, it implies 1
 			scaledToZero = false
 			break
 		} else {
-			if !(*vertexScale.ScaleDefinition.Min == 0 && *vertexScale.ScaleDefinition.Max == 0) {
+			if !(*vertexScale.ScaleDefinition.Max == 0) {
 				scaledToZero = false
 			}
 		}
@@ -1095,6 +1031,7 @@ func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstr
 	return scaledToZero, nil
 }
 
+// ensure all Pipeline Vertices have max=0
 func ensurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
 	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline)
 	if err != nil {

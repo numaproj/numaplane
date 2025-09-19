@@ -217,17 +217,6 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
-// ProcessUpgradingChildPreRecycle process the Upgrading child directly prior to it being recycled
-// (due to being replaced by a new Upgrading child)
-func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingChildDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	return nil
-}
-
 func (r *ISBServiceRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
 
 	return false
