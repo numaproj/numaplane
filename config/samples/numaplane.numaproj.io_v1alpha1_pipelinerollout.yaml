@@ -6,7 +6,7 @@ metadata:
 spec:
   strategy:
     progressive:
-      assessmentSchedule: "10,360,60,10"
+      assessmentSchedule: "10,200,60,10"
     analysis:
       args:
       #templates:
@@ -59,6 +59,8 @@ spec:
     #  annotations:
     #    numaflow.numaproj.io/instance: "0"
     spec:
+      lifecycle:
+        pauseGracePeriodSeconds: 60
       interStepBufferServiceName: my-isbsvc
       vertices:
         - name: in

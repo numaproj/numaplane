@@ -9,6 +9,7 @@ Numaplane is a control plane for installing, managing and running numaflow resou
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
+
 ### To build Numaplane image and run it on your local cluster with latest manifests
 
 `make start`

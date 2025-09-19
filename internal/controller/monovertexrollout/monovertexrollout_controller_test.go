@@ -826,6 +826,9 @@ func Test_CheckForDifferences(t *testing.T) {
 	ctx := context.Background()
 	numaLogger := logger.FromContext(ctx)
 
+	one := int64(1)
+	two := int64(2)
+
 	tests := []struct {
 		name           string
 		from           *unstructured.Unstructured
@@ -836,15 +839,19 @@ func Test_CheckForDifferences(t *testing.T) {
 		{
 			name: "ObjectsEqual",
 
-			from: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{
-						"some_map": map[string]interface{}{
-							"key": "value1",
+			from: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"spec": map[string]interface{}{
+							"some_map": map[string]interface{}{
+								"key": "value1",
+							},
 						},
 					},
-				},
-			},
+				}
+				obj.SetLabels(map[string]string{"key": "value1"})
+				return obj
+			}(),
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
@@ -858,7 +865,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			expectedResult: false,
 		},
 		{
-			name: "LabelsDiffer",
+			name: "RequiredLabelsNotPresent",
 			from: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
 				obj.SetLabels(map[string]string{"key": "value1"})
@@ -870,10 +877,10 @@ func Test_CheckForDifferences(t *testing.T) {
 				return obj
 			}(),
 			expectedError:  false,
-			expectedResult: false,
+			expectedResult: true,
 		},
 		{
-			name: "NumaflowInstanceAnnotationsDiffer",
+			name: "RequiredAnnotationsNotPresent",
 			from: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
 				return obj
@@ -912,7 +919,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			from: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
-						"replicas": 1,
+						"replicas": one,
 						"some_map": map[string]interface{}{
 							"key": "value1",
 						},
@@ -922,7 +929,7 @@ func Test_CheckForDifferences(t *testing.T) {
 			to: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"spec": map[string]interface{}{
-						"replicas": 2,
+						"replicas": two,
 						"some_map": map[string]interface{}{
 							"key": "value1",
 						},
@@ -937,7 +944,37 @@ func Test_CheckForDifferences(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &MonoVertexRolloutReconciler{}
-			needsUpdate, err := reconciler.CheckForDifferences(ctx, tt.from, tt.to)
+
+			// Create the RolloutObject with the defined spec and metadata
+
+			// Extract spec from unstructured object and convert to RawExtension
+			specData, found, err := unstructured.NestedMap(tt.to.Object, "spec")
+			if err != nil {
+				t.Fatalf("Failed to extract spec from unstructured object: %v", err)
+			}
+			if !found {
+				specData = make(map[string]interface{})
+			}
+
+			specBytes, err := json.Marshal(specData)
+			if err != nil {
+				t.Fatalf("Failed to marshal spec to JSON: %v", err)
+			}
+
+			mvRollout := &apiv1.MonoVertexRollout{
+				Spec: apiv1.MonoVertexRolloutSpec{
+					MonoVertex: apiv1.MonoVertex{
+						Spec: runtime.RawExtension{
+							Raw: specBytes,
+						},
+						Metadata: apiv1.Metadata{
+							Annotations: tt.to.GetAnnotations(),
+							Labels:      tt.to.GetLabels(),
+						},
+					},
+				},
+			}
+			needsUpdate, err := reconciler.CheckForDifferencesWithRolloutDef(ctx, tt.from, mvRollout)
 
 			if tt.expectedError {
 				assert.Error(t, err)

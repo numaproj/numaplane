@@ -19,6 +19,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
@@ -48,7 +49,11 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+	return false, nil
+}
+
+func (fpc fakeProgressiveController) CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
 	return false, nil
 }
 
@@ -94,14 +99,6 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 }
 
-func (fpc fakeProgressiveController) ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
-}
-
-func (fpc fakeProgressiveController) ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error {
-	return nil
-}
-
 func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
 	return false
 }
@@ -119,12 +116,6 @@ func Test_processUpgradingChild(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
-
-	//globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	assert.NoError(t, err)
-
-	//assessmentSchedule, err := globalConfig.Progressive.GetChildStatusAssessmentSchedule("MonoVertex")
-	assert.NoError(t, err)
 
 	defaultExistingPromotedChildDef := createMonoVertex("test")
 
@@ -801,7 +792,7 @@ func Test_ExtractScaleMinMax(t *testing.T) {
 			obj := map[string]interface{}{}
 			err := json.Unmarshal([]byte(tc.objAsJson), &obj)
 			assert.NoError(t, err)
-			scaleDefinition, err := ExtractScaleMinMax(obj, tc.path)
+			scaleDefinition, err := numaflowtypes.ExtractScaleMinMax(obj, tc.path)
 			if !tc.expectedErr {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedScaleDefinition, scaleDefinition)

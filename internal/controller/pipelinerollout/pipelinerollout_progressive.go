@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -190,34 +190,59 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests for essential equality.
-// This implements a function of the progressiveController interface, used to determine if a previously Upgrading Pipeline
-// should be replaced with a new one.
-// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
-// configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	fromCopy := from.DeepCopy()
-	toCopy := to.DeepCopy()
+	pipelineCopy := pipelineDef.DeepCopy()
 
-	err := numaflowtypes.PipelineWithoutScaleMinMax(fromCopy)
+	var requiredSpecCopy map[string]interface{}
+	if err := util.StructToStruct(requiredSpec, &requiredSpecCopy); err != nil {
+		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
+	}
+
+	err := numaflowtypes.PipelineWithoutScaleMinMax(pipelineCopy.Object)
 	if err != nil {
 		return false, err
 	}
-	err = numaflowtypes.PipelineWithoutScaleMinMax(toCopy)
+	err = numaflowtypes.PipelineWithoutScaleMinMax(requiredSpecCopy)
 	if err != nil {
 		return false, err
 	}
 
-	specsEqual := util.CompareStructNumTypeAgnostic(fromCopy.Object["spec"], toCopy.Object["spec"])
-	// just look specifically for metadata fields that can result in Progressive
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, metadataRisk, fromCopy.Object["spec"], toCopy.Object["spec"])
+	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
+	// Check required metadata (labels and annotations)
+	requiredLabels := requiredMetadata.Labels
+	actualLabels := pipelineDef.GetLabels()
+	requiredAnnotations := requiredMetadata.Annotations
+	actualAnnotations := pipelineDef.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, pipelineCopy.Object["spec"], requiredSpecCopy, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
 
-	return !specsEqual || metadataRisk, nil
+	return !specsEqual || !labelsFound || !annotationsFound, nil
+}
+
+// CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface
+// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
+func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingPipeline *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+
+	pipelineRollout := rolloutObject.(*apiv1.PipelineRollout)
+
+	isbsvcName, err := numaflowtypes.GetPipelineISBSVCName(existingPipeline)
+	if err != nil {
+		return false, err
+	}
+
+	// In order to effectively compare, we need to create a Pipeline Definition from the PipelineRollout which uses the same name and isbsvc name as our current Pipeline
+	// (so that won't be interpreted as a difference)
+	rolloutBasedPipelineDef, err := r.makePipelineDefinition(pipelineRollout, existingPipeline.GetName(), isbsvcName, pipelineRollout.Spec.Pipeline.Metadata)
+	if err != nil {
+		return false, err
+	}
+	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, pipelineRollout.Spec.Pipeline.Metadata)
 }
 
 /*
@@ -251,11 +276,7 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPreUpgrade(
 		return true, fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline pre-upgrade", pipelineRollout)
 	}
 
-	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
-		return true, errors.New("unable to perform pre-upgrade operations because the rollout does not have promotedChildStatus set")
-	}
-
-	requeue, err := computePipelineVerticesScaleValues(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c)
+	requeue, err := computePromotedPipelineVerticesScaleValues(ctx, &pipelineRO.Status.ProgressiveStatus, promotedPipelineDef, c)
 	if err != nil {
 		return true, err
 	}
@@ -351,41 +372,6 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostFailure(
 	numaLogger.Debug("completed post-failure processing of promoted pipeline")
 
 	return false, nil
-}
-
-// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
-// (due to being replaced by a new Promoted child)
-func (r *PipelineRolloutReconciler) ProcessPromotedChildPreRecycle(
-	ctx context.Context,
-	pipelineRollout progressive.ProgressiveRolloutObject,
-	promotedPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-
-	numaLogger := logger.FromContext(ctx).WithName("ProcessPromotedChildPostFailure").WithName("PipelineRollout").
-		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
-
-	numaLogger.Debug("started pre-recycle processing of promoted pipeline")
-
-	pipelineRO, ok := pipelineRollout.(*apiv1.PipelineRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process promoted pipeline post-upgrade", pipelineRollout)
-	}
-
-	// Prior to draining the Pipeline, which we do during recycling, we need to make sure we scale it back up to original scale
-	// Original scale can help us to drain it faster.
-	// Moreover, if a Vertex was scaled to 0 pods, we need to scale it back up in order for it to drain at all
-
-	if pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus == nil {
-		numaLogger.Error(errors.New("rollout does not have promotedChildStatus set"), "Can't scale Promoted Pipeline back to original scale prior to draining")
-	} else {
-		if err := scalePromotedPipelineToOriginalScale(ctx, pipelineRO.Status.ProgressiveStatus.PromotedPipelineStatus, promotedPipelineDef, c); err != nil {
-			numaLogger.Error(err, "Can't scale Promoted Pipeline back to original scale prior to draining")
-		}
-	}
-
-	numaLogger.Debug("completed pre-recycle processing of promoted pipeline")
-	return nil
 }
 
 func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostFailure(
@@ -501,7 +487,7 @@ func createScaledDownUpgradingPipelineDef(
 	for index, vertex := range vertexDefinitions {
 		vertexAsMap := vertex.(map[string]interface{})
 		vertexName := vertexAsMap["name"].(string)
-		originalScaleMinMax, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+		originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 		if err != nil {
 			return fmt.Errorf("cannot extract the scale min and max values from the upgrading pipeline vertex %s: %w", vertexName, err)
 		}
@@ -537,6 +523,50 @@ func createScaledDownUpgradingPipelineDef(
 
 	// apply the scale values for each vertex to the new min/max
 	return applyScaleValuesToPipelineDefinition(ctx, upgradingPipelineDef, vertexScaleDefinitions)
+}
+
+// scale any Source Vertices in the Pipeline definition to min=max=0
+func scalePipelineDefSourceVerticesToZero(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+) error {
+	vertexScaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipelineDef)
+	if err != nil {
+		return err
+	}
+
+	zero := int64(0)
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexName := scaleDef.VertexName
+
+		// look for this vertex's entire definition so we can determine if it's a source or not
+		pipelineSpec, exists, err := unstructured.NestedMap(pipelineDef.Object, "spec")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("spec not found in pipeline %s/%s", pipelineDef.GetNamespace(), pipelineDef.GetName())
+		}
+		vertexDef, found, err := numaflowtypes.GetVertexFromPipelineSpecMap(pipelineSpec, vertexName)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("vertex definition not found in pipeline %s/%s for vertex %s", pipelineDef.GetNamespace(), pipelineDef.GetName(), vertexName)
+		}
+		_, isSource, err := unstructured.NestedMap(vertexDef, "source")
+		if err != nil {
+			return err
+		}
+		if isSource {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+		}
+	}
+	err = applyScaleValuesToPipelineDefinition(ctx, pipelineDef, vertexScaleDefinitions)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func scalePipelineVerticesToZero(
@@ -598,39 +628,8 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
-// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
-// (due to being replaced by a new Upgrading child)
-func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingPipelineDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	numaLogger := logger.FromContext(ctx)
-
-	numaLogger.Debug("started pre-recycle processing of upgrading pipeline")
-	pipelineRollout, ok := rolloutObject.(*apiv1.PipelineRollout)
-	if !ok {
-		return fmt.Errorf("unexpected type for ProgressiveRolloutObject: %+v; can't process upgrading pipeline pre-recycle", rolloutObject)
-	}
-
-	// For each Pipeline vertex, patch to the original scale definition
-	// This enables the Pipeline to drain faster than it otherwise would. (Note that draining will immediately take the Source down to 0)
-	upgradingPipelineStatus := pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus
-	if upgradingPipelineStatus == nil {
-		return fmt.Errorf("can't process upgrading pipeline post-success; missing UpgradingPipelineStatus which should contain scale values")
-	}
-
-	err := applyScaleValuesToLivePipeline(ctx, upgradingPipelineDef, upgradingPipelineStatus.OriginalScaleMinMax, c)
-	if err != nil {
-		numaLogger.Error(err, "failed to perform pre-recycle processing of upgrading pipeline")
-	}
-	numaLogger.Debug("completed pre-recycle processing of upgrading pipeline")
-	return nil
-}
-
 /*
-computePipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
+computePromotedPipelineVerticesScaleValues creates the apiv1.ScaleValues to be stored in the PipelineRollout
 for all vertices before performing the actually scaling down of the promoted pipeline.
 It checks if the ScaleValues have been already stored and skips the operation if true.
 
@@ -644,15 +643,20 @@ Returns:
 - bool: true if should requeue, false otherwise. Should requeue in case of error or or to store the computed ScaleValues.
 - error: an error if any operation fails during the scaling process.
 */
-func computePipelineVerticesScaleValues(
+func computePromotedPipelineVerticesScaleValues(
 	ctx context.Context,
-	promotedPipelineStatus *apiv1.PromotedPipelineStatus,
+	pipelineProgressiveStatus *apiv1.PipelineProgressiveStatus,
 	promotedPipelineDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx).WithName("computePipelineVerticesScaleValues").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
+
+	if pipelineProgressiveStatus.PromotedPipelineStatus == nil {
+		return true, errors.New("unable to perform pre-upgrade scale down because the rollout does not have promotedChildStatus set")
+	}
+	promotedPipelineStatus := pipelineProgressiveStatus.PromotedPipelineStatus
 
 	vertices, _, err := unstructured.NestedSlice(promotedPipelineDef.Object, "spec", "vertices")
 	if err != nil {
@@ -716,6 +720,13 @@ func computePipelineVerticesScaleValues(
 	}
 
 	promotedPipelineStatus.ScaleValues = scaleValuesMap
+
+	// set the HistoricalPodCount to reflect the Initial values
+	// (this duplication is needed since the PromotedPipelineStatus can be cleared)
+	pipelineProgressiveStatus.HistoricalPodCount = map[string]int{}
+	for vertex, scaleValues := range scaleValuesMap {
+		pipelineProgressiveStatus.HistoricalPodCount[vertex] = int(scaleValues.Initial)
+	}
 
 	// Set ScaleValuesRestoredToOriginal to false in case previously set to true and now scaling back down to recover from a previous failure
 	promotedPipelineStatus.ScaleValuesRestoredToOriginal = false
@@ -988,7 +999,7 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 				return nil, errors.New("a vertex must have a name")
 			}
 
-			vertexScaleDef, err := progressive.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			vertexScaleDef, err := numaflowtypes.ExtractScaleMinMax(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return nil, err
 			}
@@ -996,6 +1007,44 @@ func getScaleValuesFromPipelineSpec(ctx context.Context, pipelineDef *unstructur
 		}
 	}
 	return scaleDefinitions, nil
+}
+
+// determine if all Pipeline Vertices have max=0
+func checkPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	scaledToZero := true
+
+	scaleDefinitions, err := getScaleValuesFromPipelineSpec(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	for _, vertexScale := range scaleDefinitions {
+		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Max == nil { // by default if max isn't set, it implies 1
+			scaledToZero = false
+			break
+		} else {
+			if !(*vertexScale.ScaleDefinition.Max == 0) {
+				scaledToZero = false
+			}
+		}
+
+	}
+	return scaledToZero, nil
+}
+
+// ensure all Pipeline Vertices have max=0
+func ensurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
+	scaledToZero, err := checkPipelineScaledToZero(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+
+	if !scaledToZero {
+		err := scalePipelineVerticesToZero(ctx, pipeline, c)
+		if err != nil {
+			return fmt.Errorf("error scaling pipeline %s's vertices to zero: %v", pipeline.GetName(), err)
+		}
+	}
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {

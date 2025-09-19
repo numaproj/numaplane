@@ -67,9 +67,7 @@ const (
 	loggerName                = "pipelinerollout-reconciler"
 	numWorkers                = 16 // can consider making configurable
 
-	TemplatePipelineName      = ".pipeline-name"
-	TemplateVertexName        = ".vertex-name"
-	TemplatePipelineNamespace = ".pipeline-namespace"
+	defaultPauseGracePeriodSeconds = 30
 )
 
 var (
@@ -1082,16 +1080,16 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 ) (*unstructured.Unstructured, error) {
 
 	args := map[string]interface{}{
-		TemplatePipelineName:      pipelineName,
-		TemplatePipelineNamespace: pipelineRollout.Namespace,
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
 	}
 
-	pipelineSpec, err := util.ResolveTemplateSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+	pipelineSpec, err := util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplatedSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,11 +1108,6 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	}
 
 	return pipelineDef, nil
-}
-
-func (r *PipelineRolloutReconciler) drain(ctx context.Context, pipeline *unstructured.Unstructured) error {
-	patchJson := `{"spec": {"lifecycle": {"desiredPhase": "Paused"}}}`
-	return kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
 }
 
 func getPipelineChildResourceHealth(conditions []metav1.Condition) (metav1.ConditionStatus, string) {
@@ -1169,77 +1162,6 @@ func (r *PipelineRolloutReconciler) IncrementChildCount(ctx context.Context, rol
 		return int32(0), err
 	}
 	return currentNameCount, nil
-}
-
-// Recycle deletes child; returns true if it was in fact deleted
-// This implements a function of the RolloutController interface
-func (r *PipelineRolloutReconciler) Recycle(ctx context.Context,
-	pipeline *unstructured.Unstructured,
-	c client.Client,
-) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	pipelineRollout, err := numaflowtypes.GetRolloutForPipeline(ctx, c, pipeline)
-	if err != nil {
-		return false, err
-	}
-
-	// Need to determine how to delete the pipeline
-	// Use the "upgrade-strategy-reason" Label to determine how
-	// if upgrade-strategy-reason="delete/recreate", then don't pause at all (it will have already paused if we're in PPND)
-	// if upgrade-strategy-reason="progressive success", then either just pause, or pause and drain,
-	//    depending on PipelineRollout specification (TODO: https://github.com/numaproj/numaplane/issues/512)
-	// if upgrade-strategy-reason="progressive failure", then don't pause at all (in this case we are replacing a failed pipeline)
-	upgradeState, upgradeStateReason := ctlrcommon.GetUpgradeState(ctx, c, pipeline)
-	if upgradeState == nil || *upgradeState != common.LabelValueUpgradeRecyclable {
-		numaLogger.Error(errors.New("should not call Recycle() on a Pipeline which is not in recyclable Upgrade State"), "Recycle() called on pipeline",
-			"namespace", pipeline.GetNamespace(), "name", pipeline.GetName(), "labels", pipeline.GetLabels())
-	}
-	pause := false
-	requireDrain := false
-	if upgradeStateReason != nil {
-		switch *upgradeStateReason {
-		case common.LabelValueDeleteRecreateChild:
-			// this is the case of the pipeline being deleted and recreated, either due to a change on the pipeline or on the isbsvc
-			// which required that.
-			// no need to pause here (for the case of PPND, it will have already been done before getting here)
-		case common.LabelValueProgressiveSuccess, common.LabelValueProgressiveReplaced, common.LabelValueDiscontinueProgressive:
-			// LabelValueProgressiveSuccess is the case of the previous "promoted" pipeline being deleted because the Progressive upgrade succeeded
-			// LabelValueProgressiveReplaced is the case of the previous "upgrading" pipeline being deleted because it was replaced with a new pipeline during the upgrade process
-			// in this case, we pause the pipeline because we want to push all of the remaining data in there through
-			pause = true
-			// TODO: make configurable (https://github.com/numaproj/numaplane/issues/512)
-			requireDrain = false
-		}
-
-	}
-
-	if pause {
-		// check if the Pipeline has been paused or if it can't be paused: if so, then delete the pipeline
-		pausedOrWontPause, err := numaflowtypes.IsPipelinePausedOrWontPause(ctx, pipeline, pipelineRollout, requireDrain)
-		if err != nil {
-			return false, err
-		}
-		if pausedOrWontPause {
-			err = kubernetes.DeleteResource(ctx, c, pipeline)
-			return true, err
-		}
-		// make sure we request Paused if we haven't yet
-		desiredPhaseSetting, err := numaflowtypes.GetPipelineDesiredPhase(pipeline)
-		if err != nil {
-			return false, err
-		}
-		if desiredPhaseSetting != string(numaflowv1.PipelinePhasePaused) {
-			_ = r.drain(ctx, pipeline)
-			return false, nil
-		}
-	} else {
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		return true, err
-	}
-
-	return false, nil
-
 }
 
 // get the isbsvc child of ISBServiceRollout with the given upgrading state label
@@ -1352,10 +1274,10 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			}
 			for _, vertex := range vertices {
 				vertexName := vertex.(map[string]interface{})["name"]
-				resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
-					TemplatePipelineName:      pipelineName,
-					TemplatePipelineNamespace: pipelineRollout.Namespace,
-					TemplateVertexName:        vertexName,
+				resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
+					common.TemplatePipelineName:      pipelineName,
+					common.TemplatePipelineNamespace: pipelineRollout.Namespace,
+					common.TemplateVertexName:        vertexName,
 				})
 				if err != nil {
 					return desiredRiders, err
@@ -1368,9 +1290,9 @@ func (r *PipelineRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.Ro
 			}
 		} else {
 			// create one Rider for the Pipeline
-			resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
-				TemplatePipelineName:      pipelineName,
-				TemplatePipelineNamespace: pipelineRollout.Namespace,
+			resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
+				common.TemplatePipelineName:      pipelineName,
+				common.TemplatePipelineNamespace: pipelineRollout.Namespace,
 			})
 			if err != nil {
 				return desiredRiders, err
