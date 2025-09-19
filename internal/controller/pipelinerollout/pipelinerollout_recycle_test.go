@@ -355,7 +355,7 @@ func Test_Recycle(t *testing.T) {
 			expectedDeleted:      false, // Should not delete immediately, should pause first
 			expectSpecOverridden: false,
 			expectedError:        false,
-			expectedDesiredPhase: numaflowv1.PipelinePhasePaused,
+			expectedDesiredPhase: paused,
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -400,7 +400,7 @@ func Test_Recycle(t *testing.T) {
 
 			expectSpecOverridden: true,
 			expectedError:        false,
-			expectedDesiredPhase: numaflowv1.PipelinePhaseRunning,
+			expectedDesiredPhase: running,
 			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -448,7 +448,7 @@ func Test_Recycle(t *testing.T) {
 
 			expectSpecOverridden: true,
 			expectedError:        false,
-			expectedDesiredPhase: numaflowv1.PipelinePhaseRunning,
+			expectedDesiredPhase: running,
 			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
@@ -467,12 +467,55 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
-		/*{
+		{
 			name: "Progressive Replaced - second attempt (force drain) - new spec was applied and was scaled down - now pause it",
 			// preconditions:
-			//
+			// - desiredPhase=Running, phase=Running, initialScale=previous test's expected scale
+			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
+			specHasBeenOverridden: true,
+			desiredPhase:          &running,
+			pipelinePhase:         running,
+			isPromotedPipelineNew: true,
+			// pipeline was scaled down to prepare for pausing
+			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2), // 50% of 3 historical pod = 1.5, rounded up to 2
+						Max: int64Ptr(2),
+					},
+				},
+			},
+
+			expectSpecOverridden: true,
+			expectedError:        false,
+			expectedDesiredPhase: paused,
+			// vertex definitions stay the same
+			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2), // 50% of 3 historical pod = 1.5, rounded up to 2
+						Max: int64Ptr(2),
+					},
+				},
+			},
 		},
-		{
+		/*{
 			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
 		},*/
 	}
