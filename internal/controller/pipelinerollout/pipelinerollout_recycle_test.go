@@ -18,6 +18,7 @@ package pipelinerollout
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -461,6 +462,15 @@ func Test_Recycle(t *testing.T) {
 					},
 				},
 			}
+			newPromotedPipelineDefinition := createPipelineForRecycleTest(pipelineRolloutName, newPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", newPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
+			var newPromotedDefUnstructured unstructured.Unstructured
+			err := util.StructToStruct(newPromotedPipelineDefinition, &newPromotedDefUnstructured.Object)
+			assert.NoError(t, err)
+
+			// Extract spec from the newPromotedPipelineDefinition and set it to PipelineRollout
+			specData := newPromotedDefUnstructured.Object["spec"]
+			specBytes, err := json.Marshal(specData)
+			assert.NoError(t, err)
 
 			// Create a PipelineRollout
 			pipelineRollout := &apiv1.PipelineRollout{
@@ -471,14 +481,7 @@ func Test_Recycle(t *testing.T) {
 				Spec: apiv1.PipelineRolloutSpec{
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{
-							Raw: []byte(`{
-								"lifecycle": {"pauseGracePeriodSeconds": 60 },
-								"vertices": [
-									{"name": "in", "source": {"generator": {"rpu": 5, "duration": "1s"}}, "scale": {"min": 3, "max": 5}},
-									{"name": "out", "sink": {"log": {}}, "scale": {"min": 2, "max": 4}}
-								],
-								"edges": [{"from": "in", "to": "out"}]
-							}`),
+							Raw: specBytes,
 						},
 					},
 				},
@@ -501,13 +504,13 @@ func Test_Recycle(t *testing.T) {
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipeline)
 			// Convert it to Unstructured for the Recycle function
 			var pipelineUnstructured unstructured.Unstructured
-			err := util.StructToStruct(pipeline, &pipelineUnstructured.Object)
+			err = util.StructToStruct(pipeline, &pipelineUnstructured.Object)
 			assert.NoError(t, err)
 
 			// Create the "promoted" Pipeline, which may either be old or new
 			var promotedPipeline *numaflowv1.Pipeline
 			if tc.isPromotedPipelineNew {
-				promotedPipeline = createPipelineForRecycleTest(pipelineRolloutName, newPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", newPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
+				promotedPipeline = newPromotedPipelineDefinition
 			} else {
 				promotedPipeline = createPipelineForRecycleTest(pipelineRolloutName, originalPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", originalPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
 			}
@@ -531,7 +534,7 @@ func Test_Recycle(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, updatedPipeline)
 
-				if tc.expectedDesiredPhase != "" {
+				if tc.expectedDesiredPhase == numaflowv1.PipelinePhasePaused {
 					// Verify desiredPhase was set correctly
 					assert.Equal(t, tc.expectedDesiredPhase, getDesiredPhase(updatedPipeline))
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
@@ -710,6 +713,7 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desi
 			Generation: 1,
 		},
 		Spec: numaflowv1.PipelineSpec{
+			InterStepBufferServiceName: "default",
 			Lifecycle: numaflowv1.Lifecycle{
 				PauseGracePeriodSeconds: &pauseGracePeriodSecondsInt64,
 			},
