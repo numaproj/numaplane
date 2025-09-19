@@ -107,6 +107,10 @@ func (fpc fakeProgressiveController) ProcessUpgradingChildPreRecycle(ctx context
 	return nil
 }
 
+func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
+	return false
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

@@ -88,6 +88,9 @@ type progressiveController interface {
 
 	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
 	//ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
+
+	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
+	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -355,7 +358,7 @@ func processUpgradingChild(
 	}
 
 	// check for Force Promote set in Progressive strategy to force success logic OR if upgrading child has force-promote label
-	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote {
+	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote || controller.ProgressiveUnsupported(ctx, rolloutObject) {
 		childStatus.ForcedSuccess = true
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)

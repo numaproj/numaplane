@@ -34,6 +34,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -46,6 +47,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 )
 
 var (
@@ -2185,6 +2187,139 @@ func Test_applyScaleValuesToLivePipeline(t *testing.T) {
 
 		})
 	}
+}
+
+func TestProgressiveUnsupported(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test reconciler
+	reconciler := &PipelineRolloutReconciler{}
+
+	tests := []struct {
+		name     string
+		riders   []apiv1.PipelineRider
+		expected bool
+	}{
+		{
+			name:     "No riders",
+			riders:   []apiv1.PipelineRider{},
+			expected: false,
+		},
+		{
+			name: "ConfigMap rider only",
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createConfigMapRawExtension(t),
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "HPA rider - should return true",
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createHPARawExtension(t),
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Mixed riders with HPA - should return true",
+			riders: []apiv1.PipelineRider{
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createConfigMapRawExtension(t),
+						},
+					},
+				},
+				{
+					Rider: apiv1.Rider{
+						Progressive: true,
+						Definition: runtime.RawExtension{
+							Raw: createHPARawExtension(t),
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a pipelineRollout with the test riders
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rollout",
+					Namespace: "test-namespace",
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Riders: tt.riders,
+				},
+			}
+
+			result := reconciler.ProgressiveUnsupported(ctx, pipelineRollout)
+			assert.Equal(t, tt.expected, result, "ProgressiveUnsupported should return %v for test case: %s", tt.expected, tt.name)
+		})
+	}
+}
+
+// Helper functions to create RawExtension objects for different resource types
+
+func createConfigMapRawExtension(t *testing.T) []byte {
+	t.Helper()
+	configMap := corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-configmap",
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+	raw, err := json.Marshal(configMap)
+	assert.NoError(t, err)
+	return raw
+}
+
+func createHPARawExtension(t *testing.T) []byte {
+	t.Helper()
+	hpa := autoscalingv2.HorizontalPodAutoscaler{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "autoscaling/v2",
+			Kind:       "HorizontalPodAutoscaler",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-hpa",
+		},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			MinReplicas: ptr.To(int32(1)),
+			MaxReplicas: 10,
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+				APIVersion: "numaflow.numaproj.io/v1alpha1",
+				Kind:       "MonoVertex",
+				Name:       "test-monovertex",
+			},
+		},
+	}
+	raw, err := json.Marshal(hpa)
+	assert.NoError(t, err)
+	return raw
 }
 
 func Test_scalePipelineDefSourceVerticesToZero(t *testing.T) {
