@@ -306,28 +306,31 @@ func Test_Recycle(t *testing.T) {
 		name                          string
 		upgradeStateReason            string
 		specHasBeenOverridden         bool
-		pipelinePhase                 string
+		pipelinePhase                 numaflowv1.PipelinePhase
 		isNewPromotedPipeline         bool
 		initialVertexScaleDefinitions []apiv1.VertexScaleDefinition
 
 		expectedDeleted                bool
 		expectedError                  bool
-		expectedDesiredPhase           string
+		expectedDesiredPhase           numaflowv1.PipelinePhase
+		expectSpecOverridden           bool
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 	}{
 		{
-			name:                  "delete recreate - should delete immediately",
+			name:                  "Delete/Recreate - should delete immediately",
 			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
 			specHasBeenOverridden: false,
-			pipelinePhase:         "Running",
+			pipelinePhase:         numaflowv1.PipelinePhaseRunning,
 			expectedDeleted:       true, // Delete recreate should delete immediately
+			expectSpecOverridden:  false,
 			expectedError:         false,
 		},
 		{
-			name:                  "progressive success - should scale down vertices",
-			upgradeStateReason:    string(common.LabelValueProgressiveSuccess),
+			name:                  "Progressive Replaced - first attempt - vertices already scaled down - should pause pipeline",
+			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
 			specHasBeenOverridden: false,
-			pipelinePhase:         "Running",
+			pipelinePhase:         numaflowv1.PipelinePhaseRunning,
+			// we've already scaled down so these match the expectedVertexScaleDefinitions below
 			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -346,8 +349,9 @@ func Test_Recycle(t *testing.T) {
 			},
 
 			expectedDeleted:      false, // Should not delete immediately, should pause first
+			expectSpecOverridden: false,
 			expectedError:        false,
-			expectedDesiredPhase: "Paused",
+			expectedDesiredPhase: numaflowv1.PipelinePhasePaused,
 			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
@@ -365,6 +369,53 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:                  "Progressive Replaced - second attempt (force drain) - first apply the new spec",
+			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
+			specHasBeenOverridden: false,
+			pipelinePhase:         numaflowv1.PipelinePhaseRunning,
+			// pipeline was scaled to 0
+			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0),
+						Max: int64Ptr(0),
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0),
+						Max: int64Ptr(0),
+					},
+				},
+			},
+
+			expectSpecOverridden: true,
+			expectedError:        false,
+			expectedDesiredPhase: numaflowv1.PipelinePhaseRunning,
+			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
+			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2), // original PipelineRollout scale
+						Max: int64Ptr(4),
+					},
+				},
+			},
+		},
+		/*{
+			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
+		},*/
 	}
 
 	for _, tc := range tests {
@@ -477,8 +528,15 @@ func Test_Recycle(t *testing.T) {
 
 				if tc.expectedDesiredPhase != "" {
 					// Verify desiredPhase was set correctly
-					assert.Equal(t, tc.expectedDesiredPhase, string(updatedPipeline.Spec.Lifecycle.DesiredPhase))
+					assert.Equal(t, tc.expectedDesiredPhase, getDesiredPhase(updatedPipeline))
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
+				}
+
+				if tc.expectSpecOverridden {
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyOverriddenSpec)
+					assert.Equal(t, "true", updatedPipeline.Annotations[common.AnnotationKeyOverriddenSpec])
+				} else {
+					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyOverriddenSpec)
 				}
 
 				if tc.expectedVertexScaleDefinitions != nil && len(tc.expectedVertexScaleDefinitions) > 0 {
@@ -526,6 +584,13 @@ func Test_Recycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func getDesiredPhase(pipeline *numaflowv1.Pipeline) numaflowv1.PipelinePhase {
+	if pipeline.Spec.Lifecycle.DesiredPhase == "" {
+		return numaflowv1.PipelinePhaseRunning
+	}
+	return pipeline.Spec.Lifecycle.DesiredPhase
 }
 
 // Helper function to create int64 pointer
@@ -613,7 +678,7 @@ func int32Ptr(i int32) *int32 {
 		return pipeline
 	}
 */
-func createPipelineForRecycleTest(pipelineRolloutName, pipelineName, phase, upgradeState, upgradeStateReason, sinkImagePath string,
+func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, phase numaflowv1.PipelinePhase, upgradeState, upgradeStateReason, sinkImagePath string,
 	overriddenSpec bool,
 	pauseGracePeriodSeconds float64,
 	vertexScaleDefinitions []apiv1.VertexScaleDefinition) *numaflowv1.Pipeline {
@@ -674,7 +739,7 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName, phase, upgr
 			},
 		},
 		Status: numaflowv1.PipelineStatus{
-			Phase:              numaflowv1.PipelinePhase(phase),
+			Phase:              phase,
 			ObservedGeneration: 1,
 		},
 	}
