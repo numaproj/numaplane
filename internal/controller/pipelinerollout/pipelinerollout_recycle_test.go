@@ -319,7 +319,7 @@ func Test_Recycle(t *testing.T) {
 		expectSpecOverridden           bool
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 	}{
-		/*{
+		{
 			name:                  "Delete/Recreate - should delete immediately",
 			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
 			specHasBeenOverridden: false,
@@ -371,7 +371,7 @@ func Test_Recycle(t *testing.T) {
 					},
 				},
 			},
-		},*/
+		},
 		{
 			name:                  "Progressive Replaced - second attempt (force drain) - first apply the new spec",
 			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
@@ -547,47 +547,29 @@ func Test_Recycle(t *testing.T) {
 					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyOverriddenSpec)
 				}
 
-				if tc.expectedVertexScaleDefinitions != nil && len(tc.expectedVertexScaleDefinitions) > 0 {
-					// Verify vertex scale definitions were applied correctly
-					/*vertices, found, err := unstructured.NestedSlice(updatedUnstructured.Object, "spec", "vertices")
-					assert.NoError(t, err)
-					assert.True(t, found, "Expected vertices to be found in pipeline spec")
+				if len(tc.expectedVertexScaleDefinitions) > 0 {
+					// Verify vertex scale definitions were applied correctly using the structured updatedPipeline
+					assert.Len(t, updatedPipeline.Spec.Vertices, len(tc.expectedVertexScaleDefinitions), "Number of vertices should match expected scale definitions")
 
-					// Create a map of expected vertex scales for easier comparison
-					expectedScales := make(map[string]apiv1.VertexScaleDefinition)
-					for _, vsd := range tc.expectedVertexScaleDefinitions {
-						expectedScales[vsd.VertexName] = vsd
-					}
+					// Check each vertex in the updated pipeline (assuming same order as expectedVertexScaleDefinitions)
+					for i, expectedScale := range tc.expectedVertexScaleDefinitions {
+						vertex := updatedPipeline.Spec.Vertices[i]
+						assert.Equal(t, expectedScale.VertexName, vertex.Name, "Vertex name should match at index %d", i)
 
-					// Check each vertex in the updated pipeline
-					for _, vertex := range vertices {
-						if vertexMap, ok := vertex.(map[string]interface{}); ok {
-							vertexName, found, err := unstructured.NestedString(vertexMap, "name")
-							assert.NoError(t, err)
-							assert.True(t, found, "Vertex should have a name")
+						if expectedScale.ScaleDefinition != nil {
+							if expectedScale.ScaleDefinition.Min != nil {
+								assert.NotNil(t, vertex.Scale.Min, "Expected vertex %s to have min scale", vertex.Name)
+								expectedMin := int32(*expectedScale.ScaleDefinition.Min)
+								assert.Equal(t, expectedMin, *vertex.Scale.Min, "Vertex %s min scale mismatch", vertex.Name)
+							}
 
-							if expectedScale, exists := expectedScales[vertexName]; exists {
-								// Check the scale values
-								scaleMap, found, err := unstructured.NestedMap(vertexMap, "scale")
-								assert.NoError(t, err)
-								assert.True(t, found, "Expected vertex %s to have scale definition", vertexName)
-
-								if expectedScale.ScaleDefinition.Min != nil {
-									actualMin, found, err := unstructured.NestedInt64(scaleMap, "min")
-									assert.NoError(t, err)
-									assert.True(t, found, "Expected vertex %s to have min scale", vertexName)
-									assert.Equal(t, *expectedScale.ScaleDefinition.Min, actualMin, "Vertex %s min scale mismatch", vertexName)
-								}
-
-								if expectedScale.ScaleDefinition.Max != nil {
-									actualMax, found, err := unstructured.NestedInt64(scaleMap, "max")
-									assert.NoError(t, err)
-									assert.True(t, found, "Expected vertex %s to have max scale", vertexName)
-									assert.Equal(t, *expectedScale.ScaleDefinition.Max, actualMax, "Vertex %s max scale mismatch", vertexName)
-								}
+							if expectedScale.ScaleDefinition.Max != nil {
+								assert.NotNil(t, vertex.Scale.Max, "Expected vertex %s to have max scale", vertex.Name)
+								expectedMax := int32(*expectedScale.ScaleDefinition.Max)
+								assert.Equal(t, expectedMax, *vertex.Scale.Max, "Vertex %s max scale mismatch", vertex.Name)
 							}
 						}
-					}*/
+					}
 				}
 			}
 		})
