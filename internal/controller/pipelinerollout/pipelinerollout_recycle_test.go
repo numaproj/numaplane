@@ -303,11 +303,12 @@ func Test_Recycle(t *testing.T) {
 	originalPauseGracePeriodSeconds := float64(60)
 
 	tests := []struct {
-		name                  string
-		upgradeStateReason    string
-		specHasBeenOverridden bool
-		pipelinePhase         string
-		isNewPromotedPipeline bool
+		name                          string
+		upgradeStateReason            string
+		specHasBeenOverridden         bool
+		pipelinePhase                 string
+		isNewPromotedPipeline         bool
+		initialVertexScaleDefinitions []apiv1.VertexScaleDefinition
 
 		expectedDeleted                bool
 		expectedError                  bool
@@ -323,26 +324,43 @@ func Test_Recycle(t *testing.T) {
 			expectedError:         false,
 		},*/
 		{
-			name:                  "progressive success - should set desiredPhase to Paused and scale down vertices",
+			name:                  "progressive success - should scale down vertices",
 			upgradeStateReason:    string(common.LabelValueProgressiveSuccess),
 			specHasBeenOverridden: false,
 			pipelinePhase:         "Running",
-			expectedDeleted:       false, // Should not delete immediately, should pause first
-			expectedError:         false,
-			expectedDesiredPhase:  "Paused",
-			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
 				{
 					VertexName: "in",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(1), // 30% of 2 historical pods = 0.6, rounded up to 1
-						Max: int64Ptr(1),
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
 					},
 				},
 				{
 					VertexName: "out",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: int64Ptr(1), // 30% of 1 historical pod = 0.3, rounded up to 1
-						Max: int64Ptr(1),
+						Min: int64Ptr(2), // 50% of 3 historical pod = 1.5, rounded up to 2
+						Max: int64Ptr(2),
+					},
+				},
+			},
+
+			expectedDeleted:      false, // Should not delete immediately, should pause first
+			expectedError:        false,
+			expectedDesiredPhase: "Paused",
+			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2), // 50% of 3 historical pod = 1.5, rounded up to 2
+						Max: int64Ptr(2),
 					},
 				},
 			},
@@ -368,6 +386,7 @@ func Test_Recycle(t *testing.T) {
 					Pipeline: apiv1.Pipeline{
 						Spec: runtime.RawExtension{
 							Raw: []byte(`{
+								"lifecycle": {"pauseGracePeriodSeconds": 60 },
 								"vertices": [
 									{"name": "in", "source": {"generator": {"rpu": 5, "duration": "1s"}}, "scale": {"min": 3, "max": 5}},
 									{"name": "out", "sink": {"log": {}}, "scale": {"min": 2, "max": 4}}
@@ -397,7 +416,7 @@ func Test_Recycle(t *testing.T) {
 			recyclablePipelineName := "test-pipeline-2"
 
 			// Create the Pipeline we're recycling
-			pipeline := createPipelineForRecycleTest(pipelineRolloutName, recyclablePipelineName, tc.pipelinePhase, "recyclable", tc.upgradeStateReason, recyclableImage, tc.specHasBeenOverridden, originalPauseGracePeriodSeconds)
+			pipeline := createPipelineForRecycleTest(pipelineRolloutName, recyclablePipelineName, tc.pipelinePhase, "recyclable", tc.upgradeStateReason, recyclableImage, tc.specHasBeenOverridden, originalPauseGracePeriodSeconds, tc.initialVertexScaleDefinitions)
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, pipeline)
 			// Convert it to Unstructured for the Recycle function
 			var pipelineUnstructured unstructured.Unstructured
@@ -414,7 +433,28 @@ func Test_Recycle(t *testing.T) {
 				promotedPipelineName = "test-pipeline-0"
 				promotedPipelinePath = oldImage
 			}
-			promotedPipeline := createPipelineForRecycleTest(pipelineRolloutName, promotedPipelineName, tc.pipelinePhase, "promoted", "", promotedPipelinePath, false, originalPauseGracePeriodSeconds)
+
+			two := int64(2)
+			three := int64(3)
+			four := int64(4)
+			five := int64(5)
+			scaledUpVertexDefinitions := []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &three,
+						Max: &five,
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: &two,
+						Max: &four,
+					},
+				},
+			}
+			promotedPipeline := createPipelineForRecycleTest(pipelineRolloutName, promotedPipelineName, tc.pipelinePhase, "promoted", "", promotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, promotedPipeline)
 
 			// Create a PipelineRolloutReconciler instance
@@ -581,14 +621,16 @@ func int32Ptr(i int32) *int32 {
 		return pipeline
 	}
 */
-func createPipelineForRecycleTest(pipelineRolloutName string, pipelineName string, phase string, upgradeState string, upgradeStateReason string, sinkImagePath string, overriddenSpec bool, pauseGracePeriodSeconds float64) *numaflowv1.Pipeline {
+func createPipelineForRecycleTest(pipelineRolloutName, pipelineName, phase, upgradeState, upgradeStateReason, sinkImagePath string,
+	overriddenSpec bool,
+	pauseGracePeriodSeconds float64,
+	vertexScaleDefinitions []apiv1.VertexScaleDefinition) *numaflowv1.Pipeline {
+
 	pauseGracePeriodSecondsInt64 := int64(pauseGracePeriodSeconds)
 	pipelineSpecSourceRPU := int64(5)
 	pipelineSpecSourceDuration := metav1.Duration{
 		Duration: time.Second,
 	}
-	one := int32(1)
-	five := int32(5)
 
 	pipeline := &numaflowv1.Pipeline{
 		TypeMeta: metav1.TypeMeta{
@@ -630,10 +672,6 @@ func createPipelineForRecycleTest(pipelineRolloutName string, pipelineName strin
 							},
 						},
 					},
-					Scale: numaflowv1.Scale{
-						Min: &one,
-						Max: &five,
-					},
 				},
 			},
 			Edges: []numaflowv1.Edge{
@@ -654,6 +692,21 @@ func createPipelineForRecycleTest(pipelineRolloutName string, pipelineName strin
 		pipeline.Annotations = map[string]string{
 			common.AnnotationKeyOverriddenSpec: "true",
 		}
+	}
+
+	for index, scaleDefinition := range vertexScaleDefinitions {
+		if scaleDefinition.ScaleDefinition != nil {
+			if scaleDefinition.ScaleDefinition.Min != nil {
+				min := int32(*scaleDefinition.ScaleDefinition.Min)
+				pipeline.Spec.Vertices[index].Scale.Min = &min
+			}
+			if scaleDefinition.ScaleDefinition.Max != nil {
+				max := int32(*scaleDefinition.ScaleDefinition.Max)
+				pipeline.Spec.Vertices[index].Scale.Max = &max
+			}
+
+		}
+
 	}
 
 	return pipeline
