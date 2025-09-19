@@ -304,20 +304,69 @@ func Test_Recycle(t *testing.T) {
 	originalPauseGracePeriodSeconds := float64(60)
 	paused := numaflowv1.PipelinePhasePaused
 	running := numaflowv1.PipelinePhaseRunning
+	pipelineRolloutName := "test-pipeline"
+
+	newImage := "quay.io/repo/image:new"
+	recyclableImage := "quay.io/repo/image:recyclable"
+	oldImage := "quay.io/repo/image:old"
+
+	newPromotedPipelineName := "test-pipeline-3"
+	newPromotedPipelinePath := newImage
+	originalPromotedPipelineName := "test-pipeline-0"
+	originalPromotedPipelinePath := oldImage
+
+	two := int64(2)
+	three := int64(3)
+	four := int64(4)
+	five := int64(5)
+	// these vertex definitions represent our pipeline when it's scaled up to that of the PipelineRollout definition
+	scaledUpVertexDefinitions := []apiv1.VertexScaleDefinition{
+		{
+			VertexName: "in",
+			ScaleDefinition: &apiv1.ScaleDefinition{
+				Min: &three,
+				Max: &five,
+			},
+		},
+		{
+			VertexName: "out",
+			ScaleDefinition: &apiv1.ScaleDefinition{
+				Min: &two,
+				Max: &four,
+			},
+		},
+	}
 
 	tests := []struct {
-		name                          string
-		upgradeStateReason            string
-		specHasBeenOverridden         bool
-		desiredPhase                  *numaflowv1.PipelinePhase
-		pipelinePhase                 numaflowv1.PipelinePhase
-		isPromotedPipelineNew         bool
+		name string
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// INPUTS
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// the "Upgrade State Reason" label on the Pipeline being recycled which explains the condition in which it was recycled
+		upgradeStateReason string
+		// if the spec has already been overridden on the pipeline for the purpose of force draining
+		specHasBeenOverridden bool
+		// the lifecycle.desiredPhase on the pipeline
+		desiredPhase *numaflowv1.PipelinePhase
+		// the status.phase on the pipeline
+		pipelinePhase numaflowv1.PipelinePhase
+		// if there's a new "promoted" pipeline which can be used for force draining (or really if there's a pipeline whose definition matches the PipelineRollout)
+		isPromotedPipelineNew bool
+		// the Vertex scale values of the Pipeline
 		initialVertexScaleDefinitions []apiv1.VertexScaleDefinition
 
-		expectedDeleted                bool
-		expectedError                  bool
-		expectedDesiredPhase           *numaflowv1.PipelinePhase // if set to nil, we don't care what it is
-		expectSpecOverridden           bool
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// OUTPUTS TO VERIFY
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// should this pipeline be deleted during the call to Recycle()?
+		expectedDeleted bool
+		// should Recycle() return an error?
+		expectedError bool
+		// expected value of lifecycle.desiredPhase; if set to nil, we don't care what it is
+		expectedDesiredPhase *numaflowv1.PipelinePhase
+		// do we expect the value of the pipeline's spec to be that of the "promoted" pipeline?
+		expectSpecOverridden bool
+		// expected pipeline vertex scale definitions at the end of the call
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 	}{
 		{
@@ -570,40 +619,11 @@ func Test_Recycle(t *testing.T) {
 
 			// first delete any Pipelines or PipelineRollouts in case they already exist, in Kubernetes
 			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-
 			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
 
-			pipelineRolloutName := "test-pipeline"
-
-			newImage := "quay.io/repo/image:new"
-			recyclableImage := "quay.io/repo/image:recyclable"
-			oldImage := "quay.io/repo/image:old"
-
-			newPromotedPipelineName := "test-pipeline-3"
-			newPromotedPipelinePath := newImage
-			originalPromotedPipelineName := "test-pipeline-0"
-			originalPromotedPipelinePath := oldImage
-
-			two := int64(2)
-			three := int64(3)
-			four := int64(4)
-			five := int64(5)
-			scaledUpVertexDefinitions := []apiv1.VertexScaleDefinition{
-				{
-					VertexName: "in",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &three,
-						Max: &five,
-					},
-				},
-				{
-					VertexName: "out",
-					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &two,
-						Max: &four,
-					},
-				},
-			}
+			// Create a definition for a Promoted Pipeline
+			// We will use it below for our "promoted" pipeline if the test calls for a new "promoted" pipeline
+			// We will also use this for our PipelineRollout's definition
 			newPromotedPipelineDefinition := createPipelineForRecycleTest(pipelineRolloutName, newPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", newPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
 			var newPromotedDefUnstructured unstructured.Unstructured
 			err := util.StructToStruct(newPromotedPipelineDefinition, &newPromotedDefUnstructured.Object)
@@ -654,14 +674,13 @@ func Test_Recycle(t *testing.T) {
 			if tc.isPromotedPipelineNew {
 				promotedPipeline = newPromotedPipelineDefinition
 			} else {
+				// this doesn't match that of our PipelineRollout, which means it will be seen as "old"
 				promotedPipeline = createPipelineForRecycleTest(pipelineRolloutName, originalPromotedPipelineName, nil, tc.pipelinePhase, "promoted", "", originalPromotedPipelinePath, false, originalPauseGracePeriodSeconds, scaledUpVertexDefinitions)
 			}
 			ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, promotedPipeline)
 
-			// Create a PipelineRolloutReconciler instance
 			reconciler := &PipelineRolloutReconciler{}
 
-			// Call the Recycle function
 			deleted, err := reconciler.Recycle(ctx, &pipelineUnstructured, client)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedDeleted, deleted)
@@ -682,6 +701,7 @@ func Test_Recycle(t *testing.T) {
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
 				}
 
+				// Should the spec be overridden with the "promoted" spec?
 				if tc.expectSpecOverridden {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyOverriddenSpec)
 					assert.Equal(t, "true", updatedPipeline.Annotations[common.AnnotationKeyOverriddenSpec])
