@@ -303,6 +303,7 @@ func Test_Recycle(t *testing.T) {
 
 	originalPauseGracePeriodSeconds := float64(60)
 	paused := numaflowv1.PipelinePhasePaused
+	running := numaflowv1.PipelinePhaseRunning
 
 	tests := []struct {
 		name                          string
@@ -329,7 +330,7 @@ func Test_Recycle(t *testing.T) {
 			expectedError:         false,
 		},
 		{
-			name:                  "Progressive Replaced - first attempt - vertices already scaled down - should pause pipeline",
+			name:                  "Progressive Replaced - first attempt - vertices already scaled down - now pause pipeline",
 			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
 			specHasBeenOverridden: false,
 			pipelinePhase:         numaflowv1.PipelinePhaseRunning,
@@ -377,7 +378,7 @@ func Test_Recycle(t *testing.T) {
 			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
 			specHasBeenOverridden: false,
 			desiredPhase:          &paused,
-			pipelinePhase:         numaflowv1.PipelinePhasePaused,
+			pipelinePhase:         paused,
 			isPromotedPipelineNew: true,
 			// pipeline was scaled to 0
 			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
@@ -418,7 +419,60 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Progressive Replaced - second attempt (force drain) - new spec was applied - now scale it down before pausing",
+			// preconditions:
+			// - desiredPhase=Running, phase=Running, initialScale=matching pipelinerollout
+			upgradeStateReason:    string(common.LabelValueProgressiveReplaced),
+			specHasBeenOverridden: true,
+			desiredPhase:          &running,
+			pipelinePhase:         running,
+			isPromotedPipelineNew: true,
+			// pipeline was scaled to 0
+			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0),
+						Max: int64Ptr(0),
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2),
+						Max: int64Ptr(4),
+					},
+				},
+			},
+
+			expectSpecOverridden: true,
+			expectedError:        false,
+			expectedDesiredPhase: numaflowv1.PipelinePhaseRunning,
+			// pipeline scaled back up to PipelineRollout defined scale except Source is 0
+			expectedVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(2), // 50% of 3 historical pod = 1.5, rounded up to 2
+						Max: int64Ptr(2),
+					},
+				},
+			},
+		},
 		/*{
+			name: "Progressive Replaced - second attempt (force drain) - new spec was applied and was scaled down - now pause it",
+			// preconditions:
+			//
+		},
+		{
 			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
 		},*/
 	}
