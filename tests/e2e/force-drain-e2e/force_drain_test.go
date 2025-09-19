@@ -206,7 +206,7 @@ func updateToFailedPipelines() {
 		},
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	updatePipeline(failedPipelineSpec1)
 
 	// this will be a failed Pipeline which will be assessed as Failed
@@ -219,7 +219,7 @@ func updateToFailedPipelines() {
 			},
 		},
 	}
-	time.Sleep(30 * time.Second)
+	time.Sleep(45 * time.Second)
 	updatePipeline(failedPipelineSpec2)
 
 	// verify it was assessed as failed
