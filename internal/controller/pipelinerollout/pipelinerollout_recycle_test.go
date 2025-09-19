@@ -315,14 +315,14 @@ func Test_Recycle(t *testing.T) {
 		expectedDesiredPhase           string
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
 	}{
-		/*{
+		{
 			name:                  "delete recreate - should delete immediately",
 			upgradeStateReason:    string(common.LabelValueDeleteRecreateChild),
 			specHasBeenOverridden: false,
 			pipelinePhase:         "Running",
 			expectedDeleted:       true, // Delete recreate should delete immediately
 			expectedError:         false,
-		},*/
+		},
 		{
 			name:                  "progressive success - should scale down vertices",
 			upgradeStateReason:    string(common.LabelValueProgressiveSuccess),
@@ -475,18 +475,10 @@ func Test_Recycle(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, updatedPipeline)
 
-				// Convert back to unstructured for easier field access
-				//var updatedUnstructured unstructured.Unstructured
-				//err = util.StructToStruct(updatedPipeline, &updatedUnstructured.Object)
-				//assert.NoError(t, err)
-
 				if tc.expectedDesiredPhase != "" {
 					// Verify desiredPhase was set correctly
-					//actualDesiredPhase, found, err := unstructured.NestedString(updatedUnstructured.Object, "spec", "lifecycle", "desiredPhase")
-					//assert.NoError(t, err)
-					//assert.True(t, found, "Expected desiredPhase to be set")
-					//assert.Equal(t, tc.expectedDesiredPhase, actualDesiredPhase)
 					assert.Equal(t, tc.expectedDesiredPhase, string(updatedPipeline.Spec.Lifecycle.DesiredPhase))
+					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
 				}
 
 				if tc.expectedVertexScaleDefinitions != nil && len(tc.expectedVertexScaleDefinitions) > 0 {
