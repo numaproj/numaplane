@@ -56,7 +56,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.23' # todo: use same version as everywhere else (note this introduced new lint errors that we need to deal with one way or another)
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6

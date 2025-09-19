@@ -750,11 +750,6 @@ func int64Ptr(i int64) *int64 {
 	return &i
 }
 
-// Helper function to create int32 pointer
-func int32Ptr(i int32) *int32 {
-	return &i
-}
-
 /*
 	func createRecyclablePipeline(pipelineRolloutName string, pipelineName string, phase, upgradeStateReason string, overriddenSpec bool, pauseGracePeriodSeconds float64) *numaflowv1.Pipeline {
 		pauseGracePeriodSecondsInt64 := int64(pauseGracePeriodSeconds)
