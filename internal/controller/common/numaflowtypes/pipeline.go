@@ -18,6 +18,7 @@ package numaflowtypes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -40,20 +41,6 @@ type PipelineSpec struct {
 	InterStepBufferServiceName string           `json:"interStepBufferServiceName"`
 	Lifecycle                  Lifecycle        `json:"lifecycle,omitempty"`
 	Vertices                   []AbstractVertex `json:"vertices,omitempty"`
-}
-
-// AbstractVertex keeps track of minimum number of fields we need to know about in Numaflow's AbstractVertex, which are presumed not to change from version to version
-type AbstractVertex struct {
-	Name  string `json:"name"`
-	Scale Scale  `json:"scale,omitempty"`
-}
-
-// Scale keeps track of minimum number of fields we need to know about in Numaflow's Scale struct, which are presumed not to change from version to version
-type Scale struct {
-	// Minimum replicas.
-	Min *int32 `json:"min,omitempty"`
-	// Maximum replicas.
-	Max *int32 `json:"max,omitempty"`
 }
 
 func (pipeline PipelineSpec) GetISBSvcName() string {
@@ -104,6 +91,18 @@ func GetPipelinesForRollout(ctx context.Context, c client.Client, pipelineRollou
 
 }
 
+func GetPipelineSpecFromRollout(
+	pipelineName string,
+	pipelineRollout *apiv1.PipelineRollout,
+) (map[string]interface{}, error) {
+	args := map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
+	}
+
+	return util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
+}
+
 func ParsePipelineStatus(pipeline *unstructured.Unstructured) (PipelineStatus, error) {
 	if pipeline == nil || len(pipeline.Object) == 0 {
 		return PipelineStatus{}, nil
@@ -137,6 +136,44 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	pipelinePhase := pipelineStatus.Phase
 
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
+}
+
+// CheckPipelineSetToRun checks if the pipeline is set to desiredPhase=Running(or unset) plus if all vertices can scale > 0
+func CheckPipelineSetToRun(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+	vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(pipeline)
+	if err != nil {
+		return false, fmt.Errorf("Failed to check pipeline set to run: %v", err)
+	}
+
+	// if any Vertex has max=0, it can't run
+	for _, vertexDef := range vertexScaleDefinitions {
+		if vertexDef.ScaleDefinition != nil && vertexDef.ScaleDefinition.Max != nil && *vertexDef.ScaleDefinition.Max == 0 {
+			numaLogger.WithValues("pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()), "vertex", vertexDef.VertexName).Debug("pipeline vertex has max=0")
+			return false, nil
+		}
+	}
+
+	desiredPhase, err := GetPipelineDesiredPhase(pipeline)
+	return desiredPhase == string(numaflowv1.PipelinePhaseRunning), err
+}
+
+// CheckPipelineLiveObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
+func CheckPipelineLiveObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
+	existingPipelineDef, err := kubernetes.GetLiveResource(ctx, pipeline, "pipelines")
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("failed to check observed generation of live Pipeline: %v", err)
+	}
+	return CheckPipelineObservedGeneration(ctx, existingPipelineDef)
+}
+
+// CheckPipelineObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated
+func CheckPipelineObservedGeneration(ctx context.Context, pipeline *unstructured.Unstructured) (bool, int64, int64, error) {
+	pipelineStatus, err := ParsePipelineStatus(pipeline)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("failed to parse Pipeline Status from pipeline CR: %+v, %v", pipeline, err)
+	}
+	return pipelineStatus.ObservedGeneration >= pipeline.GetGeneration(), pipeline.GetGeneration(), pipelineStatus.ObservedGeneration, nil
 }
 
 // either pipeline must be:
@@ -222,9 +259,9 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	}
 }
 
-func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
+func PipelineWithoutScaleMinMax(pipeline map[string]interface{}) error {
 	// for each Vertex, remove the scale min and max:
-	vertices, _, _ := unstructured.NestedSlice(pipeline.Object, "spec", "vertices")
+	vertices, _, _ := unstructured.NestedSlice(pipeline, "spec", "vertices")
 
 	modifiedVertices := make([]interface{}, 0)
 	for _, vertex := range vertices {
@@ -243,11 +280,37 @@ func PipelineWithoutScaleMinMax(pipeline *unstructured.Unstructured) error {
 		}
 	}
 
-	err := unstructured.SetNestedSlice(pipeline.Object, modifiedVertices, "spec", "vertices")
+	err := unstructured.SetNestedSlice(pipeline, modifiedVertices, "spec", "vertices")
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func GetVertexFromPipelineSpecMap(
+	pipelineSpec map[string]interface{},
+	vertexName string,
+) (map[string]interface{}, bool, error) {
+	vertices, found, err := unstructured.NestedSlice(pipelineSpec, "vertices")
+	if err != nil {
+		return nil, false, fmt.Errorf("error while getting vertices of pipeline: %v", err)
+	}
+	if !found {
+		return nil, false, fmt.Errorf("no vertices found in pipeline spec?: %+v", pipelineSpec)
+	}
+
+	// find the vertex
+	for _, vertex := range vertices {
+
+		vertexAsMap := vertex.(map[string]interface{})
+		name := vertexAsMap["name"].(string)
+		if name == vertexName {
+			return vertex.(map[string]interface{}), true, nil
+		}
+	}
+
+	// Vertex not found
+	return nil, false, nil
 }
 
 func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interface{}, error) {
@@ -261,6 +324,36 @@ func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interf
 	}
 
 	return vertexDefinitions, nil
+}
+
+// get the Scale definitions for each Vertex
+func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
+	vertices, err := GetPipelineVertexDefinitions(pipelineDef)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
+	}
+
+	scaleDefinitions := []apiv1.VertexScaleDefinition{}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return nil, err
+			}
+			if !foundVertexName {
+				return nil, errors.New("a vertex must have a name")
+			}
+
+			vertexScaleDef, err := ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return nil, err
+			}
+			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
+		}
+	}
+	return scaleDefinitions, nil
 }
 
 // find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found

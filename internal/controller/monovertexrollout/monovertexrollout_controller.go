@@ -58,8 +58,6 @@ import (
 
 const (
 	ControllerMonoVertexRollout = "monovertex-rollout-controller"
-	TemplateMonoVertexName      = ".monovertex-name"
-	TemplateMonoVertexNamespace = ".monovertex-namespace"
 )
 
 // MonoVertexRolloutReconciler reconciles a MonoVertexRollout object
@@ -685,16 +683,16 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 ) (*unstructured.Unstructured, error) {
 
 	args := map[string]interface{}{
-		TemplateMonoVertexName:      monoVertexName,
-		TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
+		common.TemplateMonoVertexName:      monoVertexName,
+		common.TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 	}
 
-	monoVertexSpec, err := util.ResolveTemplateSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
+	monoVertexSpec, err := util.ResolveTemplatedSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataResolved, err := util.ResolveTemplateSpec(metadata, args)
+	metadataResolved, err := util.ResolveTemplatedSpec(metadata, args)
 	if err != nil {
 		return nil, err
 	}
@@ -818,9 +816,9 @@ func (r *MonoVertexRolloutReconciler) GetDesiredRiders(rolloutObject ctlrcommon.
 		if err := util.StructToStruct(rider.Definition, &asMap); err != nil {
 			return desiredRiders, fmt.Errorf("rider definition could not converted to map: %w", err)
 		}
-		resolvedMap, err := util.ResolveTemplateSpec(asMap, map[string]interface{}{
-			TemplateMonoVertexName:      monoVertexName,
-			TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
+		resolvedMap, err := util.ResolveTemplatedSpec(asMap, map[string]interface{}{
+			common.TemplateMonoVertexName:      monoVertexName,
+			common.TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
 		})
 		if err != nil {
 			return desiredRiders, err

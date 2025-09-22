@@ -25,7 +25,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: Add bins to PATH
         run: |
@@ -56,7 +56,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.23' # todo: use same version as everywhere else (note this introduced new lint errors that we need to deal with one way or another)
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -75,7 +75,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.24'
         id: go
 
       - name: Install MockGen
@@ -130,6 +130,8 @@ jobs:
             case: "progressive-analysis-monovertex"
           - strategy: "progressive"
             case: "progressive-analysis-pipeline"
+          - strategy: "progressive"
+            case: "force-drain"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -143,7 +145,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
@@ -244,7 +246,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v4.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: Install gocovmerge
         run: go install github.com/bookerzzz/gocovmerge@latest

@@ -42,11 +42,21 @@ type PipelineStrategy struct {
 	PipelineTypeRolloutStrategy `json:",inline"`
 
 	PPNDStrategy `json:"ppnd,omitempty"`
+
+	RecycleStrategy `json:"recycleStrategy,omitempty"`
 }
 
 type PPNDStrategy struct {
 	// FastResume indicates if the Pipeline should be resumed with the number of replicas it had before it was paused.
 	FastResume bool `json:"fastResume,omitempty"`
+}
+
+type RecycleStrategy struct {
+	// ScaleFactor is a percentage of Pipeline's original vertex scale that it will scale down by while it's being paused
+	// before deleting.
+	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse.
+	// If not defined, fallback to the one defined in the global ConfigMap
+	ScaleFactor *int32 `json:"scaleFactor,omitempty"`
 }
 
 // PipelineRider defines a resource that can be deployed along with the primary child of a PipelineRollout
@@ -85,6 +95,8 @@ type PipelineProgressiveStatus struct {
 	UpgradingPipelineStatus *UpgradingPipelineStatus `json:"upgradingPipelineStatus,omitempty"`
 	// PromotedPipelineStatus stores information regarding the current "promoted" pipeline
 	PromotedPipelineStatus *PromotedPipelineStatus `json:"promotedPipelineStatus,omitempty"`
+	// HistoricalPodCount keeps track of per-vertex pod count from the last "promoted" pipeline
+	HistoricalPodCount map[string]int `json:"historicalPodCount,omitempty"`
 }
 
 // UpgradingPipelineStatus describes the status of an upgrading child
@@ -275,6 +287,10 @@ func (pipelineRollout *PipelineRollout) SetPromotedChildStatus(status *PromotedC
 		pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = &PromotedPipelineStatus{}
 	}
 	pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
+}
+
+func (pipelineRollout *PipelineRollout) GetChildMetadata() Metadata {
+	return pipelineRollout.Spec.Pipeline.Metadata
 }
 
 func init() {

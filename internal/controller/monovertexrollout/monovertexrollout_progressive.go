@@ -11,9 +11,10 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
-	"github.com/numaproj/numaplane/internal/usde"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -141,20 +142,14 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-// CheckForDifferences tests for essential equality.
-// This implements a function of the progressiveController interface, used to determine if a previously Upgrading MonoVertex
-// should be replaced with a new one.
-// What should a user be able to update to cause this?: Ideally, they should be able to change any field if they need to and not just those that are
-// configured as "progressive", in the off chance that changing one of those fixes a problem.
-// However, we need to exclude any field that Numaplane or another platform changes, or it will confuse things.
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, from, to *unstructured.Unstructured) (bool, error) {
+// CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-
 	// remove certain fields (which numaplane needs to set) from comparison to test for equality
-	removeFunc := func(monoVertex *unstructured.Unstructured) (map[string]interface{}, error) {
+	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
 		var specAsMap map[string]any
 
-		if err := util.StructToStruct(monoVertex.Object["spec"], &specAsMap); err != nil {
+		if err := util.StructToStruct(monoVertex["spec"], &specAsMap); err != nil {
 			return nil, err
 		}
 
@@ -171,24 +166,47 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, f
 		return specAsMap, nil
 	}
 
-	fromNew, err := removeFunc(from)
+	from, err := removeFunc(monoVertexDef.Object)
 	if err != nil {
 		return false, err
 	}
-	toNew, err := removeFunc(to)
+	to, err := removeFunc(requiredSpec)
 	if err != nil {
 		return false, err
 	}
 
-	specsEqual := util.CompareStructNumTypeAgnostic(fromNew, toNew)
-	// just look specifically for metadata fields that can result in Progressive
-	// anything else could be updated by some platform and not by the user, which would cause an issue
-	metadataRisk := usde.ResourceMetadataHasDataLossRisk(ctx, from, to)
-	numaLogger.Debugf("specsEqual: %t, metadataRisk=%t, from=%v, to=%v\n",
-		specsEqual, metadataRisk, fromNew, toNew)
+	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
-	return !specsEqual || metadataRisk, nil
+	// Check required metadata (labels and annotations)
 
+	requiredLabels := requiredMetadata.Labels
+	actualLabels := monoVertexDef.GetLabels()
+	requiredAnnotations := requiredMetadata.Annotations
+	actualAnnotations := monoVertexDef.GetAnnotations()
+	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
+	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
+	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
+		specsEqual, labelsFound, annotationsFound, from, to, requiredLabels, actualLabels, requiredAnnotations, actualAnnotations)
+
+	return !specsEqual || !labelsFound || !annotationsFound, nil
+
+}
+
+// CheckForDifferencesWithRolloutDef tests if there's a meaningful difference between an existing child and the child
+// that would be produced by the Rollout definition.
+// This implements a function of the progressiveController interface
+// In order to do that, it must remove from the check any fields that are manipulated by Numaplane or Numaflow
+func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx context.Context, existingMonoVertex *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error) {
+	monoVertexRollout := rolloutObject.(*apiv1.MonoVertexRollout)
+
+	// In order to effectively compare, we need to create a MonoVertex Definition from the MonoVertexRollout which uses the same name as our current MonoVertex
+	// (so that won't be interpreted as a difference)
+	rolloutBasedMVDef, err := r.makeMonoVertexDefinition(monoVertexRollout, existingMonoVertex.GetName(), monoVertexRollout.Spec.MonoVertex.Metadata)
+	if err != nil {
+		return false, err
+	}
+
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, monoVertexRollout.Spec.MonoVertex.Metadata)
 }
 
 /*
@@ -269,17 +287,6 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
 
 	return false, nil
-}
-
-// ProcessPromotedChildPreRecycle processes the Promoted child directly prior to it being recycled
-// (due to being replaced by a new Promoted child)
-func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	promotedMonoVertexDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	return nil
 }
 
 /*
@@ -443,7 +450,7 @@ func scaleDownUpgradingMonoVertex(
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex as string: %w", err)
 	}
 	monoVertexRollout.Status.ProgressiveStatus.UpgradingMonoVertexStatus.OriginalScaleMinMax = originalScaleMinMaxString
-	originalScaleMinMax, err := progressive.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
+	originalScaleMinMax, err := numaflowtypes.ExtractScaleMinMax(upgradingMonoVertexDef.Object, []string{"spec", "scale"})
 	if err != nil {
 		return fmt.Errorf("cannot extract the scale min and max values from the upgrading monovertex: %w", err)
 	}
@@ -504,7 +511,7 @@ func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 }
 
 func getScaleValuesFromMonoVertexSpec(monovertexSpec map[string]interface{}) (*apiv1.ScaleDefinition, error) {
-	return progressive.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
+	return numaflowtypes.ExtractScaleMinMax(monovertexSpec, []string{"scale"})
 }
 
 /*
@@ -551,17 +558,6 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostFailure(
 	numaLogger.Debug("completed post-upgrade processing of promoted monovertex")
 
 	return false, nil
-}
-
-// ProcessUpgradingChildPreRecycle processes the Upgrading child directly prior to it being recycled
-// (due to being replaced by a new Upgrading child)
-func (r *MonoVertexRolloutReconciler) ProcessUpgradingChildPreRecycle(
-	ctx context.Context,
-	rolloutObject progressive.ProgressiveRolloutObject,
-	upgradingMonoVertexDef *unstructured.Unstructured,
-	c client.Client,
-) error {
-	return nil
 }
 
 /*

@@ -42,6 +42,7 @@ import (
 	numaflowversioned "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -92,6 +93,14 @@ func CreatePipelineInK8S(ctx context.Context, t *testing.T, numaflowClientSet *n
 	// updating the Status subresource is a separate operation
 	_, err = numaflowClientSet.NumaflowV1alpha1().Pipelines(DefaultTestNamespace).UpdateStatus(ctx, resultPipeline, metav1.UpdateOptions{})
 	assert.NoError(t, err)
+}
+
+func CreatePipelineInK8SFromUnstructured(ctx context.Context, t *testing.T, numaflowClientSet *numaflowversioned.Clientset, pipeline *unstructured.Unstructured) {
+	// Convert unstructured to typed Pipeline for creation in K8S
+	var typedPipeline numaflowv1.Pipeline
+	err := util.StructToStruct(pipeline.Object, &typedPipeline)
+	assert.NoError(t, err)
+	CreatePipelineInK8S(ctx, t, numaflowClientSet, &typedPipeline)
 }
 
 func CreateVertexInK8S(ctx context.Context, t *testing.T, numaflowClientSet *numaflowversioned.Clientset, vertex *numaflowv1.Vertex) {

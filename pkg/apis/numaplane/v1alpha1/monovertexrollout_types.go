@@ -229,6 +229,10 @@ func (monoVertexRollout *MonoVertexRollout) SetPromotedChildStatus(status *Promo
 	monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.PromotedPipelineTypeStatus.PromotedChildStatus = *status.DeepCopy()
 }
 
+func (monoVertexRollout *MonoVertexRollout) GetChildMetadata() Metadata {
+	return monoVertexRollout.Spec.MonoVertex.Metadata
+}
+
 func init() {
 	SchemeBuilder.Register(&MonoVertexRollout{}, &MonoVertexRolloutList{})
 }

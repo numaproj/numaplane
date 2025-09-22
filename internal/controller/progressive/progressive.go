@@ -34,7 +34,6 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/usde"
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -48,9 +47,11 @@ type progressiveController interface {
 	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
-	// CheckForDifferences determines if the new child definition is different from an existing child (which could either be "promoted" or "upgrading")
-	// Any fields manipulated by progressive rollout process are ignored
-	CheckForDifferences(ctx context.Context, existingChild, newChildDefinition *unstructured.Unstructured) (bool, error)
+	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition
+	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error)
+
+	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
+	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error)
 
 	// AssessUpgradingChild determines if upgrading child is determined to be healthy, unhealthy, or unknown
 	AssessUpgradingChild(ctx context.Context, rolloutObject ProgressiveRolloutObject, existingUpgradingChildDef *unstructured.Unstructured, schedule config.AssessmentSchedule) (apiv1.AssessmentResult, string, error)
@@ -82,12 +83,6 @@ type progressiveController interface {
 	// ProcessUpgradingChildPostSuccess performs operations on the upgrading child after the upgrade succeeds (just the operations which are unique to this Kind)
 	ProcessUpgradingChildPostSuccess(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
 
-	// ProcessPromotedChildPreRecycle performs operations on the promoted child prior to its being recycled
-	ProcessPromotedChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, promotedChildDef *unstructured.Unstructured, c client.Client) error
-
-	// ProcessUpgradingChildPreRecycle performs operations on the upgrading child prior to its being recycled
-	ProcessUpgradingChildPreRecycle(ctx context.Context, rolloutObject ProgressiveRolloutObject, upgradingChildDef *unstructured.Unstructured, c client.Client) error
-
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 }
@@ -111,6 +106,8 @@ type ProgressiveRolloutObject interface {
 
 	// note this resets the entire Promoted status struct which encapsulates the PromotedChildStatus struct
 	ResetPromotedChildStatus(promotedChild *unstructured.Unstructured) error
+
+	GetChildMetadata() apiv1.Metadata
 }
 
 // return:
@@ -482,16 +479,13 @@ func checkForUpgradeReplacement(
 
 	if differentFromExistingUpgrading {
 
-		// prepare existing upgrading child for Recycle
-		err = controller.ProcessUpgradingChildPreRecycle(ctx, rolloutObject, existingUpgradingChildDef, c)
-		if err != nil {
-			return false, false, err
-		}
-
 		if differentFromPromoted {
 
 			// recycle the old one
 			reason := common.LabelValueProgressiveReplaced
+			if childStatus.AssessmentResult == apiv1.AssessmentResultFailure {
+				reason = common.LabelValueProgressiveReplacedFailed
+			}
 			err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reason, existingUpgradingChildDef)
 			if err != nil {
 				return false, false, err
@@ -539,14 +533,14 @@ func checkForUpgradeReplacement(
 func checkForDifferences(
 	ctx context.Context,
 	controller progressiveController,
-	rolloutObject ctlrcommon.RolloutObject,
+	rolloutObject ProgressiveRolloutObject,
 	existingChildDef *unstructured.Unstructured,
 	existingIsUpgrading bool, // is the existing child "Upgrading" (vs "Promoted")?
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
 
 	needsUpdating := false
 
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef)
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, rolloutObject.GetChildMetadata())
 	if err != nil {
 		return false, err
 	}
@@ -712,10 +706,6 @@ func declareSuccess(
 		return false, err
 	}
 
-	err = controller.ProcessPromotedChildPreRecycle(ctx, rolloutObject, existingPromotedChildDef, c)
-	if err != nil {
-		return false, err
-	}
 	err = ctlrcommon.UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &reasonSuccess, existingPromotedChildDef)
 	if err != nil {
 		return false, err
@@ -885,37 +875,6 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	}
 
 	return string(jsonBytes), nil
-}
-
-func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*apiv1.ScaleDefinition, error) {
-
-	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
-	if err != nil {
-		return nil, err
-	}
-
-	if !foundScale {
-		return nil, nil
-	}
-	scaleMinMax := apiv1.ScaleDefinition{}
-	minInterface := scaleDef["min"]
-	maxInterface := scaleDef["max"]
-	if minInterface != nil {
-		min, valid := util.ToInt64(minInterface)
-		if !valid {
-			return nil, fmt.Errorf("scale min %+v of unexpected type", minInterface)
-		}
-		scaleMinMax.Min = &min
-	}
-	if maxInterface != nil {
-		max, valid := util.ToInt64(maxInterface)
-		if !valid {
-			return nil, fmt.Errorf("scale max %+v of unexpected type", maxInterface)
-		}
-		scaleMinMax.Max = &max
-	}
-
-	return &scaleMinMax, nil
 }
 
 /*
