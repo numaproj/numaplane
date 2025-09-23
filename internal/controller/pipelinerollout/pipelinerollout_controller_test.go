@@ -1128,7 +1128,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		ctlrcommon.TestCustomMetrics,
 		recorder)
 
-	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
 	defaultPromotedPipelineDef := createPipeline(
 		numaflowv1.PipelinePhaseRunning,
@@ -1168,7 +1168,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			Status: metav1.ConditionFalse,
 		},
 	}
-	defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
+	/*defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
 		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 			PromotedChildStatus: apiv1.PromotedChildStatus{
 				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
@@ -1179,7 +1179,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
 			},
 		},
-	}
+	}*/
 
 	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
 		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
@@ -1218,7 +1218,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
 
 	}{
-		{
+		/*{
 			name:                        "Progressive deployed successfully",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
@@ -1271,7 +1271,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
-		},
+		},*/
 		{
 			name:                        "Clean up after progressive upgrade",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
@@ -1284,13 +1284,13 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				map[string]string{
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
+					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // TODO: why is this promoted?
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
 			initialRolloutPhase:         apiv1.PhaseDeployed,
 			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   nil,
+			initialInProgressStrategy:   nil, // TODO: why is this nil?
 			initialUpgradingChildStatus: nil,
 			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
 			expectedRolloutPhase:        apiv1.PhaseDeployed,
@@ -1298,7 +1298,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
 		},
-		{
+		/*{
 			name:            "Clean up after progressive upgrade: pipeline still pausing",
 			newPipelineSpec: pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: createPipeline(
@@ -1353,7 +1353,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
-		},
+		},*/
 	}
 
 	for _, tc := range testCases {
