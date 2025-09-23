@@ -141,7 +141,7 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 // CheckPipelineSetToRun checks if the pipeline is set to desiredPhase=Running(or unset) plus if all vertices can scale > 0
 func CheckPipelineSetToRun(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
-	vertexScaleDefinitions, err := GetScaleValuesFromPipelineSpec(pipeline)
+	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipeline)
 	if err != nil {
 		return false, fmt.Errorf("Failed to check pipeline set to run: %v", err)
 	}
@@ -326,36 +326,6 @@ func GetPipelineVertexDefinitions(pipeline *unstructured.Unstructured) ([]interf
 	return vertexDefinitions, nil
 }
 
-// get the Scale definitions for each Vertex
-func GetScaleValuesFromPipelineSpec(pipelineDef *unstructured.Unstructured) ([]apiv1.VertexScaleDefinition, error) {
-	vertices, err := GetPipelineVertexDefinitions(pipelineDef)
-	if err != nil {
-		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
-	}
-
-	scaleDefinitions := []apiv1.VertexScaleDefinition{}
-
-	for _, vertex := range vertices {
-		if vertexAsMap, ok := vertex.(map[string]any); ok {
-
-			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
-			if err != nil {
-				return nil, err
-			}
-			if !foundVertexName {
-				return nil, errors.New("a vertex must have a name")
-			}
-
-			vertexScaleDef, err := ExtractScaleMinMax(vertexAsMap, []string{"scale"})
-			if err != nil {
-				return nil, err
-			}
-			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
-		}
-	}
-	return scaleDefinitions, nil
-}
-
 // find all the Pipeline Vertices in K8S using the Pipeline's definition: return a map of vertex name to resource found
 // for any Vertices that can't be found, return an entry mapped to nil
 func GetPipelineVertices(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured) (map[string]*unstructured.Unstructured, error) {
@@ -424,4 +394,291 @@ func MinimizePipelineVertexReplicas(ctx context.Context, c client.Client, pipeli
 	}
 
 	return nil
+}
+
+// determine if all Pipeline Vertices have max=0
+func CheckPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
+	scaledToZero := true
+
+	scaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipeline)
+	if err != nil {
+		return false, err
+	}
+	for _, vertexScale := range scaleDefinitions {
+		if vertexScale.ScaleDefinition == nil || vertexScale.ScaleDefinition.Max == nil { // by default if max isn't set, it implies 1
+			scaledToZero = false
+			break
+		} else {
+			if !(*vertexScale.ScaleDefinition.Max == 0) {
+				scaledToZero = false
+			}
+		}
+
+	}
+	return scaledToZero, nil
+}
+
+// ensure all Pipeline Vertices have max=0
+func EnsurePipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured, c client.Client) error {
+	scaledToZero, err := CheckPipelineScaledToZero(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+
+	if !scaledToZero {
+		err := ScalePipelineVerticesToZero(ctx, pipeline, c)
+		if err != nil {
+			return fmt.Errorf("error scaling pipeline %s's vertices to zero: %v", pipeline.GetName(), err)
+		}
+	}
+	return nil
+}
+
+// scale any Source Vertices in the Pipeline definition to min=max=0
+func ScalePipelineDefSourceVerticesToZero(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+) error {
+	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipelineDef)
+	if err != nil {
+		return err
+	}
+
+	zero := int64(0)
+	for i, scaleDef := range vertexScaleDefinitions {
+		vertexName := scaleDef.VertexName
+
+		// look for this vertex's entire definition so we can determine if it's a source or not
+		pipelineSpec, exists, err := unstructured.NestedMap(pipelineDef.Object, "spec")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("spec not found in pipeline %s/%s", pipelineDef.GetNamespace(), pipelineDef.GetName())
+		}
+		vertexDef, found, err := GetVertexFromPipelineSpecMap(pipelineSpec, vertexName)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("vertex definition not found in pipeline %s/%s for vertex %s", pipelineDef.GetNamespace(), pipelineDef.GetName(), vertexName)
+		}
+		_, isSource, err := unstructured.NestedMap(vertexDef, "source")
+		if err != nil {
+			return err
+		}
+		if isSource {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+		}
+	}
+	err = ApplyScaleValuesToPipelineDefinition(ctx, pipelineDef, vertexScaleDefinitions)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ScalePipelineVerticesToZero(
+	ctx context.Context,
+	pipelineDef *unstructured.Unstructured,
+	c client.Client,
+) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	// scale down every Vertex to 0 Pods
+	// for each Vertex: first check to see if it's already scaled down
+	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipelineDef)
+	if err != nil {
+		return err
+	}
+	allVerticesScaledDown := true
+	for _, vertexScaleDef := range vertexScaleDefinitions {
+		scaleDef := vertexScaleDef.ScaleDefinition
+		scaledDown := scaleDef != nil && scaleDef.Min != nil && *scaleDef.Min == 0 && scaleDef.Max != nil && *scaleDef.Max == 0
+
+		if !scaledDown {
+			allVerticesScaledDown = false
+		}
+	}
+	if !allVerticesScaledDown {
+		zero := int64(0)
+		for i := range vertexScaleDefinitions {
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+		}
+
+		numaLogger.Debug("Scaling down all vertices to 0 Pods")
+		if err := ApplyScaleValuesToLivePipeline(ctx, pipelineDef, vertexScaleDefinitions, c); err != nil {
+			return fmt.Errorf("error scaling down the pipeline: %w", err)
+		}
+	}
+	return nil
+}
+
+// for each Vertex, get the definition of the Scale
+// return map of Vertex name to scale definition
+func GetScaleValuesFromPipelineDefinition(ctx context.Context, pipelineDef *unstructured.Unstructured) (
+	[]apiv1.VertexScaleDefinition, error) {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	vertices, _, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return nil, fmt.Errorf("error while getting vertices of pipeline %s/%s: %w", pipelineDef.GetNamespace(), pipelineDef.GetName(), err)
+	}
+
+	numaLogger.WithValues("vertices", vertices).Debugf("found vertices for the pipeline: %d", len(vertices))
+
+	scaleDefinitions := []apiv1.VertexScaleDefinition{}
+
+	for _, vertex := range vertices {
+		if vertexAsMap, ok := vertex.(map[string]any); ok {
+
+			vertexName, foundVertexName, err := unstructured.NestedString(vertexAsMap, "name")
+			if err != nil {
+				return nil, err
+			}
+			if !foundVertexName {
+				return nil, errors.New("a vertex must have a name")
+			}
+
+			vertexScaleDef, err := ExtractScaleMinMax(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return nil, err
+			}
+			scaleDefinitions = append(scaleDefinitions, apiv1.VertexScaleDefinition{VertexName: vertexName, ScaleDefinition: vertexScaleDef})
+		}
+	}
+	return scaleDefinitions, nil
+}
+
+func ApplyScaleValuesToPipelineDefinition(
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScaleDefinition) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	// get the current Vertices definition
+	vertexDefinitions, exists, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting spec.vertices from pipeline %s: %s", pipelineDef.GetName(), err.Error())
+	}
+	if !exists {
+		return fmt.Errorf("failed to get spec.vertices from pipeline %s: doesn't exist?", pipelineDef.GetName())
+	}
+
+	for _, scaleDef := range vertexScaleDefinitions {
+		vertexName := scaleDef.VertexName
+		// set the scale min/max for the vertex
+		// find this Vertex and update it
+
+		foundVertexInExisting := false
+		for index, vertex := range vertexDefinitions {
+			vertexAsMap := vertex.(map[string]interface{})
+			if vertexAsMap["name"] == vertexName {
+				foundVertexInExisting = true
+
+				if scaleDef.ScaleDefinition != nil && scaleDef.ScaleDefinition.Min != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.min' to %d", *scaleDef.ScaleDefinition.Min)
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.ScaleDefinition.Min, "scale", "min"); err != nil {
+						return err
+					}
+				} else {
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
+				}
+				if scaleDef.ScaleDefinition != nil && scaleDef.ScaleDefinition.Max != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.max' to %d", *scaleDef.ScaleDefinition.Max)
+					if err = unstructured.SetNestedField(vertexAsMap, *scaleDef.ScaleDefinition.Max, "scale", "max"); err != nil {
+						return err
+					}
+				} else {
+					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+				}
+				vertexDefinitions[index] = vertexAsMap
+			}
+		}
+		if !foundVertexInExisting {
+			numaLogger.WithValues("vertex", vertexName).Warnf("didn't find vertex in pipeline")
+		}
+	}
+
+	// now add back the vertex slice into the pipeline
+	return unstructured.SetNestedSlice(pipelineDef.Object, vertexDefinitions, "spec", "vertices")
+}
+
+// apply the scale values to the running pipeline as patches
+// note that vertexScaleDefinitions are not required to be in order and also can be a partial set
+func ApplyScaleValuesToLivePipeline(
+	ctx context.Context, pipelineDef *unstructured.Unstructured, vertexScaleDefinitions []apiv1.VertexScaleDefinition, c client.Client) error {
+
+	numaLogger := logger.FromContext(ctx).WithValues("pipeline", pipelineDef.GetName())
+
+	vertices, found, err := unstructured.NestedSlice(pipelineDef.Object, "spec", "vertices")
+	if err != nil {
+		return fmt.Errorf("error getting vertices from pipeline %s: %s", pipelineDef.GetName(), err)
+	}
+	if !found {
+		return fmt.Errorf("error getting vertices from pipeline %s: not found", pipelineDef.GetName())
+	}
+
+	verticesPatch := "["
+	for _, vertexScale := range vertexScaleDefinitions {
+
+		// find the vertex in the existing spec and determine if "scale" is set or unset; if it's not set, we need to set it
+		existingIndex := -1
+		existingVertex := map[string]interface{}{}
+		for index, v := range vertices {
+			existingVertex = v.(map[string]interface{})
+			if existingVertex["name"] == vertexScale.VertexName {
+				existingIndex = index
+				break
+			}
+		}
+		if existingIndex == -1 {
+			return fmt.Errorf("invalid vertex name %s in vertexScaleDefinitions, pipeline %s has vertices %+v", vertexScale.VertexName, pipelineDef.GetName(), vertices)
+		}
+
+		_, found := existingVertex["scale"]
+		if !found {
+			vertexPatch := fmt.Sprintf(`
+			{
+				"op": "add",
+				"path": "/spec/vertices/%d/scale",
+				"value": %s
+			},`, existingIndex, `{"min": null, "max": null}`)
+			verticesPatch = verticesPatch + vertexPatch
+		}
+
+		minStr := "null"
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Min != nil {
+			minStr = fmt.Sprintf("%d", *vertexScale.ScaleDefinition.Min)
+		}
+		vertexPatch := fmt.Sprintf(`
+		{
+			"op": "add",
+			"path": "/spec/vertices/%d/scale/min",
+			"value": %s
+		},`, existingIndex, minStr)
+		verticesPatch = verticesPatch + vertexPatch
+
+		maxStr := "null"
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Max != nil {
+			maxStr = fmt.Sprintf("%d", *vertexScale.ScaleDefinition.Max)
+		}
+		vertexPatch = fmt.Sprintf(`
+		{
+			"op": "add",
+			"path": "/spec/vertices/%d/scale/max",
+			"value": %s
+		},`, existingIndex, maxStr)
+		verticesPatch = verticesPatch + vertexPatch
+	}
+	// remove terminating comma
+	if verticesPatch[len(verticesPatch)-1] == ',' {
+		verticesPatch = verticesPatch[0 : len(verticesPatch)-1]
+	}
+	verticesPatch = verticesPatch + "]"
+	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices")
+
+	err = kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
+	return err
 }
