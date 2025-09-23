@@ -1073,7 +1073,7 @@ func TestGetScaleValuesFromPipelineSpec(t *testing.T) {
 
 			obj.Object["spec"] = spec
 
-			result, err := GetScaleValuesFromPipelineSpec(ctx, obj)
+			result, err := GetScaleValuesFromPipelineDefinition(ctx, obj)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)

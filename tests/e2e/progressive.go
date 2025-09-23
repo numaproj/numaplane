@@ -181,7 +181,7 @@ func VerifyPromotedPipelineScaledDownForProgressive(
 
 		prProgressiveStatus := GetPipelineRolloutProgressiveStatus(pipelineRolloutName)
 
-		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(context.TODO(), promotedPipeline)
+		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineDefinition(context.TODO(), promotedPipeline)
 		if err != nil {
 			return false
 		}
@@ -249,7 +249,7 @@ func VerifyUpgradingPipelineScaledDownForProgressive(
 		if err != nil {
 			return false
 		}
-		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(context.TODO(), upgradingPipeline)
+		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineDefinition(context.TODO(), upgradingPipeline)
 		if err != nil {
 			return false
 		}
@@ -289,7 +289,7 @@ func VerifyUpgradingPipelineScaledToZeroForProgressive(
 		if err != nil {
 			return false
 		}
-		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(context.TODO(), upgradingPipeline)
+		upgradingScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineDefinition(context.TODO(), upgradingPipeline)
 		if err != nil {
 			return false
 		}
@@ -334,7 +334,7 @@ func VerifyPromotedPipelineScaledUpForProgressive(
 		if err != nil {
 			return false
 		}
-		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(context.TODO(), promotedPipeline)
+		vertexScaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineDefinition(context.TODO(), promotedPipeline)
 		if err != nil {
 			return false
 		}

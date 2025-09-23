@@ -448,7 +448,7 @@ func (r *PipelineRolloutReconciler) ProcessUpgradingChildPreUpgrade(
 	}
 
 	// save the current scale definitions from the upgrading Pipeline to our Status so we can use them when we scale it back up after success
-	scaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineSpec(ctx, upgradingPipelineDef)
+	scaleDefinitions, err := numaflowtypes.GetScaleValuesFromPipelineDefinition(ctx, upgradingPipelineDef)
 	if err != nil {
 		return true, err
 	}
