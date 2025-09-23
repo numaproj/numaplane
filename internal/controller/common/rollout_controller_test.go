@@ -35,12 +35,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 	reasonProgressiveSuccess := common.LabelValueProgressiveSuccess
 	reasonUpgradingReplaced := common.LabelValueProgressiveReplaced
 
-	// Base time for creating pipelines with different timestamps
-	baseTime := time.Now()
-
 	tests := []struct {
 		name               string
-		pipelines          []*numaflowv1.Pipeline
+		pipelines          []*numaflowv1.Pipeline // pipelines will be created in the order that they appear in the array slice
 		upgradeState       common.UpgradeState
 		upgradeStateReason *common.UpgradeStateReason
 		expectedName       string
@@ -49,10 +46,10 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "Multiple children with different creation timestamps",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipelineWithTimestamp("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-3*time.Minute)), // oldest
-				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-2*time.Minute)),
-				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-1*time.Minute)), // newest
-				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil, baseTime),                   // different upgrade state
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil), // oldest
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),   // newest
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil), // different upgrade state
 			},
 			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "my-pipeline-3", // newest timestamp
@@ -61,10 +58,10 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "Multiple children with upgrade strategy reason specified",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipelineWithTimestamp("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-2*time.Minute)), // older
-				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)), // newer
-				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess, baseTime),                    // different reason
-				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime),                                          // no reason
+				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),  // older
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),  // newer
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess), // different reason
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),                       // no reason
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
 			upgradeStateReason: &reasonUpgradingReplaced,
@@ -81,9 +78,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "No children found",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess, baseTime), // different reason
-				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime),                       // no reason
-				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil, baseTime),                     // different upgrade state
+				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess), // different reason
+				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),                       // no reason
+				createPipeline("my-pipeline-5", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil),                     // different upgrade state
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
 			upgradeStateReason: &reasonUpgradingReplaced,
@@ -93,7 +90,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "One child",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
 			},
 			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "my-pipeline-2",
@@ -102,7 +99,7 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		{
 			name: "One child with upgrade strategy reason specified",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)),
+				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
 			upgradeStateReason: &reasonUpgradingReplaced,
@@ -120,8 +117,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, pipelineList.Items, 0)
 
-			// Create the Pipelines in Kubernetes
+			// Create the Pipelines in Kubernetes - they should be created in the order that they appear
 			for _, pipeline := range tt.pipelines {
+				time.Sleep(time.Second * 10) // sleep to ensure they have differentiated timestamps
 				_, err := numaflowClientSet.NumaflowV1alpha1().Pipelines(DefaultTestNamespace).Create(ctx, pipeline, metav1.CreateOptions{})
 				assert.NoError(t, err)
 			}
@@ -189,7 +187,7 @@ var (
 	}
 )
 
-func createPipelineWithTimestamp(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, creationTime time.Time) *numaflowv1.Pipeline {
+func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason) *numaflowv1.Pipeline {
 	labels := map[string]string{
 		common.LabelKeyParentRollout:               pipelineRolloutName,
 		common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
@@ -199,7 +197,5 @@ func createPipelineWithTimestamp(pipelineName string, pipelineRolloutName string
 		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
 	}
 	pipeline := CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, labels, map[string]string{})
-	// Set the creation timestamp
-	pipeline.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
 	return pipeline
 }
