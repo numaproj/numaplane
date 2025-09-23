@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"testing"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -34,6 +35,9 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 	reasonProgressiveSuccess := common.LabelValueProgressiveSuccess
 	reasonUpgradingReplaced := common.LabelValueProgressiveReplaced
 
+	// Base time for creating pipelines with different timestamps
+	baseTime := time.Now()
+
 	tests := []struct {
 		name               string
 		pipelines          []*numaflowv1.Pipeline
@@ -43,61 +47,67 @@ func TestFindMostCurrentChildOfUpgradeState(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name: "Multiple children with valid indices",
+			name: "Multiple children with different creation timestamps",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil),
+				createPipelineWithTimestamp("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-3*time.Minute)), // oldest
+				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-2*time.Minute)),
+				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime.Add(-1*time.Minute)), // newest
+				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil, baseTime),                   // different upgrade state
 			},
 			upgradeState:  common.LabelValueUpgradePromoted,
-			expectedName:  "my-pipeline-3",
+			expectedName:  "my-pipeline-3", // newest timestamp
 			expectedError: nil,
 		},
 		{
-			name: "Multiple children with valid indices - upgrade strategy reason specified",
+			name: "Multiple children with upgrade strategy reason specified",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess),
-				createPipeline("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipelineWithTimestamp("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-2*time.Minute)), // older
+				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)), // newer
+				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess, baseTime),                    // different reason
+				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime),                                          // no reason
 			},
 			upgradeState:       common.LabelValueUpgradePromoted,
 			upgradeStateReason: &reasonUpgradingReplaced,
-			expectedName:       "my-pipeline-2",
+			expectedName:       "my-pipeline-2", // newest with matching reason
 			expectedError:      nil,
 		},
 		{
-			name:          "No children",
+			name:          "No children exist",
 			pipelines:     []*numaflowv1.Pipeline{},
 			upgradeState:  common.LabelValueUpgradePromoted,
 			expectedName:  "",
 			expectedError: nil,
 		},
 		{
-			name: "Backward compatibility with older code",
+			name: "No children found",
 			pipelines: []*numaflowv1.Pipeline{
-				createPipeline("my-pipeline-1", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				createPipeline("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
-				// backward compatibility test tests for case of "my-pipeline" with no suffix
-				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipelineWithTimestamp("my-pipeline-3", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonProgressiveSuccess, baseTime), // different reason
+				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil, baseTime),                       // no reason
+				createPipelineWithTimestamp("my-pipeline-4", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradeInProgress, nil, baseTime),                     // different upgrade state
 			},
-			upgradeState: common.LabelValueUpgradePromoted,
-
-			expectedName:  "my-pipeline-3",
+			upgradeState:       common.LabelValueUpgradePromoted,
+			upgradeStateReason: &reasonUpgradingReplaced,
+			expectedName:       "",
+			expectedError:      nil,
+		},
+		{
+			name: "One child",
+			pipelines: []*numaflowv1.Pipeline{
+				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)),
+			},
+			upgradeState:  common.LabelValueUpgradePromoted,
+			expectedName:  "my-pipeline-2",
 			expectedError: nil,
 		},
 		{
-			name: "Backward compatibility with older code, and just one pipeline exists",
+			name: "One child with upgrade strategy reason specified",
 			pipelines: []*numaflowv1.Pipeline{
-				// backward compatibility test tests for case of "my-pipeline" with no suffix
-				createPipeline("my-pipeline", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, nil),
+				createPipelineWithTimestamp("my-pipeline-2", "my-pipeline", defaultISBSVCRolloutName, common.LabelValueUpgradePromoted, &reasonUpgradingReplaced, baseTime.Add(-1*time.Minute)),
 			},
-			upgradeState: common.LabelValueUpgradePromoted,
-
-			expectedName:  "my-pipeline",
-			expectedError: nil,
+			upgradeState:       common.LabelValueUpgradePromoted,
+			upgradeStateReason: &reasonUpgradingReplaced,
+			expectedName:       "my-pipeline-2",
+			expectedError:      nil,
 		},
 	}
 
@@ -189,4 +199,19 @@ func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRollo
 		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
 	}
 	return CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, labels, map[string]string{})
+}
+
+func createPipelineWithTimestamp(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, creationTime time.Time) *numaflowv1.Pipeline {
+	labels := map[string]string{
+		common.LabelKeyParentRollout:               pipelineRolloutName,
+		common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
+		common.LabelKeyUpgradeState:                string(upgradeState),
+	}
+	if upgradeStateReason != nil {
+		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
+	}
+	pipeline := CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, labels, map[string]string{})
+	// Set the creation timestamp
+	pipeline.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
+	return pipeline
 }
