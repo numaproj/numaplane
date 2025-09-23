@@ -26,6 +26,9 @@ type CustomMetrics struct {
 	PipelineRolloutQueueLength *prometheus.GaugeVec
 	// PipelineROSyncs is the counter for the total number of PipelineRollout reconciliations
 	PipelineROSyncs *prometheus.CounterVec
+	// ProgressivePipelineDrains is the counter for the total number of drains that have occurred prior to recycling a Pipeline as part of progressive upgrade
+	// Labels indicate whether they completed or not
+	ProgressivePipelineDrains *prometheus.CounterVec
 
 	// ISBServicesRolloutHealth is the gauge for the health of ISBServiceRollouts.
 	ISBServicesRolloutHealth *prometheus.GaugeVec
@@ -187,6 +190,12 @@ var (
 		ConstLabels: defaultLabels,
 	}, []string{})
 
+	progressivePipelineDrains = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "progressive_pipeline_drains",
+		Help:        "The total number of pipelines drained as part of Progressive Rollout recycling",
+		ConstLabels: defaultLabels,
+	}, []string{})
+
 	// isbServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	isbServiceRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name:        "isb_service_rollouts_running",
@@ -324,7 +333,7 @@ var (
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 	metrics.Registry.MustRegister(
-		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength,
+		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength, progressivePipelineDrains,
 		isbServicesRolloutHealth, isbServiceRolloutsRunning, isbServiceROSyncs, isbServiceROSyncErrors,
 		monoVerticesRolloutHealth, monoVertexRolloutsRunning, monoVertexROSyncs, monoVertexROSyncErrors,
 		numaflowControllerRolloutsHealth, numaflowControllerRolloutsRunning, numaflowControllerRolloutSyncs, numaflowControllerRolloutSyncErrors, numaflowControllerRolloutPausedSeconds,
@@ -340,6 +349,7 @@ func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 		PipelineROSyncs:                           pipelineROSyncs,
 		PipelineROSyncErrors:                      pipelineROSyncErrors,
 		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
+		ProgressivePipelineDrains:                 progressivePipelineDrains,
 		ISBServicesRolloutHealth:                  isbServicesRolloutHealth,
 		ISBServiceRolloutsRunning:                 isbServiceRolloutsRunning,
 		ISBServiceROCounterMap:                    make(map[string]map[string]struct{}),
@@ -537,4 +547,8 @@ func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) 
 		deleted := m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
 		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of numaflow controller health metrics for %s/%s", namespace, name)
 	}
+}
+
+func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipelineName string, drainComplete bool, incompleteReason *LabelValueDrainIncompleteReason) {
+
 }
