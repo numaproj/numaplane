@@ -1128,7 +1128,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		ctlrcommon.TestCustomMetrics,
 		recorder)
 
-	//progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
+	progressiveUpgradeStrategy := apiv1.UpgradeStrategyProgressive
 
 	defaultPromotedPipelineDef := createPipeline(
 		numaflowv1.PipelinePhaseRunning,
@@ -1168,7 +1168,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			Status: metav1.ConditionFalse,
 		},
 	}
-	/*defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
+	defaultPromotedChildStatus := &apiv1.PromotedPipelineStatus{
 		PromotedPipelineTypeStatus: apiv1.PromotedPipelineTypeStatus{
 			PromotedChildStatus: apiv1.PromotedChildStatus{
 				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
@@ -1179,7 +1179,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
 			},
 		},
-	}*/
+	}
 
 	successfulUpgradingChildStatus := &apiv1.UpgradingPipelineStatus{
 		UpgradingPipelineTypeStatus: apiv1.UpgradingPipelineTypeStatus{
@@ -1218,7 +1218,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 		expectedPipelines map[string]common.UpgradeState // after reconcile(), these are the only pipelines we expect to exist along with their expected UpgradeState
 
 	}{
-		/*{
+		{
 			name:                        "Progressive deployed successfully",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
@@ -1271,8 +1271,10 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradePromoted,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 			},
-		},*/
+		},
 		{
+			// this one is a weird case in which we've just updated our latest Pipeline (what's referred to below as the "existingUpgradePipelineDef") as "promoted" but maybe we had some resource version conflict failure
+			// trying to set the previous "promoted" one to "recyclable" so now there are two "promoted" Pipelines in there
 			name:                        "Clean up after progressive upgrade",
 			newPipelineSpec:             pipelineSpecWithTopologyChange,
 			existingPromotedPipelineDef: defaultPromotedPipelineDef,
@@ -1284,7 +1286,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				map[string]string{
 					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
 					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // TODO: why is this promoted?
+					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted), // note: this is now "promoted"
 					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 				},
 				map[string]string{}),
@@ -1298,45 +1300,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
 			},
 		},
-		/*{
-			name:            "Clean up after progressive upgrade: pipeline still pausing",
-			newPipelineSpec: pipelineSpecWithTopologyChange,
-			existingPromotedPipelineDef: createPipeline(
-				numaflowv1.PipelinePhasePausing,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeRecyclable),
-					common.LabelKeyUpgradeStateReason:             string(common.LabelValueProgressiveSuccess),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				}),
-			existingUpgradePipelineDef: ctlrcommon.CreateTestPipelineOfSpec(
-				runningPipelineSpecWithTopologyChange, ctlrcommon.DefaultTestPipelineRolloutName+"-1",
-				numaflowv1.PipelinePhaseRunning,
-				numaflowv1.Status{},
-				false,
-				map[string]string{
-					common.LabelKeyISBServiceRONameForPipeline:    ctlrcommon.DefaultTestISBSvcRolloutName,
-					common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
-					common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
-					common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
-				},
-				map[string]string{}),
-			initialRolloutPhase:         apiv1.PhaseDeployed,
-			initialRolloutNameCount:     2,
-			initialInProgressStrategy:   nil,
-			initialUpgradingChildStatus: nil,
-			expectedInProgressStrategy:  apiv1.UpgradeStrategyNoOp,
-			expectedRolloutPhase:        apiv1.PhaseDeployed,
-
-			expectedPipelines: map[string]common.UpgradeState{
-				ctlrcommon.DefaultTestPipelineRolloutName + "-0": common.LabelValueUpgradeRecyclable,
-				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradePromoted,
-			},
-		},
 		{
+			// this is the case of someobdy deleting their "promoted" Pipeline during Progressive Rollout
+			// we make sure that we create a new "promoted" one in its place with the latest and greatest spec, and also delete the "upgrading" one
 			name:                        "Handle user deletion of promoted pipeline during Progressive",
 			newPipelineSpec:             pipelineSpec, // this matches the original spec
 			existingPromotedPipelineDef: nil,          // somebody just deleted their promoted pipeline
@@ -1353,7 +1319,7 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				ctlrcommon.DefaultTestPipelineRolloutName + "-1": common.LabelValueUpgradeRecyclable,
 				ctlrcommon.DefaultTestPipelineRolloutName + "-2": common.LabelValueUpgradePromoted,
 			},
-		},*/
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1396,6 +1362,8 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				existingPipelineDef.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rollout.GetObjectMeta(), apiv1.PipelineRolloutGroupVersionKind)}
 				ctlrcommon.CreatePipelineInK8S(ctx, t, numaflowClientSet, existingPipelineDef)
 			}
+
+			time.Sleep(time.Second * 15) // this is for the "Clean up after progressive upgrade" test case in which there are two "promoted" Pipelines (due to a failure) and we must know which one was created most recently (therefore, we need the CreationTimestamps differentiated enough)
 
 			if tc.existingUpgradePipelineDef != nil {
 				existingUpgradePipelineDef := tc.existingUpgradePipelineDef
