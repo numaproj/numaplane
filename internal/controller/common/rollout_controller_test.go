@@ -189,18 +189,6 @@ var (
 	}
 )
 
-func createPipeline(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason) *numaflowv1.Pipeline {
-	labels := map[string]string{
-		common.LabelKeyParentRollout:               pipelineRolloutName,
-		common.LabelKeyISBServiceRONameForPipeline: isbsvcRolloutName,
-		common.LabelKeyUpgradeState:                string(upgradeState),
-	}
-	if upgradeStateReason != nil {
-		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
-	}
-	return CreateTestPipelineOfSpec(pipelineSpec, pipelineName, numaflowv1.PipelinePhaseRunning, numaflowv1.Status{}, false, labels, map[string]string{})
-}
-
 func createPipelineWithTimestamp(pipelineName string, pipelineRolloutName string, isbsvcRolloutName string, upgradeState common.UpgradeState, upgradeStateReason *common.UpgradeStateReason, creationTime time.Time) *numaflowv1.Pipeline {
 	labels := map[string]string{
 		common.LabelKeyParentRollout:               pipelineRolloutName,

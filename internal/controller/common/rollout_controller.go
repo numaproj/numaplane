@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -210,35 +208,6 @@ func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstruct
 		}
 	}
 
-}
-
-// Get the index of the child following the dash in the name
-// childName should be the rolloutName + '-<integer>'
-// For backward compatibility, support child resources whose names were equivalent to rollout names, returning -1 index
-func getChildIndex(rolloutName string, childName string) (int, error) {
-	// verify that the initial part of the child name is the rolloutName
-	if !strings.HasPrefix(childName, rolloutName) {
-		return 0, fmt.Errorf("child name %q should begin with rollout name %q", childName, rolloutName)
-	}
-	// backward compatibility for older naming convention (before the '-<integer>' suffix was introduced - if it's the same name, consider it to essentially be the smallest index
-	if childName == rolloutName {
-		return -1, nil
-	}
-
-	// next character should be a dash
-	dash := childName[len(rolloutName)]
-	if dash != '-' {
-		return 0, fmt.Errorf("child name %q should begin with rollout name %q, followed by '-<integer>'", childName, rolloutName)
-	}
-
-	// remaining characters should be the integer index
-	suffix := childName[len(rolloutName)+1:]
-
-	childIndex, err := strconv.Atoi(suffix)
-	if err != nil {
-		return 0, fmt.Errorf("child name %q has a suffix which is not an integer", childName)
-	}
-	return childIndex, nil
 }
 
 // get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
