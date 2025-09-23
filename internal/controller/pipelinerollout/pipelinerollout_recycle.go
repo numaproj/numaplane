@@ -130,7 +130,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 	if promotedPipeline == nil {
 		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
-		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
@@ -243,7 +243,7 @@ func forceApplySpecOnUndrainablePipeline(
 
 	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
-	err := scalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
+	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,7 @@ func drainRecyclablePipeline(
 		}
 
 		// patch the pipeline to update the scale values
-		err = applyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
+		err = numaflowtypes.ApplyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
 		if err != nil {
 			return false, false, false, err
 		}
@@ -533,7 +533,7 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 		return false, err
 	}
 	if !setToRun {
-		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
