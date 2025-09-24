@@ -11,6 +11,8 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+type LabelValueDrainResult string
+
 type CustomMetrics struct {
 	// NumaLogger is used to log messages related to metrics.
 	NumaLogger *logger.NumaLogger
@@ -104,6 +106,9 @@ const (
 	LabelNumaflowController        = "numaflowcontroller"
 	LabelMonoVertex                = "monovertex"
 	LabelPauseType                 = "pause_type"
+	LabelPipelineRollout           = "pipelineRollout"
+	LabelDrainComplete             = "drainComplete"
+	LabelIncompleteReason          = "incompleteReason"
 )
 
 var (
@@ -112,6 +117,11 @@ var (
 	pipelineLock   sync.Mutex
 	isbServiceLock sync.Mutex
 	monoVertexLock sync.Mutex
+
+	LabelValueDrainResult_PipelineFailed LabelValueDrainResult = "Failed"
+	LabelValueDrainResult_NeverDrained   LabelValueDrainResult = "DrainIncomplete"
+	LabelValueDrainResult_StandardDrain  LabelValueDrainResult = "StandardDrain"
+	LabelValueDrainResult_ForceDrain     LabelValueDrainResult = "ForceDrain"
 
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -194,7 +204,7 @@ var (
 		Name:        "progressive_pipeline_drains",
 		Help:        "The total number of pipelines drained as part of Progressive Rollout recycling",
 		ConstLabels: defaultLabels,
-	}, []string{})
+	}, []string{LabelNamespace, LabelPipelineRollout, LabelPipeline, LabelDrainComplete, LabelIncompleteReason})
 
 	// isbServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	isbServiceRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -549,6 +559,11 @@ func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) 
 	}
 }
 
-func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipelineName string, drainComplete bool, incompleteReason *LabelValueDrainIncompleteReason) {
+func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipelineName string, drainComplete bool, drainResult LabelValueDrainResult) {
+	drainCompleteStr := "true"
+	if !drainComplete {
+		drainCompleteStr = "false"
+	}
 
+	m.ProgressivePipelineDrains.WithLabelValues(namespace, pipelineRolloutName, pipelineName, drainCompleteStr, string(drainResult)).Inc()
 }
