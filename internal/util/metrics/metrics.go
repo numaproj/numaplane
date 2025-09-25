@@ -118,7 +118,7 @@ var (
 	isbServiceLock sync.Mutex
 	monoVertexLock sync.Mutex
 
-	LabelValueDrainResult_PipelineFailed LabelValueDrainResult = "Failed"
+	LabelValueDrainResult_PipelineFailed LabelValueDrainResult = "PipelineFailed"
 	LabelValueDrainResult_NeverDrained   LabelValueDrainResult = "DrainIncomplete"
 	LabelValueDrainResult_StandardDrain  LabelValueDrainResult = "StandardDrain"
 	LabelValueDrainResult_ForceDrain     LabelValueDrainResult = "ForceDrain"
