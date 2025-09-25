@@ -151,6 +151,10 @@ const (
 	// "promoted" pipeline for the purpose of "force draining" it
 	AnnotationKeyOverriddenSpec = KeyNumaplanePrefix + "overridden-spec"
 
+	// AnnotationKeyRequiresDrain is annotated on a pipeline if at least some point in its lifetime it has had Source scaled > 0 and desiredPhase=Running
+	// (if not, it is safe to delete without needing to drain it first)
+	AnnotationKeyRequiresDrain = KeyNumaplanePrefix + "requires-drain"
+
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
 

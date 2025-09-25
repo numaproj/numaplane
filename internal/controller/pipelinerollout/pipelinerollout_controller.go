@@ -202,6 +202,11 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	err = r.annotatePipeline(ctx, existingPipelineDef)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Update PipelineRollout Status based on child resource (Pipeline) Status
 	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
 	if err != nil {
@@ -812,6 +817,23 @@ func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.Pip
 func (r *PipelineRolloutReconciler) setPauseMetrics(namespace, name string, pausedVal, pausingVal float64) {
 	r.customMetrics.PipelinePausedSeconds.WithLabelValues(namespace, name).Set(pausedVal)
 	r.customMetrics.PipelinePausingSeconds.WithLabelValues(namespace, name).Set(pausingVal)
+}
+
+func (r *PipelineRolloutReconciler) annotatePipeline(ctx context.Context, pipeline *unstructured.Unstructured) error {
+	pipelineCanIngestData, err := numaflowtypes.CanPipelineIngestData(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+
+	if pipelineCanIngestData && (pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyRequiresDrain] != "true") {
+		// Patch the live pipeline to mark that this pipeline requires drain
+		patchJson := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "true"}}}`, common.AnnotationKeyRequiresDrain)
+		err = kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
+		if err != nil {
+			return fmt.Errorf("failed to patch pipeline annotation %s: %w", common.AnnotationKeyRequiresDrain, err)
+		}
+	}
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {
