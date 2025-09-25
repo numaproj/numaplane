@@ -541,7 +541,7 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	pipelineRolloutDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
 	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
 	pipelineRolloutDef.Object["spec"] = pipelineSpec
-	setToRun, err := numaflowtypes.CheckPipelineSetToRun(ctx, pipelineRolloutDef)
+	setToRun, err := numaflowtypes.CanPipelineIngestData(ctx, pipelineRolloutDef)
 	if err != nil {
 		return false, err
 	}
