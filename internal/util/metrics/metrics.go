@@ -108,7 +108,7 @@ const (
 	LabelPauseType                 = "pause_type"
 	LabelPipelineRollout           = "pipelineRollout"
 	LabelDrainComplete             = "drainComplete"
-	LabelIncompleteReason          = "incompleteReason"
+	LabelDrainResult               = "drainResult"
 )
 
 var (
@@ -204,7 +204,7 @@ var (
 		Name:        "progressive_pipeline_drains",
 		Help:        "The total number of pipelines drained as part of Progressive Rollout recycling",
 		ConstLabels: defaultLabels,
-	}, []string{LabelNamespace, LabelPipelineRollout, LabelPipeline, LabelDrainComplete, LabelIncompleteReason})
+	}, []string{LabelNamespace, LabelPipelineRollout, LabelPipeline, LabelDrainComplete, LabelDrainResult})
 
 	// isbServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	isbServiceRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
