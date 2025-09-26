@@ -202,22 +202,24 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	err = r.annotatePipeline(ctx, existingPipelineDef)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Update PipelineRollout Status based on child resource (Pipeline) Status
-	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
-	if err != nil {
-		r.ErrorHandler(ctx, pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
-		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
-		if statusUpdateErr != nil {
-			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
-			return ctrl.Result{}, statusUpdateErr
+	if existingPipelineDef != nil {
+		err = r.annotatePipeline(ctx, existingPipelineDef)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, err
+		// Update PipelineRollout Status based on child resource (Pipeline) Status
+		err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
+		if err != nil {
+			r.ErrorHandler(ctx, pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
+			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
+			if statusUpdateErr != nil {
+				r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+				return ctrl.Result{}, statusUpdateErr
+			}
+
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update the resource definition (everything except the Status subresource)
