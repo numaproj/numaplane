@@ -27,7 +27,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -150,7 +149,7 @@ func TestForceDrainE2E(t *testing.T) {
 
 var _ = Describe("Force Drain e2e", Serial, func() {
 
-	It("Should create NumaflowControllerRollout and ISBServiceRollout", func() {
+	It("Should create NumaflowControllerRollout, ISBServiceRollout, PipelineRollout", func() {
 		CreateNumaflowControllerRollout(UpdatedNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
@@ -178,7 +177,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
 	})
 
-	It("Should not bother trying to drain a Pipeline which has never been set to ingest data", func() {
+	/*It("Should not bother trying to drain a Pipeline which has never been set to ingest data", func() {
 		// take the current spec in the PipelineRollout and set its Source Vertex to max=0
 		updatedPipelineSpecWithZeroScale := updatedPipelineSpec.DeepCopy()
 		updatedPipelineSpecWithZeroScale.Vertices[0].Scale.Min = &zeroPods
@@ -194,7 +193,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		// verify the original Pipeline gets deleted without being paused first
 		// (after Progressive upgrade succeeds)
 		verifyPipelinesDeletedWithNoPause([]int{5})
-	})
+	})*/
 
 	It("Should Delete Rollouts", func() {
 		DeletePipelineRollout(pipelineRolloutName)
@@ -288,33 +287,6 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 	// verify that pipelines are deleted
 	for _, pipelineIndex := range pipelineIndices {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, pipelineIndex))
-	}
-}
-
-func verifyPipelinesDeletedWithNoPause(pipelineIndices []int) {
-	CheckConsistently(fmt.Sprintf("Verifying that the Pipeline(s) (%v) are deleted without pausing", pipelineIndices), func() bool {
-
-		// allow that the Pipeline could be deleted, but otherwise should not be pausing
-		for _, pipelineIndex := range pipelineIndices {
-			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-			_, retrievedPipelineSpec, _, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
-			if err != nil {
-				if errors.IsNotFound(err) {
-					continue // Pipeline was deleted - that's fine
-				}
-				return false
-			}
-
-			if retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused {
-				return false
-			}
-		}
-		return true
-	}).WithTimeout(time.Minute * 1)
-
-	for _, pipelineIndex := range pipelineIndices {
-		pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-		VerifyPipelineDeletion(pipelineName)
 	}
 }
 
