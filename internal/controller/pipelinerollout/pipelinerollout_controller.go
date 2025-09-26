@@ -202,11 +202,13 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	// if there's any metadata to add to the pipelines as annotations, do it here
+	err = r.annotatePipelines(ctx, pipelineRollout)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if existingPipelineDef != nil {
-		err = r.annotatePipeline(ctx, existingPipelineDef)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 
 		// Update PipelineRollout Status based on child resource (Pipeline) Status
 		err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
@@ -819,6 +821,20 @@ func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.Pip
 func (r *PipelineRolloutReconciler) setPauseMetrics(namespace, name string, pausedVal, pausingVal float64) {
 	r.customMetrics.PipelinePausedSeconds.WithLabelValues(namespace, name).Set(pausedVal)
 	r.customMetrics.PipelinePausingSeconds.WithLabelValues(namespace, name).Set(pausingVal)
+}
+
+func (r *PipelineRolloutReconciler) annotatePipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
+	pipelines, err := kubernetes.ListResources(ctx, r.client, pipelineRollout.GetChildGVK(), pipelineRollout.GetRolloutObjectMeta().GetNamespace())
+	if err != nil {
+		return err
+	}
+	for _, pipeline := range pipelines.Items {
+		err = r.annotatePipeline(ctx, &pipeline)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) annotatePipeline(ctx context.Context, pipeline *unstructured.Unstructured) error {
