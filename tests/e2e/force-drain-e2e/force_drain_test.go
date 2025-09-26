@@ -123,11 +123,11 @@ var (
 		},
 	}
 
-	updatedPipelineSpec numaflowv1.PipelineSpec
+	updatedPipelineSpec *numaflowv1.PipelineSpec
 )
 
 func init() {
-	updatedPipelineSpec = initialPipelineSpec
+	updatedPipelineSpec = initialPipelineSpec.DeepCopy()
 	updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
 		Name: "out",
 		Sink: &numaflowv1.Sink{
@@ -173,7 +173,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		updateToFailedPipelines()
 
 		// updated Pipeline updates the sink
-		updatePipeline(&updatedPipelineSpec)
+		updatePipeline(updatedPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
 	})
