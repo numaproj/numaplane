@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -58,6 +59,7 @@ var (
 	}
 	pullPolicyAlways    = corev1.PullAlways
 	validImagePath      = "quay.io/numaio/numaflow-go/map-cat:stable"
+	zeroPods            = int32(0)
 	onePod              = int32(1)
 	twoPods             = int32(2)
 	threePods           = int32(3)
@@ -120,7 +122,21 @@ var (
 			},
 		},
 	}
+
+	updatedPipelineSpec numaflowv1.PipelineSpec
 )
+
+func init() {
+	updatedPipelineSpec = initialPipelineSpec
+	updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
+		Name: "out",
+		Sink: &numaflowv1.Sink{
+			AbstractSink: numaflowv1.AbstractSink{
+				Blackhole: &numaflowv1.Blackhole{},
+			},
+		},
+	}
+}
 
 func TestForceDrainE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -156,31 +172,28 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		updateToFailedPipelines()
 
-		// updated Pipeline inserts another "cat" vertex in the middle
-		updatedPipelineSpec := initialPipelineSpec
-		/*catVertex := initialPipelineSpec.Vertices[1].DeepCopy()
-		catVertex.Name = "cat2"
-		outVertex := initialPipelineSpec.Vertices[2].DeepCopy()
-		updatedPipelineSpec.Vertices = append(updatedPipelineSpec.Vertices, *outVertex)
-		updatedPipelineSpec.Vertices[2] = *catVertex
-		updatedPipelineSpec.Edges = []numaflowv1.Edge{
-			{From: "in", To: "cat"},
-			{From: "cat", To: "cat2"},
-			{From: "cat2", To: "out"},
-		}*/
-		updatedPipelineSpec.Vertices[2] = numaflowv1.AbstractVertex{
-			Name: "out",
-			Sink: &numaflowv1.Sink{
-				AbstractSink: numaflowv1.AbstractSink{
-					Blackhole: &numaflowv1.Blackhole{},
-				},
-			},
-		}
-
-		// restore PipelineRollout back to original spec
+		// updated Pipeline updates the sink
 		updatePipeline(&updatedPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
+	})
+
+	It("Should not bother trying to drain a Pipeline which has never been set to ingest data", func() {
+		// take the current spec in the PipelineRollout and set its Source Vertex to max=0
+		updatedPipelineSpecWithZeroScale := updatedPipelineSpec.DeepCopy()
+		updatedPipelineSpecWithZeroScale.Vertices[0].Scale.Min = &zeroPods
+		updatedPipelineSpecWithZeroScale.Vertices[0].Scale.Max = &zeroPods
+		updatePipeline(updatedPipelineSpecWithZeroScale)
+
+		// keeping the PipelineRollout with Source Vertex set to max=0, now perform a progressive upgrade
+		initialPipelineSpecWithZeroScale := initialPipelineSpec.DeepCopy()
+		initialPipelineSpecWithZeroScale.Vertices[0].Scale.Min = &zeroPods
+		initialPipelineSpecWithZeroScale.Vertices[0].Scale.Max = &zeroPods
+		updatePipeline(initialPipelineSpecWithZeroScale)
+
+		// verify the original Pipeline gets deleted without being paused first
+		// (after Progressive upgrade succeeds)
+		verifyPipelinesDeletedWithNoPause([]int{5})
 	})
 
 	It("Should Delete Rollouts", func() {
@@ -234,23 +247,13 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 		forceAppliedSpecPausing[pipelineIndex] = false
 	}
 
-	CheckEventually("Verifying that the failed Pipelines have spec overridden", func() bool {
+	CheckEventually(fmt.Sprintf("Verifying that the failed Pipeline(s) (%v) have spec overridden", pipelineIndices), func() bool {
 		// if at any point the pipeline is pausing with its spec overridden, update the value in the forceAppliedSpecPausing array
 		for _, pipelineIndex := range pipelineIndices {
 			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
-			pipeline, err := GetPipelineByName(Namespace, pipelineName)
+			pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
 			if err != nil {
 				continue
-			}
-
-			var retrievedPipelineSpec numaflowv1.PipelineSpec
-			if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
-				return false
-			}
-
-			var retrievedPipelineStatus numaflowv1.PipelineStatus
-			if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
-				return false
 			}
 
 			annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
@@ -285,6 +288,33 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 	// verify that pipelines are deleted
 	for _, pipelineIndex := range pipelineIndices {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, pipelineIndex))
+	}
+}
+
+func verifyPipelinesDeletedWithNoPause(pipelineIndices []int) {
+	CheckConsistently(fmt.Sprintf("Verifying that the Pipeline(s) (%v) are deleted without pausing", pipelineIndices), func() bool {
+
+		// allow that the Pipeline could be deleted, but otherwise should not be pausing
+		for _, pipelineIndex := range pipelineIndices {
+			pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+			_, retrievedPipelineSpec, _, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					continue // Pipeline was deleted - that's fine
+				}
+				return false
+			}
+
+			if retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused {
+				return false
+			}
+		}
+		return true
+	}).WithTimeout(time.Minute * 1)
+
+	for _, pipelineIndex := range pipelineIndices {
+		pipelineName := GetInstanceName(pipelineRolloutName, pipelineIndex)
+		VerifyPipelineDeletion(pipelineName)
 	}
 }
 

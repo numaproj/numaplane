@@ -65,21 +65,31 @@ func VerifyPromotedPipelineSpec(namespace string, pipelineRolloutName string, f 
 	}).Should(BeTrue())
 }
 
-func VerifyPipelineSpecStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
-
+// GetPipelineSpecAndStatus retrieves a pipeline by name and returns its spec and status
+func GetPipelineSpecAndStatus(namespace, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
 	var retrievedPipelineStatus numaflowv1.PipelineStatus
+
+	pipeline, err := GetPipelineByName(namespace, pipelineName)
+	if err != nil {
+		return pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err
+	}
+
+	if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
+		return pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err
+	}
+
+	if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
+		return pipeline, retrievedPipelineSpec, retrievedPipelineStatus, err
+	}
+
+	return pipeline, retrievedPipelineSpec, retrievedPipelineStatus, nil
+}
+
+func VerifyPipelineSpecStatus(namespace string, pipelineName string, f func(numaflowv1.PipelineSpec, numaflowv1.PipelineStatus) bool) {
 	CheckEventually("verifying Pipeline Spec", func() bool {
-		pipeline, err := GetPipelineByName(namespace, pipelineName)
+		_, retrievedPipelineSpec, retrievedPipelineStatus, err := GetPipelineSpecAndStatus(namespace, pipelineName)
 		if err != nil {
-			return false
-		}
-
-		if retrievedPipelineSpec, err = GetPipelineSpec(pipeline); err != nil {
-			return false
-		}
-
-		if retrievedPipelineStatus, err = GetPipelineStatus(pipeline); err != nil {
 			return false
 		}
 
