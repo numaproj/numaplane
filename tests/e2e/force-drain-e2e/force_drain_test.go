@@ -58,7 +58,6 @@ var (
 	}
 	pullPolicyAlways    = corev1.PullAlways
 	validImagePath      = "quay.io/numaio/numaflow-go/map-cat:stable"
-	zeroPods            = int32(0)
 	onePod              = int32(1)
 	twoPods             = int32(2)
 	threePods           = int32(3)
@@ -176,24 +175,6 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
 	})
-
-	/*It("Should not bother trying to drain a Pipeline which has never been set to ingest data", func() {
-		// take the current spec in the PipelineRollout and set its Source Vertex to max=0
-		updatedPipelineSpecWithZeroScale := updatedPipelineSpec.DeepCopy()
-		updatedPipelineSpecWithZeroScale.Vertices[0].Scale.Min = &zeroPods
-		updatedPipelineSpecWithZeroScale.Vertices[0].Scale.Max = &zeroPods
-		updatePipeline(updatedPipelineSpecWithZeroScale)
-
-		// keeping the PipelineRollout with Source Vertex set to max=0, now perform a progressive upgrade
-		initialPipelineSpecWithZeroScale := initialPipelineSpec.DeepCopy()
-		initialPipelineSpecWithZeroScale.Vertices[0].Scale.Min = &zeroPods
-		initialPipelineSpecWithZeroScale.Vertices[0].Scale.Max = &zeroPods
-		updatePipeline(initialPipelineSpecWithZeroScale)
-
-		// verify the original Pipeline gets deleted without being paused first
-		// (after Progressive upgrade succeeds)
-		verifyPipelinesDeletedWithNoPause([]int{5})
-	})*/
 
 	It("Should Delete Rollouts", func() {
 		DeletePipelineRollout(pipelineRolloutName)

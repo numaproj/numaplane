@@ -119,6 +119,7 @@ func init() {
 	}
 }
 
+// The purpose of this test is verify that we won't try to drain a Pipeline that has never been configured in a way that it can ingest data
 func TestNoDrainE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 

@@ -823,6 +823,7 @@ func (r *PipelineRolloutReconciler) setPauseMetrics(namespace, name string, paus
 	r.customMetrics.PipelinePausingSeconds.WithLabelValues(namespace, name).Set(pausingVal)
 }
 
+// where needed, add annotations to Pipelines
 func (r *PipelineRolloutReconciler) annotatePipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
 	pipelines, err := kubernetes.ListResources(ctx, r.client, pipelineRollout.GetChildGVK(), pipelineRollout.GetRolloutObjectMeta().GetNamespace())
 	if err != nil {
@@ -837,6 +838,7 @@ func (r *PipelineRolloutReconciler) annotatePipelines(ctx context.Context, pipel
 	return nil
 }
 
+// where needed, add annotations to Pipeline
 func (r *PipelineRolloutReconciler) annotatePipeline(ctx context.Context, pipeline *unstructured.Unstructured) error {
 	pipelineCanIngestData, err := numaflowtypes.CanPipelineIngestData(ctx, pipeline)
 	if err != nil {
