@@ -620,6 +620,31 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:                  "Pipeline never had any data - just delete it",
+			upgradeStateReason:    string(common.LabelValueProgressiveSuccess),
+			requiresDrain:         false,
+			desiredPhase:          &running, // it could be running but not have data if the Source Vertex had max=0
+			pipelinePhase:         running,
+			isPromotedPipelineNew: true,
+			initialVertexScaleDefinitions: []apiv1.VertexScaleDefinition{
+				{
+					VertexName: "in",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0), // source=0 pods
+						Max: int64Ptr(0), // source=0 pods
+					},
+				},
+				{
+					VertexName: "out",
+					ScaleDefinition: &apiv1.ScaleDefinition{
+						Min: int64Ptr(0),
+						Max: int64Ptr(0),
+					},
+				},
+			},
+			expectedDeleted: true,
+		},
 	}
 
 	for _, tc := range tests {
