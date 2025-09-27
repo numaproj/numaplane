@@ -140,8 +140,7 @@ var _ = Describe("No Drain e2e", Serial, func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
 	})
 
-	//It("Should update PipelineRollout sink")
-	It("Should not bother trying to drain a Pipeline which has never been set to ingest data", func() {
+	It("Should not bother trying to drain a Pipeline which has been configured with scale.max=0", func() {
 		// perform Progressive Rollout, thereby creating test-pipeline-rollout-1
 		updatePipeline(updatedPipelineSpec)
 
@@ -153,6 +152,33 @@ var _ = Describe("No Drain e2e", Serial, func() {
 		// verify the original Pipeline gets deleted without being paused first
 		// (after Progressive upgrade succeeds)
 		verifyPipelinesDeletedWithNoPause([]int{1})
+	})
+
+	// repeat the same test except confirm it still works if PipelineRollout is configured with desiredPhase=Paused instead of Source max=0
+	It("Should not bother trying to drain a Pipeline which has been configured with desiredPhase=Paused", func() {
+		initialPipelineSpecPaused := initialPipelineSpec.DeepCopy()
+		initialPipelineSpecPaused.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+		initialPipelineSpecPaused.Vertices[0].Scale = numaflowv1.Scale{} // this means min=max=1
+
+		updatePipeline(initialPipelineSpecPaused)
+		time.Sleep(20 * time.Second)
+
+		updatedPipelineSpecPaused := updatedPipelineSpec.DeepCopy()
+		updatedPipelineSpecPaused.Lifecycle.DesiredPhase = numaflowv1.PipelinePhasePaused
+		updatedPipelineSpecPaused.Vertices[0].Scale = numaflowv1.Scale{} // this means min=max=1
+
+		// perform Progressive Rollout, thereby creating test-pipeline-rollout-2
+		updatePipeline(updatedPipelineSpecPaused)
+
+		time.Sleep(30 * time.Second)
+
+		// reverse the change, therefore causing test-pipeline-rollout-1 to be marked "recyclable"
+		updatePipeline(initialPipelineSpecPaused)
+
+		// verify the original Pipeline gets deleted without being paused first
+		// (after Progressive upgrade succeeds)
+		verifyPipelinesDeletedWithNoPause([]int{2})
+
 	})
 
 	It("Should Delete Rollouts", func() {
