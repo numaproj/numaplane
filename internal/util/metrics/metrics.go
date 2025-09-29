@@ -11,6 +11,8 @@ import (
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
+type LabelValueDrainResult string
+
 type CustomMetrics struct {
 	// NumaLogger is used to log messages related to metrics.
 	NumaLogger *logger.NumaLogger
@@ -26,6 +28,9 @@ type CustomMetrics struct {
 	PipelineRolloutQueueLength *prometheus.GaugeVec
 	// PipelineROSyncs is the counter for the total number of PipelineRollout reconciliations
 	PipelineROSyncs *prometheus.CounterVec
+	// ProgressivePipelineDrains is the counter for the total number of drains that have occurred prior to recycling a Pipeline as part of progressive upgrade
+	// Labels indicate whether they completed or not
+	ProgressivePipelineDrains *prometheus.CounterVec
 
 	// ISBServicesRolloutHealth is the gauge for the health of ISBServiceRollouts.
 	ISBServicesRolloutHealth *prometheus.GaugeVec
@@ -101,6 +106,9 @@ const (
 	LabelNumaflowController        = "numaflowcontroller"
 	LabelMonoVertex                = "monovertex"
 	LabelPauseType                 = "pause_type"
+	LabelPipelineRollout           = "pipelineRollout"
+	LabelDrainComplete             = "drainComplete"
+	LabelDrainResult               = "drainResult"
 )
 
 var (
@@ -109,6 +117,11 @@ var (
 	pipelineLock   sync.Mutex
 	isbServiceLock sync.Mutex
 	monoVertexLock sync.Mutex
+
+	LabelValueDrainResult_PipelineFailed LabelValueDrainResult = "PipelineFailed"
+	LabelValueDrainResult_NeverDrained   LabelValueDrainResult = "DrainIncomplete"
+	LabelValueDrainResult_StandardDrain  LabelValueDrainResult = "StandardDrain"
+	LabelValueDrainResult_ForceDrain     LabelValueDrainResult = "ForceDrain"
 
 	// pipelinesRolloutHealth indicates whether the pipeline rollouts are healthy (from k8s resource perspective).
 	pipelinesRolloutHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -186,6 +199,12 @@ var (
 		Help:        "The length of pipeline rollout queue",
 		ConstLabels: defaultLabels,
 	}, []string{})
+
+	progressivePipelineDrains = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "progressive_pipeline_drains",
+		Help:        "The total number of pipelines drained as part of Progressive Rollout recycling",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelPipelineRollout, LabelPipeline, LabelDrainComplete, LabelDrainResult})
 
 	// isbServiceRolloutsRunning is the gauge for the number of running ISBServiceRollouts.
 	isbServiceRolloutsRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -324,7 +343,7 @@ var (
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
 func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 	metrics.Registry.MustRegister(
-		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength,
+		pipelinesRolloutHealth, pipelineRolloutsRunning, pipelineROSyncs, pipelineROSyncErrors, pipelineRolloutQueueLength, progressivePipelineDrains,
 		isbServicesRolloutHealth, isbServiceRolloutsRunning, isbServiceROSyncs, isbServiceROSyncErrors,
 		monoVerticesRolloutHealth, monoVertexRolloutsRunning, monoVertexROSyncs, monoVertexROSyncErrors,
 		numaflowControllerRolloutsHealth, numaflowControllerRolloutsRunning, numaflowControllerRolloutSyncs, numaflowControllerRolloutSyncErrors, numaflowControllerRolloutPausedSeconds,
@@ -340,6 +359,7 @@ func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 		PipelineROSyncs:                           pipelineROSyncs,
 		PipelineROSyncErrors:                      pipelineROSyncErrors,
 		PipelineRolloutQueueLength:                pipelineRolloutQueueLength,
+		ProgressivePipelineDrains:                 progressivePipelineDrains,
 		ISBServicesRolloutHealth:                  isbServicesRolloutHealth,
 		ISBServiceRolloutsRunning:                 isbServiceRolloutsRunning,
 		ISBServiceROCounterMap:                    make(map[string]map[string]struct{}),
@@ -454,7 +474,8 @@ func (m *CustomMetrics) SetPipelineRolloutHealth(namespace, name, currentPhase s
 func (m *CustomMetrics) DeletePipelineRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		deleted := m.PipelinesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of pipeline rollout health metrics for %s/%s", namespace, name)
 	}
 }
 
@@ -471,9 +492,10 @@ func (m *CustomMetrics) SetISBServicesRolloutHealth(namespace, name, currentPhas
 
 // DeleteISBServicesRolloutHealth deletes the ISB service rollout health metric
 func (m *CustomMetrics) DeleteISBServicesRolloutHealth(namespace, name string) {
-	m.NumaLogger.Infof("Deleting pipeline rollout health metrics for %s/%s", namespace, name)
+	m.NumaLogger.Infof("Deleting isbsvc rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		deleted := m.ISBServicesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of isbsvc rollout health metrics for %s/%s", namespace, name)
 	}
 }
 
@@ -492,7 +514,8 @@ func (m *CustomMetrics) SetMonoVerticesRolloutHealth(namespace, name, currentPha
 func (m *CustomMetrics) DeleteMonoVerticesRolloutHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting monovertex rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		deleted := m.MonoVerticesRolloutHealth.DeleteLabelValues(namespace, name, phase)
+		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of monovertex rollout health metrics for %s/%s", namespace, name)
 	}
 }
 
@@ -511,7 +534,8 @@ func (m *CustomMetrics) SetNumaflowControllerRolloutsHealth(namespace, name, cur
 func (m *CustomMetrics) DeleteNumaflowControllerRolloutsHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting numaflow controller rollout health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
+		deleted := m.NumaflowControllerRolloutsHealth.DeleteLabelValues(namespace, name, phase)
+		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of numaflow controller rollout health metrics for %s/%s", namespace, name)
 	}
 }
 
@@ -530,6 +554,16 @@ func (m *CustomMetrics) SetNumaflowControllersHealth(namespace, name, currentPha
 func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) {
 	m.NumaLogger.Infof("Deleting numaflow controller health metrics for %s/%s", namespace, name)
 	for _, phase := range phases {
-		m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
+		deleted := m.NumaflowControllersHealth.DeleteLabelValues(namespace, name, phase)
+		m.NumaLogger.WithValues("phase", phase, "deleted", deleted).Debugf("Result of deletion of numaflow controller health metrics for %s/%s", namespace, name)
 	}
+}
+
+func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipelineName string, drainComplete bool, drainResult LabelValueDrainResult) {
+	drainCompleteStr := "true"
+	if !drainComplete {
+		drainCompleteStr = "false"
+	}
+
+	m.ProgressivePipelineDrains.WithLabelValues(namespace, pipelineRolloutName, pipelineName, drainCompleteStr, string(drainResult)).Inc()
 }

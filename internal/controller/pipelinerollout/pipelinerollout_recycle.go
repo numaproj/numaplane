@@ -14,6 +14,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -112,6 +113,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 			if drained {
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
+				r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), true, metrics.LabelValueDrainResult_StandardDrain)
 				return true, err
 			} // else implicitly fall through to force draining
 
@@ -130,14 +132,14 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 	if promotedPipeline == nil {
 		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
-		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}
 
 		return false, nil
 	} else {
-		return forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
+		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
 	}
 
 }
@@ -145,7 +147,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
 // The new spec will enable it to drain.
 // Then pause it.
-func forceDrain(ctx context.Context,
+func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	// the pipeline whose spec will be updated
 	pipeline *unstructured.Unstructured,
 	// the definition of the pipeline whose spec will be used
@@ -197,9 +199,20 @@ func forceDrain(ctx context.Context,
 	}
 	numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Debug("checking drain of Pipeline using latest promoted pipeline's spec")
 	// if it's either paused or failed, delete it
-	if paused || failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-		numaLogger.WithValues("paused", paused, "drained", drained, "failed", failed).Infof("Pipeline has the promoted pipeline's spec and has either paused or failed, now deleting it")
+	if paused {
+		numaLogger.WithValues("paused", paused, "drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now deleting it")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		if drained {
+			r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), true, metrics.LabelValueDrainResult_ForceDrain)
+		} else {
+			r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), false, metrics.LabelValueDrainResult_NeverDrained)
+		}
+		return true, err
+	}
+	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
+		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it")
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), false, metrics.LabelValueDrainResult_PipelineFailed)
 		return true, err
 	}
 
@@ -243,7 +256,7 @@ func forceApplySpecOnUndrainablePipeline(
 
 	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
-	err := scalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
+	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
 	if err != nil {
 		return err
 	}
@@ -321,7 +334,7 @@ func drainRecyclablePipeline(
 		}
 
 		// patch the pipeline to update the scale values
-		err = applyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
+		err = numaflowtypes.ApplyScaleValuesToLivePipeline(ctx, pipeline, newVertexScaleDefinitions, c)
 		if err != nil {
 			return false, false, false, err
 		}
@@ -533,7 +546,7 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 		return false, err
 	}
 	if !setToRun {
-		err = ensurePipelineScaledToZero(ctx, pipeline, c)
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
 		if err != nil {
 			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
 		}

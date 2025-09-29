@@ -3,9 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
-	"strings"
+	"sort"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -138,35 +136,25 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 		rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, util.OptionalString(upgradeStateReason), kubernetes.ExtractResourceNames(&children))
 
 	if len(children.Items) > 1 {
-		var mostCurrentChild *unstructured.Unstructured
-		recycleList := []*unstructured.Unstructured{}
-		mostCurrentIndex := math.MinInt
-		for _, child := range children.Items {
-			childIndex, err := getChildIndex(rolloutObject.GetRolloutObjectMeta().Name, child.GetName())
-			if err != nil {
-				// something is improperly named for some reason - don't touch it just in case?
-				numaLogger.Warn(err.Error())
-				continue
-			}
-			if mostCurrentChild == nil { // first one in the list
-				mostCurrentChild = &child
-				mostCurrentIndex = childIndex
-			} else if childIndex > mostCurrentIndex { // most current for now
-				recycleList = append(recycleList, mostCurrentChild) // recycle the previous one
-				mostCurrentChild = &child
-				mostCurrentIndex = childIndex
-			} else {
-				recycleList = append(recycleList, &child)
-			}
-		}
-		// recycle the previous children
-		for _, recyclableChild := range recycleList {
-			numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
-				rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
-			purgeOld := common.LabelValuePurgeOld
-			err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
-			if err != nil {
-				numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
+		// Sort children by creation timestamp (newest first)
+		sort.Slice(children.Items, func(i, j int) bool {
+			return children.Items[i].GetCreationTimestamp().After(children.Items[j].GetCreationTimestamp().Time)
+		})
+
+		// The most current child is the first one after sorting (newest)
+		mostCurrentChild := &children.Items[0]
+
+		// Mark older children for recycling
+		if upgradeState != common.LabelValueUpgradeRecyclable {
+			for i := 1; i < len(children.Items); i++ {
+				recyclableChild := &children.Items[i]
+				numaLogger.Debugf("found multiple children of Rollout %s/%s of upgrade state=%q, marking recyclable: %s",
+					rolloutObject.GetRolloutObjectMeta().Namespace, rolloutObject.GetRolloutObjectMeta().Name, upgradeState, recyclableChild.GetName())
+				purgeOld := common.LabelValuePurgeOld
+				err = UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, &purgeOld, recyclableChild)
+				if err != nil {
+					numaLogger.Error(err, "failed to mark older child objects") // don't return error, as it's a non-essential operation
+				}
 			}
 		}
 		return mostCurrentChild, nil
@@ -220,35 +208,6 @@ func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstruct
 		}
 	}
 
-}
-
-// Get the index of the child following the dash in the name
-// childName should be the rolloutName + '-<integer>'
-// For backward compatibility, support child resources whose names were equivalent to rollout names, returning -1 index
-func getChildIndex(rolloutName string, childName string) (int, error) {
-	// verify that the initial part of the child name is the rolloutName
-	if !strings.HasPrefix(childName, rolloutName) {
-		return 0, fmt.Errorf("child name %q should begin with rollout name %q", childName, rolloutName)
-	}
-	// backward compatibility for older naming convention (before the '-<integer>' suffix was introduced - if it's the same name, consider it to essentially be the smallest index
-	if childName == rolloutName {
-		return -1, nil
-	}
-
-	// next character should be a dash
-	dash := childName[len(rolloutName)]
-	if dash != '-' {
-		return 0, fmt.Errorf("child name %q should begin with rollout name %q, followed by '-<integer>'", childName, rolloutName)
-	}
-
-	// remaining characters should be the integer index
-	suffix := childName[len(rolloutName)+1:]
-
-	childIndex, err := strconv.Atoi(suffix)
-	if err != nil {
-		return 0, fmt.Errorf("child name %q has a suffix which is not an integer", childName)
-	}
-	return childIndex, nil
 }
 
 // get the name of the child whose parent is "rolloutObject" and whose upgrade state is "upgradeState" (and if upgradeStateReason is that, check that as well)
