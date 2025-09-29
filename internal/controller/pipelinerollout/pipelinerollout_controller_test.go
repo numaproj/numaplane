@@ -794,8 +794,8 @@ func createDefaultTestPipeline(phase numaflowv1.PipelinePhase) *numaflowv1.Pipel
 		map[string]string{})
 }
 
-func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, rolloutLabels map[string]string) *numaflowv1.Pipeline {
-	return ctlrcommon.CreateTestPipelineOfSpec(runningPipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, rolloutLabels, map[string]string{})
+func createPipeline(phase numaflowv1.PipelinePhase, status numaflowv1.Status, drainedOnPause bool, labels map[string]string, annotations map[string]string) *numaflowv1.Pipeline {
+	return ctlrcommon.CreateTestPipelineOfSpec(runningPipelineSpec, ctlrcommon.DefaultTestPipelineName, phase, status, drainedOnPause, labels, annotations)
 }
 
 func withInterstepBufferService(origPipelineSpec numaflowv1.PipelineSpec, isbsvc string) numaflowv1.PipelineSpec {
@@ -1139,6 +1139,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			common.LabelKeyISBServiceChildNameForPipeline: ctlrcommon.DefaultTestISBSvcName,
 			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradePromoted),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
+		},
+		map[string]string{
+			common.AnnotationKeyRequiresDrain: "true",
 		})
 
 	defaultUpgradingPipelineDef := ctlrcommon.CreateTestPipelineOfSpec(
@@ -1159,7 +1162,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 			common.LabelKeyUpgradeState:                   string(common.LabelValueUpgradeInProgress),
 			common.LabelKeyParentRollout:                  ctlrcommon.DefaultTestPipelineRolloutName,
 		},
-		map[string]string{})
+		map[string]string{
+			common.AnnotationKeyRequiresDrain: "true",
+		})
 
 	defaultFailedUpgradingPipelineDef := defaultUpgradingPipelineDef.DeepCopy()
 	defaultFailedUpgradingPipelineDef.Status.Conditions = []metav1.Condition{

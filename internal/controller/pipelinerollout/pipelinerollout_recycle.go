@@ -79,6 +79,13 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return true, err
 	}
 
+	// if pipeline doesn't require drain then just delete it
+	if pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyRequiresDrain] != "true" {
+		numaLogger.Info("Pipeline does not require drain and will be deleted now")
+		err = kubernetes.DeleteResource(ctx, c, pipeline)
+		return true, err
+	}
+
 	// First check if the PipelineRollout is configured to run
 	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
 	// TODO: reduce the number of Pipelines which are in this state by deleting any pipeline which has always been paused or scaled to 0 its entire life, in which case there's
@@ -541,7 +548,7 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	pipelineRolloutDef := &unstructured.Unstructured{Object: make(map[string]interface{})}
 	// use the incoming spec from the PipelineRollout after templating, except replace the InterstepBufferServiceName with the one that's dynamically derived
 	pipelineRolloutDef.Object["spec"] = pipelineSpec
-	setToRun, err := numaflowtypes.CheckPipelineSetToRun(ctx, pipelineRolloutDef)
+	setToRun, err := numaflowtypes.CanPipelineIngestData(ctx, pipelineRolloutDef)
 	if err != nil {
 		return false, err
 	}

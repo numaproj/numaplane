@@ -138,24 +138,49 @@ func CheckPipelineDrained(ctx context.Context, pipeline *unstructured.Unstructur
 	return pipelinePhase == numaflowv1.PipelinePhasePaused && pipelineStatus.DrainedOnPause, nil
 }
 
-// CheckPipelineSetToRun checks if the pipeline is set to desiredPhase=Running(or unset) plus if all vertices can scale > 0
-func CheckPipelineSetToRun(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
-	numaLogger := logger.FromContext(ctx)
+// CanPipelineIngestData checks if the pipeline is set to desiredPhase=Running(or unset) plus if a source vertex has scale.max>0
+func CanPipelineIngestData(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	vertexScaleDefinitions, err := GetScaleValuesFromPipelineDefinition(ctx, pipeline)
 	if err != nil {
-		return false, fmt.Errorf("Failed to check pipeline set to run: %v", err)
+		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
 	}
 
-	// if any Vertex has max=0, it can't run
-	for _, vertexDef := range vertexScaleDefinitions {
-		if vertexDef.ScaleDefinition != nil && vertexDef.ScaleDefinition.Max != nil && *vertexDef.ScaleDefinition.Max == 0 {
-			numaLogger.WithValues("pipeline", fmt.Sprintf("%s/%s", pipeline.GetNamespace(), pipeline.GetName()), "vertex", vertexDef.VertexName).Debug("pipeline vertex has max=0")
-			return false, nil
+	// if any Source Vertex has max>0, it can consume data
+	currentVertexSpecs, err := GetPipelineVertexDefinitions(pipeline)
+	if err != nil {
+		return false, fmt.Errorf("failed to check pipeline set to run: %v", err)
+	}
+
+	sourceIsScalable := false
+	for _, currentVertexSpec := range currentVertexSpecs {
+
+		if vertexAsMap, ok := currentVertexSpec.(map[string]any); ok {
+
+			_, isSource, _ := unstructured.NestedFieldNoCopy(vertexAsMap, "source")
+			if isSource {
+
+				// Get the vertex's name
+				vertexName, found, err := unstructured.NestedString(vertexAsMap, "name")
+				if err != nil {
+					return false, err
+				}
+				if !found {
+					return false, errors.New("a vertex must have a name")
+				}
+
+				for _, scaleDef := range vertexScaleDefinitions {
+					if scaleDef.VertexName == vertexName {
+						if scaleDef.Max() > 0 {
+							sourceIsScalable = true
+						}
+					}
+				}
+			}
 		}
 	}
 
 	desiredPhase, err := GetPipelineDesiredPhase(pipeline)
-	return desiredPhase == string(numaflowv1.PipelinePhaseRunning), err
+	return desiredPhase == string(numaflowv1.PipelinePhaseRunning) && sourceIsScalable, err
 }
 
 // CheckPipelineLiveObservedGeneration verifies that the observedGeneration is not less than the generation, meaning it's been reconciled by Numaflow since being updated

@@ -1253,3 +1253,230 @@ func Test_CheckPipelineScaledToZero(t *testing.T) {
 		})
 	}
 }
+
+func Test_CanPipelineIngestData(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name           string
+		pipelineSpec   string
+		expectedResult bool
+		expectError    bool
+	}{
+		{
+			name: "Pipeline set to ingest data - source vertex with max > 0 and desiredPhase=Running",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Running"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 1,
+							"max": 3
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"scale": {
+							"min": 1,
+							"max": 2
+						},
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline set to ingest data - source vertex with max > 0 and no desiredPhase (defaults to Running)",
+			pipelineSpec: `{
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 1
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline NOT set to ingest data - source vertex with max = 0",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Running"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline NOT set to ingest data - desiredPhase=Paused",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Paused"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"scale": {
+							"min": 1,
+							"max": 3
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline set to ingest data - source vertex with no scale definition (defaults to max=1)",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Running"
+				},
+				"vertices": [
+					{
+						"name": "in",
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Pipeline set to ingest data - multiple source vertices, one with max > 0",
+			pipelineSpec: `{
+				"lifecycle": {
+					"desiredPhase": "Running"
+				},
+				"vertices": [
+					{
+						"name": "in1",
+						"scale": {
+							"min": 0,
+							"max": 0
+						},
+						"source": {
+							"generator": {
+								"rpu": 5,
+								"duration": "1s"
+							}
+						}
+					},
+					{
+						"name": "in2",
+						"scale": {
+							"min": 1,
+							"max": 2
+						},
+						"source": {
+							"generator": {
+								"rpu": 3,
+								"duration": "2s"
+							}
+						}
+					},
+					{
+						"name": "out",
+						"sink": {
+							"log": {}
+						}
+					}
+				]
+			}`,
+			expectedResult: true,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create unstructured pipeline object
+			pipeline, err := ctlrcommon.CreateTestPipelineUnstructured("test-pipeline", tt.pipelineSpec)
+			assert.NoError(t, err)
+
+			// Call the function under test
+			result, err := CanPipelineIngestData(ctx, pipeline)
+
+			// Verify results
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result, "Expected result to be %v, got %v", tt.expectedResult, result)
+			}
+		})
+	}
+}

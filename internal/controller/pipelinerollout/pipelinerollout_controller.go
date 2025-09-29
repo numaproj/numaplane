@@ -202,17 +202,26 @@ func (r *PipelineRolloutReconciler) processPipelineRollout(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	// Update PipelineRollout Status based on child resource (Pipeline) Status
-	err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
+	// if there's any metadata to add to the pipelines as annotations, do it here
+	err = r.annotatePipelines(ctx, pipelineRollout)
 	if err != nil {
-		r.ErrorHandler(ctx, pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
-		statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
-		if statusUpdateErr != nil {
-			r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
-			return ctrl.Result{}, statusUpdateErr
-		}
-
 		return ctrl.Result{}, err
+	}
+
+	if existingPipelineDef != nil {
+
+		// Update PipelineRollout Status based on child resource (Pipeline) Status
+		err = r.processPipelineStatus(ctx, pipelineRollout, existingPipelineDef)
+		if err != nil {
+			r.ErrorHandler(ctx, pipelineRollout, err, "ProcessPipelineStatusFailed", "Failed to process Pipeline Status")
+			statusUpdateErr := r.updatePipelineRolloutStatusToFailed(ctx, pipelineRollout, err)
+			if statusUpdateErr != nil {
+				r.ErrorHandler(ctx, pipelineRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update PipelineRollout status")
+				return ctrl.Result{}, statusUpdateErr
+			}
+
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update the resource definition (everything except the Status subresource)
@@ -812,6 +821,39 @@ func (r *PipelineRolloutReconciler) updatePauseMetric(pipelineRollout *apiv1.Pip
 func (r *PipelineRolloutReconciler) setPauseMetrics(namespace, name string, pausedVal, pausingVal float64) {
 	r.customMetrics.PipelinePausedSeconds.WithLabelValues(namespace, name).Set(pausedVal)
 	r.customMetrics.PipelinePausingSeconds.WithLabelValues(namespace, name).Set(pausingVal)
+}
+
+// where needed, add annotations to Pipelines
+func (r *PipelineRolloutReconciler) annotatePipelines(ctx context.Context, pipelineRollout *apiv1.PipelineRollout) error {
+	pipelines, err := kubernetes.ListResources(ctx, r.client, pipelineRollout.GetChildGVK(), pipelineRollout.GetRolloutObjectMeta().GetNamespace())
+	if err != nil {
+		return err
+	}
+	for _, pipeline := range pipelines.Items {
+		err = r.annotatePipeline(ctx, &pipeline)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// where needed, add annotations to Pipeline
+func (r *PipelineRolloutReconciler) annotatePipeline(ctx context.Context, pipeline *unstructured.Unstructured) error {
+	pipelineCanIngestData, err := numaflowtypes.CanPipelineIngestData(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+
+	if pipelineCanIngestData && (pipeline.GetAnnotations() == nil || pipeline.GetAnnotations()[common.AnnotationKeyRequiresDrain] != "true") {
+		// Patch the live pipeline to mark that this pipeline requires drain
+		patchJson := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "true"}}}`, common.AnnotationKeyRequiresDrain)
+		err = kubernetes.PatchResource(ctx, r.client, pipeline, patchJson, k8stypes.MergePatchType)
+		if err != nil {
+			return fmt.Errorf("failed to patch pipeline annotation %s: %w", common.AnnotationKeyRequiresDrain, err)
+		}
+	}
+	return nil
 }
 
 func (r *PipelineRolloutReconciler) needsUpdate(old, new *apiv1.PipelineRollout) bool {

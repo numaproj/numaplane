@@ -123,6 +123,22 @@ type VertexScaleDefinition struct {
 	ScaleDefinition *ScaleDefinition `json:"scaleDefinition,omitempty"`
 }
 
+func (scaleDef *VertexScaleDefinition) Min() int64 {
+	if scaleDef.ScaleDefinition == nil || scaleDef.ScaleDefinition.Min == nil {
+		return int64(1)
+	} else {
+		return *scaleDef.ScaleDefinition.Min
+	}
+}
+
+func (scaleDef *VertexScaleDefinition) Max() int64 {
+	if scaleDef.ScaleDefinition == nil || scaleDef.ScaleDefinition.Max == nil {
+		return int64(1)
+	} else {
+		return *scaleDef.ScaleDefinition.Max
+	}
+}
+
 // PromotedPipelineStatus describes the status of the promoted child
 type PromotedPipelineStatus struct {
 	PromotedPipelineTypeStatus `json:",inline"`

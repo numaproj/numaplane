@@ -249,9 +249,10 @@ func CreateTestPipelineOfSpec(
 			APIVersion: "numaflow.numaproj.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: DefaultTestNamespace,
-			Labels:    labels,
+			Name:        name,
+			Namespace:   DefaultTestNamespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec:   spec,
 		Status: pipelineStatus,
