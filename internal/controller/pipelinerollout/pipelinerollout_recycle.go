@@ -73,6 +73,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 		}
 	}
 
+	numaLogger.WithValues("reason", upgradeStateReason).Debug("Recycling Pipeline")
+
 	if !requiresPause {
 		numaLogger.Info("Pipeline will be deleted now")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
