@@ -336,7 +336,7 @@ func processUpgradingChild(
 	c client.Client,
 ) (bool, time.Duration, error) {
 
-	numaLogger := logger.FromContext(ctx)
+	numaLogger := logger.FromContext(ctx).WithValues("upgrading child", fmt.Sprintf("%s/%s", existingUpgradingChildDef.GetNamespace(), existingUpgradingChildDef.GetName()))
 
 	assessmentSchedule, err := getChildStatusAssessmentSchedule(ctx, rolloutObject)
 	if err != nil {
@@ -354,6 +354,15 @@ func processUpgradingChild(
 	// check for Force Promote set in Progressive strategy to force success logic OR if upgrading child has force-promote label
 	if rolloutObject.GetProgressiveStrategy().ForcePromote || forcePromote || controller.ProgressiveUnsupported(ctx, rolloutObject) {
 		childStatus.ForcedSuccess = true
+		reason := ""
+		if rolloutObject.GetProgressiveStrategy().ForcePromote {
+			reason = "rollout strategy"
+		} else if forcePromote {
+			reason = "user force promote"
+		} else {
+			reason = "progressive unsupported"
+		}
+		numaLogger.WithValues("reason", reason).Debug("Upgrading child force promoted")
 
 		done, err := declareSuccess(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, childStatus, c)
 		if err != nil || done {
