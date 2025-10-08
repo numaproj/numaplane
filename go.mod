@@ -10,6 +10,7 @@ require (
 	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch v5.9.0+incompatible
+	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-swagger/go-swagger v0.31.0
@@ -52,7 +53,6 @@ require (
 	github.com/distribution/reference v0.5.0 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/fatih/color v1.17.0 // indirect

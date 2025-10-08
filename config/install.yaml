@@ -721,9 +721,7 @@ spec:
                                 process
                               format: int64
                               type: integer
-                            originalScaleMinMax:
-                              description: OriginalScaleMinMax stores the original
-                                scale min and max values as JSON string
+                            originalScaleDefinition:
                               type: string
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
@@ -732,7 +730,6 @@ spec:
                               type: integer
                           required:
                           - initial
-                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-
@@ -1690,9 +1687,7 @@ spec:
                                 process
                               format: int64
                               type: integer
-                            originalScaleMinMax:
-                              description: OriginalScaleMinMax stores the original
-                                scale min and max values as JSON string
+                            originalScaleDefinition:
                               type: string
                             scaleTo:
                               description: ScaleTo indicates how many pods to scale
@@ -1701,7 +1696,6 @@ spec:
                               type: integer
                           required:
                           - initial
-                          - originalScaleMinMax
                           - scaleTo
                           type: object
                         description: |-

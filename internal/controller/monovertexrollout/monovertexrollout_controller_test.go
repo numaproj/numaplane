@@ -115,7 +115,7 @@ var (
 			PromotedChildStatus: apiv1.PromotedChildStatus{
 				Name: ctlrcommon.DefaultTestMonoVertexRolloutName + "-0",
 			},
-			ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
+			ScaleValues: map[string]apiv1.ScaleValues{ctlrcommon.DefaultTestMonoVertexRolloutName + "-0": {OriginalScaleDefinition: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo}},
 		},
 	}
 

@@ -134,7 +134,7 @@ func VerifyISBServiceRolloutProgressiveStatus(
 func VerifyMonoVertexRolloutScaledDownForProgressive(
 	monoVertexRolloutName string,
 	expectedPromotedName string,
-	expectedOriginalScaleMinMaxAsJSONString string,
+	expectedOriginalScaleDefinitionAsJSONString string,
 	expectedScaleTo int64,
 ) {
 	CheckEventually("verifying that the MonoVertexRollout scaled down for Progressive upgrade", func() bool {
@@ -150,7 +150,7 @@ func VerifyMonoVertexRolloutScaledDownForProgressive(
 
 		return mvrProgressiveStatus.PromotedMonoVertexStatus.Name == expectedPromotedName &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues != nil &&
-			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].OriginalScaleMinMax == expectedOriginalScaleMinMaxAsJSONString &&
+			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].OriginalScaleDefinition == expectedOriginalScaleDefinitionAsJSONString &&
 			mvrProgressiveStatus.PromotedMonoVertexStatus.ScaleValues[expectedPromotedName].ScaleTo == expectedScaleTo
 	}).Should(BeTrue())
 }
@@ -374,7 +374,7 @@ func VerifyPromotedPipelineScaledUpForProgressive(
 func MakeExpectedPipelineTypeProgressiveStatus(
 	promotedName, upgradingName, sourceVertexName string,
 	scaleTo int64,
-	originalScaleMinMax string,
+	originalScaleDefinition string,
 	assessmentResultInProgress, assessmentResultOnDone apiv1.AssessmentResult,
 ) (ExpectedPipelineTypeProgressiveStatus, ExpectedPipelineTypeProgressiveStatus) {
 	expectedPipelineTypeProgressiveStatusInProgress := ExpectedPipelineTypeProgressiveStatus{
@@ -384,8 +384,8 @@ func MakeExpectedPipelineTypeProgressiveStatus(
 			},
 			ScaleValues: map[string]apiv1.ScaleValues{
 				sourceVertexName: {
-					OriginalScaleMinMax: originalScaleMinMax,
-					ScaleTo:             scaleTo,
+					OriginalScaleDefinition: originalScaleDefinition,
+					ScaleTo:                 scaleTo,
 				},
 			},
 		},

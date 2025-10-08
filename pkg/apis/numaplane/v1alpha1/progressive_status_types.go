@@ -93,7 +93,9 @@ type AnalysisStatus struct {
 // ScaleValues stores the original scale min and max values, scaleTo value, and actual scale value of a pipeline or monovertex vertex
 type ScaleValues struct {
 	// OriginalScaleMinMax stores the original scale min and max values as JSON string
-	OriginalScaleMinMax string `json:"originalScaleMinMax"`
+	//OriginalScaleMinMax string `json:"originalScaleMinMax"`
+
+	OriginalScaleDefinition string `json:"originalScaleDefinition,omitempty"`
 	// ScaleTo indicates how many pods to scale down to
 	ScaleTo int64 `json:"scaleTo"`
 	// Initial indicates how many pods were initially running for the vertex at the beginning of the upgrade process

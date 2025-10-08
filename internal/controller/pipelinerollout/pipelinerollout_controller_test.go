@@ -1179,9 +1179,9 @@ func Test_processExistingPipeline_Progressive(t *testing.T) {
 				Name: ctlrcommon.DefaultTestPipelineRolloutName + "-0",
 			},
 			ScaleValues: map[string]apiv1.ScaleValues{
-				"in":  {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-				"cat": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
-				"out": {OriginalScaleMinMax: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"in":  {OriginalScaleDefinition: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"cat": {OriginalScaleDefinition: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
+				"out": {OriginalScaleDefinition: ctlrcommon.DefaultScaleJSONString, ScaleTo: ctlrcommon.DefaultScaleTo},
 			},
 		},
 	}

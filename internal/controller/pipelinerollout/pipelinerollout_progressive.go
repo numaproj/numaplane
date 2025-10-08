@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
+
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -612,9 +615,14 @@ func computePromotedPipelineVerticesScaleValues(
 
 			numaLogger.WithValues("vertexName", vertexName, "currentPodsCount", currentPodsCount).Debugf("found pods for the vertex")
 
-			originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
+			/*originalScaleMinMax, err := progressive.ExtractScaleMinMaxAsJSONString(vertexAsMap, []string{"scale"})
 			if err != nil {
 				return true, fmt.Errorf("cannot extract the scale min and max values from the promoted pipeline vertex %s: %w", vertexName, err)
+			}*/
+
+			originalScale, err := progressive.ExtractScaleAsJSONString(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return true, err
 			}
 
 			scaleTo := progressive.CalculateScaleMinMaxValues(int(currentPodsCount))
@@ -626,13 +634,13 @@ func computePromotedPipelineVerticesScaleValues(
 				"vertexName", vertexName,
 				"newMin", newMin,
 				"newMax", newMax,
-				"originalScaleMinMax", originalScaleMinMax,
+				"originalScale", originalScale,
 			).Debugf("found %d pod(s) for the vertex, scaling down to %d", currentPodsCount, newMax)
 
 			scaleValuesMap[vertexName] = apiv1.ScaleValues{
-				OriginalScaleMinMax: originalScaleMinMax,
-				ScaleTo:             scaleTo,
-				Initial:             currentPodsCount,
+				OriginalScaleDefinition: originalScale,
+				ScaleTo:                 scaleTo,
+				Initial:                 currentPodsCount,
 			}
 		}
 	}
@@ -677,7 +685,7 @@ func scalePromotedPipelineToOriginalScale(
 	c client.Client,
 ) error {
 
-	numaLogger := logger.FromContext(ctx).WithName("scalePipelineVerticesToOriginalValues").
+	numaLogger := logger.FromContext(ctx).WithName("scalePromotedPipelineToOriginalScale").
 		WithValues("promotedPipelineNamespace", promotedPipelineDef.GetNamespace(), "promotedPipelineName", promotedPipelineDef.GetName())
 
 	// If all the pipeline vertices have been scaled back to the original values already, do not restore scaling values again
@@ -693,7 +701,7 @@ func scalePromotedPipelineToOriginalScale(
 	if err != nil {
 		return fmt.Errorf("error while getting vertices of promoted pipeline: %w", err)
 	}
-	vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
+	//vertexScaleDefinitions := make([]apiv1.VertexScaleDefinition, len(vertices))
 
 	for vertexIndex, vertex := range vertices {
 		if vertexAsMap, ok := vertex.(map[string]any); ok {
@@ -711,7 +719,7 @@ func scalePromotedPipelineToOriginalScale(
 				return fmt.Errorf("the scale values for vertex '%s' are not present in the rollout promotedChildStatus", vertexName)
 			}
 
-			if vertexScaleValues.OriginalScaleMinMax == "null" {
+			/*if vertexScaleValues.OriginalScaleMinMax == "null" {
 				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 					VertexName: vertexName,
 					ScaleDefinition: &apiv1.ScaleDefinition{
@@ -743,13 +751,94 @@ func scalePromotedPipelineToOriginalScale(
 						Max: max,
 					},
 				}
+			}*/
+
+			newScaleDefinition, err := progressive.ExtractScaleAsJSONString(vertexAsMap, []string{"scale"})
+			if err != nil {
+				return err
 			}
+			fmt.Printf("deletethis: newScaleDefinition=%s\n", newScaleDefinition)
+
+			// Create new pipeline definition with updated scale
+			newPipelineDef := promotedPipelineDef.DeepCopy().Object
+			newPipelineVertices, found, err := unstructured.NestedSlice(newPipelineDef, "spec", "vertices")
+			if !found {
+				return fmt.Errorf("promotedPipeline %s/%s doesn't have spec.vertices array", promotedPipelineDef.GetNamespace(), promotedPipelineDef.GetName())
+			}
+			if err != nil {
+				return err
+			}
+
+			// Parse the new scale definition JSON string into a map
+			var newScaleMap map[string]interface{}
+			if err := json.Unmarshal([]byte(newScaleDefinition), &newScaleMap); err != nil {
+				return fmt.Errorf("failed to unmarshal newScaleDefinition: %w", err)
+			}
+
+			// Update the vertex with the new scale definition
+			newVertexAsMap := newPipelineVertices[vertexIndex].(map[string]interface{})
+			if len(newScaleMap) > 0 {
+				newVertexAsMap["scale"] = newScaleMap
+			} else {
+				delete(newVertexAsMap, "scale")
+			}
+			newPipelineVertices[vertexIndex] = newVertexAsMap
+
+			unstructured.SetNestedSlice(newPipelineDef, newPipelineVertices, "spec", "vertices")
+			newPipelineJSON, err := json.Marshal(newPipelineDef)
+			if err != nil {
+				return err
+			}
+
+			// Create original pipeline definition with original scale
+			originalPipelineDef := promotedPipelineDef.DeepCopy().Object
+			originalPipelineVertices, _, _ := unstructured.NestedSlice(originalPipelineDef, "spec", "vertices")
+
+			// Parse the original scale definition JSON string into a map
+			var originalScaleMap map[string]interface{}
+			if err := json.Unmarshal([]byte(vertexScaleValues.OriginalScaleDefinition), &originalScaleMap); err != nil {
+				return fmt.Errorf("failed to unmarshal OriginalScaleDefinition: %w", err)
+			}
+
+			// Update the vertex with the original scale definition
+			originalVertexAsMap := originalPipelineVertices[vertexIndex].(map[string]interface{})
+			if len(originalScaleMap) > 0 {
+				originalVertexAsMap["scale"] = originalScaleMap
+			} else {
+				delete(originalVertexAsMap, "scale")
+			}
+			originalPipelineVertices[vertexIndex] = originalVertexAsMap
+
+			unstructured.SetNestedSlice(originalPipelineDef, originalPipelineVertices, "spec", "vertices")
+			fmt.Printf("deletethis: OriginalScaleDefinition=%s\n", vertexScaleValues.OriginalScaleDefinition)
+
+			originalPipelineJSON, err := json.Marshal(originalPipelineDef)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("newPipelineJSON=%s\n", newPipelineJSON)
+			fmt.Printf("originalPipelineJSON=%s\n", originalPipelineJSON)
+
+			patch, err := jsonpatch.CreateMergePatch(newPipelineJSON, originalPipelineJSON)
+			if err != nil {
+				return err
+			}
+
+			numaLogger.WithValues("patch", patch).Debug("applying patch")
+
+			// Apply the patch using the Kubernetes client
+			err = kubernetes.PatchResource(ctx, c, promotedPipelineDef, string(patch), types.MergePatchType)
+			if err != nil {
+				return fmt.Errorf("error applying patch '%s' to promoted pipeline %s/%s: %v", string(patch), promotedPipelineDef.GetNamespace(), promotedPipelineDef.GetName(), err)
+			}
+
 		}
 	}
 
-	if err := numaflowtypes.ApplyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
+	/*if err := numaflowtypes.ApplyScaleValuesToLivePipeline(ctx, promotedPipelineDef, vertexScaleDefinitions, c); err != nil {
 		return fmt.Errorf("error scaling the existing promoted pipeline vertices to original values: %w", err)
-	}
+	}*/
 
 	numaLogger.WithValues("promotedPipelineDef", promotedPipelineDef).Debug("patched the promoted pipeline vertices with the original scale configuration")
 

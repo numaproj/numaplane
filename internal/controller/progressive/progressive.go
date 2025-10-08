@@ -886,6 +886,24 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	return string(jsonBytes), nil
 }
 
+func ExtractScaleAsJSONString(object map[string]any, pathToScale []string) (string, error) {
+	scaleDef, foundScale, err := unstructured.NestedMap(object, pathToScale...)
+	if err != nil {
+		return "", err
+	}
+
+	if !foundScale {
+		return "{}", nil
+	}
+
+	jsonBytes, err := json.Marshal(scaleDef)
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
+}
+
 /*
 AreVertexReplicasReady checks if the number of ready replicas of a vertex matches or exceeds the desired replicas.
 
