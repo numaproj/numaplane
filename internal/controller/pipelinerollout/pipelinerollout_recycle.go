@@ -220,7 +220,6 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		return true, err
 	}
 	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-		// Log only the essential parts: spec and status, excluding noisy metadata
 		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), false, metrics.LabelValueDrainResult_PipelineFailed)
