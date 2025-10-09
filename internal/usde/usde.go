@@ -98,8 +98,8 @@ func resourceSpecNeedsUpdating(ctx context.Context, newDef, existingDef *unstruc
 
 	numaLogger.WithValues(
 		"dataLossUpgradeStrategy", dataLossUpgradeStrategy,
-		"newDefUnstr", newDef,
-		"existingDefUnstr", existingDef,
+		"newDefUnstr", kubernetes.GetLoggableResource(newDef),
+		"existingDefUnstr", kubernetes.GetLoggableResource(existingDef),
 	).Debug("started deriving upgrade strategy")
 
 	switch dataLossUpgradeStrategy {

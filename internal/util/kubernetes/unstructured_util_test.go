@@ -133,3 +133,176 @@ func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, pipelineList.Items, 0)
 }
+
+func TestGetLoggableResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *unstructured.Unstructured
+		expected map[string]interface{}
+	}{
+		{
+			name: "complete pipeline object",
+			input: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "numaflow.numaproj.io/v1alpha1",
+					"kind":       "Pipeline",
+					"metadata": map[string]interface{}{
+						"name":      "test-pipeline",
+						"namespace": "test-namespace",
+						"labels": map[string]interface{}{
+							"app": "test",
+							"numaplane.numaproj.io/parent-rollout-name": "my-rollout",
+						},
+						"annotations": map[string]interface{}{
+							"numaflow.numaproj.io/pause-timestamp": "2025-10-08T22:47:07Z",
+						},
+						// These should be excluded from the clean output
+						"managedFields": []interface{}{
+							map[string]interface{}{
+								"manager":   "numaflow",
+								"operation": "Update",
+								"fieldsV1":  map[string]interface{}{"f:spec": map[string]interface{}{}},
+							},
+						},
+						"resourceVersion": "12345",
+						"uid":             "abc-123-def",
+						"generation":      int64(1),
+					},
+					"spec": map[string]interface{}{
+						"vertices": []interface{}{
+							map[string]interface{}{
+								"name": "in",
+								"source": map[string]interface{}{
+									"generator": map[string]interface{}{
+										"rpu":      "500",
+										"duration": "1s",
+									},
+								},
+							},
+							map[string]interface{}{
+								"name": "out",
+								"sink": map[string]interface{}{
+									"log": map[string]interface{}{},
+								},
+							},
+						},
+						"edges": []interface{}{
+							map[string]interface{}{
+								"from": "in",
+								"to":   "out",
+							},
+						},
+					},
+					"status": map[string]interface{}{
+						"phase":              "Running",
+						"observedGeneration": int64(1),
+						"conditions": []interface{}{
+							map[string]interface{}{
+								"type":   "Ready",
+								"status": "True",
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name":      "test-pipeline",
+					"namespace": "test-namespace",
+					"labels": map[string]string{
+						"app": "test",
+						"numaplane.numaproj.io/parent-rollout-name": "my-rollout",
+					},
+					"annotations": map[string]string{
+						"numaflow.numaproj.io/pause-timestamp": "2025-10-08T22:47:07Z",
+					},
+				},
+				"spec": map[string]interface{}{
+					"vertices": []interface{}{
+						map[string]interface{}{
+							"name": "in",
+							"source": map[string]interface{}{
+								"generator": map[string]interface{}{
+									"rpu":      "500",
+									"duration": "1s",
+								},
+							},
+						},
+						map[string]interface{}{
+							"name": "out",
+							"sink": map[string]interface{}{
+								"log": map[string]interface{}{},
+							},
+						},
+					},
+					"edges": []interface{}{
+						map[string]interface{}{
+							"from": "in",
+							"to":   "out",
+						},
+					},
+				},
+				"status": map[string]interface{}{
+					"phase":              "Running",
+					"observedGeneration": int64(1),
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":   "Ready",
+							"status": "True",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "minimal object with only name",
+			input: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "minimal-pipeline",
+					},
+					"spec": map[string]interface{}{
+						"vertices": []interface{}{},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "minimal-pipeline",
+				},
+				"spec": map[string]interface{}{
+					"vertices": []interface{}{},
+				},
+			},
+		},
+		{
+			name: "object without metadata",
+			input: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"test": "value",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"test": "value",
+				},
+			},
+		},
+		{
+			name: "empty object",
+			input: &unstructured.Unstructured{
+				Object: map[string]interface{}{},
+			},
+			expected: map[string]interface{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetLoggableResource(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
