@@ -113,8 +113,9 @@ type UpgradingPipelineStatus struct {
 
 // ScaleDefinition is a struct to encapsulate scale values (can be used for a Vertex)
 type ScaleDefinition struct {
-	Min *int64 `json:"min,omitempty"`
-	Max *int64 `json:"max,omitempty"`
+	Min      *int64 `json:"min,omitempty"`
+	Max      *int64 `json:"max,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
 }
 
 // VertexScaleDefinition is a struct to encapsulate the scale values for a given vertex

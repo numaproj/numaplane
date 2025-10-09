@@ -311,8 +311,9 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 		vertexScaleDefinitions = append(vertexScaleDefinitions, apiv1.VertexScaleDefinition{
 			VertexName: vertexName,
 			ScaleDefinition: &apiv1.ScaleDefinition{
-				Min: &vertexScaleValues.ScaleTo,
-				Max: &vertexScaleValues.ScaleTo,
+				Min:      &vertexScaleValues.ScaleTo,
+				Max:      &vertexScaleValues.ScaleTo,
+				Disabled: false,
 			},
 		})
 	}
@@ -735,12 +736,17 @@ func scalePromotedPipelineToOriginalScale(
 					maxInt := int64(scaleAsMap["max"].(float64))
 					max = &maxInt
 				}
+				disabled := false
+				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) == true {
+					disabled = true
+				}
 
 				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 					VertexName: vertexName,
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: min,
-						Max: max,
+						Min:      min,
+						Max:      max,
+						Disabled: disabled,
 					},
 				}
 			}

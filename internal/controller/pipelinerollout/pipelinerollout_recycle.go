@@ -512,8 +512,9 @@ func calculateScaleForRecycle(
 			vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 				VertexName: vertexName,
 				ScaleDefinition: &apiv1.ScaleDefinition{
-					Min: &newScaleValue,
-					Max: &newScaleValue,
+					Min:      &newScaleValue,
+					Max:      &newScaleValue,
+					Disabled: false,
 				},
 			}
 

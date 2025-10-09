@@ -529,7 +529,7 @@ func ScalePipelineVerticesToZero(
 	if !allVerticesScaledDown {
 		zero := int64(0)
 		for i := range vertexScaleDefinitions {
-			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero, Disabled: false}
 		}
 
 		numaLogger.Debug("Scaling down all vertices to 0 Pods")
@@ -696,6 +696,19 @@ func ApplyScaleValuesToLivePipeline(
 			"value": %s
 		},`, existingIndex, maxStr)
 		verticesPatch = verticesPatch + vertexPatch
+
+		disabledStr := "false"
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Disabled {
+			disabledStr = "true"
+		}
+		vertexPatch = fmt.Sprintf(`
+		{
+			"op": "add",
+			"path": "/spec/vertices/%d/scale/disabled",
+			"value": %s
+		},`, existingIndex, disabledStr)
+		verticesPatch = verticesPatch + vertexPatch
+
 	}
 	// remove terminating comma
 	if verticesPatch[len(verticesPatch)-1] == ',' {
