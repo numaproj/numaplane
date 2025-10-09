@@ -275,3 +275,37 @@ func RawExtensionToUnstructured(rawExtension runtime.RawExtension) (*unstructure
 	unstruc.Object = asMap
 	return unstruc, nil
 }
+
+// GetLoggableResource returns a map containing only the essential parts of a Kubernetes object
+// for logging purposes, excluding noisy metadata like managedFields
+func GetLoggableResource(obj *unstructured.Unstructured) map[string]interface{} {
+	clean := make(map[string]interface{})
+
+	// Include basic metadata (name, namespace, labels, annotations)
+	if _, found, _ := unstructured.NestedMap(obj.Object, "metadata"); found {
+		cleanMetadata := make(map[string]interface{})
+		if name := obj.GetName(); name != "" {
+			cleanMetadata["name"] = name
+		}
+		if namespace := obj.GetNamespace(); namespace != "" {
+			cleanMetadata["namespace"] = namespace
+		}
+		if labels := obj.GetLabels(); len(labels) > 0 {
+			cleanMetadata["labels"] = labels
+		}
+		if annotations := obj.GetAnnotations(); len(annotations) > 0 {
+			cleanMetadata["annotations"] = annotations
+		}
+		clean["metadata"] = cleanMetadata
+	}
+
+	// Include spec and status
+	if spec, found, _ := unstructured.NestedMap(obj.Object, "spec"); found {
+		clean["spec"] = spec
+	}
+	if status, found, _ := unstructured.NestedMap(obj.Object, "status"); found {
+		clean["status"] = status
+	}
+
+	return clean
+}

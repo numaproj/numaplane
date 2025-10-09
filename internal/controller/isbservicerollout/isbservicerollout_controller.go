@@ -719,7 +719,7 @@ func (r *ISBServiceRolloutReconciler) isISBServiceReconciled(ctx context.Context
 	}
 
 	isbsvcReconciled := isbsvc.GetGeneration() <= isbsvcStatus.ObservedGeneration
-	numaLogger.Debugf("isbsvc status: %+v, isbsvc.Object[metadata]=%+v, generation=%d, observed generation=%d", isbsvcStatus, isbsvc.Object["metadata"], isbsvc.GetGeneration(), isbsvcStatus.ObservedGeneration)
+	numaLogger.Debugf("isbsvc: %+v, generation=%d, observed generation=%d", kubernetes.GetLoggableResource(isbsvc), isbsvc.GetGeneration(), isbsvcStatus.ObservedGeneration)
 
 	if !isbsvcReconciled {
 		return false, "Mismatch between ISBService Generation and ObservedGeneration", nil
