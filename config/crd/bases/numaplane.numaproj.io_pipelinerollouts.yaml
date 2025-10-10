@@ -466,6 +466,8 @@ spec:
                               description: ScaleDefinition is a struct to encapsulate
                                 scale values (can be used for a Vertex)
                               properties:
+                                disabled:
+                                  type: boolean
                                 max:
                                   format: int64
                                   type: integer

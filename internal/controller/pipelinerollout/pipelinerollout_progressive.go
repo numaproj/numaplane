@@ -199,11 +199,11 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	err := numaflowtypes.PipelineWithoutScaleMinMax(pipelineCopy.Object)
+	err := numaflowtypes.PipelineWithoutScaleFields(pipelineCopy.Object)
 	if err != nil {
 		return false, err
 	}
-	err = numaflowtypes.PipelineWithoutScaleMinMax(requiredSpecCopy)
+	err = numaflowtypes.PipelineWithoutScaleFields(requiredSpecCopy)
 	if err != nil {
 		return false, err
 	}
