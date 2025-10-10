@@ -712,14 +712,22 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	var scaleValue string
 	if scaleDefinition == nil {
 		scaleValue = "null"
-	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
-	} else if scaleDefinition.Min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
-	} else if scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
 	} else {
-		scaleValue = `{"min": null, "max": null}`
+		minStr := "null"
+		maxStr := "null"
+		disabledStr := "false"
+		if scaleDefinition.Min != nil {
+			minStr = fmt.Sprintf(`"min": %d`, *scaleDefinition.Min)
+		}
+		if scaleDefinition.Max != nil {
+			maxStr = fmt.Sprintf(`""max": %d`, *scaleDefinition.Max)
+		}
+		if scaleDefinition.Disabled {
+			disabledStr = "true"
+		}
+
+		scaleValue = fmt.Sprintf(`{"min": %s, "max": %s, "disabled": %s}`, minStr, maxStr, disabledStr)
+
 	}
 	return scaleValue
 }
