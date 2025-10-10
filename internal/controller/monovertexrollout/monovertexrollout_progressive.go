@@ -153,7 +153,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 			return nil, err
 		}
 
-		excludedPaths := []string{"replicas", "scale.min", "scale.max"}
+		excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
 		util.RemovePaths(specAsMap, excludedPaths, ".")
 
 		// if "scale" is there and empty, remove it
