@@ -484,6 +484,11 @@ func scaleDownUpgradingMonoVertex(
 		if err != nil {
 			return err
 		}
+
+		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, "false", "spec", "scale", "disabled")
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
