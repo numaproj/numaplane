@@ -705,16 +705,16 @@ func ApplyScaleValuesToLivePipeline(
 		},`, existingIndex, maxStr)
 		verticesPatch = verticesPatch + vertexPatch
 
-		disabledStr := "false"
+		disabled := false
 		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Disabled {
-			disabledStr = "true"
+			disabled = true
 		}
 		vertexPatch = fmt.Sprintf(`
 		{
 			"op": "add",
 			"path": "/spec/vertices/%d/scale/disabled",
-			"value": %s
-		},`, existingIndex, disabledStr)
+			"value": %t
+		},`, existingIndex, disabled)
 		verticesPatch = verticesPatch + vertexPatch
 
 	}

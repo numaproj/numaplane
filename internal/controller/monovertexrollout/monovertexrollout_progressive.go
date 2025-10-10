@@ -277,7 +277,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
-		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo}, c); err != nil {
+		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo, Disabled: false}, c); err != nil {
 			return true, fmt.Errorf("error scaling the existing promoted monovertex to the desired scale values: %w", err)
 		}
 
