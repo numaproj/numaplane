@@ -874,8 +874,9 @@ func ExtractScaleMinMaxAsJSONString(object map[string]any, pathToScale []string)
 	}
 
 	scaleMinMax := map[string]any{
-		"min": scaleDef["min"],
-		"max": scaleDef["max"],
+		"min":      scaleDef["min"],
+		"max":      scaleDef["max"],
+		"disabled": scaleDef["disabled"],
 	}
 
 	jsonBytes, err := json.Marshal(scaleMinMax)
