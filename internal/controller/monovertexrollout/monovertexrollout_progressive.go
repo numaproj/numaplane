@@ -485,7 +485,7 @@ func scaleDownUpgradingMonoVertex(
 			return err
 		}
 
-		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, "false", "spec", "scale", "disabled")
+		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, false, "spec", "scale", "disabled")
 		if err != nil {
 			return err
 		}
@@ -710,6 +710,7 @@ func scaleMonoVertex(
 
 	scaleValue := scaleDefinitionToPatchString(scaleDefinition)
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
+	fmt.Printf("deletethis: patchJson=%s\n", patchJson)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
 
@@ -720,18 +721,14 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	} else {
 		minStr := "null"
 		maxStr := "null"
-		disabledStr := "false"
 		if scaleDefinition.Min != nil {
-			minStr = fmt.Sprintf(`"min": %d`, *scaleDefinition.Min)
+			minStr = fmt.Sprintf(`%d`, *scaleDefinition.Min)
 		}
 		if scaleDefinition.Max != nil {
-			maxStr = fmt.Sprintf(`""max": %d`, *scaleDefinition.Max)
-		}
-		if scaleDefinition.Disabled {
-			disabledStr = "true"
+			maxStr = fmt.Sprintf(`%d`, *scaleDefinition.Max)
 		}
 
-		scaleValue = fmt.Sprintf(`{"min": %s, "max": %s, "disabled": %s}`, minStr, maxStr, disabledStr)
+		scaleValue = fmt.Sprintf(`{"min": %s, "max": %s, "disabled": %t}`, minStr, maxStr, scaleDefinition.Disabled)
 
 	}
 	return scaleValue
