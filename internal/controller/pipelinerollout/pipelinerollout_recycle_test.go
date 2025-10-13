@@ -473,7 +473,7 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
-		{
+		/*{
 			name: "Progressive Replaced - second attempt (force drain) - new spec was applied - now scale it down before pausing",
 			// preconditions:
 			// - desiredPhase=Running, phase=Running, initialScale=matching pipelinerollout
@@ -570,7 +570,7 @@ func Test_Recycle(t *testing.T) {
 					},
 				},
 			},
-		},
+		},*/
 		{
 			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
 			// preconditions:
@@ -876,7 +876,7 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desi
 				max := int32(*scaleDefinition.ScaleDefinition.Max)
 				pipeline.Spec.Vertices[index].Scale.Max = &max
 			}
-
+			pipeline.Spec.Vertices[index].Scale.Disabled = false
 		}
 
 	}

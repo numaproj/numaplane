@@ -432,7 +432,8 @@ func Test_ScalePipelineDefSourceVerticesToZero(t *testing.T) {
 	  "name": "source1",
 	  "scale": {
 		"min": 0,
-		"max": 0
+		"max": 0,
+		"disabled": false
 	  },
 	  "source": {
 		"generator": {
@@ -445,7 +446,8 @@ func Test_ScalePipelineDefSourceVerticesToZero(t *testing.T) {
 	  "name": "source2",
 	  "scale": {
 		"min": 0,
-		"max": 0
+		"max": 0,
+		"disabled": false
 	  },
 	  "source": {
 		"http": {}
@@ -455,7 +457,8 @@ func Test_ScalePipelineDefSourceVerticesToZero(t *testing.T) {
 	  "name": "processor",
 	  "scale": {
 		"min": 2,
-		"max": 5
+		"max": 5,
+		"disabled": false
 	  },
 	  "sink": {
 		"log": {}
@@ -582,8 +585,7 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 				{
 					VertexName: "out",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: &one,
-						Max: &five,
+						Disabled: true,
 					},
 				},
 			},
@@ -595,19 +597,21 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 		{
 			"name": "in",
 			"scale": {
-			"lookbackSeconds": 1
+				"lookbackSeconds": 1,
+				"disabled": false
 			},
 			"source": {
-			"generator": {
-				"rpu": 5,
-				"duration": "1s"
-			}
+				"generator": {
+					"rpu": 5,
+					"duration": "1s"
+				}
 			}
 		},
 		{
 			"name": "cat",
 			"scale": {
-			"max": 5
+				"max": 5,
+				"disabled": false
 			},
 			"udf": {
 				"container": {
@@ -619,7 +623,8 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 		{
 			"name": "cat-2",
 			"scale": {
-			"min": 1
+				"min": 1,
+				"disabled": false
 			},
 			"udf": {
 				"container": {
@@ -631,8 +636,7 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 		{
 			"name": "out",
 			"scale": {
-			"min": 1,
-			"max": 5
+				"disabled": true
 			},
 			"sink": {
 			"log": {}
@@ -702,6 +706,7 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 		{
 			"name": "in",
 			"scale": {
+				"disabled": false
 			},
 			"source": {
 			"generator": {
@@ -713,8 +718,9 @@ func Test_ApplyScaleValuesToPipelineDefinition(t *testing.T) {
 		{
 			"name": "out",
 			"scale": {
-			"min": 1,
-			"max": 5
+				"min": 1,
+				"max": 5,
+				"disabled": false
 			},
 			"sink": {
 			"log": {}
@@ -844,7 +850,8 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 						"scale": {
 							"lookbackSeconds": 1,
 							"min": null,
-							"max": null
+							"max": null,
+							"disabled": false
 						},
 						"source": {
 							"generator": {
@@ -858,7 +865,8 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 						"scale": {
 							"lookbackSeconds": 1,
 							"min": null,
-							"max": 5
+							"max": 5,
+							"disabled": false
 						},
 						"udf": {
 							"container": {
@@ -871,7 +879,8 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 						"name": "out",
 						"scale": {
 							"min": 1,
-							"max": 5
+							"max": 5,
+							"disabled": false
 						},
 						"sink": {
 							"log": {}
@@ -896,9 +905,9 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 								"max": 5
 							},
 							"source": {
-							"generator": {
-								"rpu": 5,
-								"duration": "1s"
+								"generator": {
+									"rpu": 5,
+									"duration": "1s"
 								}
 							}
 						},
@@ -943,7 +952,8 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 							"name": "out",
 							"scale": {
 								"min": 1,
-								"max": 5
+								"max": 5,
+								"disabled": false
 							},
 							"sink": {
 								"log": {}
@@ -983,6 +993,7 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 			expectedSpecMap := map[string]interface{}{}
 			err = json.Unmarshal([]byte(tc.expectedPipelineSpec), &expectedSpecMap)
 			assert.NoError(t, err)
+			fmt.Printf("deletethis: resultPipeline spec=%+v\n", resultPipeline.Object["spec"])
 			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
 
 		})

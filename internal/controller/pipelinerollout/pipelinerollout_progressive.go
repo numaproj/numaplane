@@ -737,7 +737,7 @@ func scalePromotedPipelineToOriginalScale(
 					max = &maxInt
 				}
 				disabled := false
-				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) == true {
+				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) {
 					disabled = true
 				}
 
