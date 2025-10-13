@@ -621,7 +621,7 @@ func ApplyScaleValuesToPipelineDefinition(
 					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
 				}
 				if scaleDef.ScaleDefinition != nil {
-					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.disabled' to %d", scaleDef.ScaleDefinition.Disabled)
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.disabled' to %t", scaleDef.ScaleDefinition.Disabled)
 					if err = unstructured.SetNestedField(vertexAsMap, scaleDef.ScaleDefinition.Disabled, "scale", "disabled"); err != nil {
 						return err
 					}
