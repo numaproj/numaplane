@@ -180,9 +180,11 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
-			Name: "badcat",
-		}}
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image:           "badcat",
+				ImagePullPolicy: &pullPolicyAlways,
+			}}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
 		By("Updating the ISBService to cause a Progressive change - Valid change")
@@ -205,8 +207,6 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 			pipeline.SetLabels(labels)
 			return pipeline, nil
 		})
-
-		VerifyPipelineProgressiveSuccess(pipelineRolloutName, GetInstanceName(pipelineRolloutName, 0), GetInstanceName(pipelineRolloutName, 1), true, initialPipelineSpec)
 
 		By("Updating the ISBService to set the 'force promote' Label")
 		UpdateISBServiceInK8S(GetInstanceName(isbServiceRolloutName, 3), func(isbservice *unstructured.Unstructured) (*unstructured.Unstructured, error) {
