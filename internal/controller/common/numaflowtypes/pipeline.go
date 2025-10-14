@@ -725,9 +725,6 @@ func ApplyScaleValuesToLivePipeline(
 	verticesPatch = verticesPatch + "]"
 	numaLogger.WithValues("specPatch patch", verticesPatch).Debug("patching vertices")
 
-	fmt.Printf("deletethis: applying verticesPatch: %s\n", verticesPatch)
-	fmt.Printf("deletethis: original pipelineDef=%+v\n", pipelineDef)
-
 	err = kubernetes.PatchResource(ctx, c, pipelineDef, verticesPatch, k8stypes.JSONPatchType)
 	return err
 }
