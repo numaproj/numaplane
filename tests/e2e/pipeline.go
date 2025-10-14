@@ -680,3 +680,15 @@ func UpdatePipeline(pipelineRolloutName string, spec numaflowv1.PipelineSpec) {
 		return pipelineRollout, nil
 	})
 }
+
+func VerifyPipelineEvent(namespace, pipelineName, eventType string) {
+	CheckEventually(fmt.Sprintf("verifying Pipeline event type %s", eventType), func() bool {
+		events, err := kubeClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+			FieldSelector: fmt.Sprintf("involvedObject.name=%s,involvedObject.kind=Pipeline,type=%s", pipelineName, eventType),
+		})
+		if err != nil {
+			return false
+		}
+		return len(events.Items) > 0
+	}).Should(BeTrue())
+}

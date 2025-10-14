@@ -122,7 +122,8 @@ func (r *PipelineRolloutReconciler) Recycle(
 			if drained {
 				numaLogger.Info("Pipeline has been drained and will be deleted now")
 				err = kubernetes.DeleteResource(ctx, c, pipeline)
-				r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), true, metrics.LabelValueDrainResult_StandardDrain)
+				r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_StandardDrain)
+
 				return true, err
 			} // else implicitly fall through to force draining
 
@@ -151,6 +152,15 @@ func (r *PipelineRolloutReconciler) Recycle(
 		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
 	}
 
+}
+
+func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipelineRolloutName string, pipeline *unstructured.Unstructured, drainComplete bool, drainResult metrics.LabelValueDrainResult) {
+	r.customMetrics.IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipeline.GetName(), drainComplete, drainResult)
+	eventType := "Normal"
+	if !drainComplete {
+		eventType = "Warning"
+	}
+	r.recorder.Eventf(pipeline, eventType, string(drainResult), string(drainResult))
 }
 
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
@@ -212,17 +222,17 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		numaLogger.WithValues("paused", paused, "drained", drained).Infof("Pipeline has the promoted pipeline's spec and has paused, now deleting it")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		if drained {
-			r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), true, metrics.LabelValueDrainResult_ForceDrain)
+			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, true, metrics.LabelValueDrainResult_ForceDrain)
 		} else {
 			numaLogger.Debugf("Pipeline never drained, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
-			r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), false, metrics.LabelValueDrainResult_NeverDrained)
+			r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_NeverDrained)
 		}
 		return true, err
 	}
 	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
 		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		r.customMetrics.IncProgressivePipelineDrains(pipelineRollout.Namespace, pipelineRollout.Name, pipeline.GetName(), false, metrics.LabelValueDrainResult_PipelineFailed)
+		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
 		return true, err
 	}
 
