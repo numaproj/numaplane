@@ -70,6 +70,9 @@ type UpgradingMonoVertexStatus struct {
 	UpgradingPipelineTypeStatus `json:",inline"`
 
 	// OriginalScaleMinMax stores the original scale min and max values as JSON string
+	// Example: {"min":1,"max":10,"disabled":false}
+	// Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
+	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax string `json:"originalScaleMinMax"`
 }
 

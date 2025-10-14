@@ -710,7 +710,6 @@ func scaleMonoVertex(
 
 	scaleValue := scaleDefinitionToPatchString(scaleDefinition)
 	patchJson := fmt.Sprintf(`{"spec": {"scale": %s}}`, scaleValue)
-	fmt.Printf("deletethis: patchJson=%s\n", patchJson)
 	return kubernetes.PatchResource(ctx, c, monovertex, patchJson, k8stypes.MergePatchType)
 }
 

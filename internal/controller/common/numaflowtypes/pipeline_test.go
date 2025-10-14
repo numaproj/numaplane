@@ -822,8 +822,9 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 				{
 					VertexName: "in",
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: nil,
-						Max: nil,
+						Min:      nil,
+						Max:      nil,
+						Disabled: true,
 					},
 				},
 				{
@@ -851,7 +852,7 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 							"lookbackSeconds": 1,
 							"min": null,
 							"max": null,
-							"disabled": false
+							"disabled": true
 						},
 						"source": {
 							"generator": {
@@ -993,7 +994,6 @@ func Test_ApplyScaleValuesToLivePipeline(t *testing.T) {
 			expectedSpecMap := map[string]interface{}{}
 			err = json.Unmarshal([]byte(tc.expectedPipelineSpec), &expectedSpecMap)
 			assert.NoError(t, err)
-			fmt.Printf("deletethis: resultPipeline spec=%+v\n", resultPipeline.Object["spec"])
 			assert.True(t, util.CompareStructNumTypeAgnostic(expectedSpecMap, resultPipeline.Object["spec"]))
 
 		})

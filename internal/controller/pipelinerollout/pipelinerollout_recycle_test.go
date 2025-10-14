@@ -19,6 +19,7 @@ package pipelinerollout
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -473,7 +474,7 @@ func Test_Recycle(t *testing.T) {
 				},
 			},
 		},
-		/*{
+		{
 			name: "Progressive Replaced - second attempt (force drain) - new spec was applied - now scale it down before pausing",
 			// preconditions:
 			// - desiredPhase=Running, phase=Running, initialScale=matching pipelinerollout
@@ -570,7 +571,7 @@ func Test_Recycle(t *testing.T) {
 					},
 				},
 			},
-		},*/
+		},
 		{
 			name: "Progressive Replace Failed - no new promoted pipeline available to use so scale to zero",
 			// preconditions:
@@ -727,6 +728,8 @@ func Test_Recycle(t *testing.T) {
 				// If we didn't expect deletion, verify the pipeline was updated correctly
 				assert.NoError(t, err)
 				assert.NotNil(t, updatedPipeline)
+
+				fmt.Printf("deletethis: new pipelineDef=%+v\n", updatedPipeline.Spec)
 
 				if tc.expectedDesiredPhase != nil && *tc.expectedDesiredPhase == numaflowv1.PipelinePhasePaused {
 					// Verify desiredPhase was set correctly
