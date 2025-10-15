@@ -180,9 +180,11 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{Builtin: &numaflowv1.Function{
-			Name: "badcat",
-		}}
+		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{
+			Container: &numaflowv1.Container{
+				Image:           "badcat",
+				ImagePullPolicy: &pullPolicyAlways,
+			}}
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
 		By("Updating the ISBService to cause a Progressive change - Valid change")

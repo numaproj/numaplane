@@ -7,15 +7,16 @@ import (
 	"testing"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
-	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 var (
@@ -1118,8 +1119,9 @@ func Test_CheckPipelineScaledToZero(t *testing.T) {
 							"max": 0
 						},
 						"udf": {
-							"builtin": {
-								"name": "cat"
+							"container": {
+								"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+								"imagePullPolicy": "Always,"
 							}
 						}
 					},
@@ -1162,8 +1164,9 @@ func Test_CheckPipelineScaledToZero(t *testing.T) {
 							"max": 3
 						},
 						"udf": {
-							"builtin": {
-								"name": "cat"
+							"container": {
+								"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+								"imagePullPolicy": "Always,"
 							}
 						}
 					},
@@ -1202,8 +1205,9 @@ func Test_CheckPipelineScaledToZero(t *testing.T) {
 					{
 						"name": "cat",
 						"udf": {
-							"builtin": {
-								"name": "cat"
+							"container": {
+								"image": "quay.io/numaio/numaflow-go/map-cat:stable",
+								"imagePullPolicy": "Always,"
 							}
 						}
 					}
