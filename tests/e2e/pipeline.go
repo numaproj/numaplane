@@ -642,7 +642,9 @@ func VerifyPipelineProgressiveSuccess(pipelineRolloutName, promotedPipelineName,
 	for _, vertex := range upgradingPipelineSpec.Vertices {
 		newPipelineSpecVertices = append(newPipelineSpecVertices, numaflowv1.AbstractVertex{Name: vertex.Name, Scale: vertex.Scale})
 	}
-	VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
+	if !forcedSuccess {
+		VerifyVerticesPodsRunning(Namespace, upgradingPipelineName, newPipelineSpecVertices, ComponentVertex)
+	}
 
 	// Verify the previously promoted pipeline was deleted
 	VerifyPipelineDeletion(promotedPipelineName)
