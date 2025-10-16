@@ -107,14 +107,17 @@ type UpgradingPipelineStatus struct {
 	InterStepBufferServiceName string `json:"interStepBufferServiceName,omitempty"`
 
 	// OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
-	//OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
+	// Example: {"min":1,"max":10,"disabled":false}
+	// Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
+	// If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
 	OriginalScaleMinMax []VertexScaleDefinition `json:"originalScaleMinMax,omitempty"`
 }
 
 // ScaleDefinition is a struct to encapsulate scale values (can be used for a Vertex)
 type ScaleDefinition struct {
-	Min *int64 `json:"min,omitempty"`
-	Max *int64 `json:"max,omitempty"`
+	Min      *int64 `json:"min,omitempty"`
+	Max      *int64 `json:"max,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
 }
 
 // VertexScaleDefinition is a struct to encapsulate the scale values for a given vertex

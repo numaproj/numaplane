@@ -164,6 +164,9 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		updatePipeline(&initialPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{1, 2})
+
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 1), "Normal")
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 2), "Normal")
 	})
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
@@ -174,6 +177,10 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		updatePipeline(updatedPipelineSpec)
 
 		verifyPipelinesPausingWithValidSpecAndDeleted([]int{0, 3, 4})
+
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 0), "Normal")
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 3), "Normal")
+		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 4), "Normal")
 	})
 
 	It("Should Delete Rollouts", func() {
@@ -221,10 +228,10 @@ func updateToFailedPipelines() {
 
 func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 
-	forceAppliedSpecPausing := map[int]bool{}
+	pausingWithCorrectSpec := map[int]bool{}
 
 	for _, pipelineIndex := range pipelineIndices {
-		forceAppliedSpecPausing[pipelineIndex] = false
+		pausingWithCorrectSpec[pipelineIndex] = false
 	}
 
 	CheckEventually(fmt.Sprintf("Verifying that the failed Pipeline(s) (%v) have spec overridden", pipelineIndices), func() bool {
@@ -241,7 +248,7 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				return false
 			}
 
-			if !forceAppliedSpecPausing[pipelineIndex] &&
+			if !pausingWithCorrectSpec[pipelineIndex] &&
 				retrievedPipelineSpec.Vertices[1].UDF != nil && retrievedPipelineSpec.Vertices[1].UDF.Container != nil &&
 				retrievedPipelineSpec.Vertices[1].UDF.Container.Image == validImagePath &&
 				retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused &&
@@ -249,26 +256,28 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				// just the latter would be a better check, but sometimes the test isn't quick enough to catch it before the pipeline is deleted
 				(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePausing ||
 					(retrievedPipelineStatus.Phase == numaflowv1.PipelinePhasePaused && retrievedPipelineStatus.DrainedOnPause)) {
-				forceAppliedSpecPausing[pipelineIndex] = true
-				By(fmt.Sprintf("setting forceAppliedSpecPausing for index %d\n", pipelineIndex))
+				pausingWithCorrectSpec[pipelineIndex] = true
+				By(fmt.Sprintf("setting pausingWithCorrectSpec for index %d\n", pipelineIndex))
 			}
 
 		}
 
 		// check if all Pipelines have met the criteria
 		for _, pipelineIndex := range pipelineIndices {
-			if !forceAppliedSpecPausing[pipelineIndex] {
+			if !pausingWithCorrectSpec[pipelineIndex] {
 				return false
 			}
+
 		}
 		return true
 
-	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", forceAppliedSpecPausing))
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("Pipelines weren't both drainedOnPause=true: %v", pausingWithCorrectSpec))
 
 	// verify that pipelines are deleted
 	for _, pipelineIndex := range pipelineIndices {
 		VerifyPipelineDeletion(GetInstanceName(pipelineRolloutName, pipelineIndex))
 	}
+
 }
 
 func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {

@@ -284,7 +284,8 @@ func PipelineWithoutDesiredPhase(pipeline *unstructured.Unstructured) {
 	}
 }
 
-func PipelineWithoutScaleMinMax(pipeline map[string]interface{}) error {
+// extract fields from the Pipeline within "scale" that are manipulated by the platform
+func PipelineWithoutScaleFields(pipeline map[string]interface{}) error {
 	// for each Vertex, remove the scale min and max:
 	vertices, _, _ := unstructured.NestedSlice(pipeline, "spec", "vertices")
 
@@ -294,6 +295,7 @@ func PipelineWithoutScaleMinMax(pipeline map[string]interface{}) error {
 
 			unstructured.RemoveNestedField(vertexAsMap, "scale", "min")
 			unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
+			unstructured.RemoveNestedField(vertexAsMap, "scale", "disabled")
 
 			// if "scale" is there and empty, remove it
 			scaleMap, found := vertexAsMap["scale"].(map[string]interface{})
@@ -529,7 +531,7 @@ func ScalePipelineVerticesToZero(
 	if !allVerticesScaledDown {
 		zero := int64(0)
 		for i := range vertexScaleDefinitions {
-			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero}
+			vertexScaleDefinitions[i].ScaleDefinition = &apiv1.ScaleDefinition{Min: &zero, Max: &zero, Disabled: false}
 		}
 
 		numaLogger.Debug("Scaling down all vertices to 0 Pods")
@@ -618,6 +620,12 @@ func ApplyScaleValuesToPipelineDefinition(
 				} else {
 					unstructured.RemoveNestedField(vertexAsMap, "scale", "max")
 				}
+				if scaleDef.ScaleDefinition != nil {
+					numaLogger.WithValues("vertex", vertexName).Debugf("setting field 'scale.disabled' to %t", scaleDef.ScaleDefinition.Disabled)
+					if err = unstructured.SetNestedField(vertexAsMap, scaleDef.ScaleDefinition.Disabled, "scale", "disabled"); err != nil {
+						return err
+					}
+				}
 				vertexDefinitions[index] = vertexAsMap
 			}
 		}
@@ -696,6 +704,19 @@ func ApplyScaleValuesToLivePipeline(
 			"value": %s
 		},`, existingIndex, maxStr)
 		verticesPatch = verticesPatch + vertexPatch
+
+		disabled := false
+		if vertexScale.ScaleDefinition != nil && vertexScale.ScaleDefinition.Disabled {
+			disabled = true
+		}
+		vertexPatch = fmt.Sprintf(`
+		{
+			"op": "add",
+			"path": "/spec/vertices/%d/scale/disabled",
+			"value": %t
+		},`, existingIndex, disabled)
+		verticesPatch = verticesPatch + vertexPatch
+
 	}
 	// remove terminating comma
 	if verticesPatch[len(verticesPatch)-1] == ',' {

@@ -46,7 +46,7 @@ var (
 	zeroReplicaSleepSec = uint32(15)
 
 	monoVertexScaleTo               = int64(2)
-	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
+	monoVertexScaleMinMaxJSONString = fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", monoVertexScaleMax, monoVertexScaleMin)
 	monovertexSinkBadImage          = "quay.io/numaio/numaflow-go/sink-log-failure:stable"
 
 	defaultStrategyForSuccessCase = apiv1.PipelineTypeRolloutStrategy{

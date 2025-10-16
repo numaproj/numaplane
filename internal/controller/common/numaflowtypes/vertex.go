@@ -49,6 +49,10 @@ func ExtractScaleMinMax(object map[string]any, pathToScale []string) (*apiv1.Sca
 		}
 		scaleMinMax.Max = &max
 	}
+	disabledInterface := scaleDef["disabled"]
+	if disabledInterface != nil && disabledInterface.(bool) {
+		scaleMinMax.Disabled = true
+	}
 
 	return &scaleMinMax, nil
 }

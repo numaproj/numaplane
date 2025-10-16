@@ -820,8 +820,11 @@ spec:
                         description: Name of the upgrading child
                         type: string
                       originalScaleMinMax:
-                        description: OriginalScaleMinMax stores the original scale
-                          min and max values as JSON string
+                        description: |-
+                          OriginalScaleMinMax stores the original scale min and max values as JSON string
+                          Example: {"min":1,"max":10,"disabled":false}
+                          Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
+                          If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
                         type: string
                       riders:
                         description: Riders stores the list of Riders that have been
@@ -1795,7 +1798,9 @@ spec:
                       originalScaleMinMax:
                         description: |-
                           OriginalScaleMinMax stores for each vertex, the original scale min and max values as JSON string
-                          OriginalScaleMinMax []VertexScale `json:"originalScaleMinMax,omitempty"`
+                          Example: {"min":1,"max":10,"disabled":false}
+                          Note 'disabled' is a field in numaflow used to represent if scaling is performed by numaflow.
+                          If 'disabled==true", then "min" and "max" probably wouldn't be set, and if they are they'll be ignored.
                         items:
                           description: VertexScaleDefinition is a struct to encapsulate
                             the scale values for a given vertex
@@ -1804,6 +1809,8 @@ spec:
                               description: ScaleDefinition is a struct to encapsulate
                                 scale values (can be used for a Vertex)
                               properties:
+                                disabled:
+                                  type: boolean
                                 max:
                                   format: int64
                                   type: integer

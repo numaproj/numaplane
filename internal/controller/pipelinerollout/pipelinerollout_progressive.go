@@ -199,11 +199,11 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 		return false, fmt.Errorf("failed to deep copy requiredSpec: %w", err)
 	}
 
-	err := numaflowtypes.PipelineWithoutScaleMinMax(pipelineCopy.Object)
+	err := numaflowtypes.PipelineWithoutScaleFields(pipelineCopy.Object)
 	if err != nil {
 		return false, err
 	}
-	err = numaflowtypes.PipelineWithoutScaleMinMax(requiredSpecCopy)
+	err = numaflowtypes.PipelineWithoutScaleFields(requiredSpecCopy)
 	if err != nil {
 		return false, err
 	}
@@ -311,8 +311,9 @@ func (r *PipelineRolloutReconciler) ProcessPromotedChildPostUpgrade(
 		vertexScaleDefinitions = append(vertexScaleDefinitions, apiv1.VertexScaleDefinition{
 			VertexName: vertexName,
 			ScaleDefinition: &apiv1.ScaleDefinition{
-				Min: &vertexScaleValues.ScaleTo,
-				Max: &vertexScaleValues.ScaleTo,
+				Min:      &vertexScaleValues.ScaleTo,
+				Max:      &vertexScaleValues.ScaleTo,
+				Disabled: false,
 			},
 		})
 	}
@@ -735,12 +736,17 @@ func scalePromotedPipelineToOriginalScale(
 					maxInt := int64(scaleAsMap["max"].(float64))
 					max = &maxInt
 				}
+				disabled := false
+				if scaleAsMap["disabled"] != nil && scaleAsMap["disabled"].(bool) {
+					disabled = true
+				}
 
 				vertexScaleDefinitions[vertexIndex] = apiv1.VertexScaleDefinition{
 					VertexName: vertexName,
 					ScaleDefinition: &apiv1.ScaleDefinition{
-						Min: min,
-						Max: max,
+						Min:      min,
+						Max:      max,
+						Disabled: disabled,
 					},
 				}
 			}

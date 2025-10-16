@@ -153,7 +153,7 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 			return nil, err
 		}
 
-		excludedPaths := []string{"replicas", "scale.min", "scale.max"}
+		excludedPaths := []string{"replicas", "scale.min", "scale.max", "scale.disabled"}
 		util.RemovePaths(specAsMap, excludedPaths, ".")
 
 		// if "scale" is there and empty, remove it
@@ -277,7 +277,7 @@ func (r *MonoVertexRolloutReconciler) ProcessPromotedChildPostUpgrade(
 
 	// There is only one key-value on this map, so we can just iterate over it instead of having to pass the promotedChild name to this func
 	for _, scaleValue := range monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus.ScaleValues {
-		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo}, c); err != nil {
+		if err := scaleMonoVertex(ctx, promotedMonoVertexDef, &apiv1.ScaleDefinition{Min: &scaleValue.ScaleTo, Max: &scaleValue.ScaleTo, Disabled: false}, c); err != nil {
 			return true, fmt.Errorf("error scaling the existing promoted monovertex to the desired scale values: %w", err)
 		}
 
@@ -481,6 +481,11 @@ func scaleDownUpgradingMonoVertex(
 		}
 
 		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, upgradingChildScaleTo, "spec", "scale", "max")
+		if err != nil {
+			return err
+		}
+
+		err = unstructured.SetNestedField(upgradingMonoVertexDef.Object, false, "spec", "scale", "disabled")
 		if err != nil {
 			return err
 		}
@@ -712,14 +717,18 @@ func scaleDefinitionToPatchString(scaleDefinition *apiv1.ScaleDefinition) string
 	var scaleValue string
 	if scaleDefinition == nil {
 		scaleValue = "null"
-	} else if scaleDefinition.Min != nil && scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": %d}`, *scaleDefinition.Min, *scaleDefinition.Max)
-	} else if scaleDefinition.Min != nil {
-		scaleValue = fmt.Sprintf(`{"min": %d, "max": null}`, *scaleDefinition.Min)
-	} else if scaleDefinition.Max != nil {
-		scaleValue = fmt.Sprintf(`{"min": null, "max": %d}`, *scaleDefinition.Max)
 	} else {
-		scaleValue = `{"min": null, "max": null}`
+		minStr := "null"
+		maxStr := "null"
+		if scaleDefinition.Min != nil {
+			minStr = fmt.Sprintf(`%d`, *scaleDefinition.Min)
+		}
+		if scaleDefinition.Max != nil {
+			maxStr = fmt.Sprintf(`%d`, *scaleDefinition.Max)
+		}
+
+		scaleValue = fmt.Sprintf(`{"min": %s, "max": %s, "disabled": %t}`, minStr, maxStr, scaleDefinition.Disabled)
+
 	}
 	return scaleValue
 }

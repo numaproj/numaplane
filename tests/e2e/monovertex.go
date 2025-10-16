@@ -449,7 +449,7 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 		expectedPipelineTypeProgressiveStatusInProgress, expectedPipelineTypeProgressiveStatusOnDone := MakeExpectedPipelineTypeProgressiveStatus(
 			GetInstanceName(name, currentMonoVertexRolloutIndex), GetInstanceName(name, currentMonoVertexRolloutIndex+1), GetInstanceName(name, currentMonoVertexRolloutIndex),
 			int64(monoVertexScaleTo),
-			fmt.Sprintf("{\"max\":%d,\"min\":%d}", origMax, origMin),
+			fmt.Sprintf("{\"disabled\":null,\"max\":%d,\"min\":%d}", origMax, origMin),
 			apiv1.AssessmentResultUnknown, apiv1.AssessmentResultSuccess,
 		)
 
