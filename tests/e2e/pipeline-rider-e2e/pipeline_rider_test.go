@@ -35,28 +35,24 @@ import (
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
-func TestRiderE2E(t *testing.T) {
+func TestPipelineRiderE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	BeforeSuite(func() {
 		BeforeSuiteSetup()
 	})
 
-	RunSpecs(t, "Rider E2E Suite")
+	RunSpecs(t, "Pipeline Rider E2E Suite")
 }
 
 const (
-	monoVertexRolloutName = "test-monovertex-rollout"
 	isbServiceRolloutName = "test-isbservice-rollout"
 	pipelineRolloutName   = "test-pipeline-rollout"
 )
 
 var (
-	pullPolicyAlways           = corev1.PullAlways
-	monoVertexIndex            = 0
-	pipelineIndex              = 0
-	monoVertexSpecWithoutRider numaflowv1.MonoVertexSpec
-	monoVertexSpecWithRider    numaflowv1.MonoVertexSpec
+	pullPolicyAlways = corev1.PullAlways
+	pipelineIndex    = 0
 
 	defaultConfigMap = corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -70,7 +66,6 @@ var (
 			"my-key": "my-value",
 		},
 	}
-	currentConfigMap = &defaultConfigMap
 
 	initialJetstreamVersion = "2.10.17"
 	volSize, _              = apiresource.ParseQuantity("10Mi")
@@ -112,40 +107,6 @@ var (
 )
 
 func init() {
-	monoVertexSpecWithoutRider = numaflowv1.MonoVertexSpec{
-		Source: &numaflowv1.Source{
-			UDSource: &numaflowv1.UDSource{
-				Container: &numaflowv1.Container{
-					Image: "quay.io/numaio/numaflow-rs/simple-source:stable",
-				},
-			},
-		},
-		Sink: &numaflowv1.Sink{
-			AbstractSink: numaflowv1.AbstractSink{
-				Blackhole: &numaflowv1.Blackhole{},
-			},
-		},
-	}
-
-	monoVertexSpecWithRider = *monoVertexSpecWithoutRider.DeepCopy()
-	monoVertexSpecWithRider.Volumes = []corev1.Volume{
-		{
-			Name: "volume",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "my-configmap-{{.monovertex-name}}",
-					},
-				},
-			},
-		},
-	}
-	monoVertexSpecWithRider.Source.UDSource.Container.VolumeMounts = []corev1.VolumeMount{
-		{
-			Name:      "volume",
-			MountPath: "/etc/config",
-		},
-	}
 
 	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
@@ -194,85 +155,7 @@ func init() {
 
 }
 
-var _ = Describe("Rider E2E", Serial, func() {
-
-	It("Should create NumaflowControllerRollout and MonoVertexRollout", func() {
-		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, monoVertexSpecWithoutRider, nil)
-	})
-
-	It("Should add ConfigMap Rider to MonoVertexRollout", func() {
-
-		// Add ConfigMap Rider and update MonoVertex spec to use it
-		rawMVSpec, err := json.Marshal(monoVertexSpecWithRider)
-		Expect(err).ShouldNot(HaveOccurred())
-		rawConfigMapSpec, err := json.Marshal(defaultConfigMap)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// update the MonoVertexRollout
-		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			rollout.Spec.MonoVertex.Spec.Raw = rawMVSpec
-
-			rollout.Spec.Riders = []apiv1.Rider{
-				{
-					Progressive: true,
-					Definition:  runtime.RawExtension{Raw: rawConfigMapSpec},
-				},
-			}
-			return rollout, nil
-		})
-
-		// verify ConfigMap is created
-		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
-		// ConfigMap is named with the monovertex name as the suffix
-		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-	})
-
-	It("Should update the ConfigMap Rider", func() {
-		// Update ConfigMap to add a new key/value pair
-		currentConfigMap = currentConfigMap.DeepCopy()
-		currentConfigMap.Data["my-key-2"] = "my-value-2"
-		rawConfigMapSpec, err := json.Marshal(currentConfigMap)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			rollout.Spec.Riders[0].Definition = runtime.RawExtension{Raw: rawConfigMapSpec}
-			return rollout, nil
-		})
-
-		monoVertexIndex++
-
-		// Verify that this caused a Progressive upgrade and generated a new ConfigMap
-		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
-		// ConfigMap is named with the monovertex name as the suffix
-		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-
-		// Now verify that with the Progressive upgrade, the original MonoVertex and
-		// ConfigMap get cleaned up
-		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex-1)
-		originalConfigMap := fmt.Sprintf("my-configmap-%s", mvOriginalName)
-		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
-	})
-
-	It("Should delete the ConfigMap Rider", func() {
-		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
-			rollout.Spec.Riders = []apiv1.Rider{}
-			return rollout, nil
-		})
-
-		// Confirm the ConfigMap was deleted (but the monovertex is still present)
-		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
-		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
-	})
-
-	It("Should delete the MonoVertexRollout and child MonoVertex", func() {
-		DeleteMonoVertexRollout(monoVertexRolloutName)
-	})
+var _ = Describe("Pipeline Rider E2E", Serial, func() {
 
 	It("Should create the ISBServiceRollout", func() {
 		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
