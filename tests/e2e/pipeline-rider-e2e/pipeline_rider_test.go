@@ -144,11 +144,9 @@ func init() {
 
 var _ = Describe("Pipeline Rider E2E", Serial, func() {
 
-	It("Should create the ISBServiceRollout", func() {
+	It("Should create NumaflowControllerRollout, ISBServiceRollout, and PipelineRollout", func() {
+		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
-	})
-
-	It("Should create the PipelineRollout", func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
 	})
 
@@ -230,12 +228,9 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		}
 	})
 
-	It("Should delete the PipelineRollout and ISBServiceRollout", func() {
+	It("Should delete the PipelineRollout, ISBServiceRollout and NumaflowControllerRollout", func() {
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteISBServiceRollout(isbServiceRolloutName)
-	})
-
-	It("Should delete the NumaflowControllerRollout", func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
