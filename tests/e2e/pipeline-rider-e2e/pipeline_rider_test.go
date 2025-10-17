@@ -54,19 +54,6 @@ var (
 	pullPolicyAlways = corev1.PullAlways
 	pipelineIndex    = 0
 
-	defaultConfigMap = corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-configmap",
-		},
-		Data: map[string]string{
-			"my-key": "my-value",
-		},
-	}
-
 	initialJetstreamVersion = "2.10.17"
 	volSize, _              = apiresource.ParseQuantity("10Mi")
 	isbServiceSpec          = numaflowv1.InterStepBufferServiceSpec{

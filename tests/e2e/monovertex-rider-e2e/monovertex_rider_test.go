@@ -48,7 +48,6 @@ const (
 )
 
 var (
-	pullPolicyAlways           = corev1.PullAlways
 	monoVertexIndex            = 0
 	monoVertexSpecWithoutRider numaflowv1.MonoVertexSpec
 	monoVertexSpecWithRider    numaflowv1.MonoVertexSpec
