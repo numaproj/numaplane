@@ -150,7 +150,8 @@ test-progressive-monovertex-e2e:
 test-progressive-pipeline-e2e:
 test-progressive-analysis-monovertex-e2e:
 test-progressive-analysis-pipeline-e2e:
-test-rider-e2e:
+test-pipeline-rider-e2e:
+test-monovertex-rider-e2e:
 test-rollback-e2e:
 test-force-drain-e2e:
 test-no-drain-e2e:
