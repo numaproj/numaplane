@@ -174,7 +174,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 
 			rollout.Spec.Riders = []apiv1.Rider{
 				{
-					Progressive: false,
+					Progressive: true,
 					Definition:  runtime.RawExtension{Raw: rawConfigMapSpec},
 				},
 			}
@@ -197,7 +197,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 		// update the MonoVertexRollout to include both riders
 		UpdateMonoVertexRolloutInK8S(monoVertexRolloutName, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 			rollout.Spec.Riders = append(rollout.Spec.Riders, apiv1.Rider{
-				Progressive: true,
+				Progressive: false,
 				Definition:  runtime.RawExtension{Raw: rawHPASpec},
 			})
 
