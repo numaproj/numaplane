@@ -33,6 +33,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +46,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -194,7 +196,17 @@ func (r *NumaflowControllerReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 func (r *NumaflowControllerReconciler) needsUpdate(old, new *apiv1.NumaflowController) bool {
-	return old == nil
+	if old == nil {
+		return true
+	}
+
+	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
+	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+		return true
+	}
+
+	return false
 }
 
 // reconcile does the real logic
@@ -215,11 +227,19 @@ func (r *NumaflowControllerReconciler) reconcile(
 	}()
 
 	if !controller.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
+			controllerutil.RemoveFinalizer(controller, common.FinalizerName)
+		}
 		r.recorder.Eventf(controller, corev1.EventTypeNormal, "Deleting", "Deleting NumaflowController")
 		// generate the metrics for the numaflow controller deletion
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerNumaflowController, "delete").Observe(time.Since(syncStartTime).Seconds())
 		r.customMetrics.DeleteNumaflowControllersHealth(controller.Namespace, controller.Name)
 		return ctrl.Result{}, nil
+	}
+
+	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
+	if !controllerutil.ContainsFinalizer(controller, common.FinalizerName) {
+		controllerutil.AddFinalizer(controller, common.FinalizerName)
 	}
 
 	_, deploymentExists, err := r.getNumaflowControllerDeployment(ctx, controller)
