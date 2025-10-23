@@ -165,10 +165,9 @@ func (r *NumaflowControllerRolloutReconciler) Reconcile(ctx context.Context, req
 			r.ErrorHandler(ctx, numaflowControllerRollout, statusUpdateErr, "UpdateStatusFailed", "Failed to update status of NumaflowControllerRollout")
 			return ctrl.Result{}, statusUpdateErr
 		}
+		// generate the metrics for the numaflow controller rollout only if it is not being deleted.
+		r.customMetrics.NumaflowControllerRolloutsRunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
 	}
-
-	// generate metrics for NumaflowControllerRollout.
-	r.customMetrics.NumaflowControllerRolloutsRunning.WithLabelValues(numaflowControllerRollout.Name, numaflowControllerRollout.Namespace, numaflowControllerRollout.Spec.Controller.Version).Set(1)
 
 	r.recorder.Eventf(numaflowControllerRollout, corev1.EventTypeNormal, "ReconcilationSuccessful", "Reconciliation successful")
 	numaLogger.Debug("reconciliation successful")
