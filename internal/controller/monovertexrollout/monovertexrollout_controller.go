@@ -24,6 +24,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,6 +36,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -198,11 +200,19 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 	// Update metrics if monoVertexRollout is being deleted
 	if !monoVertexRollout.DeletionTimestamp.IsZero() {
 		numaLogger.Info("Deleting MonoVertexRollout")
+		if controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+			controllerutil.RemoveFinalizer(monoVertexRollout, common.FinalizerName)
+		}
 		// generate metrics for MonoVertex deletion
 		r.customMetrics.DecMonoVertexRollouts(monoVertexRollout.Name, monoVertexRollout.Namespace)
 		r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "delete").Observe(time.Since(startTime).Seconds())
 		r.customMetrics.DeleteMonoVerticesRolloutHealth(monoVertexRollout.Namespace, monoVertexRollout.Name)
 		return ctrl.Result{}, nil
+	}
+
+	// add Finalizer so we can ensure that we take appropriate action when CRD is deleted
+	if !controllerutil.ContainsFinalizer(monoVertexRollout, common.FinalizerName) {
+		controllerutil.AddFinalizer(monoVertexRollout, common.FinalizerName)
 	}
 
 	// check if there's a promoted monovertex yet
@@ -599,7 +609,17 @@ func performCustomResumeMod(
 }
 
 func (r *MonoVertexRolloutReconciler) needsUpdate(old, new *apiv1.MonoVertexRollout) bool {
-	return old == nil
+	if old == nil {
+		return true
+	}
+
+	// check for any fields we might update in the Spec - generally we'd only update a Finalizer or maybe something in the metadata
+	// TODO: we would need to update this if we ever add anything else, like a label or annotation - unless there's a generic check that makes sense
+	if !equality.Semantic.DeepEqual(old.Finalizers, new.Finalizers) {
+		return true
+	}
+
+	return false
 }
 
 func (r *MonoVertexRolloutReconciler) updateMonoVertexRolloutStatus(ctx context.Context, monoVertexRollout *apiv1.MonoVertexRollout) error {
