@@ -120,6 +120,9 @@ type PipelineConfig struct {
 	// Note that the Pipeline's pauseGracePeriodSeconds will be multiplied by the inverse fraction.
 	// If not defined, default to 50
 	RecycleScaleFactor *int32 `json:"recycleScaleFactor,omitempty"`
+	// ForceDrainFailureWaitDuration is the duration to wait after a force drain failure before deleting.
+	// If not defined, default to 15 seconds
+	ForceDrainFailureWaitDuration *int32 `json:"forceDrainFailureWaitDuration,omitempty"`
 }
 
 type ProgressiveConfig struct {

@@ -155,6 +155,8 @@ const (
 	// (if not, it is safe to delete without needing to drain it first)
 	AnnotationKeyRequiresDrain = KeyNumaplanePrefix + "requires-drain"
 
+	AnnotationKeyForceDrainFailureStartTime = KeyNumaplanePrefix + "force-drain-failure-start-time"
+
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
 

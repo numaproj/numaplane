@@ -6,8 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -16,9 +21,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Recycle deletes child; returns true if it was in fact deleted
@@ -229,11 +231,31 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		}
 		return true, err
 	}
-	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
-		err = kubernetes.DeleteResource(ctx, c, pipeline)
-		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
-		return true, err
+	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
+	if failed {
+		currentTime := time.Now()
+		if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
+			pipeline.SetAnnotations(map[string]string{common.AnnotationKeyForceDrainFailureStartTime: currentTime.Format(time.RFC3339)})
+			if err = kubernetes.UpdateResource(ctx, c, pipeline); err != nil {
+				return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+			}
+		} else {
+			// check if we've waited long enough
+			startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime])
+			if err != nil {
+				return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
+			}
+			waitDurationSeconds := getForceDrainFailureWaitDuration()
+			if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
+				numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
+				return false, nil
+			} else {
+				numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
+				err = kubernetes.DeleteResource(ctx, c, pipeline)
+				r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
+				return true, err
+			}
+		}
 	}
 
 	return false, nil
@@ -588,4 +610,12 @@ func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
 func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
 	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
 	return found
+}
+
+func getForceDrainFailureWaitDuration() int32 {
+	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
+		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
+	}
+	return 15
 }
