@@ -168,19 +168,11 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
 // The new spec will enable it to drain.
 // Then pause it.
-func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
-	// the pipeline whose spec will be updated
-	pipeline *unstructured.Unstructured,
-	// the definition of the pipeline whose spec will be used
-	promotedPipeline *unstructured.Unstructured,
-	// the PipelineRollout parent
-	pipelineRollout *apiv1.PipelineRollout,
-	// this function may be called multiple times
-	// if originalSpec is true, we still need to update the spec
-	// if false, just continue with the remaining process
-	originalSpec bool,
-	c client.Client,
-) (bool, error) {
+// pipeline: the pipeline whose spec will be updated
+// promotedPipeline: the definition of the pipeline whose spec will be used
+// pipelineRollout: the PipelineRollout parent
+// originalSpec: this function may be called multiple times, if originalSpec is true, we still need to update the spec, if false, just continue with the remaining process
+func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context, pipeline, promotedPipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout, originalSpec bool, c client.Client) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// if we still have the original spec, we need to update with the promoted pipeline's spec
@@ -233,16 +225,16 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	}
 	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
 	if failed {
-		return r.checkForPipelineTransientFailures(ctx, c, pipelineRollout, pipeline)
+		return r.checkForFailedPipeline(ctx, c, pipelineRollout, pipeline)
 	}
 
 	return false, nil
 }
 
-// checkForPipelineTransientFailures checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
+// checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
 // if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
 // decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
-func (r *PipelineRolloutReconciler) checkForPipelineTransientFailures(ctx context.Context, c client.Client,
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client,
 	pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured) (bool, error) {
 
 	numaLogger := logger.FromContext(ctx)
@@ -297,16 +289,10 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 // Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
 // (it will be set to Paused later)
-func forceApplySpecOnUndrainablePipeline(
-	ctx context.Context,
-	// the pipeline that will be updated
-	currentPipeline *unstructured.Unstructured,
-	// spec from the new pipeline which will be applied
-	newPipeline *unstructured.Unstructured,
-	c client.Client) error {
-
+// currentPipeline: the pipeline that will be updated
+// newPipeline: spec from the new pipeline which will be applied
+func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, newPipeline *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx)
-
 	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
 	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
