@@ -169,15 +169,15 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 // The new spec will enable it to drain.
 // Then pause it.
 func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
-// the pipeline whose spec will be updated
+	// the pipeline whose spec will be updated
 	pipeline *unstructured.Unstructured,
-// the definition of the pipeline whose spec will be used
+	// the definition of the pipeline whose spec will be used
 	promotedPipeline *unstructured.Unstructured,
-// the PipelineRollout parent
+	// the PipelineRollout parent
 	pipelineRollout *apiv1.PipelineRollout,
-// this function may be called multiple times
-// if originalSpec is true, we still need to update the spec
-// if false, just continue with the remaining process
+	// this function may be called multiple times
+	// if originalSpec is true, we still need to update the spec
+	// if false, just continue with the remaining process
 	originalSpec bool,
 	c client.Client,
 ) (bool, error) {
@@ -299,9 +299,9 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 // (it will be set to Paused later)
 func forceApplySpecOnUndrainablePipeline(
 	ctx context.Context,
-// the pipeline that will be updated
+	// the pipeline that will be updated
 	currentPipeline *unstructured.Unstructured,
-// spec from the new pipeline which will be applied
+	// spec from the new pipeline which will be applied
 	newPipeline *unstructured.Unstructured,
 	c client.Client) error {
 
