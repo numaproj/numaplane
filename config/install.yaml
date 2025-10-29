@@ -2639,7 +2639,7 @@ subjects:
 ---
 apiVersion: v1
 data:
-  config.yaml: |
+  config.yaml: |-
     # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
     logLevel: INFO
     includedResources: "group=apps,kind=Deployment;\
@@ -2656,6 +2656,8 @@ data:
           schedule: "0,0,0,10"
       analysisRunTimeout: 1200
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
+    pipeline:
+      forceDrainFailureWaitDuration: 15
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config

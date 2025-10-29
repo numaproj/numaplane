@@ -20,3 +20,5 @@ data:
           schedule: "0,0,0,10"
       analysisRunTimeout: 1200
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
+    pipeline:
+      forceDrainFailureWaitDuration: 15

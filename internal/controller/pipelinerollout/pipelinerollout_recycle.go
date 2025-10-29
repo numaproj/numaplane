@@ -6,8 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -16,9 +21,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Recycle deletes child; returns true if it was in fact deleted
@@ -166,19 +168,11 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
 // The new spec will enable it to drain.
 // Then pause it.
-func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
-	// the pipeline whose spec will be updated
-	pipeline *unstructured.Unstructured,
-	// the definition of the pipeline whose spec will be used
-	promotedPipeline *unstructured.Unstructured,
-	// the PipelineRollout parent
-	pipelineRollout *apiv1.PipelineRollout,
-	// this function may be called multiple times
-	// if originalSpec is true, we still need to update the spec
-	// if false, just continue with the remaining process
-	originalSpec bool,
-	c client.Client,
-) (bool, error) {
+// pipeline: the pipeline whose spec will be updated
+// promotedPipeline: the definition of the pipeline whose spec will be used
+// pipelineRollout: the PipelineRollout parent
+// originalSpec: this function may be called multiple times, if originalSpec is true, we still need to update the spec, if false, just continue with the remaining process
+func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context, pipeline, promotedPipeline *unstructured.Unstructured, pipelineRollout *apiv1.PipelineRollout, originalSpec bool, c client.Client) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	// if we still have the original spec, we need to update with the promoted pipeline's spec
@@ -229,14 +223,45 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		}
 		return true, err
 	}
-	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
+	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
+	if failed {
+		return r.checkForFailedPipeline(ctx, c, pipelineRollout, pipeline)
+	}
+
+	return false, nil
+}
+
+// checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
+// if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
+// decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client,
+	pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+	currentTime := time.Now()
+	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
+		patchJson := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "%s"}}}`, common.AnnotationKeyForceDrainFailureStartTime, currentTime.Format(time.RFC3339))
+		if err := kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType); err != nil {
+			return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		return false, nil
+	}
+
+	// check if we've waited long enough
+	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	waitDurationSeconds := getForceDrainFailureWaitDuration()
+	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
+		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
+		return false, nil
+	} else {
+		numaLogger.WithValues("failed", true).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
 		return true, err
 	}
-
-	return false, nil
 }
 
 // if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
@@ -264,16 +289,10 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 // Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
 // (it will be set to Paused later)
-func forceApplySpecOnUndrainablePipeline(
-	ctx context.Context,
-	// the pipeline that will be updated
-	currentPipeline *unstructured.Unstructured,
-	// spec from the new pipeline which will be applied
-	newPipeline *unstructured.Unstructured,
-	c client.Client) error {
-
+// currentPipeline: the pipeline that will be updated
+// newPipeline: spec from the new pipeline which will be applied
+func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, newPipeline *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx)
-
 	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
 	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
@@ -588,4 +607,12 @@ func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
 func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
 	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
 	return found
+}
+
+func getForceDrainFailureWaitDuration() int32 {
+	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
+		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
+	}
+	return 15
 }
