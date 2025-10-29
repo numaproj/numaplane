@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
@@ -102,7 +103,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	// Is the pipeline still defined with its original spec or have we overridden it with that of the "promoted" pipeline?
-	originalSpec := !isPipelineSpecOverridden(pipeline)
+	originalSpec := isPipelineSpecOriginal(pipeline)
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// if requiresPauseOriginalSpec==true, it means we first attempt to pause with our original spec, and only if that is not able to drain fully, we do force draining
@@ -135,22 +136,7 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	// force drain:
-	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
-	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
-	if err != nil {
-		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
-	}
-	if promotedPipeline == nil {
-		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
-		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, c)
-		if err != nil {
-			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
-		}
-
-		return false, nil
-	} else {
-		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, c)
-	}
+	return r.checkAndPerformForceDrain(ctx, pipeline, pipelineRollout)
 
 }
 
@@ -163,9 +149,36 @@ func (r *PipelineRolloutReconciler) registerFinalDrainStatus(namespace, pipeline
 	r.recorder.Eventf(pipeline, eventType, string(drainResult), string(drainResult))
 }
 
+func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Context,
+	// the pipeline whose spec will be updated
+	pipeline *unstructured.Unstructured,
+	// the PipelineRollout parent
+	pipelineRollout *apiv1.PipelineRollout,
+) (bool, error) {
+	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
+	// TODO: here we need to make sure that we don't reattempt with a Pipeline that we already tried
+	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
+	if err != nil {
+		return false, fmt.Errorf("error checking for promoted pipeline for force drain for PipelineRollout %s/%s: %v", pipelineRollout.Namespace, pipelineRollout.Name, err)
+	}
+	//checkIfPipelineMarkedForForceDrain(pipeline, promotedPipeline.GetName())
+	if promotedPipeline == nil {
+		numaLogger.Debug("No viable promoted pipeline found for force draining, scaling current pipeline to zero")
+		err = numaflowtypes.EnsurePipelineScaledToZero(ctx, pipeline, r.client)
+		if err != nil {
+			return false, fmt.Errorf("failed to scale pipeline %s/%s to zero: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+
+		return false, nil
+	} else {
+		return r.forceDrain(ctx, pipeline, promotedPipeline, pipelineRollout, originalSpec, r.client)
+	}
+}
+
 // apply a spec that's considered valid (from a promoted pipeline) over top a spec that's not working.
 // The new spec will enable it to drain.
 // Then pause it.
+// Return true if the Pipeline was deleted
 func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	// the pipeline whose spec will be updated
 	pipeline *unstructured.Unstructured,
@@ -576,16 +589,40 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 	return false, nil
 }
 
-func markPipelineSpecOverridden(pipeline *unstructured.Unstructured) {
+// update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
+func markPipelineForceDrain(pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) {
+	// first check if it's already marked in which case we'll skip this
+	if checkIfPipelineMarkedForForceDrain(pipeline, forceDrainSpecPipeline) {
+		return
+	}
 	annotations := pipeline.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
-	annotations[common.AnnotationKeyOverriddenSpec] = "true"
+	currentVal := annotations[common.AnnotationKeyForceDrainSpecs]
+	annotations[common.AnnotationKeyForceDrainSpecs] = currentVal + forceDrainSpecPipeline + ","
 	pipeline.SetAnnotations(annotations)
 }
 
-func isPipelineSpecOverridden(pipeline *unstructured.Unstructured) bool {
-	_, found := pipeline.GetAnnotations()[common.AnnotationKeyOverriddenSpec]
-	return found
+func checkIfPipelineMarkedForForceDrain(pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) bool {
+	annotations := pipeline.GetAnnotations()
+	if annotations == nil {
+		return false
+	}
+
+	forceDrainSpecs, exists := annotations[common.AnnotationKeyForceDrainSpecs]
+	if !exists {
+		return false
+	}
+
+	// The value is formatted as a comma-separated list with a comma after each pipeline name
+	// For example: "pipeline1,pipeline2,pipeline3,"
+	// We need to check if our pipeline name followed by a comma exists in the string
+	targetPattern := forceDrainSpecPipeline + ","
+	return strings.Contains(forceDrainSpecs, targetPattern)
+}
+
+func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
+	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecs]
+	return found && forceDrainSpecs != ""
 }
