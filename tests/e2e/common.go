@@ -234,33 +234,7 @@ func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv
 	return c.Status
 }
 
-// func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
-// 	watcher, err := client.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
-// 	if err != nil {
-// 		fmt.Printf("Error listing pods: %v\n", err)
-// 		return
-// 	}
-
-// 	for {
-// 		select {
-// 		case event := <-watcher.ResultChan():
-// 			if event.Type == watch.Added {
-// 				pod := event.Object.(*corev1.Pod)
-// 				for _, container := range pod.Spec.Containers {
-// 					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
-// 				}
-// 				for _, container := range pod.Spec.InitContainers {
-// 					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
-// 				}
-// 			}
-// 		case <-stopCh:
-// 			return
-// 		}
-// 	}
-
-// }
-
-// Simple tracking to prevent duplicate streams
+// map to track active logs streams for given pods
 var activeLogStreams = make(map[string]bool)
 var streamsMutex sync.Mutex
 
@@ -274,7 +248,8 @@ func watchPodLogsSimple(client clientgo.Interface, namespace, labelSelector stri
 	for {
 		select {
 		case event := <-watcher.ResultChan():
-			if event.Type == watch.Added { // ONLY Added, not Modified
+			// only add new streams for added pods
+			if event.Type == watch.Added {
 				pod := event.Object.(*corev1.Pod)
 				for _, container := range pod.Spec.Containers {
 					startUniqueLogStream(pod.Name, container.Name)
@@ -293,14 +268,14 @@ func startUniqueLogStream(podName, containerName string) {
 	streamKey := fmt.Sprintf("%s-%s", podName, containerName)
 
 	streamsMutex.Lock()
+	// check if stream already exists, if so return
 	if activeLogStreams[streamKey] {
 		streamsMutex.Unlock()
-		return // Already streaming this container
+		return
 	}
 	activeLogStreams[streamKey] = true
 	streamsMutex.Unlock()
 
-	// Use your existing streamPodLogs function
 	go streamPodLogs(context.Background(), kubeClient, Namespace, podName, containerName, stopCh)
 }
 
