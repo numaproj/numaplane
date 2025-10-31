@@ -77,6 +77,14 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	numaLogger.WithValues("reason", upgradeStateReason).Debug("Recycling Pipeline")
 
+	if requiresPause {
+		if (pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote) || r.ProgressiveUnsupported(ctx, pipelineRollout) {
+			// these are cases in which we don't care about data loss, so we can just delete the pipeline without draining
+			numaLogger.Debug("PipelineRollout strategy indicates no concern for data loss so Pipeline will be deleted without draining")
+			requiresPause = false
+		}
+	}
+
 	if !requiresPause {
 		numaLogger.Info("Pipeline will be deleted now")
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
