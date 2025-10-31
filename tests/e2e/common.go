@@ -238,7 +238,7 @@ func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv
 var activeLogStreams = make(map[string]bool)
 var streamsMutex sync.Mutex
 
-func watchPodLogsSimple(client clientgo.Interface, namespace, labelSelector string) {
+func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 	watcher, err := client.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
 	if err != nil {
 		fmt.Printf("Error listing pods: %v\n", err)
@@ -675,10 +675,10 @@ func BeforeSuiteSetup() {
 
 		if enablePodLogs == "true" {
 			wg.Add(1)
-			go watchPodLogsSimple(kubeClient, Namespace, NumaplaneLabel)
+			go watchPodLogs(kubeClient, Namespace, NumaplaneLabel)
 
 			wg.Add(1)
-			go watchPodLogsSimple(kubeClient, Namespace, NumaflowLabel)
+			go watchPodLogs(kubeClient, Namespace, NumaflowLabel)
 		}
 
 	}
