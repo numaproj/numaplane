@@ -78,9 +78,9 @@ func (r *PipelineRolloutReconciler) Recycle(
 	numaLogger.WithValues("reason", upgradeStateReason).Debug("Recycling Pipeline")
 
 	if requiresPause {
-		if (pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote) || r.ProgressiveUnsupported(ctx, pipelineRollout) {
-			// these are cases in which we don't care about data loss, so we can just delete the pipeline without draining
-			numaLogger.Debug("PipelineRollout strategy indicates no concern for data loss so Pipeline will be deleted without draining")
+		if pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote {
+			// this is a case in which user likely doesn't care about data loss (and also we have no idea if the "promoted" pipeline is any good), so we can just delete the pipeline without draining
+			numaLogger.Debug("PipelineRollout strategy implies no concern for data loss so Pipeline will be deleted without draining")
 			requiresPause = false
 		}
 	}
