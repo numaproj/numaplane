@@ -61,10 +61,12 @@ func ConvertInterfaceMapToStringMap(interfaceMap map[string]interface{}) map[str
 
 func IsMapSubset(requiredKVPairs map[string]string, mapToCheck map[string]string) bool {
 
-	if requiredKVPairs == nil {
+	// If there are no required key-value pairs (nil or empty), always return true
+	if len(requiredKVPairs) == 0 {
 		return true
 	}
-	if mapToCheck == nil {
+	// If there are requirements but mapToCheck is nil or empty, return false
+	if len(mapToCheck) == 0 {
 		return false
 	}
 
