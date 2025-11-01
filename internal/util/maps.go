@@ -43,6 +43,22 @@ func CompareMaps(existing, new map[string]string) bool {
 	return cmp.Equal(existing, new)
 }
 
+// ConvertInterfaceMapToStringMap converts a map[string]interface{} to map[string]string
+// by type asserting each value to string. Non-string values are skipped.
+func ConvertInterfaceMapToStringMap(interfaceMap map[string]interface{}) map[string]string {
+	if interfaceMap == nil {
+		return nil
+	}
+
+	stringMap := make(map[string]string)
+	for k, v := range interfaceMap {
+		if str, ok := v.(string); ok {
+			stringMap[k] = str
+		}
+	}
+	return stringMap
+}
+
 func IsMapSubset(requiredKVPairs map[string]string, mapToCheck map[string]string) bool {
 
 	if requiredKVPairs == nil {

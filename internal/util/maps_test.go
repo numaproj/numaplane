@@ -65,6 +65,55 @@ func TestCompareMaps(t *testing.T) {
 	}
 }
 
+func TestConvertInterfaceMapToStringMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		expected map[string]string
+	}{
+		{
+			name:     "nil input",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty map",
+			input:    map[string]interface{}{},
+			expected: map[string]string{},
+		},
+		{
+			name: "all string values",
+			input: map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "mixed types - non-strings skipped",
+			input: map[string]interface{}{
+				"stringKey": "stringValue",
+				"intKey":    123,
+				"boolKey":   true,
+				"nilKey":    nil,
+			},
+			expected: map[string]string{
+				"stringKey": "stringValue",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertInterfaceMapToStringMap(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCompareMapsWithExceptions(t *testing.T) {
 	testCases := []struct {
 		name             string

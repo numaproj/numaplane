@@ -48,7 +48,7 @@ type progressiveController interface {
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
 	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition
-	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error)
+	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error)
 
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
 	CheckForDifferencesWithRolloutDef(ctx context.Context, existingChild *unstructured.Unstructured, rolloutObject ctlrcommon.RolloutObject) (bool, error)
@@ -212,14 +212,20 @@ func ProcessResource(
 }
 
 // create the definition for the child of the Rollout which is the one labeled "upgrading"
-// if there's already an existing "upgrading" child, create a definition using its name; otherwise, use a new name
-func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, controller progressiveController, c client.Client, useExistingChildName bool) (*unstructured.Unstructured, error) {
+// if useExistingChildName is set, create a definition using that name; otherwise, use a new name
+func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, controller progressiveController, c client.Client, useExistingChildName *string) (*unstructured.Unstructured, error) {
 
 	numaLogger := logger.FromContext(ctx)
 
-	childName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, useExistingChildName)
-	if err != nil {
-		return nil, err
+	var err error
+	childName := ""
+	if useExistingChildName == nil {
+		childName, err = ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		childName = *useExistingChildName
 	}
 	numaLogger.Debugf("Upgrading child: %s", childName)
 	upgradingChild, err := controller.CreateUpgradingChildDefinition(ctx, rolloutObject, childName)
@@ -471,7 +477,24 @@ func checkForUpgradeReplacement(
 	// If the new one is different from the existing Upgrading one:
 	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
 	//  Else replace the Upgrading one with a new one
-	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, true)
+	/*existingUpgradingChildName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+	if err != nil {
+		return false, false, err
+	}*/
+	existingUpgradingChildName := existingUpgradingChildDef.GetName()
+	// we need to create an Upgrading child definition which is evaluated using the existing Upgrading child's name so that we can effectively compare them below
+	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingUpgradingChildName)
+	if err != nil {
+		return false, false, err
+	}
+
+	/*existingPromotedChildName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
+	if err != nil {
+		return false, false, err
+	}*/
+	// we need to create an Upgrading child definition which is evaluated using the existing Promoted child's name so that we can effectively compare them below
+	existingPromotedChildName := existingPromotedChildDef.GetName()
+	newUpgradingChildDefUsingPromotedName, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingPromotedChildName)
 	if err != nil {
 		return false, false, err
 	}
@@ -481,7 +504,7 @@ func checkForUpgradeReplacement(
 		return false, false, err
 	}
 
-	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDef)
+	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDefUsingPromotedName)
 	if err != nil {
 		return false, false, err
 	}
@@ -549,7 +572,8 @@ func checkForDifferences(
 
 	needsUpdating := false
 
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, rolloutObject.GetChildMetadata())
+	metadata, _ := newUpgradingChildDef.Object["metadata"].(map[string]interface{})
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, metadata)
 	if err != nil {
 		return false, err
 	}
@@ -757,7 +781,7 @@ func startUpgradeProcess(
 	}
 
 	// create object as it doesn't exist
-	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, false)
+	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, nil)
 	if err != nil {
 		return newUpgradingChildDef, false, err
 	}

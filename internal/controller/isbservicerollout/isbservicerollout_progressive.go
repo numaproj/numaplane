@@ -119,15 +119,19 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
-func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabels := requiredMetadata.Labels
+	requiredLabelsInterface := requiredMetadata["labels"].(map[string]interface{})
+	requiredLabels := util.ConvertInterfaceMapToStringMap(requiredLabelsInterface)
 	actualLabels := isbsvcDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
+
+	requiredAnnotationsInterface := requiredMetadata["annotations"].(map[string]interface{})
+	requiredAnnotations := util.ConvertInterfaceMapToStringMap(requiredAnnotationsInterface)
 	actualAnnotations := isbsvcDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -146,7 +150,13 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	if err != nil {
 		return false, err
 	}
-	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, isbsvcRollout.Spec.InterStepBufferService.Metadata)
+	// Convert apiv1.Metadata to map[string]interface{}
+	var metadataMap map[string]interface{}
+	if err := util.StructToStruct(isbsvcRollout.Spec.InterStepBufferService.Metadata, &metadataMap); err != nil {
+		return false, err
+	}
+
+	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, metadataMap)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

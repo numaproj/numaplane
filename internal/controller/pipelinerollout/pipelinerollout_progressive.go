@@ -190,7 +190,7 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 }
 
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
 
@@ -210,10 +210,14 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabels := requiredMetadata.Labels
+	requiredLabelsInterface := requiredMetadata["labels"].(map[string]interface{})
+	requiredLabels := util.ConvertInterfaceMapToStringMap(requiredLabelsInterface)
 	actualLabels := pipelineDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
+
+	requiredAnnotationsInterface := requiredMetadata["annotations"].(map[string]interface{})
+	requiredAnnotations := util.ConvertInterfaceMapToStringMap(requiredAnnotationsInterface)
 	actualAnnotations := pipelineDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -241,7 +245,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 	if err != nil {
 		return false, err
 	}
-	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, pipelineRollout.Spec.Pipeline.Metadata)
+	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata)
 }
 
 /*
