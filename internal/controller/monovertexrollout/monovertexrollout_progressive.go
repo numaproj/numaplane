@@ -178,12 +178,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
 	// Check required metadata (labels and annotations)
-	requiredLabelsInterface := requiredMetadata["labels"].(map[string]interface{})
-	requiredLabels := util.ConvertInterfaceMapToStringMap(requiredLabelsInterface)
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := monoVertexDef.GetLabels()
-
-	requiredAnnotationsInterface := requiredMetadata["annotations"].(map[string]interface{})
-	requiredAnnotations := util.ConvertInterfaceMapToStringMap(requiredAnnotationsInterface)
 	actualAnnotations := monoVertexDef.GetAnnotations()
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)

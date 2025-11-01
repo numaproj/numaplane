@@ -210,12 +210,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabelsInterface := requiredMetadata["labels"].(map[string]interface{})
-	requiredLabels := util.ConvertInterfaceMapToStringMap(requiredLabelsInterface)
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := pipelineDef.GetLabels()
-
-	requiredAnnotationsInterface := requiredMetadata["annotations"].(map[string]interface{})
-	requiredAnnotations := util.ConvertInterfaceMapToStringMap(requiredAnnotationsInterface)
 	actualAnnotations := pipelineDef.GetAnnotations()
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)

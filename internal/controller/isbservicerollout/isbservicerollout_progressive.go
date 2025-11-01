@@ -14,6 +14,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -124,12 +125,8 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, i
 
 	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabelsInterface := requiredMetadata["labels"].(map[string]interface{})
-	requiredLabels := util.ConvertInterfaceMapToStringMap(requiredLabelsInterface)
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := isbsvcDef.GetLabels()
-
-	requiredAnnotationsInterface := requiredMetadata["annotations"].(map[string]interface{})
-	requiredAnnotations := util.ConvertInterfaceMapToStringMap(requiredAnnotationsInterface)
 	actualAnnotations := isbsvcDef.GetAnnotations()
 
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
