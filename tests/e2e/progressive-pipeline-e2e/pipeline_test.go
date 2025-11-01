@@ -62,7 +62,17 @@ var (
 	sourceVertexScaleMax = int32(9)
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15)
-	initialPipelineSpec  = numaflowv1.PipelineSpec{
+
+	pipelineMetadata = metav1.ObjectMeta{
+		Labels: map[string]string{
+			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+		Annotations: map[string]string{
+			"my-annotation": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+	}
+
+	initialPipelineSpec = numaflowv1.PipelineSpec{
 		InterStepBufferServiceName: isbServiceRolloutName,
 		Vertices: []numaflowv1.AbstractVertex{
 			{
@@ -137,7 +147,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate Pipeline and ISBService upgrade failure followed by success using Progressive strategy", func() {
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategy, pipelineMetadata)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
@@ -176,7 +186,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate ISBService as failure when Pipeline upgrade assesses in failure", func() {
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 2), initialPipelineSpec, defaultStrategy)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 2), initialPipelineSpec, defaultStrategy, pipelineMetadata)
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
@@ -231,7 +241,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 	})
 
 	It("Should validate Pipeline as failure when ISBService upgrade assesses in failure", func() {
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, defaultStrategy)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 3), initialPipelineSpec, defaultStrategy, pipelineMetadata)
 
 		promotedISBSvc, initialISBServiceSpec, _, err := GetPromotedISBServiceSpecAndStatus(Namespace, isbServiceRolloutName)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -271,7 +281,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 					},
 				},
 			},
-		})
+		}, pipelineMetadata)
 
 		// Update ISBServiceRollout to set forcePromote=true
 		UpdateISBServiceRolloutInK8S(isbServiceRolloutName, func(ir apiv1.ISBServiceRollout) (apiv1.ISBServiceRollout, error) {

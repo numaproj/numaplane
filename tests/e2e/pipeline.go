@@ -405,9 +405,9 @@ func startPipelineRolloutWatches() {
 // shared functions
 
 // create a PipelineRollout of a given spec/name and make sure it's running
-func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy) {
+func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy, metadata metav1.ObjectMeta) {
 
-	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy)
+	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy, metadata)
 	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -431,7 +431,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	}
 }
 
-func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy) *apiv1.PipelineRollout {
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy, metadata metav1.ObjectMeta) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -442,8 +442,10 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 			Kind:       "PipelineRollout",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
+			Namespace:   namespace,
+			Name:        name,
+			Labels:      metadata.Labels,
+			Annotations: metadata.Annotations,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Strategy: strategy,
@@ -503,7 +505,7 @@ func DeletePipelineRollout(name string) {
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
 func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
-	progressiveFieldChanged bool, expectedSuccess bool,
+	progressiveFieldChanged bool, expectedSuccess bool, metadata apiv1.Metadata,
 ) {
 
 	By("Updating Pipeline spec in PipelineRollout")
@@ -515,6 +517,7 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	// update the PipelineRollout
 	UpdatePipelineRolloutInK8S(Namespace, name, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
+		rollout.Spec.Pipeline.Metadata = metadata
 		return rollout, nil
 	})
 
@@ -617,9 +620,9 @@ func VerifyPipelineDeletion(pipelineName string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
 }
 
-func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy) {
+func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy, metadata metav1.ObjectMeta) {
 	By("Creating a PipelineRollout")
-	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy, metadata)
 
 	By("Verifying that the Pipeline spec is as expected")
 	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName

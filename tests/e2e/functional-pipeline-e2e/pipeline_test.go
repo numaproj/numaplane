@@ -196,7 +196,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
@@ -239,7 +239,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true, true, true)
+		}, true, true, true, apiv1.Metadata{})
 	})
 
 	It("Should pause the Pipeline if user requests it and resume it", func() {
@@ -334,7 +334,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-	}, false, false, true)
+	}, false, false, true, apiv1.Metadata{})
 
 	VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
 
@@ -359,7 +359,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 	// Resume Pipeline
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-	}, false, false, true)
+	}, false, false, true, apiv1.Metadata{})
 
 	// then verify that replicas is null
 	VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {

@@ -137,7 +137,7 @@ var _ = Describe("No Drain e2e", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
 		// this will be the original successful Pipeline to drain
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
 	})
 
 	It("Should not bother trying to drain a Pipeline which has been configured with scale.max=0", func() {
