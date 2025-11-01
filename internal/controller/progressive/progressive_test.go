@@ -49,7 +49,7 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	return false, nil
 }
 
