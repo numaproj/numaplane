@@ -31,8 +31,8 @@ func TestExtractMetadataSubmaps(t *testing.T) {
 		{
 			name:                "empty metadata",
 			metadata:            map[string]interface{}{},
-			expectedLabels:      nil,
-			expectedAnnotations: nil,
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
 		},
 		{
 			name: "both labels and annotations present",
@@ -65,7 +65,19 @@ func TestExtractMetadataSubmaps(t *testing.T) {
 			expectedLabels: map[string]string{
 				"app": "test",
 			},
-			expectedAnnotations: nil,
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "only annotations present",
+			metadata: map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"description": "test app",
+				},
+			},
+			expectedLabels: map[string]string{},
+			expectedAnnotations: map[string]string{
+				"description": "test app",
+			},
 		},
 		{
 			name: "labels with nil value",
@@ -80,8 +92,8 @@ func TestExtractMetadataSubmaps(t *testing.T) {
 			metadata: map[string]interface{}{
 				"labels": "not-a-map",
 			},
-			expectedLabels:      nil,
-			expectedAnnotations: nil,
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
 		},
 		{
 			name:                "nil metadata",

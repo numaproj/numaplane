@@ -311,12 +311,14 @@ func GetLoggableResource(obj *unstructured.Unstructured) map[string]interface{} 
 }
 
 // ExtractMetadataSubmaps extracts labels and annotations from a metadata map and converts them to map[string]string.
-// Returns (labels, annotations) where either can be nil if not found or invalid.
+// Returns (labels, annotations) - if not found returns empty map
 func ExtractMetadataSubmaps(metadata map[string]interface{}) (map[string]string, map[string]string) {
-	var labels, annotations map[string]string
+	// Initialize with empty maps instead of nil
+	labels := map[string]string{}
+	annotations := map[string]string{}
 
 	if metadata == nil {
-		return map[string]string{}, map[string]string{}
+		return labels, annotations
 	}
 
 	// Extract labels
