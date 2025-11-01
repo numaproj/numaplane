@@ -155,6 +155,8 @@ func (r *PipelineRolloutReconciler) checkAndPerformForceDrain(ctx context.Contex
 	// the PipelineRollout parent
 	pipelineRollout *apiv1.PipelineRollout,
 ) (bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
 	// if no new promoted pipeline, we need to wait: ensure we scale to 0 and return
 	// TODO: here we need to make sure that we don't reattempt with a Pipeline that we already tried
 	promotedPipeline, err := r.checkForPromotedPipelineForForceDrain(ctx, pipelineRollout)
