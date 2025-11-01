@@ -442,16 +442,18 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 			Kind:       "PipelineRollout",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:   namespace,
-			Name:        name,
-			Labels:      metadata.Labels,
-			Annotations: metadata.Annotations,
+			Namespace: namespace,
+			Name:      name,
 		},
 		Spec: apiv1.PipelineRolloutSpec{
 			Strategy: strategy,
 			Pipeline: apiv1.Pipeline{
 				Spec: runtime.RawExtension{
 					Raw: pipelineSpecRaw,
+				},
+				Metadata: apiv1.Metadata{
+					Labels:      metadata.Labels,
+					Annotations: metadata.Annotations,
 				},
 			},
 		},
