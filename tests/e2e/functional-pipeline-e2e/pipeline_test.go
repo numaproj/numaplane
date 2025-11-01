@@ -138,7 +138,7 @@ var (
 		},
 	}
 
-	pipelineMetadata = metav1.ObjectMeta{
+	pipelineMetadata = apiv1.Metadata{
 		Labels: map[string]string{
 			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
 		},
@@ -213,7 +213,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	It("Should create the PipelineRollout if it does not exist", func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, pipelineMetadata)
 
-		VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(metadata metav1.ObjectMeta) bool {
+		VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(metadata apiv1.Metadata) bool {
 			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0))
 		})
 	})

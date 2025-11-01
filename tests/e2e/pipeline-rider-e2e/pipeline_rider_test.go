@@ -161,7 +161,7 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 	It("Should create NumaflowControllerRollout, ISBServiceRollout, and PipelineRollout", func() {
 		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
 		CreateISBServiceRollout(isbServiceRolloutName, isbServiceSpec)
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 	})
 
 	It("Should add VPA Rider to PipelineRollout (one per Vertex)", func() {

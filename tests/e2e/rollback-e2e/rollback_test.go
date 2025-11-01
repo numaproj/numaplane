@@ -222,7 +222,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 	It("Should Update Rollouts and then immediately Roll them back", func() {
 
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 		// update each rollout
@@ -286,7 +286,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 	})
 
 	It("Should update ISBServiceRollout and PipelineRollout and rollback just PipelineRollout", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, nil, nil)
@@ -330,7 +330,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 	It("Should update PipelineRollout and MonoVertexRollout to a failed state and then roll them back (Progressive strategy only)", func() {
 
 		if UpgradeStrategy == config.ProgressiveStrategyID {
-			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 			// update each rollout

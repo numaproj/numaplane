@@ -65,8 +65,8 @@ func VerifyPromotedPipelineSpec(namespace string, pipelineRolloutName string, f 
 	}).Should(BeTrue())
 }
 
-func VerifyPromotedPipelineMetadata(namespace string, pipelineRolloutName string, f func(metav1.ObjectMeta) bool) {
-	var retrievedPipelineMetadata metav1.ObjectMeta
+func VerifyPromotedPipelineMetadata(namespace string, pipelineRolloutName string, f func(apiv1.Metadata) bool) {
+	var retrievedPipelineMetadata apiv1.Metadata
 	CheckEventually("verifying Pipeline Metadata", func() bool {
 		unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
 		if err != nil {
@@ -235,11 +235,13 @@ func GetPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 }
 
 // GetPipelineMetadata from Unstructured type
-func GetPipelineMetadata(u *unstructured.Unstructured) (metav1.ObjectMeta, error) {
-	metadataMap := u.Object["metadata"]
-	var pipelineMetadata metav1.ObjectMeta
-	err := util.StructToStruct(&metadataMap, &pipelineMetadata)
-	return pipelineMetadata, err
+func GetPipelineMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error) {
+	labels := u.GetLabels()
+	annotations := u.GetAnnotations()
+	return apiv1.Metadata{
+		Labels:      labels,
+		Annotations: annotations,
+	}, nil
 }
 
 func GetGVRForPipeline() schema.GroupVersionResource {
@@ -428,7 +430,7 @@ func startPipelineRolloutWatches() {
 // shared functions
 
 // create a PipelineRollout of a given spec/name and make sure it's running
-func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy, metadata metav1.ObjectMeta) {
+func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy, metadata apiv1.Metadata) {
 
 	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy, metadata)
 	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
@@ -454,7 +456,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	}
 }
 
-func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy, metadata metav1.ObjectMeta) *apiv1.PipelineRollout {
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy, metadata apiv1.Metadata) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -474,10 +476,7 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 				Spec: runtime.RawExtension{
 					Raw: pipelineSpecRaw,
 				},
-				Metadata: apiv1.Metadata{
-					Labels:      metadata.Labels,
-					Annotations: metadata.Annotations,
-				},
+				Metadata: metadata,
 			},
 		},
 	}
@@ -645,7 +644,7 @@ func VerifyPipelineDeletion(pipelineName string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
 }
 
-func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy, metadata metav1.ObjectMeta) {
+func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy, metadata apiv1.Metadata) {
 	By("Creating a PipelineRollout")
 	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy, metadata)
 

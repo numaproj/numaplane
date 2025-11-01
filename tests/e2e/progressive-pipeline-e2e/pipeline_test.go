@@ -63,7 +63,7 @@ var (
 	numVertices          = int32(1)
 	zeroReplicaSleepSec  = uint32(15)
 
-	pipelineMetadata = metav1.ObjectMeta{
+	pipelineMetadata = apiv1.Metadata{
 		Labels: map[string]string{
 			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
 		},

@@ -250,7 +250,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -272,7 +272,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -300,7 +300,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -321,7 +321,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			PPNDStrategy: apiv1.PPNDStrategy{
 				FastResume: false,
 			},
-		}, metav1.ObjectMeta{})
+		}, apiv1.Metadata{})
 
 		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
 		pipelineName := GetInstanceName(pipelineRolloutName, 0)
@@ -352,7 +352,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			PPNDStrategy: apiv1.PPNDStrategy{
 				FastResume: true,
 			},
-		}, metav1.ObjectMeta{})
+		}, apiv1.Metadata{})
 
 		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
 		pipelineName := GetInstanceName(pipelineRolloutName, 0)
@@ -397,7 +397,7 @@ func createSlowPipelineRollout() {
 		Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
 	}}
 
-	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil, metav1.ObjectMeta{})
+	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil, apiv1.Metadata{})
 
 	By("Verifying that the slow pipeline was created")
 	VerifyPromotedPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {

@@ -316,7 +316,7 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			// create initial objects
 			CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 			CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
-			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
 
 			// update each rollout
