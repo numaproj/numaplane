@@ -65,6 +65,21 @@ func VerifyPromotedPipelineSpec(namespace string, pipelineRolloutName string, f 
 	}).Should(BeTrue())
 }
 
+func VerifyPromotedPipelineMetadata(namespace string, pipelineRolloutName string, f func(metav1.ObjectMeta) bool) {
+	var retrievedPipelineMetadata metav1.ObjectMeta
+	CheckEventually("verifying Pipeline Metadata", func() bool {
+		unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		if retrievedPipelineMetadata, err = GetPipelineMetadata(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedPipelineMetadata)
+	}).Should(BeTrue())
+}
+
 // GetPipelineSpecAndStatus retrieves a pipeline by name and returns its spec and status
 func GetPipelineSpecAndStatus(namespace, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
@@ -217,6 +232,14 @@ func GetPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	return pipelineSpec, err
+}
+
+// GetPipelineMetadata from Unstructured type
+func GetPipelineMetadata(u *unstructured.Unstructured) (metav1.ObjectMeta, error) {
+	metadataMap := u.Object["metadata"]
+	var pipelineMetadata metav1.ObjectMeta
+	err := util.StructToStruct(&metadataMap, &pipelineMetadata)
+	return pipelineMetadata, err
 }
 
 func GetGVRForPipeline() schema.GroupVersionResource {

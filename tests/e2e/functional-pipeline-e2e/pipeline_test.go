@@ -106,6 +106,12 @@ var (
 					Container: &numaflowv1.Container{
 						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
 						ImagePullPolicy: &pullPolicyAlways,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "my-env",
+								Value: "{{.pipeline-namespace}}-{{.pipeline-name}}",
+							},
+						},
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -129,6 +135,15 @@ var (
 				From: "cat",
 				To:   "out",
 			},
+		},
+	}
+
+	pipelineMetadata = metav1.ObjectMeta{
+		Labels: map[string]string{
+			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+		Annotations: map[string]string{
+			"my-annotation": "{{.pipeline-namespace}}-{{.pipeline-name}}",
 		},
 	}
 
@@ -196,7 +211,11 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, metav1.ObjectMeta{})
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, pipelineMetadata)
+
+		VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(metadata metav1.ObjectMeta) bool {
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0))
+		})
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
@@ -238,8 +257,15 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
+			currentPromotedPipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			if len(retrievedPipelineSpec.Vertices) < numPipelineVertices {
+				// not yet updated
+				return false
+			}
+			evaluatedEnvironmentVariable := retrievedPipelineSpec.Vertices[1].UDF.Container.Env[0]
+			return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
 		}, true, true, true, apiv1.Metadata{})
+
 	})
 
 	It("Should pause the Pipeline if user requests it and resume it", func() {
