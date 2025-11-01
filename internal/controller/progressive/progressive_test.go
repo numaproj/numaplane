@@ -103,6 +103,10 @@ func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context,
 	return false
 }
 
+func (fpc fakeProgressiveController) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return map[string]interface{}{}
+}
+
 func Test_processUpgradingChild(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

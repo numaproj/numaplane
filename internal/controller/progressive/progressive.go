@@ -34,6 +34,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/usde"
+	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -572,8 +573,12 @@ func checkForDifferences(
 
 	needsUpdating := false
 
-	metadata, _ := newUpgradingChildDef.Object["metadata"].(map[string]interface{})
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, metadata)
+	// resolve the Rollout's metadata using the upgrading child so we can compare effectively
+	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(newUpgradingChildDef))
+	if err != nil {
+		return false, err
+	}
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, templatedMetadata)
 	if err != nil {
 		return false, err
 	}

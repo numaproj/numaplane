@@ -37,6 +37,9 @@ type RolloutController interface {
 
 	// SetCurrentRiderList updates the list of Riders
 	SetCurrentRiderList(ctx context.Context, rolloutObject RolloutObject, riders []riders.Rider)
+
+	// GetTemplateArguments is the map of Arguments used for templating the child definition
+	GetTemplateArguments(child *unstructured.Unstructured) map[string]interface{}
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable
