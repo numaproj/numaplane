@@ -28,7 +28,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -53,7 +52,8 @@ const (
 
 var (
 	pullPolicyAlways = corev1.PullAlways
-	pipelineIndex    = 0
+
+	pipelineIndex = 0
 
 	initialJetstreamVersion = "2.10.17"
 	volSize, _              = apiresource.ParseQuantity("10Mi")
@@ -73,7 +73,11 @@ var (
 	}
 	initialPipelineSpec numaflowv1.PipelineSpec
 	updatedPipelineSpec numaflowv1.PipelineSpec
-	defaultVertexVPA    = `
+
+	configMapGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+	vpaGVR       = schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}
+
+	defaultVertexVPA = `
 	{
 		"apiVersion": "autoscaling.k8s.io/v1",
 		"kind": "VerticalPodAutoscaler",
@@ -102,7 +106,7 @@ var (
 			Name: "my-pipeline-configmap",
 		},
 		Data: map[string]string{
-			"pipeline-key": "pipeline-value",
+			"pipeline-name": "{{.pipeline-name}}",
 		},
 	}
 )
@@ -185,14 +189,9 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", pipelineName, vertex)
-			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceExists(vpaGVR, vpaName)
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", pipelineName, vertex))
 		}
-
-		// VPA is named with the pipeline name and vertex name as the suffix
-		vpaName := fmt.Sprintf("my-vpa-%s-in", pipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
-		vpaName = fmt.Sprintf("my-vpa-%s-out", pipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
 	})
 
 	It("Should add ConfigMap Rider to PipelineRollout", func() {
@@ -214,7 +213,8 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex)
 		// ConfigMap is named with the pipeline name as the suffix
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", pipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-name", pipelineName)
 	})
 
 	It("Should update the VPA Rider in place", func() {
@@ -250,39 +250,17 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		pipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex)
 		// ConfigMap is still there and named with the same pipeline name as the suffix
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", pipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
 
 		// VPAs are still there and named with the same pipeline and vertex names as the suffix
 		vertices := []string{"in", "out"}
 		for _, vertex := range vertices {
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", pipelineName, vertex)
-			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceExists(vpaGVR, vpaName)
 
 			// Verify that the VPA content was updated to include the updatePolicy
-			CheckEventually(fmt.Sprintf("verifying VPA %s has updateMode=Initial", vpaName), func() bool {
-				vpaResource, err := GetResource(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, Namespace, vpaName)
-				if err != nil || vpaResource == nil {
-					return false
-				}
-
-				// Extract updatePolicy from the VPA spec
-				spec, found, err := unstructured.NestedMap(vpaResource.Object, "spec")
-				if err != nil || !found {
-					return false
-				}
-
-				updatePolicy, found, err := unstructured.NestedMap(spec, "updatePolicy")
-				if err != nil || !found {
-					return false
-				}
-
-				updateMode, found, err := unstructured.NestedString(updatePolicy, "updateMode")
-				if err != nil || !found {
-					return false
-				}
-
-				return updateMode == "Initial"
-			}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.updatePolicy.updateMode", "^Initial$")
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", pipelineName, vertex))
 		}
 	})
 
@@ -299,14 +277,16 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 
 		// verify ConfigMap exists for the new pipeline
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", newPipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-name", newPipelineName)
 
 		// make sure we created VPAs for all 3 vertices
 		vertices := []string{"in", "cat", "out"}
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
-			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceExists(vpaGVR, vpaName)
+			VerifyResourceFieldMatchesRegex(vpaGVR, vpaName, "spec.targetRef.name", fmt.Sprintf("%s-%s", newPipelineName, vertex))
 		}
 		// make sure the original VPAs are removed once the pipeline is deleted
 		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex-1) // TODO: can we create a variable at the top and update it instead of repeating?
@@ -314,12 +294,12 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", originalPipelineName, vertex)
-			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceDoesntExist(vpaGVR, vpaName)
 		}
 
 		// make sure the original ConfigMap is removed once the pipeline is deleted
 		originalConfigMapName := fmt.Sprintf("my-pipeline-configmap-%s", originalPipelineName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMapName)
+		VerifyResourceDoesntExist(configMapGVR, originalConfigMapName)
 	})
 
 	It("Should update the ConfigMap Rider, which should trigger a Progressive rollout", func() {
@@ -343,41 +323,25 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
-			VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceExists(vpaGVR, vpaName)
 		}
 
 		// verify ConfigMap exists for the new pipeline
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", newPipelineName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.pipeline-key-2", "pipeline-value-2")
 
 		// make sure the original VPAs are removed once the pipeline is deleted
 		originalPipelineName := fmt.Sprintf("%s-%d", pipelineRolloutName, pipelineIndex-1) // TODO: can we create a variable at the top and update it instead of repeating?
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", originalPipelineName, vertex)
-			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceDoesntExist(vpaGVR, vpaName)
 		}
 
 		// make sure the original ConfigMap is removed once the pipeline is deleted
 		originalConfigMapName := fmt.Sprintf("my-pipeline-configmap-%s", originalPipelineName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMapName)
-
-		// Verify that the new ConfigMap's content includes the new key-value pair
-		CheckEventually(fmt.Sprintf("verifying ConfigMap %s has updated content", configMapName), func() bool {
-			configMapResource, err := GetResource(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, Namespace, configMapName)
-			if err != nil || configMapResource == nil {
-				return false
-			}
-
-			// Extract data from the ConfigMap
-			data, found, err := unstructured.NestedStringMap(configMapResource.Object, "data")
-			if err != nil || !found {
-				return false
-			}
-
-			// Check that both original and new key-value pairs exist
-			return data["pipeline-key"] == "pipeline-value" && data["pipeline-key-2"] == "pipeline-value-2"
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+		VerifyResourceDoesntExist(configMapGVR, originalConfigMapName)
 	})
 
 	It("Should delete the VPA and ConfigMap Riders", func() {
@@ -392,12 +356,12 @@ var _ = Describe("Pipeline Rider E2E", Serial, func() {
 		for _, vertex := range vertices {
 			// VPA is named with the pipeline name and vertex name as the suffix
 			vpaName := fmt.Sprintf("my-vpa-%s-%s", newPipelineName, vertex)
-			VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling.k8s.io", Version: "v1", Resource: "verticalpodautoscalers"}, vpaName)
+			VerifyResourceDoesntExist(vpaGVR, vpaName)
 		}
 
 		// Confirm the ConfigMap was deleted
 		configMapName := fmt.Sprintf("my-pipeline-configmap-%s", newPipelineName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceDoesntExist(configMapGVR, configMapName)
 	})
 
 	It("Should delete the PipelineRollout, ISBServiceRollout and NumaflowControllerRollout", func() {

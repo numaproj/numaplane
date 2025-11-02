@@ -56,6 +56,9 @@ var (
 	monoVertexSpecWithoutRider numaflowv1.MonoVertexSpec
 	monoVertexSpecWithCMRef    numaflowv1.MonoVertexSpec
 
+	configMapGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+	hpaGVR       = schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
+
 	defaultConfigMap = corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
@@ -65,7 +68,8 @@ var (
 			Name: "my-configmap",
 		},
 		Data: map[string]string{
-			"my-key": "my-value",
+			"monovertex-namespace": "{{.monovertex-namespace}}",
+			"monovertex-name":      "{{.monovertex-name}}",
 		},
 	}
 	currentConfigMap = &defaultConfigMap
@@ -185,7 +189,9 @@ var _ = Describe("Rider E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-namespace", Namespace)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-name", monoVertexName)
 	})
 
 	It("Should add HPA Rider to MonoVertexRollout", func() {
@@ -208,7 +214,8 @@ var _ = Describe("Rider E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// HPA is named with the monovertex name as the suffix
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, hpaName)
+		VerifyResourceExists(hpaGVR, hpaName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
 	})
 
 	It("Should update the ConfigMap Rider as a Progressive rollout change", func() {
@@ -234,28 +241,15 @@ var _ = Describe("Rider E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-
-		// Verify that the ConfigMap content was updated to include the new key-value pair
-		CheckEventually(fmt.Sprintf("verifying ConfigMap %s has updated content", configMapName), func() bool {
-			configMapResource, err := GetResource(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, Namespace, configMapName)
-			if err != nil || configMapResource == nil {
-				return false
-			}
-
-			// Extract data from the ConfigMap
-			data, found, err := unstructured.NestedStringMap(configMapResource.Object, "data")
-			if err != nil || !found {
-				return false
-			}
-
-			// Check that both original and new key-value pairs exist
-			return data["my-key"] == "my-value" && data["my-key-2"] == "my-value-2"
-		}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+		VerifyResourceExists(configMapGVR, configMapName)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.my-key-2", "my-value-2")
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-namespace", Namespace)
+		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-name", monoVertexName)
 
 		// HPA is named with the monovertex name as the suffix
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, hpaName)
+		VerifyResourceExists(hpaGVR, hpaName)
+		VerifyResourceFieldMatchesRegex(hpaGVR, hpaName, "spec.scaleTargetRef.name", monoVertexName)
 
 		// Now verify that with the Progressive upgrade, the original MonoVertex,
 		// ConfigMap, and HPA get cleaned up
@@ -263,8 +257,8 @@ var _ = Describe("Rider E2E", Serial, func() {
 		originalConfigMap := fmt.Sprintf("my-configmap-%s", mvOriginalName)
 		originalHPA := fmt.Sprintf("hpa-%s", mvOriginalName)
 		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, originalConfigMap)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, originalHPA)
+		VerifyResourceDoesntExist(configMapGVR, originalConfigMap)
+		VerifyResourceDoesntExist(hpaGVR, originalHPA)
 	})
 
 	It("Should update the HPA Rider in place", func() {
@@ -284,14 +278,14 @@ var _ = Describe("Rider E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// ConfigMap is still there and named with the same monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
+		VerifyResourceExists(configMapGVR, configMapName)
 		// HPA is still there and named with the same monovertex name as the suffix
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceExists(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, hpaName)
+		VerifyResourceExists(hpaGVR, hpaName)
 
 		// Verify that the HPA content was updated to reflect the maxReplicas change from 10 to 15
 		CheckEventually(fmt.Sprintf("verifying HPA %s has maxReplicas=15", hpaName), func() bool {
-			hpaResource, err := GetResource(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, Namespace, hpaName)
+			hpaResource, err := GetResource(hpaGVR, Namespace, hpaName)
 			if err != nil || hpaResource == nil {
 				return false
 			}
@@ -321,8 +315,8 @@ var _ = Describe("Rider E2E", Serial, func() {
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, configMapName)
-		VerifyResourceDoesntExist(schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}, hpaName)
+		VerifyResourceDoesntExist(configMapGVR, configMapName)
+		VerifyResourceDoesntExist(hpaGVR, hpaName)
 		VerifyResourceExists(numaflowv1.MonoVertexGroupVersionResource, monoVertexName)
 	})
 

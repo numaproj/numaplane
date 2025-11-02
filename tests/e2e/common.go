@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -505,6 +506,45 @@ func VerifyResourceDoesntExist(gvr schema.GroupVersionResource, name string) {
 	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s doesn't exist", gvr, name), func() bool {
 		resource, _ := GetResource(gvr, Namespace, name)
 		return resource == nil
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
+}
+
+// VerifyResourceFieldMatchesRegex verifies that a field in a resource eventually matches a regular expression.
+// The fieldPath parameter is a dot-separated path to the field (e.g., "status.phase" or "metadata.name").
+// The field at the specified path is expected to be a string.
+//
+// Example usage:
+//
+//	// Verify that a Pipeline's status phase matches "Running" or "Paused"
+//	VerifyResourceFieldMatchesRegex(
+//	    schema.GroupVersionResource{Group: "numaflow.numaproj.io", Version: "v1alpha1", Resource: "pipelines"},
+//	    "my-pipeline",
+//	    "status.phase",
+//	    "^(Running|Paused)$",
+//	)
+func VerifyResourceFieldMatchesRegex(gvr schema.GroupVersionResource, name string, fieldPath string, regexPattern string) {
+	CheckEventually(fmt.Sprintf("verifying GVR %+v of name=%s has field %q matching regex %q", gvr, name, fieldPath, regexPattern), func() bool {
+		resource, err := GetResource(gvr, Namespace, name)
+		if resource == nil || err != nil {
+			return false
+		}
+
+		// Split the field path by dots to create a path slice
+		pathSlice := strings.Split(fieldPath, ".")
+
+		// Get the field value as a string
+		fieldValue, found, err := unstructured.NestedString(resource.Object, pathSlice...)
+		if err != nil || !found {
+			return false
+		}
+
+		// Compile and match the regex
+		matched, err := regexp.MatchString(regexPattern, fieldValue)
+		if err != nil {
+			return false
+		}
+
+		return matched
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue())
 }
 
