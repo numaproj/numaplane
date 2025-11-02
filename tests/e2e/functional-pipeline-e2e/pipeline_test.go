@@ -214,7 +214,9 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, pipelineMetadata)
 
 		VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(metadata apiv1.Metadata) bool {
-			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0))
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0)) &&
+				metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0))
+
 		})
 	})
 
@@ -266,7 +268,8 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
 		}, func(metadata apiv1.Metadata) bool {
 			currentPromotedPipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
-			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName) &&
+				metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
 		}, true, true, true, pipelineMetadata)
 
 	})

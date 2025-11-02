@@ -93,28 +93,18 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, mvtxMetadata)
 
+		verifyTemplating()
+
 		// new MonoVertex spec
 		updatedMonoVertexSpec := initialMonoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource = nil
-		rpu := int64(10)
-		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
+		javaImagePath := "quay.io/numaio/numaflow-go/source-simple-source:stable"
+		updatedMonoVertexSpec.Source.UDSource.Container.Image = javaImagePath
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
+			return spec.Source != nil && spec.Source.UDSource.Container.Image == javaImagePath
 		}, true, 0)
 
-		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			currentPromotedMvtxName, _ := GetPromotedPipelineName(Namespace, monoVertexRolloutName)
-
-			evaluatedEnvironmentVariable := retrievedMonoVertexSpec.Source.UDSource.Container.Env[0]
-			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil &&
-				evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
-		})
-
-		VerifyPromotedMonoVertexMetadata(Namespace, monoVertexRolloutName, func(metadata apiv1.Metadata) bool {
-			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(monoVertexRolloutName, 0))
-
-		})
+		verifyTemplating()
 
 		// Verify no in progress strategy set
 		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -155,6 +145,23 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		DeleteNumaflowControllerRollout()
 	})
 })
+
+func verifyTemplating() {
+	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+
+		evaluatedEnvironmentVariable := retrievedMonoVertexSpec.Source.UDSource.Container.Env[0]
+		return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
+	})
+
+	VerifyPromotedMonoVertexMetadata(Namespace, monoVertexRolloutName, func(metadata apiv1.Metadata) bool {
+		currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+
+		return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName) &&
+			metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
+
+	})
+}
 
 // test that user can cause MonoVertex through MonoVertexRollout desiredPhase field
 // as well as that user can unpause (either gradually or fast depending on configuration)
