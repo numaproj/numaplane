@@ -696,6 +696,14 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata)
 }
 
+func (r *MonoVertexRolloutReconciler) GetTemplateArguments(monovertex *unstructured.Unstructured) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplateMonoVertexName:      monovertex.GetName(),
+		common.TemplateMonoVertexNamespace: monovertex.GetNamespace(),
+	}
+}
+
+// TODO: can I pass the monovertex in here so I can call GetTemplateArguments()?
 func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,

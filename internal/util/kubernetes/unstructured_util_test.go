@@ -21,6 +21,97 @@ import (
 	commontest "github.com/numaproj/numaplane/tests/common"
 )
 
+func TestExtractMetadataSubmaps(t *testing.T) {
+	tests := []struct {
+		name                string
+		metadata            map[string]interface{}
+		expectedLabels      map[string]string
+		expectedAnnotations map[string]string
+	}{
+		{
+			name:                "empty metadata",
+			metadata:            map[string]interface{}{},
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "both labels and annotations present",
+			metadata: map[string]interface{}{
+				"labels": map[string]interface{}{
+					"app":     "test",
+					"version": "v1",
+				},
+				"annotations": map[string]interface{}{
+					"description": "test app",
+					"owner":       "team-a",
+				},
+			},
+			expectedLabels: map[string]string{
+				"app":     "test",
+				"version": "v1",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test app",
+				"owner":       "team-a",
+			},
+		},
+		{
+			name: "only labels present",
+			metadata: map[string]interface{}{
+				"labels": map[string]interface{}{
+					"app": "test",
+				},
+			},
+			expectedLabels: map[string]string{
+				"app": "test",
+			},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "only annotations present",
+			metadata: map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"description": "test app",
+				},
+			},
+			expectedLabels: map[string]string{},
+			expectedAnnotations: map[string]string{
+				"description": "test app",
+			},
+		},
+		{
+			name: "labels with nil value",
+			metadata: map[string]interface{}{
+				"labels": nil,
+			},
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "labels with wrong type",
+			metadata: map[string]interface{}{
+				"labels": "not-a-map",
+			},
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name:                "nil metadata",
+			metadata:            nil,
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			labels, annotations := ExtractMetadataSubmaps(tt.metadata)
+			assert.Equal(t, tt.expectedLabels, labels)
+			assert.Equal(t, tt.expectedAnnotations, annotations)
+		})
+	}
+}
+
 func TestGetLabel(t *testing.T) {
 	yamlBytes, err := os.ReadFile("testdata/svc.yaml")
 	assert.Nil(t, err)

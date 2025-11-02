@@ -106,6 +106,12 @@ var (
 					Container: &numaflowv1.Container{
 						Image:           "quay.io/numaio/numaflow-go/map-cat:stable",
 						ImagePullPolicy: &pullPolicyAlways,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "my-env",
+								Value: "{{.pipeline-namespace}}-{{.pipeline-name}}",
+							},
+						},
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &onePod, Max: &onePod, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -129,6 +135,15 @@ var (
 				From: "cat",
 				To:   "out",
 			},
+		},
+	}
+
+	pipelineMetadata = apiv1.Metadata{
+		Labels: map[string]string{
+			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+		Annotations: map[string]string{
+			"my-annotation": "{{.pipeline-namespace}}-{{.pipeline-name}}",
 		},
 	}
 
@@ -196,7 +211,11 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, pipelineMetadata)
+
+		VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(metadata apiv1.Metadata) bool {
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, GetInstanceName(pipelineRolloutName, 0))
+		})
 	})
 
 	It("Should automatically heal a Pipeline if it is updated directly", func() {
@@ -238,8 +257,18 @@ var _ = Describe("Functional e2e:", Serial, func() {
 		numPipelineVertices := len(updatedPipelineSpec.Vertices)
 
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-			return len(retrievedPipelineSpec.Vertices) == numPipelineVertices
-		}, true, true, true)
+			currentPromotedPipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			if len(retrievedPipelineSpec.Vertices) < numPipelineVertices {
+				// not yet updated
+				return false
+			}
+			evaluatedEnvironmentVariable := retrievedPipelineSpec.Vertices[1].UDF.Container.Env[0]
+			return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
+		}, func(metadata apiv1.Metadata) bool {
+			currentPromotedPipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
+		}, true, true, true, pipelineMetadata)
+
 	})
 
 	It("Should pause the Pipeline if user requests it and resume it", func() {
@@ -334,7 +363,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-	}, false, false, true)
+	}, nil, false, false, true, pipelineMetadata)
 
 	VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
 
@@ -359,7 +388,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 	// Resume Pipeline
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-	}, false, false, true)
+	}, nil, false, false, true, pipelineMetadata)
 
 	// then verify that replicas is null
 	VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {

@@ -65,6 +65,126 @@ func TestCompareMaps(t *testing.T) {
 	}
 }
 
+func TestConvertInterfaceMapToStringMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		expected map[string]string
+	}{
+		{
+			name:     "nil input",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty map",
+			input:    map[string]interface{}{},
+			expected: map[string]string{},
+		},
+		{
+			name: "all string values",
+			input: map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "mixed types - non-strings skipped",
+			input: map[string]interface{}{
+				"stringKey": "stringValue",
+				"intKey":    123,
+				"boolKey":   true,
+				"nilKey":    nil,
+			},
+			expected: map[string]string{
+				"stringKey": "stringValue",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertInterfaceMapToStringMap(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsMapSubset(t *testing.T) {
+	tests := []struct {
+		name            string
+		requiredKVPairs map[string]string
+		mapToCheck      map[string]string
+		expectedResult  bool
+	}{
+		{
+			name:            "nil required - should return true",
+			requiredKVPairs: nil,
+			mapToCheck:      map[string]string{"key": "value"},
+			expectedResult:  true,
+		},
+		{
+			name:            "empty required - should return true",
+			requiredKVPairs: map[string]string{},
+			mapToCheck:      map[string]string{"key": "value"},
+			expectedResult:  true,
+		},
+		{
+			name:            "empty required vs nil mapToCheck - should return true",
+			requiredKVPairs: map[string]string{},
+			mapToCheck:      nil,
+			expectedResult:  true,
+		},
+		{
+			name:            "nil required vs nil mapToCheck - should return true",
+			requiredKVPairs: nil,
+			mapToCheck:      nil,
+			expectedResult:  true,
+		},
+		{
+			name:            "required present but mapToCheck is nil - should return false",
+			requiredKVPairs: map[string]string{"key": "value"},
+			mapToCheck:      nil,
+			expectedResult:  false,
+		},
+		{
+			name:            "required present but mapToCheck is empty - should return false",
+			requiredKVPairs: map[string]string{"key": "value"},
+			mapToCheck:      map[string]string{},
+			expectedResult:  false,
+		},
+		{
+			name:            "all required keys present with matching values",
+			requiredKVPairs: map[string]string{"key1": "value1", "key2": "value2"},
+			mapToCheck:      map[string]string{"key1": "value1", "key2": "value2", "key3": "value3"},
+			expectedResult:  true,
+		},
+		{
+			name:            "required key missing",
+			requiredKVPairs: map[string]string{"key1": "value1", "key2": "value2"},
+			mapToCheck:      map[string]string{"key1": "value1"},
+			expectedResult:  false,
+		},
+		{
+			name:            "required key present but value mismatch",
+			requiredKVPairs: map[string]string{"key1": "value1"},
+			mapToCheck:      map[string]string{"key1": "different"},
+			expectedResult:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsMapSubset(tt.requiredKVPairs, tt.mapToCheck)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
 func TestCompareMapsWithExceptions(t *testing.T) {
 	testCases := []struct {
 		name             string

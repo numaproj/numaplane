@@ -919,6 +919,13 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
 }
 
+func (r *ISBServiceRolloutReconciler) GetTemplateArguments(isbsvc *unstructured.Unstructured) map[string]interface{} {
+	return map[string]interface{}{
+		TemplateISBServiceName:      isbsvc.GetName(),
+		TemplateISBServiceNamespace: isbsvc.GetNamespace(),
+	}
+}
+
 func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	isbServiceRollout *apiv1.ISBServiceRollout,
 	isbsvcName string,

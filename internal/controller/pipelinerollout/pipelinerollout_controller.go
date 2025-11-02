@@ -1114,6 +1114,13 @@ func (r *PipelineRolloutReconciler) getISBSvcRollout(
 	return isbServiceRollout, err
 }
 
+func (r *PipelineRolloutReconciler) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplatePipelineName:      pipeline.GetName(),
+		common.TemplatePipelineNamespace: pipeline.GetNamespace(),
+	}
+}
+
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
