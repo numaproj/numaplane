@@ -570,7 +570,7 @@ func checkForDifferences(
 	needsUpdating := false
 
 	// evaluate the Rollout child's templated metadata using the new child name so we can effectively check whether the desired metadata is present
-	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(newChildDef))
+	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(existingChildDef))
 	if err != nil {
 		return false, err
 	}
