@@ -707,7 +707,6 @@ func (r *MonoVertexRolloutReconciler) getTemplateArguments(monovertexName string
 	}
 }
 
-// TODO: can I pass the monovertex in here so I can call GetTemplateArguments()?
 func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,
