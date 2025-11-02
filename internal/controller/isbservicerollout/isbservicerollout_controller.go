@@ -919,6 +919,7 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 	return r.makeISBServiceDefinition(isbServiceRollout, isbsvcName, metadata)
 }
 
+// templates are used to dynamically evaluate child spec, metadata, as well as Riders
 func (r *ISBServiceRolloutReconciler) GetTemplateArguments(isbsvc *unstructured.Unstructured) map[string]interface{} {
 	return r.getTemplateArguments(isbsvc.GetName(), isbsvc.GetNamespace())
 }

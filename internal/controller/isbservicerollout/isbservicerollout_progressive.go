@@ -147,13 +147,9 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	if err != nil {
 		return false, err
 	}
-	// Convert apiv1.Metadata to map[string]interface{}
-	var metadataMap map[string]interface{}
-	if err := util.StructToStruct(isbsvcRollout.Spec.InterStepBufferService.Metadata, &metadataMap); err != nil {
-		return false, err
-	}
 
-	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, metadataMap)
+	rolloutDefinedMetadata, _ := rolloutBasedISBSvcDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

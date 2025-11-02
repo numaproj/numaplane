@@ -205,13 +205,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 		return false, err
 	}
 
-	// Convert apiv1.Metadata to map[string]interface{}
-	var metadataMap map[string]interface{}
-	if err := util.StructToStruct(monoVertexRollout.Spec.MonoVertex.Metadata, &metadataMap); err != nil {
-		return false, err
-	}
-
-	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, metadataMap)
+	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata)
 }
 
 /*

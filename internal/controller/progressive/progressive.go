@@ -48,7 +48,7 @@ type progressiveController interface {
 	// CreateUpgradingChildDefinition creates a Kubernetes definition for a child resource of the Rollout with the given name in an "upgrading" state
 	CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error)
 
-	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition
+	// CheckForDifferences determines if the rollout-defined child definition is different from the existing child's definition and also whether the required metadata is present
 	CheckForDifferences(ctx context.Context, existingChild *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error)
 
 	// CheckForDifferencesWithRolloutDef determines if the rollout-defined child definition is different from the existing child's definition
@@ -478,22 +478,14 @@ func checkForUpgradeReplacement(
 	// If the new one is different from the existing Upgrading one:
 	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
 	//  Else replace the Upgrading one with a new one
-	/*existingUpgradingChildName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
-	if err != nil {
-		return false, false, err
-	}*/
+
 	existingUpgradingChildName := existingUpgradingChildDef.GetName()
-	// we need to create an Upgrading child definition which is evaluated using the existing Upgrading child's name so that we can effectively compare them below
+	// we need to create an Upgrading child definition which is template-evaluated using the existing Upgrading child's name so that we can effectively compare them below
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingUpgradingChildName)
 	if err != nil {
 		return false, false, err
 	}
-
-	/*existingPromotedChildName, err := ctlrcommon.GetChildName(ctx, rolloutObject, controller, common.LabelValueUpgradeInProgress, nil, c, false)
-	if err != nil {
-		return false, false, err
-	}*/
-	// we need to create an Upgrading child definition which is evaluated using the existing Promoted child's name so that we can effectively compare them below
+	// we need to create an Upgrading child definition which is template-evaluated using the existing Promoted child's name so that we can effectively compare them below
 	existingPromotedChildName := existingPromotedChildDef.GetName()
 	newUpgradingChildDefUsingPromotedName, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingPromotedChildName)
 	if err != nil {
@@ -560,25 +552,30 @@ func checkForUpgradeReplacement(
 	return differentFromExistingUpgrading, false, nil
 }
 
-// does our Rollout need updating?
-// compare the latest and greatest spec with either the existing "promoted" child or the existing "upgrading" child
-// this could include either the main child definition or a Rider definition
+// does our child need updating?
+// compare the latest and greatest desired spec with either the existing "promoted" child or the existing "upgrading" child
+// look for differences in either the main child definition or a Rider definition
 func checkForDifferences(
 	ctx context.Context,
 	controller progressiveController,
+	// this is the current definition of the Rollout itself - from here we look for the desired metadata
 	rolloutObject ProgressiveRolloutObject,
+	// this is the existing child (spec + Riders) we'll need to compare the new child with
 	existingChildDef *unstructured.Unstructured,
-	existingIsUpgrading bool, // is the existing child "Upgrading" (vs "Promoted")?
-	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	// is the existing child "Upgrading" (vs "Promoted")?
+	existingIsUpgrading bool,
+	// this is the new child (spec + Riders) we'll need to compare the existing child with
+	newChildDef *unstructured.Unstructured) (bool, error) {
 
 	needsUpdating := false
 
-	// resolve the Rollout's metadata using the upgrading child so we can compare effectively
-	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(newUpgradingChildDef))
+	// evaluate the Rollout child's templated metadata using the new child name so we can effectively check whether the desired metadata is present
+	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(newChildDef))
 	if err != nil {
 		return false, err
 	}
-	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newUpgradingChildDef.Object, templatedMetadata)
+	// now compare the spec from the existing child with the new child, plus verify the desired metadata is present
+	childNeedsUpdating, err := controller.CheckForDifferences(ctx, existingChildDef, newChildDef.Object, templatedMetadata)
 	if err != nil {
 		return false, err
 	}
@@ -587,7 +584,7 @@ func checkForDifferences(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = checkRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newUpgradingChildDef)
+		needsUpdating, err = checkRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
 		if err != nil {
 			return false, err
 		}

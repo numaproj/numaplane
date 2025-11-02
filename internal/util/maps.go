@@ -65,7 +65,7 @@ func IsMapSubset(requiredKVPairs map[string]string, mapToCheck map[string]string
 	if len(requiredKVPairs) == 0 {
 		return true
 	}
-	// If there are requirements but mapToCheck is nil or empty, return false
+	// If the map to look for is nil or empty, return false
 	if len(mapToCheck) == 0 {
 		return false
 	}
