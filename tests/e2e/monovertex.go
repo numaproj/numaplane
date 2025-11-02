@@ -441,7 +441,7 @@ func VerifyMonoVertexDeletion(name string) {
 }
 
 func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
-	progressiveFieldChanged bool, currentMonoVertexRolloutIndex int,
+	verifyMetadataFunc func(apiv1.Metadata) bool, progressiveFieldChanged bool, currentMonoVertexRolloutIndex int, monoVertexMetadata apiv1.Metadata,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -450,6 +450,7 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 	// update the MonoVertexRollout
 	UpdateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+		rollout.Spec.MonoVertex.Metadata = monoVertexMetadata
 		return rollout, nil
 	})
 
@@ -527,9 +528,15 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 		VerifyMonoVertexDeletion(expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name)
 	}
 
-	By("Verifying MonoVertex spec got updated")
-	// get Pipeline to check that spec has been updated to correct spec
-	VerifyPromotedMonoVertexSpec(Namespace, name, verifySpecFunc)
+	if verifySpecFunc != nil {
+		By("Verifying MonoVertex spec got updated")
+		// get Pipeline to check that spec has been updated to correct spec
+		VerifyPromotedMonoVertexSpec(Namespace, name, verifySpecFunc)
+	}
+	if verifyMetadataFunc != nil {
+		By("Verifying MonoVertex metadata got updated")
+		VerifyPromotedMonoVertexMetadata(Namespace, name, verifyMetadataFunc)
+	}
 
 	By("verifying MonoVertexRollout Phase=Deployed")
 	VerifyMonoVertexRolloutDeployed(name)

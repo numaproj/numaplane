@@ -91,9 +91,9 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, mvtxMetadata)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 
-		verifyTemplating()
+		verifyTemplatedEnvironmentVariable()
 
 		// new MonoVertex spec
 		updatedMonoVertexSpec := initialMonoVertexSpec
@@ -102,9 +102,14 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
 			return spec.Source != nil && spec.Source.UDSource.Container.Image == javaImagePath
-		}, true, 0)
+		}, func(metadata apiv1.Metadata) bool {
+			currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
 
-		verifyTemplating()
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName) &&
+				metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
+		}, true, 0, mvtxMetadata)
+
+		verifyTemplatedEnvironmentVariable()
 
 		// Verify no in progress strategy set
 		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -146,20 +151,12 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 })
 
-func verifyTemplating() {
+func verifyTemplatedEnvironmentVariable() {
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
 
 		evaluatedEnvironmentVariable := retrievedMonoVertexSpec.Source.UDSource.Container.Env[0]
 		return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
-	})
-
-	VerifyPromotedMonoVertexMetadata(Namespace, monoVertexRolloutName, func(metadata apiv1.Metadata) bool {
-		currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
-
-		return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName) &&
-			metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
-
 	})
 }
 
@@ -173,7 +170,7 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 
 	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-	}, false, currentMonoVertexIndex)
+	}, nil, false, currentMonoVertexIndex, apiv1.Metadata{})
 
 	VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName)
 
@@ -197,7 +194,7 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 	// Resume MonoVertex
 	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-	}, false, currentMonoVertexIndex)
+	}, nil, false, currentMonoVertexIndex, apiv1.Metadata{})
 
 	// then verify that replicas is null
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(spec numaflowv1.MonoVertexSpec) bool {
