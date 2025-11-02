@@ -558,18 +558,21 @@ func checkForUpgradeReplacement(
 func checkForDifferences(
 	ctx context.Context,
 	controller progressiveController,
-	// this is the current definition of the Rollout itself - from here we look for the desired metadata
+	// this is the current definition of the Rollout itself - from here we look for the desired metadata which we can compare to the existing child
 	rolloutObject ProgressiveRolloutObject,
-	// this is the existing child (spec + Riders) we'll need to compare the new child with
+	// this is the existing child we'll need to compare to:
+	// - the new desired child definition (spec + Riders)
+	// - the desired metadata from the Rollout definition
 	existingChildDef *unstructured.Unstructured,
 	// is the existing child "Upgrading" (vs "Promoted")?
 	existingIsUpgrading bool,
-	// this is the new child (spec + Riders) we'll need to compare the existing child with
+	// this is the new child we'll need to compare the existing child with (spec + Riders)
+	// this function assumes that any templates have already been evaluated at this point
 	newChildDef *unstructured.Unstructured) (bool, error) {
 
 	needsUpdating := false
 
-	// evaluate the Rollout child's templated metadata using the new child name so we can effectively check whether the desired metadata is present
+	// evaluate the Rollout child's templated metadata using the existing child name so we can effectively check whether the desired metadata is present
 	templatedMetadata, err := util.ResolveTemplatedSpec(rolloutObject.GetChildMetadata(), controller.GetTemplateArguments(existingChildDef))
 	if err != nil {
 		return false, err
@@ -598,9 +601,13 @@ func checkRidersForDifferences(
 	ctx context.Context,
 	controller progressiveController,
 	rolloutObject ctlrcommon.RolloutObject,
+	// existing child whose Riders we'll check
 	existingChildDef *unstructured.Unstructured,
-	existingIsUpgrading bool, // is the existing child "Upgrading" (vs "Promoted")?
+	// is the existing child "Upgrading" (vs "Promoted")?
+	existingIsUpgrading bool,
+	// newUpgradingChildDef can either already have had any templates evaluated or if not, the evaluation will happen in this function
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+	// if newUpgradingChildDef still has unevaluated templates, then the existing child's name is used to evaluate them, so we can compare effectively
 	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChildDef.GetName(), newUpgradingChildDef)
 	if err != nil {
 		return false, err
