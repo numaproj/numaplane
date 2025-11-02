@@ -697,9 +697,13 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 }
 
 func (r *MonoVertexRolloutReconciler) GetTemplateArguments(monovertex *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(monovertex.GetName(), monovertex.GetNamespace())
+}
+
+func (r *MonoVertexRolloutReconciler) getTemplateArguments(monovertexName string, namespace string) map[string]interface{} {
 	return map[string]interface{}{
-		common.TemplateMonoVertexName:      monovertex.GetName(),
-		common.TemplateMonoVertexNamespace: monovertex.GetNamespace(),
+		common.TemplateMonoVertexName:      monovertexName,
+		common.TemplateMonoVertexNamespace: namespace,
 	}
 }
 
@@ -710,10 +714,7 @@ func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplateMonoVertexName:      monoVertexName,
-		common.TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
-	}
+	args := r.getTemplateArguments(monoVertexName, monoVertexRollout.Namespace)
 
 	monoVertexSpec, err := util.ResolveTemplatedSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {

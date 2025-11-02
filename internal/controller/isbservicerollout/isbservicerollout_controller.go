@@ -920,9 +920,13 @@ func (r *ISBServiceRolloutReconciler) makeTargetISBServiceDef(
 }
 
 func (r *ISBServiceRolloutReconciler) GetTemplateArguments(isbsvc *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(isbsvc.GetName(), isbsvc.GetNamespace())
+}
+
+func (r *ISBServiceRolloutReconciler) getTemplateArguments(isbsvcName string, namespace string) map[string]interface{} {
 	return map[string]interface{}{
-		TemplateISBServiceName:      isbsvc.GetName(),
-		TemplateISBServiceNamespace: isbsvc.GetNamespace(),
+		TemplateISBServiceName:      isbsvcName,
+		TemplateISBServiceNamespace: namespace,
 	}
 }
 
@@ -932,10 +936,7 @@ func (r *ISBServiceRolloutReconciler) makeISBServiceDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		TemplateISBServiceName:      isbsvcName,
-		TemplateISBServiceNamespace: isbServiceRollout.Namespace,
-	}
+	args := r.getTemplateArguments(isbsvcName, isbServiceRollout.Namespace)
 
 	isbServiceSpec, err := util.ResolveTemplatedSpec(isbServiceRollout.Spec.InterStepBufferService.Spec, args)
 	if err != nil {

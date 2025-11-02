@@ -1115,9 +1115,13 @@ func (r *PipelineRolloutReconciler) getISBSvcRollout(
 }
 
 func (r *PipelineRolloutReconciler) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(pipeline.GetName(), pipeline.GetNamespace())
+}
+
+func (r *PipelineRolloutReconciler) getTemplateArguments(pipelineName string, namespace string) map[string]interface{} {
 	return map[string]interface{}{
-		common.TemplatePipelineName:      pipeline.GetName(),
-		common.TemplatePipelineNamespace: pipeline.GetNamespace(),
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: namespace,
 	}
 }
 
@@ -1128,10 +1132,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplatePipelineName:      pipelineName,
-		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
-	}
+	args := r.getTemplateArguments(pipelineName, pipelineRollout.Namespace)
 
 	pipelineSpec, err := util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {
