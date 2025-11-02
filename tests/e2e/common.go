@@ -234,6 +234,10 @@ func getRolloutConditionStatus(conditions []metav1.Condition, conditionType apiv
 	return c.Status
 }
 
+// map to track active logs streams for given pods
+var activeLogStreams = make(map[string]bool)
+var streamsMutex sync.Mutex
+
 func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 	watcher, err := client.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
 	if err != nil {
@@ -244,20 +248,35 @@ func watchPodLogs(client clientgo.Interface, namespace, labelSelector string) {
 	for {
 		select {
 		case event := <-watcher.ResultChan():
-			if event.Type == watch.Added || event.Type == watch.Modified {
+			// only add new streams for added pods
+			if event.Type == watch.Added {
 				pod := event.Object.(*corev1.Pod)
 				for _, container := range pod.Spec.Containers {
-					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
+					startUniqueLogStream(pod.Name, container.Name)
 				}
 				for _, container := range pod.Spec.InitContainers {
-					streamPodLogs(context.Background(), kubeClient, Namespace, pod.Name, container.Name, stopCh)
+					startUniqueLogStream(pod.Name, container.Name)
 				}
 			}
 		case <-stopCh:
 			return
 		}
 	}
+}
 
+func startUniqueLogStream(podName, containerName string) {
+	streamKey := fmt.Sprintf("%s-%s", podName, containerName)
+
+	streamsMutex.Lock()
+	// check if stream already exists, if so return
+	if activeLogStreams[streamKey] {
+		streamsMutex.Unlock()
+		return
+	}
+	activeLogStreams[streamKey] = true
+	streamsMutex.Unlock()
+
+	go streamPodLogs(context.Background(), kubeClient, Namespace, podName, containerName, stopCh)
 }
 
 func streamPodLogs(ctx context.Context, client clientgo.Interface, namespace, podName, containerName string, stopCh <-chan struct{}) {
