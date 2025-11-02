@@ -167,7 +167,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "len(result) > 0"
 		CreateAnalysisTemplate(analysisTemplateNameSuccessTwo, Namespace, *updatedAnalysisTemplateSpec)
 
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForSuccessCase)
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategyForSuccessCase, apiv1.Metadata{})
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, monoVertexScaleTo, updatedMonoVertexSpec,
@@ -198,7 +198,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 		updatedInitialMonoVertexSpec := initialMonoVertexSpec.DeepCopy()
 		updatedInitialMonoVertexSpec.Sink.AbstractSink.Blackhole = nil
 		updatedInitialMonoVertexSpec.Sink.AbstractSink.UDSink = &numaflowv1.UDSink{Container: &numaflowv1.Container{Image: monovertexSinkBadImage}}
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategyForFailureCase)
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, *updatedInitialMonoVertexSpec, &defaultStrategyForFailureCase, apiv1.Metadata{})
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForSuccess(monoVertexRolloutName, validUDTransformerImage, *updatedInitialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)

@@ -91,6 +91,12 @@ var (
 					Container: &numaflowv1.Container{
 						Image:           validImagePath,
 						ImagePullPolicy: &pullPolicyAlways,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "my-env",
+								Value: "{{.pipeline-namespace}}-{{pipeline-name}}",
+							},
+						},
 					},
 				},
 				Scale: numaflowv1.Scale{Min: &numVertices, Max: &numVertices, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
@@ -116,6 +122,18 @@ var (
 			},
 		},
 	}
+
+	badCatVertex = numaflowv1.UDF{
+		Container: &numaflowv1.Container{
+			Image:           "badcat",
+			ImagePullPolicy: &pullPolicyAlways,
+			Env: []corev1.EnvVar{
+				{
+					Name:  "my-env",
+					Value: "{{.pipeline-namespace}}-{{pipeline-name}}",
+				},
+			},
+		}}
 
 	volSize, _            = apiresource.ParseQuantity("10Mi")
 	initialISBServiceSpec = numaflowv1.InterStepBufferServiceSpec{
@@ -151,12 +169,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Failure case")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{
-			Container: &numaflowv1.Container{
-				Image:           "badcat",
-				ImagePullPolicy: &pullPolicyAlways,
-			},
-		}
+		updatedPipelineSpec.Vertices[1].UDF = &badCatVertex
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
 		updatedISBServiceSpec := updateISBServiceForFailure()
@@ -190,11 +203,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Invalid change causing failure")
 		updatedPipelineSpec := initialPipelineSpec.DeepCopy()
-		updatedPipelineSpec.Vertices[1].UDF = &numaflowv1.UDF{
-			Container: &numaflowv1.Container{
-				Image:           "badcat",
-				ImagePullPolicy: &pullPolicyAlways,
-			}}
+		updatedPipelineSpec.Vertices[1].UDF = &badCatVertex
 		UpdatePipeline(pipelineRolloutName, *updatedPipelineSpec)
 
 		By("Updating the ISBService to cause a Progressive change - Valid change")

@@ -157,7 +157,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 
 	It("Should create NumaflowControllerRollout and MonoVertexRollout", func() {
 		CreateNumaflowControllerRollout(PrimaryNumaflowControllerVersion)
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, monoVertexSpecWithoutRider, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, monoVertexSpecWithoutRider, nil, apiv1.Metadata{})
 	})
 
 	It("Should add ConfigMap Rider to MonoVertexRollout", func() {

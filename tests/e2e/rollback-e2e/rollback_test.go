@@ -223,7 +223,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 	It("Should Update Rollouts and then immediately Roll them back", func() {
 
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 
 		// update each rollout
 		updatedNCVersion := UpdatedNumaflowControllerVersion
@@ -287,7 +287,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 	It("Should update ISBServiceRollout and PipelineRollout and rollback just PipelineRollout", func() {
 		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 
 		updateResources(&failedPipelineSpec, &updatedISBServiceSpec, nil, nil)
 
@@ -331,7 +331,7 @@ var _ = Describe("Rollback e2e", Serial, func() {
 
 		if UpgradeStrategy == config.ProgressiveStrategyID {
 			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
-			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 
 			// update each rollout
 			updatedNCVersion := UpdatedNumaflowControllerVersion

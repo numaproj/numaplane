@@ -133,6 +133,15 @@ var (
 		},
 	}
 
+	pipelineMetadata = apiv1.Metadata{
+		Labels: map[string]string{
+			"my-label": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+		Annotations: map[string]string{
+			"my-annotation": "{{.pipeline-namespace}}-{{.pipeline-name}}",
+		},
+	}
+
 	monoVertexScaleMin = int32(4)
 	monoVertexScaleMax = int32(5)
 
@@ -316,8 +325,8 @@ var _ = Describe("Concurrent e2e", Serial, func() {
 			// create initial objects
 			CreateNumaflowControllerRollout(InitialNumaflowControllerVersion)
 			CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
-			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
-			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+			CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, pipelineMetadata)
+			CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 
 			// update each rollout
 			By("Updating PipelineRollout")

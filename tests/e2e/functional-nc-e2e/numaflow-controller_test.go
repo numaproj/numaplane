@@ -133,7 +133,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the MonoVertexRollout if it does not exist", func() {
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {
