@@ -97,7 +97,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 		// new MonoVertex spec
 		updatedMonoVertexSpec := initialMonoVertexSpec
-		javaImagePath := "quay.io/numaio/numaflow-go/source-simple-source:stable"
+		javaImagePath := "quay.io/numaio/numaflow-java/source-simple-source:stable"
 		updatedMonoVertexSpec.Source.UDSource.Container.Image = javaImagePath
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {

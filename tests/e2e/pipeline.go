@@ -546,6 +546,7 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 		return rollout, nil
 	})
 
+	// PPND checks
 	if UpgradeStrategy == config.PPNDStrategyID && dataLoss {
 
 		switch expectedFinalPhase {
@@ -579,7 +580,9 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
 		By("Verifying Pipeline got updated")
 		// get Pipeline to check that spec has been updated to correct spec
-		VerifyPromotedPipelineSpec(Namespace, name, verifySpecFunc)
+		if verifySpecFunc != nil {
+			VerifyPromotedPipelineSpec(Namespace, name, verifySpecFunc)
+		}
 		if verifyMetadataFunc != nil {
 			VerifyPromotedPipelineMetadata(Namespace, name, verifyMetadataFunc)
 		}
