@@ -264,7 +264,10 @@ var _ = Describe("Functional e2e:", Serial, func() {
 			}
 			evaluatedEnvironmentVariable := retrievedPipelineSpec.Vertices[1].UDF.Container.Env[0]
 			return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
-		}, true, true, true, apiv1.Metadata{})
+		}, func(metadata apiv1.Metadata) bool {
+			currentPromotedPipelineName, _ := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedPipelineName)
+		}, true, true, true, pipelineMetadata)
 
 	})
 
@@ -360,7 +363,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhasePaused, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhasePaused
-	}, false, false, true, apiv1.Metadata{})
+	}, nil, false, false, true, pipelineMetadata)
 
 	VerifyPromotedPipelineStaysPaused(pipelineRolloutName)
 
@@ -385,7 +388,7 @@ func testPauseResume(currentPipelineSpec numaflowv1.PipelineSpec, resumeFast boo
 	// Resume Pipeline
 	UpdatePipelineRollout(pipelineRolloutName, currentPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 		return retrievedPipelineSpec.Lifecycle.DesiredPhase == numaflowv1.PipelinePhaseRunning
-	}, false, false, true, apiv1.Metadata{})
+	}, nil, false, false, true, pipelineMetadata)
 
 	// then verify that replicas is null
 	VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
