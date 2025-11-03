@@ -7,8 +7,8 @@ spec:
   strategy:
     progressive:
       assessmentSchedule: "10,200,60,10"
-    analysis:
-      args:
+    # analysis:
+      # args:
       #templates:
       #- templateName: pipeline-template
       #  clusterScope: false
@@ -54,10 +54,11 @@ spec:
     #         name: '{{.pipeline-name}}-{{.vertex-name}}'
 
   pipeline:
-    #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
+    metadata:
+      annotations:
+    #    numaflow.numaproj.io/instance: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
+        my-templated-annotation: '{{.pipeline-namespace}}-{{.pipeline-name}}'
+
     spec:
       lifecycle:
         pauseGracePeriodSeconds: 60

@@ -8,7 +8,6 @@ spec:
     progressive:
       assessmentSchedule: "10,200,60,10"
     analysis:
-      args:
       templates:
       - templateName: mvtx-acknowledged-messages
         clusterScope: false
@@ -55,10 +54,10 @@ spec:
     #         name: '{{.monovertex-name}}'
 
   monoVertex:
-    #uncomment for Progressive rollout to set Numaflow Controller instance:
     metadata:
       annotations:
-        my-templated-annotation: '{{.monovertex-name}}-2'
+      # numaflow.numaproj.io/instance: "0" # uncomment for Progressive rollout to set Numaflow Controller instance
+        my-templated-annotation: '{{.monovertex-namespace}}-{{.monovertex-name}}'
     spec:
       scale:
         min: 2
