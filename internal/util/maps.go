@@ -19,6 +19,8 @@ package util
 import (
 	"maps"
 	"strings"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func MergeMaps(existing, new map[string]string) map[string]string {
@@ -32,6 +34,13 @@ func MergeMaps(existing, new map[string]string) map[string]string {
 	}
 
 	return merged
+}
+
+func CompareMaps(existing, new map[string]string) bool {
+	if existing == nil || new == nil {
+		return len(existing) == len(new)
+	}
+	return cmp.Equal(existing, new)
 }
 
 // ConvertInterfaceMapToStringMap converts a map[string]interface{} to map[string]string
