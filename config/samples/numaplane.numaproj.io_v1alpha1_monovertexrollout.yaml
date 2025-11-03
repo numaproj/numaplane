@@ -56,9 +56,9 @@ spec:
 
   monoVertex:
     #uncomment for Progressive rollout to set Numaflow Controller instance:
-    #metadata:
-    #  annotations:
-    #    numaflow.numaproj.io/instance: "0"
+    metadata:
+      annotations:
+        my-templated-annotation: '{{.monovertex-name}}-2'
     spec:
       scale:
         min: 2
