@@ -385,18 +385,6 @@ func getNamesAndKinds(ulist unstructured.UnstructuredList) string {
 	return namesAndKinds
 }
 
-func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
-	tempMap1 := map1
-	if tempMap1 == nil {
-		tempMap1 = map[string]string{}
-	}
-	tempMap2 := map2
-	if tempMap2 == nil {
-		tempMap2 = map[string]string{}
-	}
-	return util.CompareStructNumTypeAgnostic(tempMap1, tempMap2)
-}
-
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss
 func getDataLossUpgradeStrategy(ctx context.Context, namespace, resourceKind string) (apiv1.UpgradeStrategy, error) {
 	userUpgradeStrategy, err := GetUserStrategy(ctx, namespace, resourceKind)
