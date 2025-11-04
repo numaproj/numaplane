@@ -23,7 +23,6 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +30,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
+
+	"github.com/numaproj/numaplane/internal/common"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
@@ -183,6 +185,42 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		VerifyPipelineEvent(Namespace, GetInstanceName(pipelineRolloutName, 4), "Normal")
 	})
 
+	It("Should create 1 failed Pipelines which will need to be drained and deleted and update to new Pipeline", func() {
+
+		DeletePipelineRollout(pipelineRolloutName)
+		failedPipelineSpec1 := initialPipelineSpec.DeepCopy()
+		failedPipelineSpec1.Vertices[1] = numaflowv1.AbstractVertex{
+			Name: "cat",
+			UDF: &numaflowv1.UDF{
+				Container: &numaflowv1.Container{
+					Image:           "badpath1",
+					ImagePullPolicy: &pullPolicyAlways,
+				},
+			},
+			Scale: numaflowv1.Scale{Min: &fourPods, Max: &fivePods, ZeroReplicaSleepSeconds: &zeroReplicaSleepSec},
+		}
+
+		strategy := &apiv1.PipelineStrategy{
+			PipelineTypeRolloutStrategy: apiv1.PipelineTypeRolloutStrategy{
+				PipelineTypeProgressiveStrategy: apiv1.PipelineTypeProgressiveStrategy{
+					Progressive: apiv1.ProgressiveStrategy{ForcePromote: true}}},
+		}
+		CreatePipelineRollout(pipelineRolloutName, Namespace, *failedPipelineSpec1, true, strategy, apiv1.Metadata{})
+
+		// wait for some time to ensure that there is enough data to drain
+		time.Sleep(30 * time.Second)
+
+		failedPipelineSpec2 := failedPipelineSpec1.DeepCopy()
+		failedPipelineSpec2.Edges = []numaflowv1.Edge{
+			{From: "in", To: "cat"},
+			{From: "cat2", To: "out"},
+		}
+
+		updatePipeline(failedPipelineSpec2)
+
+		verifyPipelineForceDrainFailure(GetInstanceName(pipelineRolloutName, 0))
+	})
+
 	It("Should Delete Rollouts", func() {
 		DeletePipelineRollout(pipelineRolloutName)
 		DeleteISBServiceRollout(isbServiceRolloutName)
@@ -259,7 +297,6 @@ func verifyPipelinesPausingWithValidSpecAndDeleted(pipelineIndices []int) {
 				pausingWithCorrectSpec[pipelineIndex] = true
 				By(fmt.Sprintf("setting pausingWithCorrectSpec for index %d\n", pipelineIndex))
 			}
-
 		}
 
 		// check if all Pipelines have met the criteria
@@ -287,4 +324,23 @@ func updatePipeline(pipelineSpec *numaflowv1.PipelineSpec) {
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
 		return rollout, nil
 	})
+}
+
+// verifyPipelineForceDrainFailure will check if annotation 'numaplane.numaproj.io/force-drain-failure-start-time` is present on the given Pipeline
+func verifyPipelineForceDrainFailure(pipelineName string) {
+	CheckEventually("Verifying that the failed Pipeline has force drain failure annotation", func() bool {
+		pipeline, _, _, err := GetPipelineSpecAndStatus(Namespace, pipelineName)
+		if err != nil {
+			fmt.Println("Error retrieving pipeline:", err)
+			return false
+		}
+
+		annotations, found, err := unstructured.NestedMap(pipeline.Object, "metadata", "annotations")
+		if !found || err != nil || annotations == nil {
+			return false
+		}
+		// Check if the annotation for force drain is present
+		_, annotationFound := annotations[common.AnnotationKeyForceDrainFailureStartTime]
+		return annotationFound
+	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "Pipeline didn't have force drain failure annotation")
 }

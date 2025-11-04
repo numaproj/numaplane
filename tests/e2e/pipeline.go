@@ -429,7 +429,7 @@ func startPipelineRolloutWatches() {
 
 // shared functions
 
-// create a PipelineRollout of a given spec/name and make sure it's running
+// CreatePipelineRollout create a PipelineRollout of a given spec/name and make sure it's running
 func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy, metadata apiv1.Metadata) {
 
 	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy, metadata)
@@ -485,7 +485,7 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 
 }
 
-// delete a PipelineRollout and verify deletion
+// DeletePipelineRollout deletes a PipelineRollout and verify deletion
 func DeletePipelineRollout(name string) {
 
 	By("Deleting PipelineRollout")
@@ -522,7 +522,7 @@ func DeletePipelineRollout(name string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), "The Pipeline should have been deleted but it was found.")
 }
 
-// update PipelineRollout and verify correct process
+// UpdatePipelineRollout and verify correct process;
 // name - name of PipelineRollout to update
 // newSpec - new child Pipeline spec that will be updated in the rollout
 // expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in

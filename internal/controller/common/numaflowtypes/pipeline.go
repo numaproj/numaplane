@@ -22,18 +22,19 @@ import (
 	"fmt"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaplane/internal/common"
-	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
-	"github.com/numaproj/numaplane/internal/util"
-	"github.com/numaproj/numaplane/internal/util/kubernetes"
-	"github.com/numaproj/numaplane/internal/util/logger"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numaproj/numaplane/internal/common"
+	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
 // PipelineSpec keeps track of minimum number of fields we need to know about in Numaflow's PipelineSpec, which are presumed not to change from version to version
@@ -423,7 +424,7 @@ func MinimizePipelineVertexReplicas(ctx context.Context, c client.Client, pipeli
 	return nil
 }
 
-// determine if all Pipeline Vertices have max=0
+// CheckPipelineScaledToZero determine if all Pipeline Vertices have max=0
 func CheckPipelineScaledToZero(ctx context.Context, pipeline *unstructured.Unstructured) (bool, error) {
 	scaledToZero := true
 
