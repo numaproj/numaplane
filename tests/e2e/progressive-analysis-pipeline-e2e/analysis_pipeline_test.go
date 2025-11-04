@@ -218,7 +218,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 
 	It("Should validate Pipeline and ISBService upgrade using Progressive strategy - Successful analysis", func() {
 		CreateAnalysisTemplate(analysisTemplateNameSuccess, Namespace, initialAnalysisTemplateSpec)
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForSuccessCase)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForSuccessCase, apiv1.Metadata{})
 
 		By("Updating the Pipeline Topology to cause a Progressive change - Successful case")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)
@@ -235,7 +235,7 @@ var _ = Describe("Progressive Pipeline and ISBService E2E", Serial, func() {
 		updatedAnalysisTemplateSpec := initialAnalysisTemplateSpec.DeepCopy()
 		updatedAnalysisTemplateSpec.Metrics[0].SuccessCondition = "result[0] > 0"
 		CreateAnalysisTemplate(analysisTemplateNameFailure, Namespace, *updatedAnalysisTemplateSpec)
-		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForFailureCase)
+		CreateInitialPipelineRollout(pipelineRolloutName, GetInstanceName(isbServiceRolloutName, 0), initialPipelineSpec, defaultStrategyForFailureCase, apiv1.Metadata{})
 
 		By("Updating the Pipeline Topology to cause a Progressive change")
 		UpdatePipeline(pipelineRolloutName, updatedPipelineSpec)

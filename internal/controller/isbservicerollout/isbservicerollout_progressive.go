@@ -14,6 +14,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
@@ -119,15 +120,15 @@ func (r *ISBServiceRolloutReconciler) assessPipelines(
 }
 
 // CheckForDifferences checks to see if the isbsvc definition matches the spec and the required metadata
-func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *ISBServiceRolloutReconciler) CheckForDifferences(ctx context.Context, isbsvcDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 
 	specsEqual := util.CompareStructNumTypeAgnostic(isbsvcDef.Object["spec"], requiredSpec["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabels := requiredMetadata.Labels
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := isbsvcDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
 	actualAnnotations := isbsvcDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -146,7 +147,9 @@ func (r *ISBServiceRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 	if err != nil {
 		return false, err
 	}
-	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, isbsvcRollout.Spec.InterStepBufferService.Metadata)
+
+	rolloutDefinedMetadata, _ := rolloutBasedISBSvcDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingISBSvc, rolloutBasedISBSvcDef.Object, rolloutDefinedMetadata)
 }
 
 func (r *ISBServiceRolloutReconciler) ProcessPromotedChildPreUpgrade(

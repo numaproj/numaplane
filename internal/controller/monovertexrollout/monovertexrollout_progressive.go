@@ -143,7 +143,7 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 }
 
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove certain fields (which numaplane needs to set) from comparison to test for equality
 	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
@@ -178,11 +178,10 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
 	// Check required metadata (labels and annotations)
-
-	requiredLabels := requiredMetadata.Labels
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := monoVertexDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
 	actualAnnotations := monoVertexDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -206,7 +205,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 		return false, err
 	}
 
-	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, monoVertexRollout.Spec.MonoVertex.Metadata)
+	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata)
 }
 
 /*

@@ -71,6 +71,31 @@ func VerifyPromotedMonoVertexSpec(namespace, monoVertexRolloutName string, f fun
 	}).Should(BeTrue())
 }
 
+func VerifyPromotedMonoVertexMetadata(namespace string, monoVertexRolloutName string, f func(apiv1.Metadata) bool) {
+	var retrievedMonoVertexMetadata apiv1.Metadata
+	CheckEventually("verifying MonoVertex Metadata", func() bool {
+		unstruct, err := GetPromotedMonoVertex(namespace, monoVertexRolloutName)
+		if err != nil {
+			return false
+		}
+		if retrievedMonoVertexMetadata, err = GetMonoVertexMetadata(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedMonoVertexMetadata)
+	}).Should(BeTrue())
+}
+
+// GetMonoVertexMetadata from Unstructured type
+func GetMonoVertexMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error) {
+	labels := u.GetLabels()
+	annotations := u.GetAnnotations()
+	return apiv1.Metadata{
+		Labels:      labels,
+		Annotations: annotations,
+	}, nil
+}
+
 func VerifyMonoVertexRolloutReady(monoVertexRolloutName string) {
 	VerifyMonoVertexRolloutDeployed(monoVertexRolloutName)
 
@@ -323,9 +348,9 @@ func startMonoVertexRolloutWatches() {
 // shared functions
 
 // creates MonoVertexRollout of a given spec/name and makes sure it's running
-func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) {
+func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy, metadata apiv1.Metadata) {
 
-	monoVertexRolloutSpec := createMonoVertexRolloutSpec(name, namespace, spec, strategy)
+	monoVertexRolloutSpec := createMonoVertexRolloutSpec(name, namespace, spec, strategy, metadata)
 	_, err := monoVertexRolloutClient.Create(ctx, monoVertexRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -346,7 +371,7 @@ func CreateMonoVertexRollout(name, namespace string, spec numaflowv1.MonoVertexS
 
 }
 
-func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) *apiv1.MonoVertexRollout {
+func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy, metadata apiv1.Metadata) *apiv1.MonoVertexRollout {
 
 	rawSpec, err := json.Marshal(spec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -366,6 +391,7 @@ func createMonoVertexRolloutSpec(name, namespace string, spec numaflowv1.MonoVer
 				Spec: runtime.RawExtension{
 					Raw: rawSpec,
 				},
+				Metadata: metadata,
 			},
 		},
 	}
@@ -415,7 +441,7 @@ func VerifyMonoVertexDeletion(name string) {
 }
 
 func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, newSpec numaflowv1.MonoVertexSpec, expectedFinalPhase numaflowv1.MonoVertexPhase, verifySpecFunc func(numaflowv1.MonoVertexSpec) bool,
-	progressiveFieldChanged bool, currentMonoVertexRolloutIndex int,
+	verifyMetadataFunc func(apiv1.Metadata) bool, progressiveFieldChanged bool, currentMonoVertexRolloutIndex int, monoVertexMetadata apiv1.Metadata,
 ) {
 
 	rawSpec, err := json.Marshal(newSpec)
@@ -424,6 +450,7 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 	// update the MonoVertexRollout
 	UpdateMonoVertexRolloutInK8S(name, func(rollout apiv1.MonoVertexRollout) (apiv1.MonoVertexRollout, error) {
 		rollout.Spec.MonoVertex.Spec.Raw = rawSpec
+		rollout.Spec.MonoVertex.Metadata = monoVertexMetadata
 		return rollout, nil
 	})
 
@@ -501,9 +528,15 @@ func UpdateMonoVertexRollout(name string, origSpec numaflowv1.MonoVertexSpec, ne
 		VerifyMonoVertexDeletion(expectedPipelineTypeProgressiveStatusOnDone.Promoted.Name)
 	}
 
-	By("Verifying MonoVertex spec got updated")
-	// get Pipeline to check that spec has been updated to correct spec
-	VerifyPromotedMonoVertexSpec(Namespace, name, verifySpecFunc)
+	if verifySpecFunc != nil {
+		By("Verifying MonoVertex spec got updated")
+		// get Pipeline to check that spec has been updated to correct spec
+		VerifyPromotedMonoVertexSpec(Namespace, name, verifySpecFunc)
+	}
+	if verifyMetadataFunc != nil {
+		By("Verifying MonoVertex metadata got updated")
+		VerifyPromotedMonoVertexMetadata(Namespace, name, verifyMetadataFunc)
+	}
 
 	By("verifying MonoVertexRollout Phase=Deployed")
 	VerifyMonoVertexRolloutDeployed(name)
@@ -571,9 +604,9 @@ func VerifyMonoVertexProgressiveSuccess(monoVertexRolloutName, monoVertexScaleMi
 	VerifyMonoVertexRolloutProgressiveCondition(monoVertexRolloutName, metav1.ConditionTrue)
 }
 
-func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy) {
+func CreateInitialMonoVertexRollout(monoVertexRolloutName string, initialMonoVertexSpec numaflowv1.MonoVertexSpec, strategy *apiv1.PipelineTypeRolloutStrategy, monoVertexMetadata apiv1.Metadata) {
 	By("Creating a MonoVertexRollout")
-	CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy)
+	CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, strategy, monoVertexMetadata)
 
 	By("Verifying that the MonoVertex spec is as expected")
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {

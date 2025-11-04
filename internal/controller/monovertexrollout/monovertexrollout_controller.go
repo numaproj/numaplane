@@ -696,16 +696,25 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata)
 }
 
+// templates are used to dynamically evaluate child spec, metadata, as well as Riders
+func (r *MonoVertexRolloutReconciler) GetTemplateArguments(monovertex *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(monovertex.GetName(), monovertex.GetNamespace())
+}
+
+func (r *MonoVertexRolloutReconciler) getTemplateArguments(monovertexName string, namespace string) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplateMonoVertexName:      monovertexName,
+		common.TemplateMonoVertexNamespace: namespace,
+	}
+}
+
 func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplateMonoVertexName:      monoVertexName,
-		common.TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
-	}
+	args := r.getTemplateArguments(monoVertexName, monoVertexRollout.Namespace)
 
 	monoVertexSpec, err := util.ResolveTemplatedSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {

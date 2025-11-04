@@ -1114,6 +1114,18 @@ func (r *PipelineRolloutReconciler) getISBSvcRollout(
 	return isbServiceRollout, err
 }
 
+// templates are used to dynamically evaluate child spec, metadata, as well as Riders
+func (r *PipelineRolloutReconciler) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(pipeline.GetName(), pipeline.GetNamespace())
+}
+
+func (r *PipelineRolloutReconciler) getTemplateArguments(pipelineName string, namespace string) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: namespace,
+	}
+}
+
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
@@ -1121,10 +1133,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplatePipelineName:      pipelineName,
-		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
-	}
+	args := r.getTemplateArguments(pipelineName, pipelineRollout.Namespace)
 
 	pipelineSpec, err := util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {

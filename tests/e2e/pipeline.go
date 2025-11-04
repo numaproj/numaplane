@@ -65,6 +65,21 @@ func VerifyPromotedPipelineSpec(namespace string, pipelineRolloutName string, f 
 	}).Should(BeTrue())
 }
 
+func VerifyPromotedPipelineMetadata(namespace string, pipelineRolloutName string, f func(apiv1.Metadata) bool) {
+	var retrievedPipelineMetadata apiv1.Metadata
+	CheckEventually("verifying Pipeline Metadata", func() bool {
+		unstruct, err := GetPromotedPipeline(namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+		if retrievedPipelineMetadata, err = GetPipelineMetadata(unstruct); err != nil {
+			return false
+		}
+
+		return f(retrievedPipelineMetadata)
+	}).Should(BeTrue())
+}
+
 // GetPipelineSpecAndStatus retrieves a pipeline by name and returns its spec and status
 func GetPipelineSpecAndStatus(namespace, pipelineName string) (*unstructured.Unstructured, numaflowv1.PipelineSpec, numaflowv1.PipelineStatus, error) {
 	var retrievedPipelineSpec numaflowv1.PipelineSpec
@@ -217,6 +232,16 @@ func GetPipelineSpec(u *unstructured.Unstructured) (numaflowv1.PipelineSpec, err
 	var pipelineSpec numaflowv1.PipelineSpec
 	err := util.StructToStruct(&specMap, &pipelineSpec)
 	return pipelineSpec, err
+}
+
+// GetPipelineMetadata from Unstructured type
+func GetPipelineMetadata(u *unstructured.Unstructured) (apiv1.Metadata, error) {
+	labels := u.GetLabels()
+	annotations := u.GetAnnotations()
+	return apiv1.Metadata{
+		Labels:      labels,
+		Annotations: annotations,
+	}, nil
 }
 
 func GetGVRForPipeline() schema.GroupVersionResource {
@@ -405,9 +430,9 @@ func startPipelineRolloutWatches() {
 // shared functions
 
 // create a PipelineRollout of a given spec/name and make sure it's running
-func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy) {
+func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec, failed bool, strategy *apiv1.PipelineStrategy, metadata apiv1.Metadata) {
 
-	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy)
+	pipelineRolloutSpec := createPipelineRolloutSpec(name, namespace, spec, strategy, metadata)
 	_, err := pipelineRolloutClient.Create(ctx, pipelineRolloutSpec, metav1.CreateOptions{})
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -431,7 +456,7 @@ func CreatePipelineRollout(name, namespace string, spec numaflowv1.PipelineSpec,
 	}
 }
 
-func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy) *apiv1.PipelineRollout {
+func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.PipelineSpec, strategy *apiv1.PipelineStrategy, metadata apiv1.Metadata) *apiv1.PipelineRollout {
 
 	pipelineSpecRaw, err := json.Marshal(pipelineSpec)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -451,6 +476,7 @@ func createPipelineRolloutSpec(name, namespace string, pipelineSpec numaflowv1.P
 				Spec: runtime.RawExtension{
 					Raw: pipelineSpecRaw,
 				},
+				Metadata: metadata,
 			},
 		},
 	}
@@ -501,9 +527,10 @@ func DeletePipelineRollout(name string) {
 // newSpec - new child Pipeline spec that will be updated in the rollout
 // expectedFinalPhase - after updating the Rollout what phase we expect the child Pipeline to be in
 // verifySpecFunc - boolean function to verify that updated PipelineRollout has correct spec
+// verifyMetadataFunc - boolean function to verify that updated PipelineRollout has correct metadata
 // dataLoss - informs us if the update to the PipelineRollout will cause data loss or not
-func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, dataLoss bool,
-	progressiveFieldChanged bool, expectedSuccess bool,
+func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expectedFinalPhase numaflowv1.PipelinePhase, verifySpecFunc func(numaflowv1.PipelineSpec) bool, verifyMetadataFunc func(apiv1.Metadata) bool, dataLoss bool,
+	progressiveFieldChanged bool, expectedSuccess bool, pipelineMetadata apiv1.Metadata,
 ) {
 
 	By("Updating Pipeline spec in PipelineRollout")
@@ -515,9 +542,11 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	// update the PipelineRollout
 	UpdatePipelineRolloutInK8S(Namespace, name, func(rollout apiv1.PipelineRollout) (apiv1.PipelineRollout, error) {
 		rollout.Spec.Pipeline.Spec.Raw = rawSpec
+		rollout.Spec.Pipeline.Metadata = pipelineMetadata
 		return rollout, nil
 	})
 
+	// PPND checks
 	if UpgradeStrategy == config.PPNDStrategyID && dataLoss {
 
 		switch expectedFinalPhase {
@@ -551,7 +580,12 @@ func UpdatePipelineRollout(name string, newSpec numaflowv1.PipelineSpec, expecte
 	if !(UpgradeStrategy == config.PPNDStrategyID && expectedFinalPhase == numaflowv1.PipelinePhasePausing) {
 		By("Verifying Pipeline got updated")
 		// get Pipeline to check that spec has been updated to correct spec
-		VerifyPromotedPipelineSpec(Namespace, name, verifySpecFunc)
+		if verifySpecFunc != nil {
+			VerifyPromotedPipelineSpec(Namespace, name, verifySpecFunc)
+		}
+		if verifyMetadataFunc != nil {
+			VerifyPromotedPipelineMetadata(Namespace, name, verifyMetadataFunc)
+		}
 		VerifyPipelineRolloutDeployed(name)
 	}
 	// slow pausing case
@@ -617,15 +651,78 @@ func VerifyPipelineDeletion(pipelineName string) {
 	}).WithTimeout(DefaultTestTimeout).Should(BeTrue(), fmt.Sprintf("The Pipeline %s/%s should have been deleted but it was found.", Namespace, pipelineName))
 }
 
-func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy) {
+func CreateInitialPipelineRollout(pipelineRolloutName, currentPromotedISBService string, initialPipelineSpec numaflowv1.PipelineSpec, defaultStrategy apiv1.PipelineStrategy, pipelineMetadata apiv1.Metadata) {
 	By("Creating a PipelineRollout")
-	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy)
+	CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, &defaultStrategy, pipelineMetadata)
 
 	By("Verifying that the Pipeline spec is as expected")
 	originalPipelineSpecISBSvcName := initialPipelineSpec.InterStepBufferServiceName
 	initialPipelineSpec.InterStepBufferServiceName = currentPromotedISBService
 	VerifyPromotedPipelineSpec(Namespace, pipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
-		return reflect.DeepEqual(retrievedPipelineSpec, initialPipelineSpec)
+		// Get the promoted pipeline name to resolve templates
+		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+
+		// Resolve templates in the initial spec
+		args := map[string]interface{}{
+			common.TemplatePipelineName:      promotedPipelineName,
+			common.TemplatePipelineNamespace: Namespace,
+		}
+
+		resolvedSpec, err := util.ResolveTemplatedSpec(initialPipelineSpec, args)
+		if err != nil {
+			return false
+		}
+
+		// Convert resolved spec back to PipelineSpec
+		var expectedPipelineSpec numaflowv1.PipelineSpec
+		err = util.StructToStruct(&resolvedSpec, &expectedPipelineSpec)
+		if err != nil {
+			return false
+		}
+
+		return reflect.DeepEqual(retrievedPipelineSpec, expectedPipelineSpec)
+	})
+	VerifyPromotedPipelineMetadata(Namespace, pipelineRolloutName, func(retrievedPipelineMetadata apiv1.Metadata) bool {
+		// Get the promoted pipeline name to resolve templates
+		promotedPipelineName, err := GetPromotedPipelineName(Namespace, pipelineRolloutName)
+		if err != nil {
+			return false
+		}
+
+		// Resolve templates in the metadata
+		args := map[string]interface{}{
+			common.TemplatePipelineName:      promotedPipelineName,
+			common.TemplatePipelineNamespace: Namespace,
+		}
+
+		resolvedMetadata, err := util.ResolveTemplatedSpec(pipelineMetadata, args)
+		if err != nil {
+			return false
+		}
+
+		// Convert resolved metadata back to Metadata struct
+		var expectedMetadata apiv1.Metadata
+		err = util.StructToStruct(&resolvedMetadata, &expectedMetadata)
+		if err != nil {
+			return false
+		}
+
+		// Verify that all expected labels are present
+		for key, value := range expectedMetadata.Labels {
+			if retrievedPipelineMetadata.Labels[key] != value {
+				return false
+			}
+		}
+		// Verify that all expected annotations are present
+		for key, value := range expectedMetadata.Annotations {
+			if retrievedPipelineMetadata.Annotations[key] != value {
+				return false
+			}
+		}
+		return true
 	})
 	initialPipelineSpec.InterStepBufferServiceName = originalPipelineSpecISBSvcName
 	VerifyPipelineRolloutInProgressStrategy(pipelineRolloutName, apiv1.UpgradeStrategyNoOp)

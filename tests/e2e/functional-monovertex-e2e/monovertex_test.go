@@ -17,11 +17,13 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
@@ -45,6 +47,12 @@ var (
 			UDSource: &numaflowv1.UDSource{
 				Container: &numaflowv1.Container{
 					Image: "quay.io/numaio/numaflow-go/source-simple-source:stable",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "my-env",
+							Value: "{{.monovertex-namespace}}-{{.monovertex-name}}",
+						},
+					},
 				},
 			},
 		},
@@ -52,6 +60,15 @@ var (
 			AbstractSink: numaflowv1.AbstractSink{
 				Blackhole: &numaflowv1.Blackhole{},
 			},
+		},
+	}
+
+	mvtxMetadata = apiv1.Metadata{
+		Labels: map[string]string{
+			"my-label": "{{.monovertex-namespace}}-{{.monovertex-name}}",
+		},
+		Annotations: map[string]string{
+			"my-annotation": "{{.monovertex-namespace}}-{{.monovertex-name}}",
 		},
 	}
 )
@@ -74,21 +91,25 @@ var _ = Describe("Functional e2e:", Serial, func() {
 
 	It("Should update child MonoVertex if the MonoVertexRollout is updated", func() {
 
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
+
+		verifyTemplatedEnvironmentVariable()
 
 		// new MonoVertex spec
 		updatedMonoVertexSpec := initialMonoVertexSpec
-		updatedMonoVertexSpec.Source.UDSource = nil
-		rpu := int64(10)
-		updatedMonoVertexSpec.Source.Generator = &numaflowv1.GeneratorSource{RPU: &rpu}
+		javaImagePath := "quay.io/numaio/numaflow-java/source-simple-source:stable"
+		updatedMonoVertexSpec.Source.UDSource.Container.Image = javaImagePath
 
 		UpdateMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, updatedMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(spec numaflowv1.MonoVertexSpec) bool {
-			return spec.Source != nil && spec.Source.Generator != nil && *spec.Source.Generator.RPU == rpu
-		}, true, 0)
+			return spec.Source != nil && spec.Source.UDSource.Container.Image == javaImagePath
+		}, func(metadata apiv1.Metadata) bool {
+			currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
 
-		VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
-			return retrievedMonoVertexSpec.Source.Generator != nil && retrievedMonoVertexSpec.Source.UDSource == nil
-		})
+			return metadata.Labels != nil && metadata.Labels["my-label"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName) &&
+				metadata.Annotations != nil && metadata.Annotations["my-annotation"] == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
+		}, true, 0, mvtxMetadata)
+
+		verifyTemplatedEnvironmentVariable()
 
 		// Verify no in progress strategy set
 		VerifyMonoVertexRolloutInProgressStrategy(monoVertexRolloutName, apiv1.UpgradeStrategyNoOp)
@@ -102,7 +123,7 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should pause the MonoVertex if user requests it and resume it", func() {
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, mvtxMetadata)
 
 		// test that pause works, as well as that monovertex resumes gradually
 		testPauseResume(0, initialMonoVertexSpec, false)
@@ -130,6 +151,15 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 })
 
+func verifyTemplatedEnvironmentVariable() {
+	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
+		currentPromotedMvtxName, _ := GetPromotedMonoVertexName(Namespace, monoVertexRolloutName)
+
+		evaluatedEnvironmentVariable := retrievedMonoVertexSpec.Source.UDSource.Container.Env[0]
+		return evaluatedEnvironmentVariable.Name == "my-env" && evaluatedEnvironmentVariable.Value == fmt.Sprintf("%s-%s", Namespace, currentPromotedMvtxName)
+	})
+}
+
 // test that user can cause MonoVertex through MonoVertexRollout desiredPhase field
 // as well as that user can unpause (either gradually or fast depending on configuration)
 func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv1.MonoVertexSpec, resumeFast bool) {
@@ -140,7 +170,7 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 
 	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhasePaused, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhasePaused
-	}, false, currentMonoVertexIndex)
+	}, nil, false, currentMonoVertexIndex, apiv1.Metadata{})
 
 	VerifyPromotedMonoVertexStaysPaused(monoVertexRolloutName)
 
@@ -164,7 +194,7 @@ func testPauseResume(currentMonoVertexIndex int, currentMonoVertexSpec numaflowv
 	// Resume MonoVertex
 	UpdateMonoVertexRollout(monoVertexRolloutName, *originalMonoVertexSpec, currentMonoVertexSpec, numaflowv1.MonoVertexPhaseRunning, func(retrievedMonoVertexSpec numaflowv1.MonoVertexSpec) bool {
 		return retrievedMonoVertexSpec.Lifecycle.DesiredPhase == numaflowv1.MonoVertexPhaseRunning
-	}, false, currentMonoVertexIndex)
+	}, nil, false, currentMonoVertexIndex, apiv1.Metadata{})
 
 	// then verify that replicas is null
 	VerifyPromotedMonoVertexSpec(Namespace, monoVertexRolloutName, func(spec numaflowv1.MonoVertexSpec) bool {
