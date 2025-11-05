@@ -59,6 +59,8 @@ data:
         includeSubfields: true
       - path: spec.vertices.udf.container.envfrom
         includeSubfields: true
+      - path: spec.vertices.volumes
+        includeSubfields: true
       - path: spec.vertices.udf.builtin
         includeSubfields: true
       - path: spec.sideInputs.container.image
@@ -135,6 +137,8 @@ data:
       - path: spec.source.udsource.container.command
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
+      - path: spec.volumes
+        includeSubfields: true
   numaflowcontroller: |
     dataLoss:
      - path: spec.version
