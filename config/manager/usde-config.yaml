@@ -25,7 +25,11 @@ data:
       - path: spec.vertices.source.jetstream
       - path: spec.vertices.source.serving
       - path: spec.vertices.source.udsource.container.image
+      - path: spec.vertices.source.udsource.container.volumeMounts
+        includeSubfields: true
       - path: spec.vertices.source.transformer.container.image
+      - path: spec.vertices.source.transformer.container.volumeMounts
+        includeSubfields: true
       - path: spec.vertices.source.transformer.container.command
       - path: spec.vertices.source.transformer.container.args
       - path: spec.vertices.source.transformer.container.env
@@ -38,6 +42,8 @@ data:
       - path: spec.vertices.sink.kafka
       - path: spec.vertices.sink.blackhole
       - path: spec.vertices.sink.udsink.container.image
+      - path: spec.vertices.sink.udsink.container.volumeMounts
+        includeSubfields: true
       - path: spec.vertices.sink.udsink.container.command
       - path: spec.vertices.sink.udsink.container.args
       - path: spec.vertices.sink.udsink.container.env
@@ -45,15 +51,21 @@ data:
       - path: spec.vertices.sink.udsink.container.envfrom
         includeSubfields: true
       - path: spec.vertices.udf.container.image
+      - path: spec.vertices.udf.container.volumeMounts
+        includeSubfields: true
       - path: spec.vertices.udf.container.command
       - path: spec.vertices.udf.container.args
       - path: spec.vertices.udf.container.env
         includeSubfields: true
       - path: spec.vertices.udf.container.envfrom
         includeSubfields: true
+      - path: spec.vertices.volumes
+        includeSubfields: true
       - path: spec.vertices.udf.builtin
         includeSubfields: true
       - path: spec.sideInputs.container.image
+      - path: spec.sideInputs.container.volumeMounts
+        includeSubfields: true
       - path: spec.sideInputs.container.command
       - path: spec.sideInputs.container.args
       - path: spec.sideInputs.container.env
@@ -90,29 +102,43 @@ data:
   monovertex: |
     progressive:
       - path: spec.initContainers.image
+      - path: spec.initContainers.volumeMounts
+        includeSubfields: true
       - path: spec.initContainers.command
       - path: spec.initContainers.args
       - path: spec.initContainers.env
       - path: spec.sidecars.image
+      - path: spec.sidecars.volumeMounts
+        includeSubfields: true
       - path: spec.sidecars.command
       - path: spec.sidecars.args
       - path: spec.sidecars.env
       - path: spec.sink.fallback.udsink.container.image
+      - path: spec.sink.fallback.udsink.container.volumeMounts
+        includeSubfields: true
       - path: spec.sink.fallback.udsink.container.command
       - path: spec.sink.fallback.udsink.container.args
       - path: spec.sink.fallback.udsink.container.env
       - path: spec.sink.udsink.container.image
+      - path: spec.sink.udsink.container.volumeMounts
+        includeSubfields: true
       - path: spec.sink.udsink.container.command
       - path: spec.sink.udsink.container.args
       - path: spec.sink.udsink.container.env
       - path: spec.source.transformer.container.image
+      - path: spec.source.transformer.container.volumeMounts
+        includeSubfields: true
       - path: spec.source.transformer.container.command
       - path: spec.source.transformer.container.args
       - path: spec.source.transformer.container.env
       - path: spec.source.udsource.container.image
+      - path: spec.source.udsource.container.volumeMounts
+        includeSubfields: true
       - path: spec.source.udsource.container.command
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
+      - path: spec.volumes
+        includeSubfields: true
   numaflowcontroller: |
     dataLoss:
      - path: spec.version
