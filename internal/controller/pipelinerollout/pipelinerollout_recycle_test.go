@@ -356,8 +356,6 @@ func Test_Recycle(t *testing.T) {
 		pipelinePhase numaflowv1.PipelinePhase
 		// if there's a new "promoted" pipeline which can be used for force draining (or really if there's a pipeline whose definition matches the PipelineRollout)
 		isPromotedPipelineNew bool
-		// if the "force drain failure time" annotation is set on the pipeline
-		isForceDrainFailureTimeSet bool
 		// the Vertex scale values of the Pipeline
 		initialVertexScaleDefinitions []apiv1.VertexScaleDefinition
 
@@ -374,6 +372,8 @@ func Test_Recycle(t *testing.T) {
 		expectSpecOverridden bool
 		// expected pipeline vertex scale definitions at the end of the call
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
+		// expected whether the force drain failure time annotation is set
+		expectForceDrainFailureTimeSet bool
 	}{
 		{
 			name:                  "Delete/Recreate - should delete immediately",
@@ -386,16 +386,16 @@ func Test_Recycle(t *testing.T) {
 			expectedError:         false,
 		},
 		{
-			name:                       "Progressive Replace - second attempt (force drain failed)",
-			upgradeStateReason:         string(common.LabelValueProgressiveReplaced),
-			specHasBeenOverridden:      true,
-			requiresDrain:              true,
-			desiredPhase:               &paused,
-			pipelinePhase:              failed,
-			isPromotedPipelineNew:      true,
-			isForceDrainFailureTimeSet: true,
-			expectSpecOverridden:       true,
-			expectedDesiredPhase:       &running,
+			name:                           "Progressive Replace - second attempt (force drain failed)",
+			upgradeStateReason:             string(common.LabelValueProgressiveReplaced),
+			specHasBeenOverridden:          true,
+			requiresDrain:                  true,
+			desiredPhase:                   &paused,
+			pipelinePhase:                  failed,
+			isPromotedPipelineNew:          true,
+			expectForceDrainFailureTimeSet: true,
+			expectSpecOverridden:           true,
+			expectedDesiredPhase:           &running,
 		},
 		{
 			name:                  "Progressive Replaced - second attempt (force drain) - first apply the new spec",
@@ -657,7 +657,7 @@ func Test_Recycle(t *testing.T) {
 				}
 
 				// Verify if the force drain failure time annotation is set
-				if tc.isForceDrainFailureTimeSet {
+				if tc.expectForceDrainFailureTimeSet {
 					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainFailureStartTime)
 				}
 
