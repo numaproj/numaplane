@@ -185,13 +185,17 @@ var _ = Describe("Rider E2E", Serial, func() {
 			return rollout, nil
 		})
 
-		// verify ConfigMap is created
+		monoVertexIndex++
+
+		// verify ConfigMap is created (this causes a Progressive upgrade due to the change to the MonoVertex volumeMount)
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
+		mvOriginalName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex-1)
 		// ConfigMap is named with the monovertex name as the suffix
 		configMapName := fmt.Sprintf("my-configmap-%s", monoVertexName)
 		VerifyResourceExists(configMapGVR, configMapName)
 		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-namespace", Namespace)
 		VerifyResourceFieldMatchesRegex(configMapGVR, configMapName, "data.monovertex-name", monoVertexName)
+		VerifyResourceDoesntExist(numaflowv1.MonoVertexGroupVersionResource, mvOriginalName)
 	})
 
 	It("Should add HPA Rider to MonoVertexRollout", func() {
@@ -210,7 +214,7 @@ var _ = Describe("Rider E2E", Serial, func() {
 			return rollout, nil
 		})
 
-		// verify HPA is created for the MonoVertex
+		// verify HPA is created for the existing MonoVertex in place
 		monoVertexName := fmt.Sprintf("%s-%d", monoVertexRolloutName, monoVertexIndex)
 		// HPA is named with the monovertex name as the suffix
 		hpaName := fmt.Sprintf("hpa-%s", monoVertexName)
