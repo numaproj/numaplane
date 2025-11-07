@@ -131,9 +131,6 @@ type ProgressiveConfig struct {
 
 	// timeout duration which AnalysisRuns cannot continue to run after
 	AnalysisRunTimeout string `json:"analysisRunTimeout" mapstructure:"analysisRunTimeout"`
-
-	// when set to true, adds the rollout, promoted, and upgrading objects to all the log messages during progressive upgrade
-	LogObjects bool `json:"logObjects" mapstructure:"logObjects"`
 }
 
 // DefaultAssessmentSchedule defines a default schedule for each Kind
