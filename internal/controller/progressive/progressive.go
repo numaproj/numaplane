@@ -124,21 +124,6 @@ func ProcessResource(
 	c client.Client,
 ) (bool, time.Duration, error) {
 
-	// Log progressive objects if the related flag is enabled
-	logObjects, err := getConfigLogObjects()
-	if err != nil {
-		return false, 0, err
-	}
-	if logObjects {
-		// Add the rolloutObject and promotedChild to the logger in context and set the name
-		progressiveLogger := logger.FromContext(ctx).WithName("ProgressiveUpgrade").
-			WithValues(
-				"rolloutObject", rolloutObject,
-				"promotedChild", existingPromotedChild,
-			)
-		ctx = logger.WithLogger(ctx, progressiveLogger)
-	}
-
 	// Make sure that our Promoted Child Status reflects the current promoted child
 	promotedChildStatus := rolloutObject.GetPromotedChildStatus()
 	if promotedChildStatus == nil || promotedChildStatus.Name != existingPromotedChild.GetName() {
@@ -173,11 +158,6 @@ func ProcessResource(
 
 	// There's already an Upgrading child, now process it
 
-	// Add the upgradingChild to the logger in context (only if the related flag is enabled)
-	if logObjects {
-		ctx = logger.WithLogger(ctx, logger.FromContext(ctx).WithValues("upgradingChild", currentUpgradingChildDef))
-	}
-
 	// get UpgradingChildStatus and reset it if necessary
 	childStatus, err := getUpgradingChildStatus(ctx, rolloutObject, currentUpgradingChildDef)
 	if err != nil {
@@ -197,7 +177,7 @@ func ProcessResource(
 
 	// determine if we need to replace the Upgrading child with a newer one
 	needsRequeue, done, err := checkForUpgradeReplacement(ctx, rolloutObject, controller, existingPromotedChild, currentUpgradingChildDef, c)
-	if needsRequeue {
+	if needsRequeue || err != nil {
 		return false, common.DefaultRequeueDelay, err
 	}
 	if done {
@@ -306,15 +286,6 @@ func getChildStatusAssessmentSchedule(
 	}
 
 	return schedule, nil
-}
-
-func getConfigLogObjects() (bool, error) {
-	globalConfig, err := config.GetConfigManagerInstance().GetConfig()
-	if err != nil {
-		return false, fmt.Errorf("error getting the global config to retrieve logObjects: %w", err)
-	}
-
-	return globalConfig.Progressive.LogObjects, nil
 }
 
 /*
