@@ -1916,16 +1916,6 @@ func setRiderHashAnnotation(ctx context.Context, t *testing.T, rider *unstructur
 	rider.SetAnnotations(annotations)
 }
 
-// addLabelToRider adds a label to a rider resource.
-func addLabelToRider(rider *unstructured.Unstructured, key, value string) {
-	if rider.GetLabels() == nil {
-		rider.SetLabels(make(map[string]string))
-	}
-	labels := rider.GetLabels()
-	labels[key] = value
-	rider.SetLabels(labels)
-}
-
 // Technically, CheckRidersForDifferences() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.
 func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
