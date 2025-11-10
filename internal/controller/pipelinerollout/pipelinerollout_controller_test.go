@@ -39,6 +39,7 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
 	"github.com/numaproj/numaplane/internal/controller/progressive"
@@ -1898,6 +1899,187 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"differentFromUpgrading mismatch")
 			assert.Equal(t, tc.expectedDiffFromPromoted, differentFromPromoted,
 				"differentFromPromoted mismatch")
+		})
+	}
+}
+
+// Technically, GetDesiredRiders() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.
+// This test focuses on verifying that rider templates ({{.pipeline-name}} and {{.vertex-name}}) are correctly evaluated.
+func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	// Create a real PipelineRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewPipelineRolloutReconciler(client, scheme, nil, nil)
+
+	testCases := []struct {
+		name                string
+		rolloutRiderDef     map[string]interface{} // Rider definition with templates
+		perVertex           bool
+		rolloutSpecVertices []string // Vertex names in the rollout spec
+		pipelineDefVertices []string // Vertex names in the actual pipeline definition (may differ from rollout)
+		pipelineName        string
+		expectedRiderCount  int
+		expectedRiderNames  []string
+		verifyTemplateEval  func(t *testing.T, riders []riders.Rider) // Custom verification function
+	}{
+		{
+			name: "per-vertex rider with templates creates one rider per vertex",
+			rolloutRiderDef: map[string]interface{}{
+				"apiVersion": "autoscaling.k8s.io/v1",
+				"kind":       "VerticalPodAutoscaler",
+				"metadata": map[string]interface{}{
+					"name": "vpa",
+				},
+				"spec": map[string]interface{}{
+					"targetRef": map[string]interface{}{
+						"apiVersion": "numaflow.numaproj.io/v1alpha1",
+						"kind":       "Vertex",
+						"name":       "{{.pipeline-name}}-{{.vertex-name}}",
+					},
+					"updatePolicy": map[string]interface{}{
+						"updateMode": "Auto",
+					},
+				},
+			},
+			perVertex:           true,
+			rolloutSpecVertices: []string{"in", "cat", "out"},
+			pipelineDefVertices: []string{"in", "cat", "out"}, // Vertex names remain the same
+			pipelineName:        "my-pipeline-0",
+			expectedRiderCount:  3,
+			expectedRiderNames: []string{
+				"vpa-my-pipeline-0-in",
+				"vpa-my-pipeline-0-cat",
+				"vpa-my-pipeline-0-out",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				vertexNames := []string{"in", "cat", "out"}
+				for i, rider := range riders {
+					// Verify the targetRef has templates evaluated
+					targetRef, found, err := unstructured.NestedMap(rider.Definition.Object, "spec", "targetRef")
+					assert.NoError(t, err)
+					assert.True(t, found)
+					expectedTargetName := fmt.Sprintf("my-pipeline-0-%s", vertexNames[i])
+					assert.Equal(t, expectedTargetName, targetRef["name"],
+						"TargetRef name should have templates evaluated")
+				}
+			},
+		},
+		{
+			name: "per-Pipeline rider with templates creates just one rider",
+			rolloutRiderDef: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name": "my-config",
+				},
+				"data": map[string]interface{}{
+					"pipeline-name": "{{.pipeline-name}}",
+					"namespace":     "{{.pipeline-namespace}}",
+				},
+			},
+			perVertex:           false,
+			rolloutSpecVertices: []string{"in", "out"},
+			pipelineDefVertices: []string{"in", "cat", "out"}, // doesn't matter that this is different
+			pipelineName:        "my-pipeline-0",
+			expectedRiderCount:  1,
+			expectedRiderNames: []string{
+				"my-config-my-pipeline-0",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				// Verify data field has templates evaluated
+				data, found, err := unstructured.NestedStringMap(riders[0].Definition.Object, "data")
+				assert.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, "my-pipeline-0", data["pipeline-name"])
+				assert.Equal(t, ctlrcommon.DefaultTestNamespace, data["namespace"])
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create rider definition
+			riderDefRaw, err := json.Marshal(tc.rolloutRiderDef)
+			assert.NoError(t, err)
+
+			// Create PipelineRollout with the rider (using rollout spec vertices)
+			rolloutVertices := make([]numaflowv1.AbstractVertex, len(tc.rolloutSpecVertices))
+			for i, name := range tc.rolloutSpecVertices {
+				rolloutVertices[i] = numaflowv1.AbstractVertex{Name: name}
+			}
+			pipelineSpec := numaflowv1.PipelineSpec{
+				InterStepBufferServiceName: "my-isbsvc",
+				Vertices:                   rolloutVertices,
+			}
+			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+			assert.NoError(t, err)
+
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ctlrcommon.DefaultTestNamespace,
+					Name:      ctlrcommon.DefaultTestPipelineRolloutName,
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: pipelineSpecRaw},
+					},
+					Riders: []apiv1.PipelineRider{
+						{
+							Rider: apiv1.Rider{
+								Definition: runtime.RawExtension{Raw: riderDefRaw},
+							},
+							PerVertex: tc.perVertex,
+						},
+					},
+				},
+			}
+
+			// Create pipeline definition
+			pipelineDefVertices := make([]interface{}, len(tc.pipelineDefVertices))
+			for i, name := range tc.pipelineDefVertices {
+				pipelineDefVertices[i] = map[string]interface{}{"name": name}
+			}
+			pipelineDef := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      tc.pipelineName,
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+					"spec": map[string]interface{}{
+						"interStepBufferServiceName": "my-isbsvc",
+						"vertices":                   pipelineDefVertices,
+					},
+				},
+			}
+
+			// Call GetDesiredRiders
+			desiredRiders, err := reconciler.GetDesiredRiders(pipelineRollout, tc.pipelineName, pipelineDef)
+			assert.NoError(t, err)
+
+			// Verify rider count
+			assert.Equal(t, tc.expectedRiderCount, len(desiredRiders),
+				"Should create expected number of riders")
+
+			// Verify rider names
+			for i, expectedName := range tc.expectedRiderNames {
+				assert.Equal(t, expectedName, desiredRiders[i].Definition.GetName(),
+					"Rider name should match expected name")
+			}
+
+			// Run custom verification if provided
+			if tc.verifyTemplateEval != nil {
+				tc.verifyTemplateEval(t, desiredRiders)
+			}
 		})
 	}
 }

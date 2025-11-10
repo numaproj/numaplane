@@ -580,7 +580,7 @@ func checkForDifferences(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = checkRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
+		needsUpdating, err = CheckRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -589,8 +589,8 @@ func checkForDifferences(
 }
 
 // Do any Riders need updating? (including additions, modifications, or deletions)
-// Compare the Riders which would be derived from the latest and greatest spec with those of either the existing "promoted" child or the existing "upgrading" child
-func checkRidersForDifferences(
+// Compare the Riders which would be derived from the latest and greatest Rollout definition with those of either the existing "promoted" child or the existing "upgrading" child
+func CheckRidersForDifferences(
 	ctx context.Context,
 	controller progressiveController,
 	rolloutObject ctlrcommon.RolloutObject,
@@ -600,17 +600,21 @@ func checkRidersForDifferences(
 	existingIsUpgrading bool,
 	// newUpgradingChildDef can either already have had any templates evaluated or if not, the evaluation will happen in this function
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+
+	// Get the Riders which are desired based on the Rollout definition
 	// if newUpgradingChildDef still has unevaluated templates, then the existing child's name is used to evaluate them, so we can compare effectively
 	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChildDef.GetName(), newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 
+	// Which Riders have already been deployed?
 	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, existingIsUpgrading)
 	if err != nil {
 		return false, err
 	}
 
+	// Now compare the desired Riders with the existing Riders to see if any need updating
 	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChildDef.GetNamespace(), existingChildDef.GetKind(), existingChildDef.GetName(),
 		newRiders, existingRiders)
 	if err != nil {
