@@ -48,6 +48,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -412,6 +413,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
+			r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "false")
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 
 		} else {
@@ -451,7 +453,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, err
 	}
-	// there are some cases that require requeueing
+	// there are some cases that require re-queueing
 	if !allDeleted || inProgressStrategySet {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
@@ -460,6 +462,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
+	r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "true")
 	return requeueDelay, existingPipelineDef, err
 }
 

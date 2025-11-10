@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -243,6 +244,13 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
 
+	// isbServiceDef used for metrics
+	//var isbServiceDef *unstructured.Unstructured
+	newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+	}
+
 	if len(promotedISBSvcs.Items) == 0 {
 
 		deleteRecreateLabel := common.LabelValueDeleteRecreateChild
@@ -256,22 +264,16 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
-
 			// create an object as it doesn't exist
-			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
-			}
-
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, newISBServiceDef.GetName())
 			isbServiceRollout.Status.MarkPending()
 			if newISBServiceDef != nil {
-
 				if err = r.createPromotedISBService(ctx, isbServiceRollout, newISBServiceDef); err != nil {
 					return ctrl.Result{}, err
 				}
 
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
+				r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "false")
 				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 
 				// if there are any PipelineRollouts using this ISBServiceRollout, enqueue them for reconciliation
@@ -285,10 +287,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
-		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
-		}
 		existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
 			k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
 		if err != nil {
@@ -322,13 +320,14 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 	}
 
+	r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "true")
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 	return ctrl.Result{}, nil
 }
 
-// for the purpose of logging
+// GetChildTypeString used for logging
 func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 	return "interstepbufferservice"
 }
