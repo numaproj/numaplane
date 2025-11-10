@@ -1979,7 +1979,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 		expectedDifferencesFound    bool                                      // Expected result from CheckRidersForDifferences
 	}{
 		{
-			name:                        "per-vertex rider with templates creates one rider per vertex",
+			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - no differences",
 			rolloutRiderDef:             defaultVPARiderDef,
 			perVertex:                   true,
 			rolloutSpecVertices:         []string{"in", "cat", "out"},
@@ -2010,7 +2010,38 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
 		},
 		{
-			name:                        "per-vertex rider with different vertices between rollout and existing pipeline",
+			name:                        "Compare VPA per-vertex rider to Promoted Pipeline riders - no differences",
+			rolloutRiderDef:             defaultVPARiderDef,
+			perVertex:                   true,
+			rolloutSpecVertices:         []string{"in", "cat", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has the same vertices as rollout
+			newPipelineName:             "my-pipeline-1",              // New upgrading child
+			existingPipelineName:        "my-pipeline-0",              // Existing promoted child
+			expectedRiderCount:          3,
+			expectedRiderNames: []string{
+				"vpa-my-pipeline-1-in",
+				"vpa-my-pipeline-1-cat",
+				"vpa-my-pipeline-1-out",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				vertexNames := []string{"in", "cat", "out"}
+				for i, rider := range riders {
+					// Verify the targetRef has templates evaluated
+					targetRef, found, err := unstructured.NestedMap(rider.Definition.Object, "spec", "targetRef")
+					assert.NoError(t, err)
+					assert.True(t, found)
+					expectedTargetName := fmt.Sprintf("my-pipeline-1-%s", vertexNames[i])
+					assert.Equal(t, expectedTargetName, targetRef["name"],
+						"TargetRef name should have templates evaluated")
+				}
+			},
+			existingVPADefinition:       &defaultVPARiderDef,
+			existingConfigMapDefinition: nil,   // No existing ConfigMaps
+			existingIsUpgrading:         false, // Existing child is Promoted
+			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+		},
+		{
+			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - the Vertex names have changed",
 			rolloutRiderDef:             defaultVPARiderDef,
 			perVertex:                   true,
 			rolloutSpecVertices:         []string{"in", "cat", "out"},
@@ -2041,7 +2072,7 @@ func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
 			expectedDifferencesFound:    true, // Differences expected - existing has "transform" rider, rollout wants "cat" rider
 		},
 		{
-			name: "per-Pipeline rider with templates creates just one rider, detects differences in existing",
+			name: "Compare ConfigMap per-Pipeline Rider to Upgrading Pipeline rider: spec has changed",
 			rolloutRiderDef: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
