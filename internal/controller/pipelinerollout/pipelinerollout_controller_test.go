@@ -1617,9 +1617,42 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		expectedDiffFromUpgrading bool
 		expectedDiffFromPromoted  bool
 	}{
+
 		{
-			name:        "no differences - all match",
-			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			name:        "different from Upgrading only - rollout matches Promoted",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:        "different from Promoted only - rollout matches Upgrading",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
 			rolloutLabels: map[string]string{
 				"my-label": "{{.pipeline-name}}",
 			},
@@ -1636,7 +1669,7 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"my-annotation":    "my-pipeline-0",
 				"extra-annotation": "extra-value",
 			},
-			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
 			upgradingChildName: "my-pipeline-1",
 			upgradingChildLabels: map[string]string{
 				"my-label":    "my-pipeline-1",
@@ -1647,34 +1680,6 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"extra-annotation": "extra-value",
 			},
 			expectedDiffFromUpgrading: false,
-			expectedDiffFromPromoted:  false,
-		},
-		{
-			name:        "different from both - new spec differs from both Promoted and Upgrading",
-			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
-			rolloutLabels: map[string]string{
-				"my-label": "{{.pipeline-name}}",
-			},
-			rolloutAnnotations: map[string]string{
-				"my-annotation": "{{.pipeline-name}}",
-			},
-			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
-			promotedChildName: "my-pipeline-0",
-			promotedChildLabels: map[string]string{
-				"my-label": "my-pipeline-0",
-			},
-			promotedChildAnnotations: map[string]string{
-				"my-annotation": "my-pipeline-0",
-			},
-			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
-			upgradingChildName: "my-pipeline-1",
-			upgradingChildLabels: map[string]string{
-				"my-label": "my-pipeline-1",
-			},
-			upgradingChildAnnotations: map[string]string{
-				"my-annotation": "my-pipeline-1",
-			},
-			expectedDiffFromUpgrading: true,
 			expectedDiffFromPromoted:  true,
 		},
 		{
@@ -1810,7 +1815,7 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				common.LabelValueUpgradeInProgress,
 			)
 
-			// Call progressive.IsUpgradeReplacementRequired with the real controller
+			// Call progressive.IsUpgradeReplacementRequired with the PipelineRollout controller
 			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(
 				ctx,
 				pipelineRollout,

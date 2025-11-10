@@ -1381,9 +1381,42 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		expectedDiffFromUpgrading bool
 		expectedDiffFromPromoted  bool
 	}{
+
 		{
-			name:        "no differences - all match",
-			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "{{.monovertex-name}}"),
+			name:        "different from Upgrading only - rollout matches Promoted",
+			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v2.0.0", "{{.monovertex-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.monovertex-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.monovertex-name}}",
+			},
+			promotedChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v2.0.0", "my-monovertex-0"),
+			promotedChildName: "my-monovertex-0",
+			promotedChildLabels: map[string]string{
+				"my-label":   "my-monovertex-0",
+				"my-label-2": "something",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-0",
+				"my-annotation-2": "something",
+			},
+			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "my-monovertex-1"),
+			upgradingChildName: "my-monovertex-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":   "my-monovertex-1",
+				"my-label-2": "something",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-1",
+				"my-annotation-2": "something",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:        "different from Promoted only - rollout matches Upgrading",
+			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "{{.monovertex-name}}"),
 			rolloutLabels: map[string]string{
 				"my-label": "{{.monovertex-name}}",
 			},
@@ -1400,7 +1433,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"my-annotation":   "my-monovertex-0",
 				"my-annotation-2": "something",
 			},
-			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "my-monovertex-1"),
+			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "my-monovertex-1"),
 			upgradingChildName: "my-monovertex-1",
 			upgradingChildLabels: map[string]string{
 				"my-label":   "my-monovertex-1",
@@ -1411,34 +1444,6 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"my-annotation-2": "something",
 			},
 			expectedDiffFromUpgrading: false,
-			expectedDiffFromPromoted:  false,
-		},
-		{
-			name:        "different from both - new spec differs from both Promoted and Upgrading",
-			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v2.0.0", "{{.monovertex-name}}"),
-			rolloutLabels: map[string]string{
-				"my-label": "{{.monovertex-name}}",
-			},
-			rolloutAnnotations: map[string]string{
-				"my-annotation": "{{.monovertex-name}}",
-			},
-			promotedChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "my-monovertex-0"),
-			promotedChildName: "my-monovertex-0",
-			promotedChildLabels: map[string]string{
-				"my-label": "my-monovertex-0",
-			},
-			promotedChildAnnotations: map[string]string{
-				"my-annotation": "my-monovertex-0",
-			},
-			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "my-monovertex-1"),
-			upgradingChildName: "my-monovertex-1",
-			upgradingChildLabels: map[string]string{
-				"my-label": "my-monovertex-1",
-			},
-			upgradingChildAnnotations: map[string]string{
-				"my-annotation": "my-monovertex-1",
-			},
-			expectedDiffFromUpgrading: true,
 			expectedDiffFromPromoted:  true,
 		},
 		{
