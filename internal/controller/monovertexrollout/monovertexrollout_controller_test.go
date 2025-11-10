@@ -1442,7 +1442,7 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			expectedDiffFromPromoted:  true,
 		},
 		{
-			name:        "different from both - required annotations not present",
+			name:        "different from both - required metadata not present",
 			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "{{.monovertex-name}}"),
 			rolloutLabels: map[string]string{
 				"my-label":       "{{.monovertex-name}}",
@@ -1477,6 +1477,41 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 		},
 	}
 
+	// Helper function to create a MonoVertex child with required labels/annotations
+	createMonoVertexChild := func(spec numaflowv1.MonoVertexSpec, name string, labels, annotations map[string]string, upgradeState common.UpgradeState) *unstructured.Unstructured {
+		monoVertex := ctlrcommon.CreateTestMonoVertexOfSpec(
+			spec,
+			name,
+			numaflowv1.MonoVertexPhaseRunning,
+			numaflowv1.Status{
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+						Status:             metav1.ConditionTrue,
+						Reason:             "healthy",
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					},
+				},
+			},
+			labels,
+			annotations,
+		)
+		// Add required labels
+		if monoVertex.Labels == nil {
+			monoVertex.Labels = make(map[string]string)
+		}
+		monoVertex.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestMonoVertexRolloutName
+		monoVertex.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+		if monoVertex.Annotations == nil {
+			monoVertex.Annotations = make(map[string]string)
+		}
+		monoVertex.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
+
+		// Convert to unstructured
+		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(monoVertex)
+		return &unstructured.Unstructured{Object: unstructMap}
+	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create MonoVertexRollout with template values
@@ -1494,73 +1529,21 @@ func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				},
 			)
 
-			// Create Promoted MonoVertex
-			promotedChild := ctlrcommon.CreateTestMonoVertexOfSpec(
+			// Create Promoted and Upgrading MonoVertices
+			promotedChildUnstruct := createMonoVertexChild(
 				tc.promotedChildSpec,
 				tc.promotedChildName,
-				numaflowv1.MonoVertexPhaseRunning,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
-							Status:             metav1.ConditionTrue,
-							Reason:             "healthy",
-							LastTransitionTime: metav1.NewTime(time.Now()),
-						},
-					},
-				},
 				tc.promotedChildLabels,
 				tc.promotedChildAnnotations,
+				common.LabelValueUpgradePromoted,
 			)
-			// Add required labels for promoted child
-			if promotedChild.Labels == nil {
-				promotedChild.Labels = make(map[string]string)
-			}
-			promotedChild.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestMonoVertexRolloutName
-			promotedChild.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradePromoted)
-			if promotedChild.Annotations == nil {
-				promotedChild.Annotations = make(map[string]string)
-			}
-			promotedChild.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
-
-			// Create Upgrading MonoVertex
-			upgradingChild := ctlrcommon.CreateTestMonoVertexOfSpec(
+			upgradingChildUnstruct := createMonoVertexChild(
 				tc.upgradingChildSpec,
 				tc.upgradingChildName,
-				numaflowv1.MonoVertexPhaseRunning,
-				numaflowv1.Status{
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
-							Status:             metav1.ConditionTrue,
-							Reason:             "healthy",
-							LastTransitionTime: metav1.NewTime(time.Now()),
-						},
-					},
-				},
 				tc.upgradingChildLabels,
 				tc.upgradingChildAnnotations,
+				common.LabelValueUpgradeInProgress,
 			)
-			// Add required labels for upgrading child
-			if upgradingChild.Labels == nil {
-				upgradingChild.Labels = make(map[string]string)
-			}
-			upgradingChild.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestMonoVertexRolloutName
-			upgradingChild.Labels[common.LabelKeyUpgradeState] = string(common.LabelValueUpgradeInProgress)
-			if upgradingChild.Annotations == nil {
-				upgradingChild.Annotations = make(map[string]string)
-			}
-			upgradingChild.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
-
-			// Convert to unstructured
-			promotedChildUnstruct := func() *unstructured.Unstructured {
-				unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(promotedChild)
-				return &unstructured.Unstructured{Object: unstructMap}
-			}()
-			upgradingChildUnstruct := func() *unstructured.Unstructured {
-				unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(upgradingChild)
-				return &unstructured.Unstructured{Object: unstructMap}
-			}()
 
 			// Call progressive.IsUpgradeReplacementRequired with the real controller
 			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(

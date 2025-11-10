@@ -41,6 +41,7 @@ import (
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -1537,4 +1538,294 @@ func createHPARawExtension(t *testing.T) []byte {
 	raw, err := json.Marshal(hpa)
 	assert.NoError(t, err)
 	return raw
+}
+
+func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create a real PipelineRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewPipelineRolloutReconciler(client, scheme, nil, nil)
+
+	// Create a PipelineSpec with a name template value
+	// For rollout spec, pass "{{.pipeline-name}}" as nameTemplate and use the ISBServiceRollout name
+	// For child specs, pass the evaluated name like "my-pipeline-0" as nameTemplate and use the resolved ISBService name
+	createPipelineSpec := func(image string, nameTemplateValue string, isbServiceName string) numaflowv1.PipelineSpec {
+		return numaflowv1.PipelineSpec{
+			InterStepBufferServiceName: isbServiceName,
+			Vertices: []numaflowv1.AbstractVertex{
+				{
+					Name: "in",
+					Source: &numaflowv1.Source{
+						Generator: &numaflowv1.GeneratorSource{
+							RPU:      ptr.To(int64(5)),
+							Duration: ptr.To(metav1.Duration{Duration: time.Second}),
+						},
+					},
+				},
+				{
+					Name: "cat",
+					UDF: &numaflowv1.UDF{
+						Container: &numaflowv1.Container{
+							Image: image,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "my-key",
+									Value: nameTemplateValue,
+								},
+							},
+						},
+					},
+				},
+				{
+					Name: "out",
+					Sink: &numaflowv1.Sink{
+						AbstractSink: numaflowv1.AbstractSink{
+							Log: &numaflowv1.Log{},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name                      string
+		upgradingISBSvcExists     bool
+		rolloutSpec               numaflowv1.PipelineSpec
+		rolloutLabels             map[string]string
+		rolloutAnnotations        map[string]string
+		promotedChildSpec         numaflowv1.PipelineSpec
+		promotedChildName         string
+		promotedChildLabels       map[string]string
+		promotedChildAnnotations  map[string]string
+		upgradingChildSpec        numaflowv1.PipelineSpec
+		upgradingChildName        string
+		upgradingChildLabels      map[string]string
+		upgradingChildAnnotations map[string]string
+		expectedDiffFromUpgrading bool
+		expectedDiffFromPromoted  bool
+	}{
+		{
+			name:        "no differences - all match",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value",
+			},
+			expectedDiffFromUpgrading: false,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:        "different from both - new spec differs from both Promoted and Upgrading",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label": "my-pipeline-0",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation": "my-pipeline-0",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label": "my-pipeline-1",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation": "my-pipeline-1",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+		{
+			name:        "different from both - required metadata not present",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label":       "{{.pipeline-name}}",
+				"required-label": "important-value",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation":       "{{.pipeline-name}}",
+				"required-annotation": "important-value",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":       "my-pipeline-0",
+				"required-label": "important-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation": "my-pipeline-0",
+				// Missing "required-annotation"
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":       "my-pipeline-1",
+				"required-label": "different-important-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":       "my-pipeline-1",
+				"required-annotation": "important-value",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+	}
+
+	// Helper function to create a Pipeline child with required labels/annotations
+	createPipelineChild := func(spec numaflowv1.PipelineSpec, name string, labels, annotations map[string]string, upgradeState common.UpgradeState) *unstructured.Unstructured {
+		pipeline := ctlrcommon.CreateTestPipelineOfSpec(
+			spec,
+			name,
+			numaflowv1.PipelinePhaseRunning,
+			numaflowv1.Status{
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+						Status:             metav1.ConditionTrue,
+						Reason:             "healthy",
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					},
+				},
+			},
+			false,
+			labels,
+			annotations,
+		)
+		// Add required labels
+		if pipeline.Labels == nil {
+			pipeline.Labels = make(map[string]string)
+		}
+		pipeline.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestPipelineRolloutName
+		pipeline.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+		if pipeline.Annotations == nil {
+			pipeline.Annotations = make(map[string]string)
+		}
+		pipeline.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
+
+		// Convert to unstructured
+		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(pipeline)
+		return &unstructured.Unstructured{Object: unstructMap}
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clean up resources from previous test cases
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+
+			// Create the base ISBServiceRollout and promoted ISBService
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
+			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
+			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
+			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
+
+			// Create upgrading ISBService if needed
+			if tc.upgradingISBSvcExists {
+				upgradingISBSvc := ctlrcommon.CreateTestISBService(
+					"2.10.11",
+					ctlrcommon.DefaultTestISBSvcRolloutName+"-1",
+					numaflowv1.ISBSvcPhaseRunning,
+					true,
+					map[string]string{
+						common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+						common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					},
+					map[string]string{},
+				)
+				ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, upgradingISBSvc)
+			}
+
+			// Create PipelineRollout with template values
+			pipelineRollout := ctlrcommon.CreateTestPipelineRollout(
+				tc.rolloutSpec,
+				map[string]string{}, // rollout annotations
+				map[string]string{}, // rollout labels
+				tc.rolloutAnnotations,
+				tc.rolloutLabels,
+				&apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{},
+						PromotedPipelineStatus:  &apiv1.PromotedPipelineStatus{},
+					},
+				},
+			)
+
+			// Create Promoted and Upgrading Pipelines
+			promotedChildUnstruct := createPipelineChild(
+				tc.promotedChildSpec,
+				tc.promotedChildName,
+				tc.promotedChildLabels,
+				tc.promotedChildAnnotations,
+				common.LabelValueUpgradePromoted,
+			)
+			upgradingChildUnstruct := createPipelineChild(
+				tc.upgradingChildSpec,
+				tc.upgradingChildName,
+				tc.upgradingChildLabels,
+				tc.upgradingChildAnnotations,
+				common.LabelValueUpgradeInProgress,
+			)
+
+			// Call progressive.IsUpgradeReplacementRequired with the real controller
+			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(
+				ctx,
+				pipelineRollout,
+				reconciler,
+				promotedChildUnstruct,
+				upgradingChildUnstruct,
+				client,
+			)
+
+			// Verify results
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedDiffFromUpgrading, differentFromUpgrading,
+				"differentFromUpgrading mismatch")
+			assert.Equal(t, tc.expectedDiffFromPromoted, differentFromPromoted,
+				"differentFromPromoted mismatch")
+		})
+	}
 }
