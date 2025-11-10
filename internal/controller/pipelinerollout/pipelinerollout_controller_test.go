@@ -1540,7 +1540,7 @@ func createHPARawExtension(t *testing.T) []byte {
 	return raw
 }
 
-func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
+func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)
 	assert.Nil(t, kubernetes.SetClientSets(restConfig))
@@ -1651,6 +1651,39 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 			expectedDiffFromPromoted:  false,
 		},
 		{
+			name:                  "same spec as Promoted pipeline, but upgrading ISBService exists",
+			upgradingISBSvcExists: true,
+			rolloutSpec:           createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+		{
 			name:        "different from Promoted only - rollout matches Upgrading",
 			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
 			rolloutLabels: map[string]string{
@@ -1680,6 +1713,39 @@ func Test_PRollout_IsUpgradeReplacementRequired(t *testing.T) {
 				"extra-annotation": "extra-value",
 			},
 			expectedDiffFromUpgrading: false,
+			expectedDiffFromPromoted:  true,
+		},
+		{
+			name:                  "same spec as Upgrading pipeline, but upgrading ISBService exists",
+			upgradingISBSvcExists: true,
+			rolloutSpec:           createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value",
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value",
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value",
+			},
+			expectedDiffFromUpgrading: true,
 			expectedDiffFromPromoted:  true,
 		},
 		{
