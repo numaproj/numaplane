@@ -1903,6 +1903,29 @@ func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
 	}
 }
 
+// setRiderHashAnnotation calculates and sets the hash annotation on a rider.
+// This must be done BEFORE adding runtime labels for proper comparison.
+func setRiderHashAnnotation(ctx context.Context, t *testing.T, rider *unstructured.Unstructured) {
+	hash, err := kubernetes.CalculateHash(ctx, *rider)
+	assert.NoError(t, err, "Failed to calculate hash for rider")
+	if rider.GetAnnotations() == nil {
+		rider.SetAnnotations(make(map[string]string))
+	}
+	annotations := rider.GetAnnotations()
+	annotations[common.AnnotationKeyHash] = hash
+	rider.SetAnnotations(annotations)
+}
+
+// addLabelToRider adds a label to a rider resource.
+func addLabelToRider(rider *unstructured.Unstructured, key, value string) {
+	if rider.GetLabels() == nil {
+		rider.SetLabels(make(map[string]string))
+	}
+	labels := rider.GetLabels()
+	labels[key] = value
+	rider.SetLabels(labels)
+}
+
 // Technically, GetDesiredRiders() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.
 // This test focuses on verifying that rider templates ({{.pipeline-name}} and {{.vertex-name}}) are correctly evaluated.
 func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
@@ -1921,41 +1944,47 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 	scheme := scheme.Scheme
 	reconciler := NewPipelineRolloutReconciler(client, scheme, nil, nil)
 
+	// Define common rider definitions
+	defaultVPARiderDef := map[string]interface{}{
+		"apiVersion": "autoscaling.k8s.io/v1",
+		"kind":       "VerticalPodAutoscaler",
+		"metadata": map[string]interface{}{
+			"name": "vpa",
+		},
+		"spec": map[string]interface{}{
+			"targetRef": map[string]interface{}{
+				"apiVersion": "numaflow.numaproj.io/v1alpha1",
+				"kind":       "Vertex",
+				"name":       "{{.pipeline-name}}-{{.vertex-name}}",
+			},
+			"updatePolicy": map[string]interface{}{
+				"updateMode": "Auto",
+			},
+		},
+	}
+
 	testCases := []struct {
-		name                string
-		rolloutRiderDef     map[string]interface{} // Rider definition with templates
-		perVertex           bool
-		rolloutSpecVertices []string // Vertex names in the rollout spec
-		pipelineDefVertices []string // Vertex names in the actual pipeline definition (may differ from rollout)
-		pipelineName        string
-		expectedRiderCount  int
-		expectedRiderNames  []string
-		verifyTemplateEval  func(t *testing.T, riders []riders.Rider) // Custom verification function
+		name                        string
+		rolloutRiderDef             map[string]interface{} // Rider definition with templates
+		perVertex                   bool
+		rolloutSpecVertices         []string // Vertex names in the rollout spec
+		existingPipelineDefVertices []string // Vertex names in the actual existing pipeline definition (may differ from rollout)
+		pipelineName                string
+		expectedRiderCount          int
+		expectedRiderNames          []string
+		verifyTemplateEval          func(t *testing.T, riders []riders.Rider) // Custom verification function
+		existingVPADefinition       *map[string]interface{}                   // If nil, no existing VPA riders; if set, create existing VPA riders from this definition
+		existingConfigMapDefinition *map[string]interface{}                   // If nil, no existing ConfigMap riders; if set, create existing ConfigMap riders from this definition
+		expectedDifferencesFound    bool                                      // Expected result from CheckRidersForDifferences
 	}{
 		{
-			name: "per-vertex rider with templates creates one rider per vertex",
-			rolloutRiderDef: map[string]interface{}{
-				"apiVersion": "autoscaling.k8s.io/v1",
-				"kind":       "VerticalPodAutoscaler",
-				"metadata": map[string]interface{}{
-					"name": "vpa",
-				},
-				"spec": map[string]interface{}{
-					"targetRef": map[string]interface{}{
-						"apiVersion": "numaflow.numaproj.io/v1alpha1",
-						"kind":       "Vertex",
-						"name":       "{{.pipeline-name}}-{{.vertex-name}}",
-					},
-					"updatePolicy": map[string]interface{}{
-						"updateMode": "Auto",
-					},
-				},
-			},
-			perVertex:           true,
-			rolloutSpecVertices: []string{"in", "cat", "out"},
-			pipelineDefVertices: []string{"in", "cat", "out"}, // Vertex names remain the same
-			pipelineName:        "my-pipeline-0",
-			expectedRiderCount:  3,
+			name:                        "per-vertex rider with templates creates one rider per vertex",
+			rolloutRiderDef:             defaultVPARiderDef,
+			perVertex:                   true,
+			rolloutSpecVertices:         []string{"in", "cat", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has the same vertices as rollout
+			pipelineName:                "my-pipeline-0",
+			expectedRiderCount:          3,
 			expectedRiderNames: []string{
 				"vpa-my-pipeline-0-in",
 				"vpa-my-pipeline-0-cat",
@@ -1973,9 +2002,12 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 						"TargetRef name should have templates evaluated")
 				}
 			},
+			existingVPADefinition:       &defaultVPARiderDef,
+			existingConfigMapDefinition: nil,   // No existing ConfigMaps
+			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
 		},
 		{
-			name: "per-Pipeline rider with templates creates just one rider",
+			name: "per-Pipeline rider with templates creates just one rider, detects differences in existing",
 			rolloutRiderDef: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
@@ -1987,11 +2019,11 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 					"namespace":     "{{.pipeline-namespace}}",
 				},
 			},
-			perVertex:           false,
-			rolloutSpecVertices: []string{"in", "out"},
-			pipelineDefVertices: []string{"in", "cat", "out"}, // doesn't matter that this is different
-			pipelineName:        "my-pipeline-0",
-			expectedRiderCount:  1,
+			perVertex:                   false,
+			rolloutSpecVertices:         []string{"in", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has different vertices than rollout (doesn't affect non-perVertex riders)
+			pipelineName:                "my-pipeline-0",
+			expectedRiderCount:          1,
 			expectedRiderNames: []string{
 				"my-config-my-pipeline-0",
 			},
@@ -2003,6 +2035,20 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 				assert.Equal(t, "my-pipeline-0", data["pipeline-name"])
 				assert.Equal(t, ctlrcommon.DefaultTestNamespace, data["namespace"])
 			},
+			existingVPADefinition: nil, // No existing VPAs
+			existingConfigMapDefinition: &map[string]interface{}{
+				// Existing ConfigMap has different data than rollout
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name": "my-config",
+				},
+				"data": map[string]interface{}{
+					"pipeline-name": "old-value",               // Different from rollout ("{{.pipeline-name}}")
+					"namespace":     "{{.pipeline-namespace}}", // Same as rollout
+				},
+			},
+			expectedDifferencesFound: true, // Differences expected since existing ConfigMap has different data
 		},
 	}
 
@@ -2042,14 +2088,19 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 						},
 					},
 				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{},
+					},
+				},
 			}
 
-			// Create pipeline definition
-			pipelineDefVertices := make([]interface{}, len(tc.pipelineDefVertices))
-			for i, name := range tc.pipelineDefVertices {
-				pipelineDefVertices[i] = map[string]interface{}{"name": name}
+			// Create new pipeline definition from rollout spec
+			newPipelineDefVertices := make([]interface{}, len(tc.rolloutSpecVertices))
+			for i, name := range tc.rolloutSpecVertices {
+				newPipelineDefVertices[i] = map[string]interface{}{"name": name}
 			}
-			pipelineDef := &unstructured.Unstructured{
+			newPipelineDef := &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"name":      tc.pipelineName,
@@ -2057,13 +2108,31 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 					},
 					"spec": map[string]interface{}{
 						"interStepBufferServiceName": "my-isbsvc",
-						"vertices":                   pipelineDefVertices,
+						"vertices":                   newPipelineDefVertices,
 					},
 				},
 			}
 
-			// Call GetDesiredRiders
-			desiredRiders, err := reconciler.GetDesiredRiders(pipelineRollout, tc.pipelineName, pipelineDef)
+			// Create existing pipeline definition (which may have different vertices than the rollout spec)
+			existingPipelineDefVertices := make([]interface{}, len(tc.existingPipelineDefVertices))
+			for i, name := range tc.existingPipelineDefVertices {
+				existingPipelineDefVertices[i] = map[string]interface{}{"name": name}
+			}
+			existingPipelineDef := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      tc.pipelineName,
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+					"spec": map[string]interface{}{
+						"interStepBufferServiceName": "my-isbsvc",
+						"vertices":                   existingPipelineDefVertices,
+					},
+				},
+			}
+
+			// Call GetDesiredRiders with the new pipeline definition
+			desiredRiders, err := reconciler.GetDesiredRiders(pipelineRollout, tc.pipelineName, newPipelineDef)
 			assert.NoError(t, err)
 
 			// Verify rider count
@@ -2079,6 +2148,102 @@ func Test_PipelineRollout_GetDesiredRiders(t *testing.T) {
 			// Run custom verification if provided
 			if tc.verifyTemplateEval != nil {
 				tc.verifyTemplateEval(t, desiredRiders)
+			}
+
+			// Test CheckRidersForDifferences
+			ctx := context.Background()
+
+			// Create existing riders in the cluster based on custom definitions
+			var existingRiders []unstructured.Unstructured
+			var riderStatusList []apiv1.RiderStatus
+
+			// Determine which custom definition to use
+			riderKind, _ := tc.rolloutRiderDef["kind"].(string)
+			var existingRiderDefinition *map[string]interface{}
+			var riderNamePrefix string
+			if riderKind == "VerticalPodAutoscaler" {
+				existingRiderDefinition = tc.existingVPADefinition
+			} else if riderKind == "ConfigMap" {
+				existingRiderDefinition = tc.existingConfigMapDefinition
+			}
+
+			// Extract the base name from the rollout rider definition
+			if metadata, ok := tc.rolloutRiderDef["metadata"].(map[string]interface{}); ok {
+				if name, ok := metadata["name"].(string); ok {
+					riderNamePrefix = name
+				}
+			}
+
+			// Only create riders if the custom definition exists (nil means no existing riders)
+			if existingRiderDefinition != nil {
+				// Determine how many riders to create based on whether it's per-vertex
+				ridersToCreate := []string{tc.pipelineName} // Default: one rider (per-pipeline)
+				if tc.perVertex {
+					// Per-vertex: create one rider per vertex in existing pipeline
+					ridersToCreate = tc.existingPipelineDefVertices
+				}
+
+				for _, riderIdentifier := range ridersToCreate {
+					// Use custom definition and evaluate templates
+					templateArgs := map[string]interface{}{
+						common.TemplatePipelineName:      tc.pipelineName,
+						common.TemplatePipelineNamespace: ctlrcommon.DefaultTestNamespace,
+					}
+					if tc.perVertex {
+						templateArgs[common.TemplateVertexName] = riderIdentifier
+					}
+
+					resolvedMap, err := util.ResolveTemplatedSpec(*existingRiderDefinition, templateArgs)
+					assert.NoError(t, err)
+					existingRider := &unstructured.Unstructured{Object: resolvedMap}
+					existingRider.SetNamespace(ctlrcommon.DefaultTestNamespace)
+
+					// Generate the rider name
+					if tc.perVertex {
+						existingRider.SetName(fmt.Sprintf("%s-%s-%s", riderNamePrefix, tc.pipelineName, riderIdentifier))
+					} else {
+						existingRider.SetName(fmt.Sprintf("%s-%s", riderNamePrefix, tc.pipelineName))
+					}
+
+					// Set hash annotation and required labels for the existing rider
+					setRiderHashAnnotation(ctx, t, existingRider)
+					addLabelToRider(existingRider, common.LabelKeyParentRollout, ctlrcommon.DefaultTestPipelineRolloutName)
+					addLabelToRider(existingRider, common.LabelKeyUpgradeState, string(common.LabelValueUpgradeInProgress))
+
+					// Create the rider in the cluster
+					err = client.Create(ctx, existingRider)
+					assert.NoError(t, err, "Failed to create existing rider")
+					existingRiders = append(existingRiders, *existingRider)
+
+					// Add to rider status list
+					riderStatusList = append(riderStatusList, apiv1.RiderStatus{
+						GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(existingRider.GroupVersionKind()),
+						Name:             existingRider.GetName(),
+					})
+				}
+			}
+
+			// Update the PipelineRollout status to include the rider list
+			pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Riders = riderStatusList
+
+			// Call CheckRidersForDifferences
+			// Compare new desired riders (from newPipelineDef) against existing riders (associated with existingPipelineDef)
+			differencesFound, err := progressive.CheckRidersForDifferences(
+				ctx,
+				reconciler,
+				pipelineRollout,
+				existingPipelineDef, // existing child definition
+				true,                // existingIsUpgrading = true
+				newPipelineDef,      // new upgrading child definition
+			)
+			assert.NoError(t, err, "CheckRidersForDifferences should not return an error")
+			assert.Equal(t, tc.expectedDifferencesFound, differencesFound,
+				"CheckRidersForDifferences result mismatch")
+
+			// Clean up: delete the existing riders
+			for _, rider := range existingRiders {
+				err = client.Delete(ctx, &rider)
+				assert.NoError(t, err, "Failed to delete rider")
 			}
 		})
 	}
