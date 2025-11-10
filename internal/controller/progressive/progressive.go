@@ -426,30 +426,19 @@ func processUpgradingChild(
 	}
 }
 
-// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
-// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+// isUpgradeReplacementRequired determines if the current spec requires replacing the Upgrading child.
+// It compares the new spec against both the existing Upgrading child and the Promoted child.
 // Returns:
-// - A boolean indicating we need to requeue
-// - A boolean indicating if the upgrade is done
-// - Error if any
-func checkForUpgradeReplacement(
+// - differentFromExistingUpgrading: true if new spec differs from existing Upgrading child
+// - differentFromPromoted: true if new spec differs from Promoted child
+// - error if any
+func isUpgradeReplacementRequired(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	childStatus := rolloutObject.GetUpgradingChildStatus()
-
-	// Compare our new spec to:
-	// 1. the existing Upgrading child definition
-	// 2. the existing Promoted child definition
-	// If the new one is different from the existing Upgrading one:
-	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
-	//  Else replace the Upgrading one with a new one
-
 	existingUpgradingChildName := existingUpgradingChildDef.GetName()
 	// we need to create an Upgrading child definition which is template-evaluated using the existing Upgrading child's name so that we can effectively compare them below
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingUpgradingChildName)
@@ -469,6 +458,39 @@ func checkForUpgradeReplacement(
 	}
 
 	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDefUsingPromotedName)
+	if err != nil {
+		return false, false, err
+	}
+
+	return differentFromExistingUpgrading, differentFromPromoted, nil
+}
+
+// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
+// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+// Returns:
+// - A boolean indicating we need to requeue
+// - A boolean indicating if the upgrade is done
+// - Error if any
+func checkForUpgradeReplacement(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+	var newUpgradingChildDef *unstructured.Unstructured
+
+	// Compare our new spec to:
+	// 1. the existing Upgrading child definition
+	// 2. the existing Promoted child definition
+	// If the new one is different from the existing Upgrading one:
+	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
+	//  Else replace the Upgrading one with a new one
+
+	differentFromExistingUpgrading, differentFromPromoted, err := isUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
 	if err != nil {
 		return false, false, err
 	}
