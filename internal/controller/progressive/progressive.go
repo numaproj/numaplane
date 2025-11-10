@@ -426,13 +426,13 @@ func processUpgradingChild(
 	}
 }
 
-// isUpgradeReplacementRequired determines if the current spec requires replacing the Upgrading child.
+// IsUpgradeReplacementRequired determines if the current spec requires replacing the Upgrading child.
 // It compares the new spec against both the existing Upgrading child and the Promoted child.
 // Returns:
 // - differentFromExistingUpgrading: true if new spec differs from existing Upgrading child
 // - differentFromPromoted: true if new spec differs from Promoted child
 // - error if any
-func isUpgradeReplacementRequired(
+func IsUpgradeReplacementRequired(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
@@ -490,7 +490,7 @@ func checkForUpgradeReplacement(
 	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
 	//  Else replace the Upgrading one with a new one
 
-	differentFromExistingUpgrading, differentFromPromoted, err := isUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
+	differentFromExistingUpgrading, differentFromPromoted, err := IsUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
 	if err != nil {
 		return false, false, err
 	}
