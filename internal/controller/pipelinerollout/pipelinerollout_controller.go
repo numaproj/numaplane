@@ -462,7 +462,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
-	//r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "true")
+	r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "true")
 	return requeueDelay, existingPipelineDef, err
 }
 
