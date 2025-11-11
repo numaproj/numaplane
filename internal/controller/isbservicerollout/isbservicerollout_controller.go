@@ -244,8 +244,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
 
-	// isbServiceDef used for metrics
-	//var isbServiceDef *unstructured.Unstructured
 	newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
@@ -273,7 +271,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 				}
 
 				isbServiceRollout.Status.MarkDeployed(isbServiceRollout.Generation)
-				r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "false")
+				//r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "false")
 				r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerISBSVCRollout, "create").Observe(time.Since(startTime).Seconds())
 
 				// if there are any PipelineRollouts using this ISBServiceRollout, enqueue them for reconciliation
@@ -320,7 +318,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 	}
 
-	r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "true")
+	//r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "true")
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
