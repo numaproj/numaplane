@@ -39,8 +39,10 @@ import (
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
+	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -1537,4 +1539,773 @@ func createHPARawExtension(t *testing.T) []byte {
 	raw, err := json.Marshal(hpa)
 	assert.NoError(t, err)
 	return raw
+}
+
+// Technically, IsUpgradeReplacementRequired() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.
+func Test_PipelineRollout_IsUpgradeReplacementRequired(t *testing.T) {
+	restConfig, numaflowClientSet, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create a real PipelineRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewPipelineRolloutReconciler(client, scheme, nil, nil)
+
+	// Create a PipelineSpec
+	// For rollout spec, pass "{{.pipeline-name}}" as nameTemplateValue and use the ISBServiceRollout name as isbServiceName
+	// For child specs, pass the evaluated name like "my-pipeline-0" as nameTemplateValue and use the resolved ISBService name
+	createPipelineSpec := func(image string, nameTemplateValue string, isbServiceName string) numaflowv1.PipelineSpec {
+		return numaflowv1.PipelineSpec{
+			InterStepBufferServiceName: isbServiceName,
+			Vertices: []numaflowv1.AbstractVertex{
+				{
+					Name: "in",
+					Source: &numaflowv1.Source{
+						Generator: &numaflowv1.GeneratorSource{
+							RPU:      ptr.To(int64(5)),
+							Duration: ptr.To(metav1.Duration{Duration: time.Second}),
+						},
+					},
+				},
+				{
+					Name: "cat",
+					UDF: &numaflowv1.UDF{
+						Container: &numaflowv1.Container{
+							Image: image,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "my-key",
+									Value: nameTemplateValue,
+								},
+							},
+						},
+					},
+				},
+				{
+					Name: "out",
+					Sink: &numaflowv1.Sink{
+						AbstractSink: numaflowv1.AbstractSink{
+							Log: &numaflowv1.Log{},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name                      string
+		upgradingISBSvcExists     bool
+		rolloutSpec               numaflowv1.PipelineSpec
+		rolloutLabels             map[string]string
+		rolloutAnnotations        map[string]string
+		promotedChildSpec         numaflowv1.PipelineSpec
+		promotedChildName         string
+		promotedChildLabels       map[string]string
+		promotedChildAnnotations  map[string]string
+		upgradingChildSpec        numaflowv1.PipelineSpec
+		upgradingChildName        string
+		upgradingChildLabels      map[string]string
+		upgradingChildAnnotations map[string]string
+		expectedDiffFromUpgrading bool
+		expectedDiffFromPromoted  bool
+	}{
+
+		{
+			name:        "different from Upgrading only (different image)- rollout matches Promoted",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:                  "same spec as Promoted pipeline, but a new (different) upgrading ISBService exists which Upgrading Pipeline should use",
+			upgradingISBSvcExists: true,
+			rolloutSpec:           createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v2.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: true, // image different
+			expectedDiffFromPromoted:  true, // because we need to use a different ISBService, we consider the "target spec"to be different from the one we have
+		},
+		{
+			name:        "different from Promoted only (different image)- rollout matches Upgrading",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: false,
+			expectedDiffFromPromoted:  true,
+		},
+		{
+			name:                  "same spec as Upgrading pipeline, but a new (different) upgrading ISBService exists which Upgrading Pipeline should use",
+			upgradingISBSvcExists: true,
+			rolloutSpec:           createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.pipeline-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.pipeline-name}}",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":    "my-pipeline-0",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-0",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.5.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":    "my-pipeline-1",
+				"extra-label": "extra-value", // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":    "my-pipeline-1",
+				"extra-annotation": "extra-value", // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: true, // because we need to use a different ISBService, we consider the "target spec"to be different from the one we have
+			expectedDiffFromPromoted:  true, // different image
+		},
+		{
+			name:        "different from both - required metadata not present",
+			rolloutSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "{{.pipeline-name}}", ctlrcommon.DefaultTestISBSvcRolloutName),
+			rolloutLabels: map[string]string{
+				"my-label":       "{{.pipeline-name}}",
+				"required-label": "important-value",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation":       "{{.pipeline-name}}",
+				"required-annotation": "important-value",
+			},
+			promotedChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-0", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			promotedChildName: "my-pipeline-0",
+			promotedChildLabels: map[string]string{
+				"my-label":       "my-pipeline-0",
+				"required-label": "important-value",
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation": "my-pipeline-0",
+				// Missing "required-annotation"
+			},
+			upgradingChildSpec: createPipelineSpec("quay.io/numaio/numaflow-go/map-cat:v1.0.0", "my-pipeline-1", ctlrcommon.DefaultTestISBSvcRolloutName+"-0"),
+			upgradingChildName: "my-pipeline-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":       "my-pipeline-1",
+				"required-label": "different-important-value", // label present but value is different
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":       "my-pipeline-1",
+				"required-annotation": "important-value",
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+	}
+
+	// Helper function to create a Pipeline child with required labels/annotations
+	createPipelineChild := func(spec numaflowv1.PipelineSpec, name string, labels, annotations map[string]string, upgradeState common.UpgradeState) *unstructured.Unstructured {
+		pipeline := ctlrcommon.CreateTestPipelineOfSpec(
+			spec,
+			name,
+			numaflowv1.PipelinePhaseRunning,
+			numaflowv1.Status{
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(numaflowv1.PipelineConditionDaemonServiceHealthy),
+						Status:             metav1.ConditionTrue,
+						Reason:             "healthy",
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					},
+				},
+			},
+			false,
+			labels,
+			annotations,
+		)
+		// Add required labels
+		if pipeline.Labels == nil {
+			pipeline.Labels = make(map[string]string)
+		}
+		pipeline.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestPipelineRolloutName
+		pipeline.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+		if pipeline.Annotations == nil {
+			pipeline.Annotations = make(map[string]string)
+		}
+		pipeline.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
+
+		// Convert to unstructured
+		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(pipeline)
+		return &unstructured.Unstructured{Object: unstructMap}
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clean up resources from previous test cases
+			_ = numaflowClientSet.NumaflowV1alpha1().Pipelines(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = numaflowClientSet.NumaflowV1alpha1().InterStepBufferServices(ctlrcommon.DefaultTestNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+			_ = client.DeleteAllOf(ctx, &apiv1.PipelineRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+			_ = client.DeleteAllOf(ctx, &apiv1.ISBServiceRollout{}, &ctlrruntimeclient.DeleteAllOfOptions{ListOptions: ctlrruntimeclient.ListOptions{Namespace: ctlrcommon.DefaultTestNamespace}})
+
+			// Create the base ISBServiceRollout and promoted ISBService
+			isbServiceRollout := ctlrcommon.CreateISBServiceRollout(ctlrcommon.CreateDefaultISBServiceSpec("2.10.11"), nil)
+			ctlrcommon.CreateISBServiceRolloutInK8S(ctx, t, client, isbServiceRollout)
+			isbsvc := ctlrcommon.CreateDefaultISBService("2.10.11", numaflowv1.ISBSvcPhaseRunning, true)
+			ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, isbsvc)
+
+			// Create upgrading ISBService if needed
+			if tc.upgradingISBSvcExists {
+				upgradingISBSvc := ctlrcommon.CreateTestISBService(
+					"2.10.11",
+					ctlrcommon.DefaultTestISBSvcRolloutName+"-1",
+					numaflowv1.ISBSvcPhaseRunning,
+					true,
+					map[string]string{
+						common.LabelKeyParentRollout: ctlrcommon.DefaultTestISBSvcRolloutName,
+						common.LabelKeyUpgradeState:  string(common.LabelValueUpgradeInProgress),
+					},
+					map[string]string{},
+				)
+				ctlrcommon.CreateISBSvcInK8S(ctx, t, numaflowClientSet, upgradingISBSvc)
+			}
+
+			// Create PipelineRollout with template values
+			pipelineRollout := ctlrcommon.CreateTestPipelineRollout(
+				tc.rolloutSpec,
+				map[string]string{}, // rollout annotations
+				map[string]string{}, // rollout labels
+				tc.rolloutAnnotations,
+				tc.rolloutLabels,
+				&apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{},
+						PromotedPipelineStatus:  &apiv1.PromotedPipelineStatus{},
+					},
+				},
+			)
+
+			// Create Promoted and Upgrading Pipelines
+			promotedChildUnstruct := createPipelineChild(
+				tc.promotedChildSpec,
+				tc.promotedChildName,
+				tc.promotedChildLabels,
+				tc.promotedChildAnnotations,
+				common.LabelValueUpgradePromoted,
+			)
+			upgradingChildUnstruct := createPipelineChild(
+				tc.upgradingChildSpec,
+				tc.upgradingChildName,
+				tc.upgradingChildLabels,
+				tc.upgradingChildAnnotations,
+				common.LabelValueUpgradeInProgress,
+			)
+
+			// Call progressive.IsUpgradeReplacementRequired with the PipelineRollout controller
+			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(
+				ctx,
+				pipelineRollout,
+				reconciler,
+				promotedChildUnstruct,
+				upgradingChildUnstruct,
+				client,
+			)
+
+			// Verify results
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedDiffFromUpgrading, differentFromUpgrading,
+				"differentFromUpgrading mismatch")
+			assert.Equal(t, tc.expectedDiffFromPromoted, differentFromPromoted,
+				"differentFromPromoted mismatch")
+		})
+	}
+}
+
+// setRiderHashAnnotation calculates and sets the hash annotation on a rider.
+// This must be done BEFORE adding runtime labels for proper comparison.
+func setRiderHashAnnotation(ctx context.Context, t *testing.T, rider *unstructured.Unstructured) {
+	hash, err := kubernetes.CalculateHash(ctx, *rider)
+	assert.NoError(t, err, "Failed to calculate hash for rider")
+	if rider.GetAnnotations() == nil {
+		rider.SetAnnotations(make(map[string]string))
+	}
+	annotations := rider.GetAnnotations()
+	annotations[common.AnnotationKeyHash] = hash
+	rider.SetAnnotations(annotations)
+}
+
+// Technically, CheckRidersForDifferences() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the PipelineRollout controller.
+func Test_PipelineRollout_CheckRidersForDifferences(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	// Create a real PipelineRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewPipelineRolloutReconciler(client, scheme, nil, nil)
+
+	// Define common rider definitions
+	defaultVPARiderDef := map[string]interface{}{
+		"apiVersion": "autoscaling.k8s.io/v1",
+		"kind":       "VerticalPodAutoscaler",
+		"metadata": map[string]interface{}{
+			"name": "vpa",
+		},
+		"spec": map[string]interface{}{
+			"targetRef": map[string]interface{}{
+				"apiVersion": "numaflow.numaproj.io/v1alpha1",
+				"kind":       "Vertex",
+				"name":       "{{.pipeline-name}}-{{.vertex-name}}",
+			},
+			"updatePolicy": map[string]interface{}{
+				"updateMode": "Auto",
+			},
+		},
+	}
+
+	testCases := []struct {
+		name                        string
+		rolloutRiderDef             map[string]interface{} // Rider definition with templates
+		perVertex                   bool
+		rolloutSpecVertices         []string // Vertex names in the rollout spec
+		existingPipelineDefVertices []string // Vertex names in the actual existing pipeline definition (may differ from rollout)
+		newPipelineName             string   // Name of the new pipeline we want to create (e.g., "my-pipeline-2")
+		existingPipelineName        string   // Name of the existing pipeline (e.g., "my-pipeline-1")
+		expectedRiderCount          int
+		expectedRiderNames          []string
+		verifyTemplateEval          func(t *testing.T, riders []riders.Rider) // Custom verification function
+		existingVPADefinition       *map[string]interface{}                   // If nil, no existing VPA riders; if set, create existing VPA riders from this definition
+		existingConfigMapDefinition *map[string]interface{}                   // If nil, no existing ConfigMap riders; if set, create existing ConfigMap riders from this definition
+		existingIsUpgrading         bool                                      // If true, existing child is Upgrading; if false, existing child is Promoted
+		expectedDifferencesFound    bool                                      // Expected result from CheckRidersForDifferences
+	}{
+		{
+			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - no differences",
+			rolloutRiderDef:             defaultVPARiderDef,
+			perVertex:                   true,
+			rolloutSpecVertices:         []string{"in", "cat", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has the same vertices as rollout
+			newPipelineName:             "my-pipeline-2",
+			existingPipelineName:        "my-pipeline-1",
+			expectedRiderCount:          3,
+			expectedRiderNames: []string{
+				"vpa-my-pipeline-2-in",
+				"vpa-my-pipeline-2-cat",
+				"vpa-my-pipeline-2-out",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				vertexNames := []string{"in", "cat", "out"}
+				for i, rider := range riders {
+					// Verify the targetRef has templates evaluated
+					targetRef, found, err := unstructured.NestedMap(rider.Definition.Object, "spec", "targetRef")
+					assert.NoError(t, err)
+					assert.True(t, found)
+					expectedTargetName := fmt.Sprintf("my-pipeline-2-%s", vertexNames[i])
+					assert.Equal(t, expectedTargetName, targetRef["name"],
+						"TargetRef name should have templates evaluated")
+				}
+			},
+			existingVPADefinition:       &defaultVPARiderDef,
+			existingConfigMapDefinition: nil,   // No existing ConfigMaps
+			existingIsUpgrading:         true,  // Existing child is Upgrading
+			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+		},
+		{
+			name:                        "Compare VPA per-vertex rider to Promoted Pipeline riders - no differences",
+			rolloutRiderDef:             defaultVPARiderDef,
+			perVertex:                   true,
+			rolloutSpecVertices:         []string{"in", "cat", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has the same vertices as rollout
+			newPipelineName:             "my-pipeline-1",              // New upgrading child
+			existingPipelineName:        "my-pipeline-0",              // Existing promoted child
+			expectedRiderCount:          3,
+			expectedRiderNames: []string{
+				"vpa-my-pipeline-1-in",
+				"vpa-my-pipeline-1-cat",
+				"vpa-my-pipeline-1-out",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				vertexNames := []string{"in", "cat", "out"}
+				for i, rider := range riders {
+					// Verify the targetRef has templates evaluated
+					targetRef, found, err := unstructured.NestedMap(rider.Definition.Object, "spec", "targetRef")
+					assert.NoError(t, err)
+					assert.True(t, found)
+					expectedTargetName := fmt.Sprintf("my-pipeline-1-%s", vertexNames[i])
+					assert.Equal(t, expectedTargetName, targetRef["name"],
+						"TargetRef name should have templates evaluated")
+				}
+			},
+			existingVPADefinition:       &defaultVPARiderDef,
+			existingConfigMapDefinition: nil,   // No existing ConfigMaps
+			existingIsUpgrading:         false, // Existing child is Promoted
+			expectedDifferencesFound:    false, // No differences expected since existing riders match rollout
+		},
+		{
+			name:                        "Compare VPA per-vertex rider to Upgrading Pipeline riders - the Vertex names have changed",
+			rolloutRiderDef:             defaultVPARiderDef,
+			perVertex:                   true,
+			rolloutSpecVertices:         []string{"in", "cat", "out"},
+			existingPipelineDefVertices: []string{"in", "transform", "out"}, // Different vertices - "cat" vs "transform"
+			newPipelineName:             "my-pipeline-2",
+			existingPipelineName:        "my-pipeline-1",
+			expectedRiderCount:          3,
+			expectedRiderNames: []string{
+				"vpa-my-pipeline-2-in",
+				"vpa-my-pipeline-2-cat",
+				"vpa-my-pipeline-2-out",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				vertexNames := []string{"in", "cat", "out"}
+				for i, rider := range riders {
+					// Verify the targetRef has templates evaluated
+					targetRef, found, err := unstructured.NestedMap(rider.Definition.Object, "spec", "targetRef")
+					assert.NoError(t, err)
+					assert.True(t, found)
+					expectedTargetName := fmt.Sprintf("my-pipeline-2-%s", vertexNames[i])
+					assert.Equal(t, expectedTargetName, targetRef["name"],
+						"TargetRef name should have templates evaluated")
+				}
+			},
+			existingVPADefinition:       &defaultVPARiderDef,
+			existingConfigMapDefinition: nil,  // No existing ConfigMaps
+			existingIsUpgrading:         true, // Existing child is Upgrading
+			expectedDifferencesFound:    true, // Differences expected - existing has "transform" rider, rollout wants "cat" rider
+		},
+		{
+			name: "Compare ConfigMap per-Pipeline Rider to Upgrading Pipeline rider: spec has changed",
+			rolloutRiderDef: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name": "my-config",
+				},
+				"data": map[string]interface{}{
+					"pipeline-name": "{{.pipeline-name}}",
+					"namespace":     "{{.pipeline-namespace}}",
+				},
+			},
+			perVertex:                   false,
+			rolloutSpecVertices:         []string{"in", "out"},
+			existingPipelineDefVertices: []string{"in", "cat", "out"}, // Existing pipeline has different vertices than rollout (doesn't affect non-perVertex riders)
+			newPipelineName:             "my-pipeline-2",
+			existingPipelineName:        "my-pipeline-1",
+			expectedRiderCount:          1,
+			expectedRiderNames: []string{
+				"my-config-my-pipeline-2",
+			},
+			verifyTemplateEval: func(t *testing.T, riders []riders.Rider) {
+				// Verify data field has templates evaluated
+				data, found, err := unstructured.NestedStringMap(riders[0].Definition.Object, "data")
+				assert.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, "my-pipeline-2", data["pipeline-name"])
+				assert.Equal(t, ctlrcommon.DefaultTestNamespace, data["namespace"])
+			},
+			existingVPADefinition: nil, // No existing VPAs
+			existingConfigMapDefinition: &map[string]interface{}{
+				// Existing ConfigMap has different data than rollout
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name": "my-config",
+				},
+				"data": map[string]interface{}{
+					"pipeline-name": "old-value",               // Different from rollout ("{{.pipeline-name}}")
+					"namespace":     "{{.pipeline-namespace}}", // Same as rollout
+				},
+			},
+			existingIsUpgrading:      true, // Existing child is Upgrading
+			expectedDifferencesFound: true, // Differences expected since existing ConfigMap has different data
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create rider definition
+			riderDefRaw, err := json.Marshal(tc.rolloutRiderDef)
+			assert.NoError(t, err)
+
+			// Create PipelineRollout with the rider (using rollout spec vertices)
+			rolloutVertices := make([]numaflowv1.AbstractVertex, len(tc.rolloutSpecVertices))
+			for i, name := range tc.rolloutSpecVertices {
+				rolloutVertices[i] = numaflowv1.AbstractVertex{Name: name}
+			}
+			pipelineSpec := numaflowv1.PipelineSpec{
+				InterStepBufferServiceName: "my-isbsvc-0",
+				Vertices:                   rolloutVertices,
+			}
+			pipelineSpecRaw, err := json.Marshal(pipelineSpec)
+			assert.NoError(t, err)
+
+			pipelineRollout := &apiv1.PipelineRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ctlrcommon.DefaultTestNamespace,
+					Name:      ctlrcommon.DefaultTestPipelineRolloutName,
+				},
+				Spec: apiv1.PipelineRolloutSpec{
+					Pipeline: apiv1.Pipeline{
+						Spec: runtime.RawExtension{Raw: pipelineSpecRaw},
+					},
+					Riders: []apiv1.PipelineRider{
+						{
+							Rider: apiv1.Rider{
+								Definition: runtime.RawExtension{Raw: riderDefRaw},
+							},
+							PerVertex: tc.perVertex,
+						},
+					},
+				},
+				Status: apiv1.PipelineRolloutStatus{
+					ProgressiveStatus: apiv1.PipelineProgressiveStatus{
+						UpgradingPipelineStatus: &apiv1.UpgradingPipelineStatus{},
+						PromotedPipelineStatus:  &apiv1.PromotedPipelineStatus{},
+					},
+				},
+			}
+
+			// Create new pipeline definition from rollout spec (what we want to create)
+			newPipelineDefVertices := make([]interface{}, len(tc.rolloutSpecVertices))
+			for i, name := range tc.rolloutSpecVertices {
+				newPipelineDefVertices[i] = map[string]interface{}{"name": name}
+			}
+			newPipelineDef := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      tc.newPipelineName,
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+					"spec": map[string]interface{}{
+						"interStepBufferServiceName": "my-isbsvc-0",
+						"vertices":                   newPipelineDefVertices,
+					},
+				},
+			}
+
+			// Create existing pipeline definition (which may have different vertices than the rollout spec)
+			existingPipelineDefVertices := make([]interface{}, len(tc.existingPipelineDefVertices))
+			for i, name := range tc.existingPipelineDefVertices {
+				existingPipelineDefVertices[i] = map[string]interface{}{"name": name}
+			}
+			existingPipelineDef := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      tc.existingPipelineName,
+						"namespace": ctlrcommon.DefaultTestNamespace,
+					},
+					"spec": map[string]interface{}{
+						"interStepBufferServiceName": "my-isbsvc-0",
+						"vertices":                   existingPipelineDefVertices,
+					},
+				},
+			}
+
+			// Call GetDesiredRiders with the new pipeline definition
+			desiredRiders, err := reconciler.GetDesiredRiders(pipelineRollout, tc.newPipelineName, newPipelineDef)
+			assert.NoError(t, err)
+
+			// Verify rider count
+			assert.Equal(t, tc.expectedRiderCount, len(desiredRiders),
+				"Should create expected number of riders")
+
+			// Verify rider names
+			for i, expectedName := range tc.expectedRiderNames {
+				assert.Equal(t, expectedName, desiredRiders[i].Definition.GetName(),
+					"Rider name should match expected name")
+			}
+
+			// Run custom verification if provided
+			if tc.verifyTemplateEval != nil {
+				tc.verifyTemplateEval(t, desiredRiders)
+			}
+
+			// Test CheckRidersForDifferences
+			ctx := context.Background()
+
+			// Create existing riders in the cluster based on custom definitions
+			var existingRiders []unstructured.Unstructured
+			var riderStatusList []apiv1.RiderStatus
+
+			riderKind, _ := tc.rolloutRiderDef["kind"].(string)
+			var existingRiderDefinition *map[string]interface{}
+			var riderNamePrefix string
+			if riderKind == "VerticalPodAutoscaler" {
+				existingRiderDefinition = tc.existingVPADefinition
+			} else if riderKind == "ConfigMap" {
+				existingRiderDefinition = tc.existingConfigMapDefinition
+			}
+
+			// Extract the base name from the rollout rider definition
+			if metadata, ok := tc.rolloutRiderDef["metadata"].(map[string]interface{}); ok {
+				if name, ok := metadata["name"].(string); ok {
+					riderNamePrefix = name
+				}
+			}
+
+			// Create existing riders
+			if existingRiderDefinition != nil {
+				// Determine how many riders to create based on whether it's per-vertex
+				ridersToCreate := []string{tc.existingPipelineName} // Default: one rider (per-pipeline)
+				if tc.perVertex {
+					// Per-vertex: create one rider per vertex in existing pipeline
+					ridersToCreate = tc.existingPipelineDefVertices
+				}
+
+				for _, riderIdentifier := range ridersToCreate {
+					// Use custom definition and evaluate templates
+					templateArgs := map[string]interface{}{
+						common.TemplatePipelineName:      tc.existingPipelineName,
+						common.TemplatePipelineNamespace: ctlrcommon.DefaultTestNamespace,
+					}
+					if tc.perVertex {
+						templateArgs[common.TemplateVertexName] = riderIdentifier
+					}
+
+					resolvedMap, err := util.ResolveTemplatedSpec(*existingRiderDefinition, templateArgs)
+					assert.NoError(t, err)
+					existingRider := &unstructured.Unstructured{Object: resolvedMap}
+					existingRider.SetNamespace(ctlrcommon.DefaultTestNamespace)
+
+					// Generate the rider name
+					if tc.perVertex {
+						existingRider.SetName(fmt.Sprintf("%s-%s-%s", riderNamePrefix, tc.existingPipelineName, riderIdentifier))
+					} else {
+						existingRider.SetName(fmt.Sprintf("%s-%s", riderNamePrefix, tc.existingPipelineName))
+					}
+
+					// Set hash annotation for the existing rider (matches production behavior)
+					setRiderHashAnnotation(ctx, t, existingRider)
+
+					// Create the rider in the cluster
+					err = client.Create(ctx, existingRider)
+					assert.NoError(t, err, "Failed to create existing rider")
+					existingRiders = append(existingRiders, *existingRider)
+
+					// Add to rider status list
+					riderStatusList = append(riderStatusList, apiv1.RiderStatus{
+						GroupVersionKind: kubernetes.SchemaGVKToMetaGVK(existingRider.GroupVersionKind()),
+						Name:             existingRider.GetName(),
+					})
+				}
+			}
+
+			// Update the PipelineRollout status to include the rider list
+			// Set riders in the appropriate status based on whether existing is Upgrading or Promoted
+			if tc.existingIsUpgrading {
+				pipelineRollout.Status.ProgressiveStatus.UpgradingPipelineStatus.Riders = riderStatusList
+			} else {
+				// For promoted child, riders are stored at the top-level Status
+				pipelineRollout.Status.Riders = riderStatusList
+			}
+
+			// Call CheckRidersForDifferences
+			// Compare new desired riders (from newPipelineDef) against existing riders (associated with existingPipelineDef)
+			differencesFound, err := progressive.CheckRidersForDifferences(
+				ctx,
+				reconciler,
+				pipelineRollout,
+				existingPipelineDef,    // existing child definition
+				tc.existingIsUpgrading, // whether existing child is Upgrading (vs Promoted)
+				newPipelineDef,         // new upgrading child definition
+			)
+			assert.NoError(t, err, "CheckRidersForDifferences should not return an error")
+			assert.Equal(t, tc.expectedDifferencesFound, differencesFound,
+				"CheckRidersForDifferences result mismatch")
+
+			// Clean up: delete the existing riders
+			for _, rider := range existingRiders {
+				err = client.Delete(ctx, &rider)
+				assert.NoError(t, err, "Failed to delete rider")
+			}
+		})
+	}
 }

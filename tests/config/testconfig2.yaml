@@ -1,5 +1,6 @@
 logLevel: DEBUG # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FATAL will be printed regardless of the log level
 defaultUpgradeStrategy: "progressive"
+permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=,kind=ConfigMap;group=autoscaling,kind=HorizontalPodAutoscaler"
 progressive:
   defaultAssessmentSchedule:
     - kind: Pipeline

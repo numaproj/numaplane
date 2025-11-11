@@ -43,6 +43,7 @@ func PrepareK8SEnvironment() (restConfig *rest.Config, numaflowClientSet *numafl
 		"https://raw.githubusercontent.com/numaproj/numaflow/main/config/base/crds/minimal/numaflow.numaproj.io_monovertices.yaml",
 		"https://raw.githubusercontent.com/argoproj/argo-rollouts/refs/heads/master/manifests/crds/analysis-run-crd.yaml",
 		"https://raw.githubusercontent.com/argoproj/argo-rollouts/refs/heads/master/manifests/crds/analysis-template-crd.yaml",
+		"https://raw.githubusercontent.com/kubernetes/autoscaler/master/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml",
 	}
 	externalCRDsDir := crdDirectory + "/external"
 	for _, crdURL := range crdsURLs {

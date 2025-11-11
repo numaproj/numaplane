@@ -426,30 +426,19 @@ func processUpgradingChild(
 	}
 }
 
-// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
-// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+// IsUpgradeReplacementRequired determines if the current spec requires replacing the Upgrading child.
+// It compares the new spec against both the existing Upgrading child and the Promoted child.
 // Returns:
-// - A boolean indicating we need to requeue
-// - A boolean indicating if the upgrade is done
-// - Error if any
-func checkForUpgradeReplacement(
+// - differentFromExistingUpgrading: true if new spec differs from existing Upgrading child
+// - differentFromPromoted: true if new spec differs from Promoted child
+// - error if any
+func IsUpgradeReplacementRequired(
 	ctx context.Context,
 	rolloutObject ProgressiveRolloutObject,
 	controller progressiveController,
 	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
 	c client.Client,
 ) (bool, bool, error) {
-	numaLogger := logger.FromContext(ctx)
-
-	childStatus := rolloutObject.GetUpgradingChildStatus()
-
-	// Compare our new spec to:
-	// 1. the existing Upgrading child definition
-	// 2. the existing Promoted child definition
-	// If the new one is different from the existing Upgrading one:
-	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
-	//  Else replace the Upgrading one with a new one
-
 	existingUpgradingChildName := existingUpgradingChildDef.GetName()
 	// we need to create an Upgrading child definition which is template-evaluated using the existing Upgrading child's name so that we can effectively compare them below
 	newUpgradingChildDef, err := makeUpgradingObjectDefinition(ctx, rolloutObject, controller, c, &existingUpgradingChildName)
@@ -469,6 +458,39 @@ func checkForUpgradeReplacement(
 	}
 
 	differentFromPromoted, err := checkForDifferences(ctx, controller, rolloutObject, existingPromotedChildDef, false, newUpgradingChildDefUsingPromotedName)
+	if err != nil {
+		return false, false, err
+	}
+
+	return differentFromExistingUpgrading, differentFromPromoted, nil
+}
+
+// checkForUpgradeReplacement checks to see if we need to replace the current Upgrading child one with a new one because the spec has changed,
+// and if so, performs the replacement, thereby recycling the old one and starting upgrade on the new one
+// Returns:
+// - A boolean indicating we need to requeue
+// - A boolean indicating if the upgrade is done
+// - Error if any
+func checkForUpgradeReplacement(
+	ctx context.Context,
+	rolloutObject ProgressiveRolloutObject,
+	controller progressiveController,
+	existingPromotedChildDef, existingUpgradingChildDef *unstructured.Unstructured,
+	c client.Client,
+) (bool, bool, error) {
+	numaLogger := logger.FromContext(ctx)
+
+	childStatus := rolloutObject.GetUpgradingChildStatus()
+	var newUpgradingChildDef *unstructured.Unstructured
+
+	// Compare our new spec to:
+	// 1. the existing Upgrading child definition
+	// 2. the existing Promoted child definition
+	// If the new one is different from the existing Upgrading one:
+	//  Then if the new one matches the existing Promoted one: remove the Upgrading one
+	//  Else replace the Upgrading one with a new one
+
+	differentFromExistingUpgrading, differentFromPromoted, err := IsUpgradeReplacementRequired(ctx, rolloutObject, controller, existingPromotedChildDef, existingUpgradingChildDef, c)
 	if err != nil {
 		return false, false, err
 	}
@@ -558,7 +580,7 @@ func checkForDifferences(
 	} else {
 		// if child doesn't need updating, let's see if any Riders do
 		// (additions, modifications, or deletions)
-		needsUpdating, err = checkRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
+		needsUpdating, err = CheckRidersForDifferences(ctx, controller, rolloutObject, existingChildDef, existingIsUpgrading, newChildDef)
 		if err != nil {
 			return false, err
 		}
@@ -567,8 +589,8 @@ func checkForDifferences(
 }
 
 // Do any Riders need updating? (including additions, modifications, or deletions)
-// Compare the Riders which would be derived from the latest and greatest spec with those of either the existing "promoted" child or the existing "upgrading" child
-func checkRidersForDifferences(
+// Compare the Riders which would be derived from the latest and greatest Rollout definition with those of either the existing "promoted" child or the existing "upgrading" child
+func CheckRidersForDifferences(
 	ctx context.Context,
 	controller progressiveController,
 	rolloutObject ctlrcommon.RolloutObject,
@@ -578,17 +600,21 @@ func checkRidersForDifferences(
 	existingIsUpgrading bool,
 	// newUpgradingChildDef can either already have had any templates evaluated or if not, the evaluation will happen in this function
 	newUpgradingChildDef *unstructured.Unstructured) (bool, error) {
+
+	// Get the Riders which are desired based on the Rollout definition
 	// if newUpgradingChildDef still has unevaluated templates, then the existing child's name is used to evaluate them, so we can compare effectively
 	newRiders, err := controller.GetDesiredRiders(rolloutObject, existingChildDef.GetName(), newUpgradingChildDef)
 	if err != nil {
 		return false, err
 	}
 
+	// Which Riders have already been deployed?
 	existingRiders, err := controller.GetExistingRiders(ctx, rolloutObject, existingIsUpgrading)
 	if err != nil {
 		return false, err
 	}
 
+	// Now compare the desired Riders with the existing Riders to see if any need updating
 	needUpdating, _, _, _, _, err := usde.RidersNeedUpdating(ctx, existingChildDef.GetNamespace(), existingChildDef.GetKind(), existingChildDef.GetName(),
 		newRiders, existingRiders)
 	if err != nil {
