@@ -43,6 +43,7 @@ import (
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -1308,4 +1309,264 @@ func createHPARawExtension(t *testing.T) []byte {
 	raw, err := json.Marshal(hpa)
 	assert.NoError(t, err)
 	return raw
+}
+
+// Technically, IsUpgradeReplacementRequired() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the MonoVertexRollout controller.
+func Test_MVRollout_IsUpgradeReplacementRequired(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create a real MonoVertexRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewMonoVertexRolloutReconciler(client, scheme, nil, nil)
+
+	// Create a MonoVertexSpec
+	// For rollout spec, pass "{{.monovertex-name}}" as nameTemplateValue
+	// For child specs, pass the evaluated name like "my-monovertex-0" as nameTemplateValue
+	createMonoVertexSpec := func(image string, nameTemplateValue string) numaflowv1.MonoVertexSpec {
+		return numaflowv1.MonoVertexSpec{
+			Replicas: ptr.To(int32(1)),
+			Source: &numaflowv1.Source{
+				UDSource: &numaflowv1.UDSource{
+					Container: &numaflowv1.Container{
+						Image: image,
+					},
+				},
+				UDTransformer: &numaflowv1.UDTransformer{
+					Container: &numaflowv1.Container{
+						Image: "quay.io/numaio/numaflow-rs/source-transformer-now:stable",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "my-key",
+								Value: nameTemplateValue,
+							},
+						},
+					},
+				},
+			},
+			Sink: &numaflowv1.Sink{
+				AbstractSink: numaflowv1.AbstractSink{
+					UDSink: &numaflowv1.UDSink{
+						Container: &numaflowv1.Container{
+							Image: "quay.io/numaio/numaflow-java/simple-sink:stable",
+						},
+					},
+				},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name                      string
+		rolloutSpec               numaflowv1.MonoVertexSpec
+		rolloutLabels             map[string]string
+		rolloutAnnotations        map[string]string
+		promotedChildSpec         numaflowv1.MonoVertexSpec
+		promotedChildName         string
+		promotedChildLabels       map[string]string
+		promotedChildAnnotations  map[string]string
+		upgradingChildSpec        numaflowv1.MonoVertexSpec
+		upgradingChildName        string
+		upgradingChildLabels      map[string]string
+		upgradingChildAnnotations map[string]string
+		expectedDiffFromUpgrading bool
+		expectedDiffFromPromoted  bool
+	}{
+
+		{
+			name:        "different from Upgrading only (different image)- rollout matches Promoted",
+			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v2.0.0", "{{.monovertex-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.monovertex-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.monovertex-name}}",
+			},
+			promotedChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v2.0.0", "my-monovertex-0"),
+			promotedChildName: "my-monovertex-0",
+			promotedChildLabels: map[string]string{
+				"my-label":   "my-monovertex-0", // this is a match
+				"my-label-2": "something",       // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-0", // this is a match
+				"my-annotation-2": "something",       // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "my-monovertex-1"),
+			upgradingChildName: "my-monovertex-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":   "my-monovertex-1", // this is a match
+				"my-label-2": "something",       // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-1", // this is a match
+				"my-annotation-2": "something",       // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:        "different from Promoted only (different image) - rollout matches Upgrading",
+			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "{{.monovertex-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.monovertex-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.monovertex-name}}",
+			},
+			promotedChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "my-monovertex-0"),
+			promotedChildName: "my-monovertex-0",
+			promotedChildLabels: map[string]string{
+				"my-label":   "my-monovertex-0", // this is a match
+				"my-label-2": "something",       // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-0", // this is a match
+				"my-annotation-2": "something",       // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.5.0", "my-monovertex-1"),
+			upgradingChildName: "my-monovertex-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":   "my-monovertex-1", // this is a match
+				"my-label-2": "something",       // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":   "my-monovertex-1", // this is a match
+				"my-annotation-2": "something",       // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: false,
+			expectedDiffFromPromoted:  true,
+		},
+		{
+			name:        "different from both - required metadata not present",
+			rolloutSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "{{.monovertex-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label":       "{{.monovertex-name}}",
+				"required-label": "important-value",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation":       "{{.monovertex-name}}",
+				"required-annotation": "important-value",
+			},
+			promotedChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "my-monovertex-0"),
+			promotedChildName: "my-monovertex-0",
+			promotedChildLabels: map[string]string{
+				"my-label":       "my-monovertex-0", // this is a match
+				"required-label": "important-value", // this is a match
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation": "my-monovertex-0", // this is a match
+				// Missing "required-annotation"
+			},
+			upgradingChildSpec: createMonoVertexSpec("quay.io/numaio/numaflow-java/source-simple-source:v1.0.0", "my-monovertex-1"),
+			upgradingChildName: "my-monovertex-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":       "my-monovertex-1",           // this is a match
+				"required-label": "different-important-value", // key is present but value is different
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":       "my-monovertex-1", // this is a match
+				"required-annotation": "important-value", // this is a match
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+	}
+
+	// Helper function to create a MonoVertex child with required labels/annotations
+	createMonoVertexChild := func(spec numaflowv1.MonoVertexSpec, name string, labels, annotations map[string]string, upgradeState common.UpgradeState) *unstructured.Unstructured {
+		monoVertex := ctlrcommon.CreateTestMonoVertexOfSpec(
+			spec,
+			name,
+			numaflowv1.MonoVertexPhaseRunning,
+			numaflowv1.Status{
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(numaflowv1.MonoVertexConditionDaemonHealthy),
+						Status:             metav1.ConditionTrue,
+						Reason:             "healthy",
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					},
+				},
+			},
+			labels,
+			annotations,
+		)
+		// Add required labels
+		if monoVertex.Labels == nil {
+			monoVertex.Labels = make(map[string]string)
+		}
+		monoVertex.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestMonoVertexRolloutName
+		monoVertex.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+		if monoVertex.Annotations == nil {
+			monoVertex.Annotations = make(map[string]string)
+		}
+		monoVertex.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
+
+		// Convert to unstructured
+		unstructMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(monoVertex)
+		return &unstructured.Unstructured{Object: unstructMap}
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create MonoVertexRollout with template values
+			mvRollout := ctlrcommon.CreateTestMVRollout(
+				tc.rolloutSpec,
+				map[string]string{}, // rollout annotations
+				map[string]string{}, // rollout labels
+				tc.rolloutAnnotations,
+				tc.rolloutLabels,
+				&apiv1.MonoVertexRolloutStatus{
+					ProgressiveStatus: apiv1.MonoVertexProgressiveStatus{
+						UpgradingMonoVertexStatus: &apiv1.UpgradingMonoVertexStatus{},
+						PromotedMonoVertexStatus:  &apiv1.PromotedMonoVertexStatus{},
+					},
+				},
+			)
+
+			// Create Promoted and Upgrading MonoVertices
+			promotedChildUnstruct := createMonoVertexChild(
+				tc.promotedChildSpec,
+				tc.promotedChildName,
+				tc.promotedChildLabels,
+				tc.promotedChildAnnotations,
+				common.LabelValueUpgradePromoted,
+			)
+			upgradingChildUnstruct := createMonoVertexChild(
+				tc.upgradingChildSpec,
+				tc.upgradingChildName,
+				tc.upgradingChildLabels,
+				tc.upgradingChildAnnotations,
+				common.LabelValueUpgradeInProgress,
+			)
+
+			// Call progressive.IsUpgradeReplacementRequired with the real controller
+			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(
+				ctx,
+				mvRollout,
+				reconciler,
+				promotedChildUnstruct,
+				upgradingChildUnstruct,
+				client,
+			)
+
+			// Verify results
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedDiffFromUpgrading, differentFromUpgrading,
+				"differentFromUpgrading mismatch")
+			assert.Equal(t, tc.expectedDiffFromPromoted, differentFromPromoted,
+				"differentFromPromoted mismatch")
+		})
+	}
 }

@@ -18,6 +18,7 @@ package isbservicerollout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -39,6 +42,7 @@ import (
 	"github.com/numaproj/numaplane/internal/controller/config"
 	"github.com/numaproj/numaplane/internal/controller/pipelinerollout"
 	"github.com/numaproj/numaplane/internal/controller/ppnd"
+	"github.com/numaproj/numaplane/internal/controller/progressive"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
@@ -715,4 +719,251 @@ func createPipelineForISBSvc(
 ) *numaflowv1.Pipeline {
 	spec := numaflowv1.PipelineSpec{InterStepBufferServiceName: isbsvcName}
 	return ctlrcommon.CreateTestPipelineOfSpec(spec, name, phase, numaflowv1.Status{}, false, labels, map[string]string{})
+}
+
+// Technically, IsUpgradeReplacementRequired() function is in progressive.go file, but we test it here because we can take advantage of also testing code specific to the ISBServiceRollout controller.
+func Test_ISBSvcRollout_IsUpgradeReplacementRequired(t *testing.T) {
+	restConfig, _, client, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	assert.Nil(t, kubernetes.SetClientSets(restConfig))
+
+	getwd, err := os.Getwd()
+	assert.Nil(t, err, "Failed to get working directory")
+	configPath := filepath.Join(getwd, "../../../", "tests", "config")
+	configManager := config.GetConfigManagerInstance()
+	err = configManager.LoadAllConfigs(func(err error) {}, config.WithConfigsPath(configPath), config.WithConfigFileName("testconfig2"))
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create a real ISBServiceRolloutReconciler
+	scheme := scheme.Scheme
+	reconciler := NewISBServiceRolloutReconciler(client, scheme, nil, nil)
+
+	// Create an ISBServiceSpec
+	// For rollout spec, pass "{{.isbsvc-name}}" as nameTemplateValue
+	// For child specs, pass the evaluated name like "my-isbsvc-0" as nameTemplateValue
+	createISBServiceSpec := func(version string, nameTemplateValue string) numaflowv1.InterStepBufferServiceSpec {
+		return numaflowv1.InterStepBufferServiceSpec{
+			Redis: &numaflowv1.RedisBufferService{},
+			JetStream: &numaflowv1.JetStreamBufferService{
+				Version: version,
+				Persistence: &numaflowv1.PersistenceStrategy{
+					VolumeSize:       &numaflowv1.DefaultVolumeSize,
+					StorageClassName: &nameTemplateValue,
+				},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name                      string
+		rolloutSpec               numaflowv1.InterStepBufferServiceSpec
+		rolloutLabels             map[string]string
+		rolloutAnnotations        map[string]string
+		promotedChildSpec         numaflowv1.InterStepBufferServiceSpec
+		promotedChildName         string
+		promotedChildLabels       map[string]string
+		promotedChildAnnotations  map[string]string
+		upgradingChildSpec        numaflowv1.InterStepBufferServiceSpec
+		upgradingChildName        string
+		upgradingChildLabels      map[string]string
+		upgradingChildAnnotations map[string]string
+		expectedDiffFromUpgrading bool
+		expectedDiffFromPromoted  bool
+	}{
+
+		{
+			name:        "different from Upgrading only (different version) - rollout matches Promoted",
+			rolloutSpec: createISBServiceSpec("2.10.11", "{{.isbsvc-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.isbsvc-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.isbsvc-name}}",
+			},
+			promotedChildSpec: createISBServiceSpec("2.10.11", "my-isbsvc-0"),
+			promotedChildName: "my-isbsvc-0",
+			promotedChildLabels: map[string]string{
+				"my-label":   "my-isbsvc-0", // this is a match
+				"my-label-2": "something",   // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":   "my-isbsvc-0", // this is a match
+				"my-annotation-2": "something",   // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createISBServiceSpec("2.10.3", "my-isbsvc-1"),
+			upgradingChildName: "my-isbsvc-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":   "my-isbsvc-1", // this is a match
+				"my-label-2": "something",   // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":   "my-isbsvc-1", // this is a match
+				"my-annotation-2": "something",   // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  false,
+		},
+		{
+			name:        "different from Promoted only (different version) - rollout matches Upgrading",
+			rolloutSpec: createISBServiceSpec("2.10.3", "{{.isbsvc-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label": "{{.isbsvc-name}}",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation": "{{.isbsvc-name}}",
+			},
+			promotedChildSpec: createISBServiceSpec("2.9.0", "my-isbsvc-0"),
+			promotedChildName: "my-isbsvc-0",
+			promotedChildLabels: map[string]string{
+				"my-label":   "my-isbsvc-0", // this is a match
+				"my-label-2": "something",   // this is no problem to have an extra label
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation":   "my-isbsvc-0", // this is a match
+				"my-annotation-2": "something",   // this is no problem to have an extra annotation
+			},
+			upgradingChildSpec: createISBServiceSpec("2.10.3", "my-isbsvc-1"),
+			upgradingChildName: "my-isbsvc-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":   "my-isbsvc-1", // this is a match
+				"my-label-2": "something",   // this is no problem to have an extra label
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":   "my-isbsvc-1", // this is a match
+				"my-annotation-2": "something",   // this is no problem to have an extra annotation
+			},
+			expectedDiffFromUpgrading: false,
+			expectedDiffFromPromoted:  true,
+		},
+		{
+			name:        "different from both - required metadata not present",
+			rolloutSpec: createISBServiceSpec("2.9.0", "{{.isbsvc-name}}"),
+			rolloutLabels: map[string]string{
+				"my-label":       "{{.isbsvc-name}}",
+				"required-label": "important-value",
+			},
+			rolloutAnnotations: map[string]string{
+				"my-annotation":       "{{.isbsvc-name}}",
+				"required-annotation": "important-value",
+			},
+			promotedChildSpec: createISBServiceSpec("2.9.0", "my-isbsvc-0"),
+			promotedChildName: "my-isbsvc-0",
+			promotedChildLabels: map[string]string{
+				"my-label":       "my-isbsvc-0",     // this is a match
+				"required-label": "important-value", // this is a match
+			},
+			promotedChildAnnotations: map[string]string{
+				"my-annotation": "my-isbsvc-0", // this is a match
+				// Missing "required-annotation"
+			},
+			upgradingChildSpec: createISBServiceSpec("2.9.0", "my-isbsvc-1"),
+			upgradingChildName: "my-isbsvc-1",
+			upgradingChildLabels: map[string]string{
+				"my-label":       "my-isbsvc-1",               // this is a match
+				"required-label": "different-important-value", // key is present but value is different
+			},
+			upgradingChildAnnotations: map[string]string{
+				"my-annotation":       "my-isbsvc-1",     // this is a match
+				"required-annotation": "important-value", // this is a match
+			},
+			expectedDiffFromUpgrading: true,
+			expectedDiffFromPromoted:  true,
+		},
+	}
+
+	// Helper function to create an ISBService child with required labels/annotations
+	createISBServiceChild := func(spec numaflowv1.InterStepBufferServiceSpec, name string, labels, annotations map[string]string, upgradeState common.UpgradeState) *unstructured.Unstructured {
+		isbService := ctlrcommon.CreateTestISBService(
+			"",
+			name,
+			numaflowv1.ISBSvcPhaseRunning,
+			true,
+			labels,
+			annotations,
+		)
+		// Override the spec with the provided spec
+		isbService.Spec = spec
+		// Add required labels
+		if isbService.Labels == nil {
+			isbService.Labels = make(map[string]string)
+		}
+		isbService.Labels[common.LabelKeyParentRollout] = ctlrcommon.DefaultTestISBSvcRolloutName
+		isbService.Labels[common.LabelKeyUpgradeState] = string(upgradeState)
+		if isbService.Annotations == nil {
+			isbService.Annotations = make(map[string]string)
+		}
+		isbService.Annotations[common.AnnotationKeyNumaflowInstanceID] = "1"
+
+		// Convert to unstructured
+		unstructMap, _ := k8sRuntime.DefaultUnstructuredConverter.ToUnstructured(isbService)
+		return &unstructured.Unstructured{Object: unstructMap}
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create ISBServiceRollout with template values
+			isbsvcSpecRaw, err := json.Marshal(tc.rolloutSpec)
+			assert.NoError(t, err)
+
+			isbsvcRollout := &apiv1.ISBServiceRollout{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ctlrcommon.DefaultTestNamespace,
+					Name:      ctlrcommon.DefaultTestISBSvcRolloutName,
+					UID:       "uid",
+				},
+				Spec: apiv1.ISBServiceRolloutSpec{
+					InterStepBufferService: apiv1.InterStepBufferService{
+						Metadata: apiv1.Metadata{
+							Labels:      tc.rolloutLabels,
+							Annotations: tc.rolloutAnnotations,
+						},
+						Spec: k8sRuntime.RawExtension{
+							Raw: isbsvcSpecRaw,
+						},
+					},
+				},
+				Status: apiv1.ISBServiceRolloutStatus{
+					ProgressiveStatus: apiv1.ISBServiceProgressiveStatus{
+						UpgradingISBServiceStatus: &apiv1.UpgradingISBServiceStatus{},
+						PromotedISBServiceStatus:  &apiv1.PromotedISBServiceStatus{},
+					},
+				},
+			}
+
+			// Create Promoted and Upgrading ISBServices
+			promotedChildUnstruct := createISBServiceChild(
+				tc.promotedChildSpec,
+				tc.promotedChildName,
+				tc.promotedChildLabels,
+				tc.promotedChildAnnotations,
+				common.LabelValueUpgradePromoted,
+			)
+			upgradingChildUnstruct := createISBServiceChild(
+				tc.upgradingChildSpec,
+				tc.upgradingChildName,
+				tc.upgradingChildLabels,
+				tc.upgradingChildAnnotations,
+				common.LabelValueUpgradeInProgress,
+			)
+
+			// Call progressive.IsUpgradeReplacementRequired with the real controller
+			differentFromUpgrading, differentFromPromoted, err := progressive.IsUpgradeReplacementRequired(
+				ctx,
+				isbsvcRollout,
+				reconciler,
+				promotedChildUnstruct,
+				upgradingChildUnstruct,
+				client,
+			)
+
+			// Verify results
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedDiffFromUpgrading, differentFromUpgrading,
+				"differentFromUpgrading mismatch")
+			assert.Equal(t, tc.expectedDiffFromPromoted, differentFromPromoted,
+				"differentFromPromoted mismatch")
+		})
+	}
 }

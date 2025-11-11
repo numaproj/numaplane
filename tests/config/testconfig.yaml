@@ -2,10 +2,9 @@ logLevel: INFO # Supported log levels are: VERBOSE, DEBUG, INFO, WARN. ERROR, FA
 numaflowControllerImageNames:
   - numaflow
   - numaflow-rc
-includedResources: "group=apps,kind=Deployment;\
-group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;group=,kind=Namespace;\
-group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
+includedResources: "group=apps,kind=Deployment;group=,kind=ConfigMap;group=,kind=Secret;group=,kind=ServiceAccount;group=,kind=Namespace;group=rbac.authorization.k8s.io,kind=RoleBinding;group=rbac.authorization.k8s.io,kind=Role"
 defaultUpgradeStrategy: "pause-and-drain"
+permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=,kind=ConfigMap;group=autoscaling,kind=HorizontalPodAutoscaler"
 progressive:
   defaultAssessmentSchedule: 
     - kind: Pipeline
