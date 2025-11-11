@@ -413,7 +413,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 			}
 
 			pipelineRollout.Status.MarkDeployed(pipelineRollout.Generation)
-			//r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "false")
+			r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "false")
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerPipelineRollout, "create").Observe(time.Since(syncStartTime).Seconds())
 
 		} else {
@@ -462,7 +462,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
-	r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "true")
+	//r.customMetrics.IncPipelineProgressiveResults(newPipelineDef.GetName(), pipelineRollout, "true")
 	return requeueDelay, existingPipelineDef, err
 }
 
