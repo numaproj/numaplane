@@ -237,7 +237,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			}
 
 			monoVertexRollout.Status.MarkDeployed(monoVertexRollout.Generation)
-			//r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "false")
+			r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "false")
 			r.customMetrics.ReconciliationDuration.WithLabelValues(ControllerMonoVertexRollout, "create").Observe(time.Since(startTime).Seconds())
 
 		} else {
@@ -277,7 +277,7 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	}
 
-	//r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "true")
+	r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "true")
 
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
