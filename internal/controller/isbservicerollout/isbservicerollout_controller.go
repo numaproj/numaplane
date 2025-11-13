@@ -318,7 +318,9 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		}
 	}
 
-	r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "true")
+	if newISBServiceDef != nil {
+		r.customMetrics.IncISBSvcProgressiveResults(newISBServiceDef.GetName(), isbServiceRollout, "true")
+	}
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
@@ -765,7 +767,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	} else if isbSvcPhase == numaflowv1.ISBSvcPhaseUnknown {
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	} else {
-		reconciled, nonreconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc, false)
+		reconciled, nonReconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc, false)
 		if err != nil {
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
@@ -773,14 +775,13 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 		if reconciled && isbsvcChildResourceStatus == metav1.ConditionTrue {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
-			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonReconciledMsg, rollout.Generation)
 		}
 	}
 
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
 	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
 	_ = r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
-
 }
 
 func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRollout) bool {

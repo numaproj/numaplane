@@ -277,7 +277,9 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 		}
 	}
 
-	r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "true")
+	if newMonoVertexDef != nil {
+		r.customMetrics.IncMonovertexProgressiveResults(newMonoVertexDef.GetName(), monoVertexRollout, "true")
+	}
 
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil

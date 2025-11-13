@@ -602,32 +602,48 @@ func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutN
 func (m *CustomMetrics) IncPipelineProgressiveResults(pipelineName string, pipelineRollout *apiv1.PipelineRollout, completed string) {
 	var forcedSuccess bool
 	var basicAssessmentResult string
+	var successStatus string
 	if pipelineRollout.GetUpgradingChildStatus() != nil {
+		successStatus = evaluateSuccessStatus(pipelineRollout.GetUpgradingChildStatus().AssessmentResult)
 		forcedSuccess = pipelineRollout.GetUpgradingChildStatus().ForcedSuccess
 		basicAssessmentResult = string(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult)
 	}
 
-	m.PipelineProgressiveResults.WithLabelValues(pipelineRollout.GetNamespace(), pipelineName, pipelineRollout.GetName(), string(pipelineRollout.Status.Phase), strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
+	m.PipelineProgressiveResults.WithLabelValues(pipelineRollout.GetNamespace(), pipelineName, pipelineRollout.GetName(), successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
 }
 
 func (m *CustomMetrics) IncISBSvcProgressiveResults(isbName string, isbRollout *apiv1.ISBServiceRollout, completed string) {
 	var forcedSuccess bool
 	var basicAssessmentResult string
+	var successStatus string
 	if isbRollout.GetUpgradingChildStatus() != nil {
+		successStatus = evaluateSuccessStatus(isbRollout.GetUpgradingChildStatus().AssessmentResult)
 		forcedSuccess = isbRollout.GetUpgradingChildStatus().ForcedSuccess
 		basicAssessmentResult = string(isbRollout.GetUpgradingChildStatus().BasicAssessmentResult)
 	}
 
-	m.IsbSvcProgressiveResults.WithLabelValues(isbRollout.GetNamespace(), isbName, isbRollout.GetName(), string(isbRollout.Status.Phase), strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
+	m.IsbSvcProgressiveResults.WithLabelValues(isbRollout.GetNamespace(), isbName, isbRollout.GetName(), successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
 }
 
 func (m *CustomMetrics) IncMonovertexProgressiveResults(isbName string, monovertexRollout *apiv1.MonoVertexRollout, completed string) {
 	var forcedSuccess bool
 	var basicAssessmentResult string
+	var successStatus string
 	if monovertexRollout.GetUpgradingChildStatus() != nil {
+		successStatus = evaluateSuccessStatus(monovertexRollout.GetUpgradingChildStatus().AssessmentResult)
 		forcedSuccess = monovertexRollout.GetUpgradingChildStatus().ForcedSuccess
 		basicAssessmentResult = string(monovertexRollout.GetUpgradingChildStatus().BasicAssessmentResult)
 	}
 
-	m.MonoVertexProgressiveResults.WithLabelValues(monovertexRollout.GetNamespace(), isbName, monovertexRollout.GetName(), string(monovertexRollout.Status.Phase), strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
+	m.MonoVertexProgressiveResults.WithLabelValues(monovertexRollout.GetNamespace(), isbName, monovertexRollout.GetName(), successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, completed).Inc()
+}
+
+func evaluateSuccessStatus(assessmentResult apiv1.AssessmentResult) string {
+	if assessmentResult == apiv1.AssessmentResultSuccess {
+		return "true"
+	} else if assessmentResult == apiv1.AssessmentResultFailure {
+		return "false"
+	} else {
+		return ""
+	}
 }
