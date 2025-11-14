@@ -1,0 +1,944 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: numaflow-controller-definitions-1.7.0
+  namespace: numaplane-system
+  labels:
+    "numaplane.numaproj.io/config": numaflow-controller-definitions
+data:
+  controller_definitions.yaml: |-
+    controllerDefinitions:
+      - version: "1.7.0"
+        fullSpec: |-
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-sa{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server-sa{{ .InstanceSuffix }}
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            labels:
+              app.kubernetes.io/component: dex-server
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            labels:
+              app.kubernetes.io/component: controller-manager
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-controller-manager
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-role{{ .InstanceSuffix }}
+          rules:
+            - apiGroups:
+                - numaflow.numaproj.io
+              resources:
+                - interstepbufferservices
+                - interstepbufferservices/finalizers
+                - interstepbufferservices/status
+                - pipelines
+                - pipelines/finalizers
+                - pipelines/status
+                - vertices
+                - vertices/finalizers
+                - vertices/status
+                - vertices/scale
+                - monovertices
+                - monovertices/finalizers
+                - monovertices/status
+                - monovertices/scale
+                - servingpipelines
+                - servingpipelines/finalizers
+                - servingpipelines/status
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+                - pods/exec
+                - configmaps
+                - services
+                - persistentvolumeclaims
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - statefulsets
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+                - update
+                - patch
+                - delete
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            labels:
+              app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-ux
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-server-role{{ .InstanceSuffix }}
+          rules:
+            - apiGroups:
+                - numaflow.numaproj.io
+              resources:
+                - interstepbufferservices
+                - interstepbufferservices/finalizers
+                - interstepbufferservices/status
+                - pipelines
+                - pipelines/finalizers
+                - pipelines/status
+                - vertices
+                - vertices/finalizers
+                - vertices/status
+                - vertices/scale
+                - monovertices
+                - monovertices/finalizers
+                - monovertices/status
+                - monovertices/scale
+                - servingpipelines
+                - servingpipelines/finalizers
+                - servingpipelines/status
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - events
+                - pods
+                - pods/log
+                - configmaps
+                - services
+                - persistentvolumeclaims
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - statefulsets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - metrics.k8s.io
+              resources:
+                - pods
+              verbs:
+                - get
+                - list
+                - watch
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            labels:
+              app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-ux
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-server-secrets-role{{ .InstanceSuffix }}
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - get
+                - list
+                - watch
+                - update
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            labels:
+              app.kubernetes.io/component: dex-server
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          subjects:
+            - kind: ServiceAccount
+              name: numaflow-dex-server{{ .InstanceSuffix }}
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            labels:
+              app.kubernetes.io/component: controller-manager
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-controller-manager
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-role-binding{{ .InstanceSuffix }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: numaflow-role{{ .InstanceSuffix }}
+          subjects:
+            - kind: ServiceAccount
+              name: numaflow-sa{{ .InstanceSuffix }}
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            labels:
+              app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-ux
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-server-binding{{ .InstanceSuffix }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: numaflow-server-role{{ .InstanceSuffix }}
+          subjects:
+            - kind: ServiceAccount
+              name: numaflow-server-sa{{ .InstanceSuffix }}
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            labels:
+              app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-ux
+              app.kubernetes.io/part-of: numaflow
+            name: numaflow-server-secrets-binding{{ .InstanceSuffix }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: numaflow-server-secrets-role{{ .InstanceSuffix }}
+          subjects:
+            - kind: ServiceAccount
+              name: numaflow-server-sa{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            namespaced: "true"
+            server.disable.auth: "true"
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            controller-config.yaml: |-
+              # "instance" configuration can be used to run multiple Numaflow controllers, check details at https://numaflow.numaproj.io/operations/installation/#multiple-controllers
+              instance: "{{ .InstanceID }}"
+              defaults:
+                containerResources: |
+                  requests:
+                    memory: "128Mi"
+                    cpu: "100m"
+              isbsvc:
+                jetstream:
+                  # Default JetStream settings, could be overridden by InterStepBufferService specs
+                  settings: |
+                    # https://docs.nats.io/running-a-nats-service/configuration#limits
+                    # Only support to configure "max_payload".
+                    # Max payload size in bytes, defaults to 1 MB. It is not recommended to use values over 8MB but max_payload can be set up to 64MB.
+                    max_payload: 1048576
+                    # https://docs.nats.io/running-a-nats-service/configuration#jetstream
+                    # Only configure "max_memory_store" or "max_file_store", do not set "store_dir" as it has been hardcoded.
+                    # e.g. 1G. -1 means no limit, up to 75% of available memory. This only take effect for streams created using memory storage.
+                    max_memory_store: -1
+                    # e.g. 20G. -1 means no limit, Up to 1TB if available
+                    max_file_store: 1TB
+                  bufferConfig: |
+                    # The default properties of the buffers (streams) to be created in this JetStream service
+                    stream:
+                      # 0: Limits, 1: Interest, 2: WorkQueue
+                      retention: 0
+                      maxMsgs: 100000
+                      maxAge: 72h
+                      maxBytes: -1
+                      # 0: File, 1: Memory
+                      storage: 0
+                      replicas: 3
+                      duplicates: 60s
+                    # The default consumer properties for the created streams
+                    consumer:
+                      ackWait: 60s
+                      maxAckPending: 25000
+                    otBucket:
+                      maxValueSize: 0
+                      history: 1
+                      ttl: 3h
+                      maxBytes: 0
+                      # 0: File, 1: Memory
+                      storage: 0
+                      replicas: 3
+                    procBucket:
+                      maxValueSize: 0
+                      history: 1
+                      ttl: 72h
+                      maxBytes: 0
+                      # 0: File, 1: Memory
+                      storage: 0
+                      replicas: 3
+                  versions:
+                    - version: latest
+                      natsImage: nats:2.10.29
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.1
+                      natsImage: nats:2.8.1
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.1-alpine
+                      natsImage: nats:2.8.1-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.8.3
+                      natsImage: nats:2.8.3
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.8.3-alpine
+                      natsImage: nats:2.8.3-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.9.0
+                      natsImage: nats:2.9.0
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.0-alpine
+                      natsImage: nats:2.9.0-alpine
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: nats-server
+                    - version: 2.9.6
+                      natsImage: nats:2.9.6
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.8
+                      natsImage: nats:2.9.8
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.9.15
+                      natsImage: nats:2.9.15
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.3
+                      natsImage: nats:2.10.3
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.11
+                      natsImage: nats:2.10.11
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.17
+                      natsImage: nats:2.10.17
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+                    - version: 2.10.29
+                      natsImage: nats:2.10.29
+                      metricsExporterImage: natsio/prometheus-nats-exporter:0.9.1
+                      configReloaderImage: natsio/nats-server-config-reloader:0.7.0
+                      startCommand: /nats-server
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-controller-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            config.yaml: |-
+              connectors:
+              - type: github
+                # https://dexidp.io/docs/connectors/github/
+                id: github
+                name: GitHub
+                config:
+                  clientID: $GITHUB_CLIENT_ID
+                  clientSecret: $GITHUB_CLIENT_SECRET
+                  orgs:
+                  - name: <ORG_NAME>
+                    teams:
+                    - admin
+                    - readonly
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-dex-server-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            admin.enabled: "true"
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server-local-user-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            config.yaml: "# url is a required field, it should be the url of the service to which the metrics proxy will connect\n# url: service_name + \".\" + service_namespace + \".svc.cluster.local\" + \":\" + port\n# example for local prometheus service\n# url: http://prometheus-operated.monitoring.svc.cluster.local:9090\npatterns:\n- name: vertex_gauge\n  objects: \n    - vertex\n  title: Vertex Gauge Metrics\n  description: This pattern represents the gauge metrics for a vertex across different dimensions\n  expr: |\n    sum($metric_name{$filters}) by ($dimension, period)\n  params:\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: vertex_pending_messages\n      display_name: Vertex Pending Messages\n      metric_description: This gauge metric keeps track of the total number of messages that are waiting to be processed over varying time frames of 1min, 5min, 15min and default period of 2min. \n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: pod\n          # expr: optional expression for prometheus query\n          # overrides the default expression\n          filters:\n            - name: pod\n              required: false\n            - name: period\n              required: false\n        - name: vertex\n          # expr: optional expression for prometheus query\n          # overrides the default expression\n          filters:\n            - name: period\n              required: false\n\n- name: mono_vertex_gauge\n  objects: \n    - mono-vertex\n  title: MonoVertex Gauge Metrics\n  description: This pattern represents the gauge metrics for a mono-vertex across different dimensions\n  expr: |\n    sum($metric_name{$filters}) by ($dimension, period)\n  params:\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: monovtx_pending\n      display_name: MonoVertex Pending Messages\n      metric_description: This gauge metric keeps track of the total number of messages that are waiting to be processed over varying time frames of 1min, 5min, 15min and default period of 2min. \n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: pod\n          # expr: optional expression for prometheus query\n          # overrides the default expression\n          filters:\n            - name: pod\n              required: false\n            - name: period\n              required: false\n        - name: mono-vertex\n          # expr: optional expression for prometheus query\n          # overrides the default expression\n          filters:\n            - name: period\n              required: false\n\n- name: mono_vertex_histogram\n  objects: \n    - mono-vertex\n  title: MonoVertex Histogram Metrics\n  description: This pattern is for P99, P95, P90 and P50 quantiles for a mono-vertex across different dimensions\n  expr: |\n    histogram_quantile($quantile, sum by($dimension,le) (rate($metric_name{$filters}[$duration])))\n  params:\n    - name: quantile\n      required: true\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: monovtx_processing_time_bucket\n      display_name: MonoVertex Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to forward a chunk of messages.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: monovtx_sink_time_bucket\n      display_name: MonoVertex Sink Write Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to write to the Sink.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: monovtx_read_time_bucket\n      display_name: MonoVertex Read Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to read message.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: monovtx_ack_time_bucket\n      display_name: MonoVertex Ack Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to ack message.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: monovtx_transformer_time_bucket\n      display_name: MonoVertex Transformer Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken by transformer(if present).\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n\n- name: vertex_histogram\n  objects: \n    - vertex\n  title: Pipeline Histogram Metrics\n  description: This pattern is for P99, P95, P90 and P50 quantiles for a vertex across different dimensions\n  expr: |\n    histogram_quantile($quantile, sum by($dimension,le) (rate($metric_name{$filters}[$duration])))\n  params:\n    - name: quantile\n      required: true\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: forwarder_write_processing_time_bucket\n      display_name: Vertex Write Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to write a message.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_read_processing_time_bucket\n      display_name: Vertex Read Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to read messages.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_ack_processing_time_bucket\n      display_name: Vertex Ack Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to ack messages.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_processing_time_bucket\n      display_name: Vertex Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken to process messages (only available in Rust runtime mode).\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_udf_processing_time_bucket\n      display_name: UDF Processing Time Latency\n      metric_description: This metric represents a histogram to keep track of the total time taken by udf.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n\n- name: vertex_throughput\n  objects:\n    - vertex\n  title: Vertex Throughput and Message Rates\n  description: This pattern measures the throughput of a vertex in messages per second across different dimensions\n  expr: sum(rate($metric_name{$filters}[$duration])) by ($dimension)\n  params:\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: forwarder_data_read_total\n      display_name: Vertex Read Processing Rate\n      metric_description: This metric represents the total number of data messages read per second.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_write_total\n      display_name: Vertex Write Processing Rate\n      metric_description: This metric represents the total number of messages written per second.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_udf_read_total\n      display_name: UDF Read Processing Rate\n      metric_description: This metric represents the message read rate of UDF.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: forwarder_udf_write_total\n      display_name: UDF Write Processing Rate\n      metric_description: This metric represents the message write rate of UDF.\n      required_filters:\n        - namespace\n        - pipeline\n        - vertex\n      dimensions:\n        - name: vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n\n- name: mono_vertex_throughput\n  objects: \n    - mono-vertex\n  title: MonoVertex Throughput and Message Rates\n  description: This pattern measures the throughput of a MonoVertex in messages per second across different dimensions.\n  expr: sum(rate($metric_name{$filters}[$duration])) by ($dimension)\n  params:\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    - metric_name: monovtx_read_total\n      display_name: MonoVertex Read Processing Rate\n      metric_description: This metric represents the total number of data messages read per second.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n    - metric_name: monovtx_sink_write_total\n      display_name: MonoVertex Sink Write Processing Rate\n      metric_description: This metric represents the total number of data messages written by sink per second.\n      required_filters:\n        - namespace\n        - mvtx_name\n      dimensions:\n        - name: mono-vertex\n        - name: pod\n          filters:\n            - name: pod\n              required: false\n\n- name: pod_cpu_memory_utilization\n  objects: \n    - mono-vertex\n    - vertex\n  title: CPU and Memory Utilisation by Pod\n  description: This pattern represents the CPU and Memory utilisation by pod for mono-vertex and vertex\n  expr: avg_over_time($metric_name{$filters}[$duration])\n  params:\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics: \n    # set your cpu metric name here\n    - metric_name: namespace_pod_cpu_utilization\n      display_name: Pod CPU Utilization\n      metric_description: This metric represents the percentage utilization of cpu usage over cpu resource limits for a pod.\n      required_filters:\n        - namespace\n        - pod  \n      dimensions:\n        - name: mono-vertex\n          filters: \n            - name: pod\n              # expr: optional expression for prometheus query\n              # overrides the default expression\n              required: false\n        - name: vertex\n          filters: \n            - name: pod\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n    # set your memory metric name here\n    - metric_name: namespace_pod_memory_utilization\n      display_name: Pod Memory Utilization\n      metric_description: This metric represents the percentage utilization of memory usage in bytes over memory resource limits for a pod.\n      required_filters:\n        - namespace\n        - pod  \n      dimensions:\n        - name: mono-vertex\n          filters: \n            - name: pod\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n        - name: vertex\n          filters: \n            - name: pod\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n\n- name: container_cpu_memory_utilization\n  objects: \n    - mono-vertex\n    - vertex\n  title: CPU and Memory Utilisation by Container\n  description: This pattern represents the CPU and Memory utilisation by container for mono-vertex and vertex\n  expr: avg_over_time($metric_name{$filters}[$duration])\n  params:\n    - name: duration\n      required: true\n    - name: start_time\n      required: false\n    - name: end_time\n      required: false\n  metrics:\n    # set your cpu metric name here\n    - metric_name: namespace_app_container_cpu_utilization\n      display_name: Container CPU Utilization\n      metric_description: This metric represents the percentage utilization of cpu usage over cpu resource limits for a container.\n      required_filters:\n        - namespace\n      dimensions:\n        - name: mono-vertex\n          filters: \n            - name: container\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n        - name: vertex\n          filters:\n            - name: container\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n    # set your memory metric name here\n    - metric_name: namespace_app_container_memory_utilization\n      display_name: Container Memory Utilization\n      metric_description: This metric represents the percentage utilization of memory usage in bytes over memory resource limits for a container.\n      required_filters:\n        - namespace\n      dimensions:\n        - name: mono-vertex\n          filters: \n            - name: container\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n        - name: vertex\n          filters: \n            - name: container\n              # expr: optional expression for prometheus query\n              # overrides the default expression \n              required: false\n"
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server-metrics-proxy-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          data:
+            rbac-conf.yaml: |
+              policy.default: role:readonly
+              # The scopes field controls which authentication scopes to examine during rbac enforcement.
+              # We can have multiple scopes, and the first scope that matches with the policy will be used.
+              # The default value is "groups", which means that the groups field of the user's token will be examined
+              # The other possible value is "email", which means that the email field of the user's token will be examined
+              # It can be provided as a comma-separated list, e.g "groups,email,username"
+              policy.scopes: groups,email,username
+            rbac-policy.csv: |
+              # Policies go here
+              p, role:admin, *, *, *
+              p, role:readonly, *, *, GET
+              # Groups go here
+              # g, admin, role:admin
+              # g, my-github-org:my-github-team, role:readonly
+          kind: ConfigMap
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server-rbac-config{{ .InstanceSuffix }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-dex-secrets{{ .InstanceSuffix }}
+          stringData:
+            dex-github-client-id: <GITHUB_CLIENT_ID>
+            dex-github-client-secret: <GITHUB_CLIENT_SECRET>
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server-secrets{{ .InstanceSuffix }}
+          type: Opaque
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          spec:
+            ports:
+              - port: 5556
+                targetPort: 5556
+            selector:
+              app.kubernetes.io/component: dex-server
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-dex-server
+              app.kubernetes.io/part-of: numaflow
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server{{ .InstanceSuffix }}
+          spec:
+            ports:
+              - port: 8443
+                targetPort: 8443
+            selector:
+              app.kubernetes.io/component: numaflow-ux
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+              app.kubernetes.io/name: numaflow-ux
+              app.kubernetes.io/part-of: numaflow
+            type: ClusterIP
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-controller{{ .InstanceSuffix }}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: controller-manager
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
+                app.kubernetes.io/name: controller-manager
+                app.kubernetes.io/part-of: numaflow
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: controller-manager
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
+                  app.kubernetes.io/name: controller-manager
+                  app.kubernetes.io/part-of: numaflow
+              spec:
+                containers:
+                  - args:
+                      - controller
+                    env:
+                      - name: NUMAFLOW_IMAGE
+                        value: quay.io/numaproj/numaflow:v1.7.0
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_CONTROLLER_NAMESPACED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: namespaced
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_CONTROLLER_MANAGED_NAMESPACE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: managed.namespace
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_DISABLED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.disabled
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_DURATION
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.duration
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_DEADLINE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.renew.deadline
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_LEADER_ELECTION_LEASE_RENEW_PERIOD
+                        valueFrom:
+                          configMapKeyRef:
+                            key: controller.leader.election.lease.renew.period
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.7.0
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    name: controller-manager
+                    ports:
+                      - containerPort: 9090
+                        name: metrics
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 1024Mi
+                      requests:
+                        cpu: 100m
+                        memory: 200Mi
+                    volumeMounts:
+                      - mountPath: /etc/numaflow
+                        name: controller-config-volume
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 9737
+                serviceAccountName: numaflow-sa{{ .InstanceSuffix }}
+                volumes:
+                  - configMap:
+                      name: numaflow-controller-config{{ .InstanceSuffix }}
+                    name: controller-config-volume
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-dex-server{{ .InstanceSuffix }}
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: dex-server
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
+                app.kubernetes.io/name: numaflow-dex-server
+                app.kubernetes.io/part-of: numaflow
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: dex-server
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
+                  app.kubernetes.io/name: numaflow-dex-server
+                  app.kubernetes.io/part-of: numaflow
+              spec:
+                containers:
+                  - command:
+                      - /usr/local/bin/dex
+                      - serve
+                      - /etc/numaflow/dex/cfg/config.yaml
+                    env:
+                      - name: GITHUB_CLIENT_ID
+                        valueFrom:
+                          secretKeyRef:
+                            key: dex-github-client-id
+                            name: numaflow-dex-secrets{{ .InstanceSuffix }}
+                      - name: GITHUB_CLIENT_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            key: dex-github-client-secret
+                            name: numaflow-dex-secrets{{ .InstanceSuffix }}
+                    image: dexidp/dex:v2.37.0
+                    imagePullPolicy: Always
+                    name: dex
+                    ports:
+                      - containerPort: 5556
+                    volumeMounts:
+                      - mountPath: /etc/numaflow/dex/cfg/config.yaml
+                        name: generated-dex-config
+                        subPath: config.yaml
+                      - mountPath: /etc/numaflow/dex/tls/tls.crt
+                        name: tls
+                        subPath: tls.crt
+                      - mountPath: /etc/numaflow/dex/tls/tls.key
+                        name: tls
+                        subPath: tls.key
+                initContainers:
+                  - args:
+                      - dex-server-init
+                    env:
+                      - name: NUMAFLOW_SERVER_ADDRESS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.address
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.7.0
+                    imagePullPolicy: Always
+                    name: dex-init
+                    volumeMounts:
+                      - mountPath: /cfg
+                        name: connector-config
+                      - mountPath: /tls
+                        name: tls
+                      - mountPath: /tmp
+                        name: generated-dex-config
+                serviceAccountName: numaflow-dex-server{{ .InstanceSuffix }}
+                volumes:
+                  - configMap:
+                      items:
+                        - key: config.yaml
+                          path: config.yaml
+                      name: numaflow-dex-server-config{{ .InstanceSuffix }}
+                    name: connector-config
+                  - emptyDir: {}
+                    name: tls
+                  - emptyDir: {}
+                    name: generated-dex-config
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ .InstanceID }}'
+            name: numaflow-server{{ .InstanceSuffix }}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: numaflow-ux
+                app.kubernetes.io/instance: '{{ .InstanceID }}'
+                app.kubernetes.io/name: numaflow-ux
+                app.kubernetes.io/part-of: numaflow
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: numaflow-ux
+                  app.kubernetes.io/instance: '{{ .InstanceID }}'
+                  app.kubernetes.io/name: numaflow-ux
+                  app.kubernetes.io/part-of: numaflow
+              spec:
+                containers:
+                  - args:
+                      - server
+                    env:
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_SERVER_INSECURE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.insecure
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_PORT_NUMBER
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.port
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_NAMESPACED
+                        valueFrom:
+                          configMapKeyRef:
+                            key: namespaced
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_MANAGED_NAMESPACE
+                        valueFrom:
+                          configMapKeyRef:
+                            key: managed.namespace
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_READONLY
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.readonly
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DISABLE_AUTH
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.disable.auth
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DEX_SERVER_ADDR
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.dex.server
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_ADDRESS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.address
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_CORS_ALLOWED_ORIGINS
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.cors.allowed.origins
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                      - name: NUMAFLOW_SERVER_DAEMON_CLIENT_PROTOCOL
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.daemon.client.protocol
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.7.0
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /livez
+                        port: 8443
+                        scheme: HTTPS
+                      initialDelaySeconds: 3
+                      periodSeconds: 3
+                    name: main
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 1024Mi
+                      requests:
+                        cpu: 100m
+                        memory: 200Mi
+                    volumeMounts:
+                      - mountPath: /ui/build/runtime-env.js
+                        name: env-volume
+                        subPath: runtime-env.js
+                      - mountPath: /ui/build/index.html
+                        name: env-volume
+                        subPath: index.html
+                      - mountPath: /etc/numaflow
+                        name: rbac-config
+                      - mountPath: /etc/numaflow/metrics-proxy
+                        name: metrics-proxy-config
+                initContainers:
+                  - args:
+                      - server-init
+                    env:
+                      - name: NUMAFLOW_SERVER_BASE_HREF
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.base.href
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.7.0
+                    imagePullPolicy: Always
+                    name: server-init
+                    volumeMounts:
+                      - mountPath: /opt/numaflow
+                        name: env-volume
+                  - args:
+                      - server-secrets-init
+                    env:
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: NUMAFLOW_SERVER_DISABLE_AUTH
+                        valueFrom:
+                          configMapKeyRef:
+                            key: server.disable.auth
+                            name: numaflow-cmd-params-config{{ .InstanceSuffix }}
+                            optional: true
+                    image: quay.io/numaproj/numaflow:v1.7.0
+                    imagePullPolicy: Always
+                    name: server-secrets-init
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 9737
+                serviceAccountName: numaflow-server-sa{{ .InstanceSuffix }}
+                volumes:
+                  - emptyDir: {}
+                    name: env-volume
+                  - configMap:
+                      name: numaflow-server-rbac-config{{ .InstanceSuffix }}
+                    name: rbac-config
+                  - configMap:
+                      name: numaflow-server-metrics-proxy-config{{ .InstanceSuffix }}
+                    name: metrics-proxy-config
