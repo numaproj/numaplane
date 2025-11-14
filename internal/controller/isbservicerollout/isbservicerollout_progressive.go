@@ -220,6 +220,19 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 	return false, nil
 }
 
+func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(childName string, rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+	var forcedSuccess bool
+	var basicAssessmentResult string
+	var successStatus string
+	if rolloutObject.GetUpgradingChildStatus() != nil {
+		successStatus = progressive.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		forcedSuccess = rolloutObject.GetUpgradingChildStatus().ForcedSuccess
+		basicAssessmentResult = string(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+	}
+	r.customMetrics.IncISBSvcProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
+		childName, successStatus, basicAssessmentResult, forcedSuccess, completed)
+}
+
 func (r *ISBServiceRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {
 
 	return false

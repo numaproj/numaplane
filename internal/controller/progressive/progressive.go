@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -86,6 +87,8 @@ type progressiveController interface {
 
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
+
+	UpdateProgressiveMetrics(name string, rolloutObject ProgressiveRolloutObject, completed bool)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -163,6 +166,8 @@ func ProcessResource(
 	if err != nil {
 		return false, 0, err
 	}
+	// Set the metrics data
+	controller.UpdateProgressiveMetrics(currentUpgradingChildDef.GetName(), rolloutObject, false)
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
 	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown
@@ -221,7 +226,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 func getUpgradingChildStatus(ctx context.Context, rolloutObject ProgressiveRolloutObject, currentUpgradingChildDef *unstructured.Unstructured) (*apiv1.UpgradingChildStatus, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// if the Upgrading child status is not for current child, reset it
+	// if the Upgrading child status is not for the current child, reset it
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
