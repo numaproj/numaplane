@@ -48,6 +48,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -451,7 +452,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, err
 	}
-	// there are some cases that require requeueing
+	// there are some cases that require re-queueing
 	if !allDeleted || inProgressStrategySet {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
@@ -459,6 +460,8 @@ func (r *PipelineRolloutReconciler) reconcile(
 			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
 		}
 	}
+
+	r.updateProgressiveResultsMetrics(pipelineRollout, newPipelineDef, true)
 
 	return requeueDelay, existingPipelineDef, err
 }
@@ -1417,4 +1420,12 @@ func (r *PipelineRolloutReconciler) SetCurrentRiderList(ctx context.Context, rol
 		}
 	}
 	numaLogger.Debugf("setting PipelineRollout.Status.Riders=%+v", pipelineRollout.Status.Riders)
+}
+
+func (r *PipelineRolloutReconciler) updateProgressiveResultsMetrics(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured, completed bool) {
+	if newPipelineDef != nil {
+		r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
+			newPipelineDef.GetName(), progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult),
+			string(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult), pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, completed)
+	}
 }

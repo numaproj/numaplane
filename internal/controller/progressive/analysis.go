@@ -246,3 +246,13 @@ func AssessAnalysisStatus(
 	// no AnalysisRun so by default we can mark this successful
 	return apiv1.AssessmentResultSuccess, "", nil
 }
+
+func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) string {
+	if assessmentResult == apiv1.AssessmentResultSuccess {
+		return "true"
+	} else if assessmentResult == apiv1.AssessmentResultFailure {
+		return "false"
+	} else {
+		return ""
+	}
+}

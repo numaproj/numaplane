@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -90,6 +91,11 @@ type CustomMetrics struct {
 	PipelinePausingSeconds *prometheus.GaugeVec
 	// ISBServicePausedSeconds counts the total time an ISBService requested resources be paused.
 	ISBServicePausedSeconds *prometheus.GaugeVec
+
+	// Progressive Rollout Metrics
+	PipelineProgressiveResults   *prometheus.CounterVec
+	IsbSvcProgressiveResults     *prometheus.CounterVec
+	MonoVertexProgressiveResults *prometheus.CounterVec
 }
 
 const (
@@ -109,6 +115,11 @@ const (
 	LabelPipelineRollout           = "pipelineRollout"
 	LabelDrainComplete             = "drainComplete"
 	LabelDrainResult               = "drainResult"
+	LabelRolloutName               = "rolloutName"
+	LabelSuccess                   = "success"
+	LabelForcedSuccess             = "forcedSuccess"
+	LabelResourceHealthSuccess     = "resourceHealthSuccess"
+	LabelCompleted                 = "completed"
 )
 
 var (
@@ -338,6 +349,27 @@ var (
 		Help:        "The total number of cluster cache error",
 		ConstLabels: defaultLabels,
 	}, []string{})
+
+	// pipelineProgressiveResults count the total number of pipeline progressive rollout results
+	pipelineProgressiveResults = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaplane_pipeline_progressive_results_total",
+		Help:        "The total number of pipeline progressive rollout results",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
+
+	//ISBSvcProgressiveResults count the total number of isbsvc progressive rollout results
+	isbSvcProgressiveResults = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaplane_isbsvc_progressive_results_total",
+		Help:        "The total number of isbsvc progressive rollout results",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
+
+	// MonoVertexProgressiveResults count the total number of monovertex progressive rollout results
+	monoVertexProgressiveResults = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name:        "numaplane_monovertex_progressive_results_total",
+		Help:        "The total number of monovertex progressive rollout results",
+		ConstLabels: defaultLabels,
+	}, []string{LabelNamespace, LabelName, LabelRolloutName, LabelSuccess, LabelForcedSuccess, LabelResourceHealthSuccess, LabelCompleted})
 )
 
 // RegisterCustomMetrics registers the custom metrics to the existing global prometheus registry for pipelines, ISB service and numaflow controller
@@ -349,7 +381,8 @@ func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 		numaflowControllerRolloutsHealth, numaflowControllerRolloutsRunning, numaflowControllerRolloutSyncs, numaflowControllerRolloutSyncErrors, numaflowControllerRolloutPausedSeconds,
 		numaflowControllersHealth, numaflowControllerSyncs, numaflowControllerSyncErrors, numaflowControllerKubectlExecutionCounter,
 		reconciliationDuration, kubeRequestCounter, kubeResourceCacheMonitored,
-		kubeResourceCache, clusterCacheError, pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds)
+		kubeResourceCache, clusterCacheError, pipelinePausedSeconds, pipelinePausingSeconds, isbServicePausedSeconds, pipelineProgressiveResults,
+		isbSvcProgressiveResults, monoVertexProgressiveResults)
 
 	return &CustomMetrics{
 		NumaLogger:                                numaLogger,
@@ -387,6 +420,9 @@ func RegisterCustomMetrics(numaLogger *logger.NumaLogger) *CustomMetrics {
 		PipelinePausedSeconds:                     pipelinePausedSeconds,
 		PipelinePausingSeconds:                    pipelinePausingSeconds,
 		ISBServicePausedSeconds:                   isbServicePausedSeconds,
+		PipelineProgressiveResults:                pipelineProgressiveResults,
+		IsbSvcProgressiveResults:                  isbSvcProgressiveResults,
+		MonoVertexProgressiveResults:              monoVertexProgressiveResults,
 	}
 }
 
@@ -560,10 +596,17 @@ func (m *CustomMetrics) DeleteNumaflowControllersHealth(namespace, name string) 
 }
 
 func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutName, pipelineName string, drainComplete bool, drainResult LabelValueDrainResult) {
-	drainCompleteStr := "true"
-	if !drainComplete {
-		drainCompleteStr = "false"
-	}
+	m.ProgressivePipelineDrains.WithLabelValues(namespace, pipelineRolloutName, pipelineName, strconv.FormatBool(drainComplete), string(drainResult)).Inc()
+}
 
-	m.ProgressivePipelineDrains.WithLabelValues(namespace, pipelineRolloutName, pipelineName, drainCompleteStr, string(drainResult)).Inc()
+func (m *CustomMetrics) IncPipelineProgressiveResults(namespace, name, childName, successStatus, basicAssessmentResult string, forcedSuccess, completed bool) {
+	m.PipelineProgressiveResults.WithLabelValues(namespace, childName, name, successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
+}
+
+func (m *CustomMetrics) IncISBSvcProgressiveResults(namespace, name, childName, successStatus, basicAssessmentResult string, forcedSuccess, completed bool) {
+	m.IsbSvcProgressiveResults.WithLabelValues(namespace, childName, name, successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
+}
+
+func (m *CustomMetrics) IncMonovertexProgressiveResults(namespace, name, childName, successStatus, basicAssessmentResult string, forcedSuccess, completed bool) {
+	m.MonoVertexProgressiveResults.WithLabelValues(namespace, childName, name, successStatus, strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
 }
