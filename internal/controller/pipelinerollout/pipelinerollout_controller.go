@@ -461,8 +461,6 @@ func (r *PipelineRolloutReconciler) reconcile(
 		}
 	}
 
-	r.updateProgressiveResultsMetrics(pipelineRollout, newPipelineDef, true)
-
 	return requeueDelay, existingPipelineDef, err
 }
 
@@ -637,6 +635,12 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
 		} else {
 			requeueDelay = progressiveRequeueDelay
+		}
+
+		if pipelineRollout.GetUpgradingChildStatus() != nil {
+			r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
+				pipelineRollout.GetUpgradingChildStatus().Name, string(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+				progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult), pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
 		}
 
 	default:
@@ -1420,12 +1424,4 @@ func (r *PipelineRolloutReconciler) SetCurrentRiderList(ctx context.Context, rol
 		}
 	}
 	numaLogger.Debugf("setting PipelineRollout.Status.Riders=%+v", pipelineRollout.Status.Riders)
-}
-
-func (r *PipelineRolloutReconciler) updateProgressiveResultsMetrics(pipelineRollout *apiv1.PipelineRollout, newPipelineDef *unstructured.Unstructured, completed bool) {
-	if newPipelineDef != nil {
-		r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
-			newPipelineDef.GetName(), progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult),
-			string(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult), pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, completed)
-	}
 }

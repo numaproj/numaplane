@@ -167,7 +167,7 @@ func ProcessResource(
 		return false, 0, err
 	}
 	// Set the metrics data
-	controller.UpdateProgressiveMetrics(currentUpgradingChildDef.GetName(), rolloutObject, false)
+	controller.UpdateProgressiveMetrics(childStatus.Name, rolloutObject, false)
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
 	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown

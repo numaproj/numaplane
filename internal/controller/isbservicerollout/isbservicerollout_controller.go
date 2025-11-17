@@ -316,7 +316,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
 		}
 	}
-	r.updateProgressiveResultsMetrics(isbServiceRollout, newISBServiceDef, true)
 
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
@@ -485,6 +484,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 			// requeue using the provided delay
 			return progressiveRequeueDelay, nil
+		}
+
+		// Update metrics for progressive rollout
+		if isbServiceRollout.GetUpgradingChildStatus() != nil {
+			r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+				isbServiceRollout.GetUpgradingChildStatus().Name, string(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+				progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult), isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
@@ -1138,12 +1144,4 @@ func (r *ISBServiceRolloutReconciler) SetCurrentRiderList(ctx context.Context, r
 		}
 	}
 	numaLogger.Debugf("setting ISBServiceRollout.Status.Riders=%+v", isbServiceRollout.Status.Riders)
-}
-
-func (r *ISBServiceRolloutReconciler) updateProgressiveResultsMetrics(isbServiceRollout *apiv1.ISBServiceRollout, newISBServiceDef *unstructured.Unstructured, completed bool) {
-	if newISBServiceDef != nil {
-		r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
-			newISBServiceDef.GetName(), progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult),
-			string(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult), isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, completed)
-	}
 }

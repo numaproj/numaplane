@@ -275,7 +275,6 @@ func (r *MonoVertexRolloutReconciler) reconcile(ctx context.Context, monoVertexR
 			requeueDelay = min(requeueDelay, common.DefaultRequeueDelay)
 		}
 	}
-	r.updateProgressiveResultsMetrics(monoVertexRollout, newMonoVertexDef)
 
 	if requeueDelay > 0 {
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
@@ -379,6 +378,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 			monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = nil
 		} else {
 			requeueDelay = progressiveRequeueDelay
+		}
+
+		// generate metrics for MonoVertex progressive rollout results
+		if monoVertexRollout.GetUpgradingChildStatus() != nil {
+			r.customMetrics.IncMonovertexProgressiveResults(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
+				monoVertexRollout.GetUpgradingChildStatus().Name, string(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+				progressive.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult), monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
 		}
 
 	default:
@@ -899,12 +905,4 @@ func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
 		}
 	}
 	numaLogger.Debugf("setting MonoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
-}
-
-func (r *MonoVertexRolloutReconciler) updateProgressiveResultsMetrics(monoVertexRollout *apiv1.MonoVertexRollout, newMonoVertexDef *unstructured.Unstructured) {
-	if newMonoVertexDef != nil {
-		r.customMetrics.IncMonovertexProgressiveResults(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
-			newMonoVertexDef.GetName(), progressive.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult),
-			string(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult), monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
-	}
 }

@@ -25,15 +25,18 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
-	"github.com/numaproj/numaplane/internal/util/logger"
-	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numaproj/numaplane/internal/controller/config"
+	"github.com/numaproj/numaplane/internal/util"
+	"github.com/numaproj/numaplane/internal/util/logger"
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/numaproj/numaplane/internal/controller/config"
 )
 
 // This function is repurposed from the Argo Rollout codebase here:
@@ -247,7 +250,7 @@ func AssessAnalysisStatus(
 	return apiv1.AssessmentResultSuccess, "", nil
 }
 
-func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) string {
+func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) util.OptionalBoolStr {
 	if assessmentResult == apiv1.AssessmentResultSuccess {
 		return "true"
 	} else if assessmentResult == apiv1.AssessmentResultFailure {
