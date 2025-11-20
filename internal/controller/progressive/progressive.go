@@ -142,7 +142,7 @@ func ProcessResource(
 		return false, 0, err
 	}
 
-	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
+	// if there's a difference between the desired spec and the current "promoted" child, and there isn't yet an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
@@ -151,7 +151,6 @@ func ProcessResource(
 		} else {
 			return false, 0, err
 		}
-
 	}
 
 	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)

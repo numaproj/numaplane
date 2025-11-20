@@ -600,14 +600,14 @@ func (m *CustomMetrics) IncProgressivePipelineDrains(namespace, pipelineRolloutN
 	m.ProgressivePipelineDrains.WithLabelValues(namespace, pipelineRolloutName, pipelineName, strconv.FormatBool(drainComplete), string(drainResult)).Inc()
 }
 
-func (m *CustomMetrics) IncPipelineProgressiveResults(namespace, name, childName, basicAssessmentResult string, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.PipelineProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncPipelineProgressiveResults(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
+	m.PipelineProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
 }
 
-func (m *CustomMetrics) IncISBSvcProgressiveResults(namespace, name, childName, basicAssessmentResult string, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.IsbSvcProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncISBSvcProgressiveResults(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
+	m.IsbSvcProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
 }
 
-func (m *CustomMetrics) IncMonovertexProgressiveResults(namespace, name, childName, basicAssessmentResult string, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
-	m.MonoVertexProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult, strconv.FormatBool(completed)).Inc()
+func (m *CustomMetrics) IncMonovertexProgressiveResults(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
+	m.MonoVertexProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
 }

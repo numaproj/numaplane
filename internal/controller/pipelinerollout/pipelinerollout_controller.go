@@ -638,9 +638,13 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 		}
 
 		if pipelineRollout.GetUpgradingChildStatus() != nil {
-			r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
-				pipelineRollout.GetUpgradingChildStatus().Name, string(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-				progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult), pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+			assessmentResult := progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult)
+			if assessmentResult != "" {
+				r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
+					pipelineRollout.GetUpgradingChildStatus().Name, progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+					assessmentResult, pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			}
 		}
 
 	default:

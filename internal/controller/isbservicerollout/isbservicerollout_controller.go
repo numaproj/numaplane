@@ -488,9 +488,13 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 		// Update metrics for progressive rollout
 		if isbServiceRollout.GetUpgradingChildStatus() != nil {
-			r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
-				isbServiceRollout.GetUpgradingChildStatus().Name, string(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-				progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult), isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+			assessmentResult := progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
+			if assessmentResult != "" {
+				r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+					isbServiceRollout.GetUpgradingChildStatus().Name, progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+					assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			}
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService

@@ -382,9 +382,13 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 		// generate metrics for MonoVertex progressive rollout results
 		if monoVertexRollout.GetUpgradingChildStatus() != nil {
-			r.customMetrics.IncMonovertexProgressiveResults(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
-				monoVertexRollout.GetUpgradingChildStatus().Name, string(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-				progressive.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult), monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+			assessmentResult := progressive.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult)
+			if assessmentResult != "" {
+				r.customMetrics.IncMonovertexProgressiveResults(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
+					monoVertexRollout.GetUpgradingChildStatus().Name, progressive.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+					assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+			}
 		}
 
 	default:
