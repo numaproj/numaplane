@@ -11,6 +11,13 @@ import (
 	"github.com/valyala/fasttemplate"
 )
 
+// OptionalBoolStr is a string type that represents an optional boolean value
+type OptionalBoolStr string
+
+func (o OptionalBoolStr) ToString() string {
+	return string(o)
+}
+
 // StructToStruct converts a struct type (src) into another (dst)
 func StructToStruct(src any, dst any) error {
 	jsonBytes, err := json.Marshal(src)
