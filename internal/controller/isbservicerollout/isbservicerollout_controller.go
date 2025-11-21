@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -41,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -256,7 +256,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.WithValues("recyclable isbservices", recyclableISBSvcs).Debug("can't create 'promoted' isbservice yet; need to wait for recyclable isbservices to be deleted")
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
-
 			// create an object as it doesn't exist
 			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
 			if err != nil {
@@ -266,7 +265,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, newISBServiceDef.GetName())
 			isbServiceRollout.Status.MarkPending()
 			if newISBServiceDef != nil {
-
 				if err = r.createPromotedISBService(ctx, isbServiceRollout, newISBServiceDef); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -328,7 +326,7 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	return ctrl.Result{}, nil
 }
 
-// for the purpose of logging
+// GetChildTypeString used for logging
 func (r *ISBServiceRolloutReconciler) GetChildTypeString() string {
 	return "interstepbufferservice"
 }
@@ -473,6 +471,17 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+
+			// Update metrics for progressive rollout
+			if isbServiceRollout.GetUpgradingChildStatus() != nil {
+				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
+				if assessmentResult != "" {
+					r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+						isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+				}
+			}
 		} else {
 
 			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
@@ -768,7 +777,7 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 	} else if isbSvcPhase == numaflowv1.ISBSvcPhaseUnknown {
 		rollout.Status.MarkChildResourcesHealthUnknown("ISBSvcUnknown", "ISBService Phase Unknown", rollout.Generation)
 	} else {
-		reconciled, nonreconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc, false)
+		reconciled, nonReconciledMsg, err := r.isISBServiceReconciled(ctx, isbsvc, false)
 		if err != nil {
 			numaLogger.Errorf(err, "failed while determining if ISBService is fully reconciled: %+v, %v", isbsvc, err)
 			return
@@ -776,14 +785,13 @@ func (r *ISBServiceRolloutReconciler) processISBServiceStatus(ctx context.Contex
 		if reconciled && isbsvcChildResourceStatus == metav1.ConditionTrue {
 			rollout.Status.MarkChildResourcesHealthy(rollout.Generation)
 		} else {
-			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonreconciledMsg, rollout.Generation)
+			rollout.Status.MarkChildResourcesUnhealthy("Progressing", nonReconciledMsg, rollout.Generation)
 		}
 	}
 
 	// check if PPND strategy is requesting Pipelines to pause, and set true/false
 	// (currently, only PPND is accounted for as far as system pausing, not Progressive)
 	_ = r.MarkRolloutPaused(ctx, rollout, ppnd.IsRequestingPause(r, rollout))
-
 }
 
 func (r *ISBServiceRolloutReconciler) needsUpdate(old, new *apiv1.ISBServiceRollout) bool {

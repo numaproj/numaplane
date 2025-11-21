@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -86,6 +87,8 @@ type progressiveController interface {
 
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
+
+	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject, completed bool)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -139,7 +142,7 @@ func ProcessResource(
 		return false, 0, err
 	}
 
-	// if there's a difference between the desired spec and the current "promoted" child, and there isn't already an "upgrading" definition, then create one and return
+	// if there's a difference between the desired spec and the current "promoted" child, and there isn't yet an "upgrading" definition, then create one and return
 	if promotedDifference && currentUpgradingChildDef == nil {
 		// Create it
 		_, needRequeue, err := startUpgradeProcess(ctx, rolloutObject, existingPromotedChild, controller, c)
@@ -148,7 +151,6 @@ func ProcessResource(
 		} else {
 			return false, 0, err
 		}
-
 	}
 
 	// nothing to do (either there's nothing to upgrade, or we just created an "upgrading" child, and it's too early to start reconciling it)
@@ -221,7 +223,7 @@ func makeUpgradingObjectDefinition(ctx context.Context, rolloutObject Progressiv
 func getUpgradingChildStatus(ctx context.Context, rolloutObject ProgressiveRolloutObject, currentUpgradingChildDef *unstructured.Unstructured) (*apiv1.UpgradingChildStatus, error) {
 	numaLogger := logger.FromContext(ctx)
 
-	// if the Upgrading child status is not for current child, reset it
+	// if the Upgrading child status is not for the current child, reset it
 	childStatus := rolloutObject.GetUpgradingChildStatus()
 	// Create a new childStatus object if not present in the live rollout object or
 	// if it is that of a previous progressive upgrade.
@@ -809,9 +811,14 @@ func startUpgradeProcess(
 	// only guaranteed to be called up until that child has been created.
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	if err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef); err != nil {
+		return newUpgradingChildDef, false, err
+	}
 
-	return newUpgradingChildDef, false, err
+	// Update progressive metrics after creating the upgrading child
+	controller.UpdateProgressiveMetrics(rolloutObject, false)
+
+	return newUpgradingChildDef, false, nil
 }
 
 func startPostUpgradeProcess(
