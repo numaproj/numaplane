@@ -222,17 +222,15 @@ func (r *ISBServiceRolloutReconciler) ProcessUpgradingChildPostUpgrade(
 }
 
 func (r *ISBServiceRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
-	var forcedSuccess bool
-	var successStatus, basicAssessmentResult util.OptionalBoolStr
-	var childName string
 	if rolloutObject.GetUpgradingChildStatus() != nil {
-		childName = rolloutObject.GetUpgradingChildStatus().Name
-		successStatus = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
-		forcedSuccess = rolloutObject.GetUpgradingChildStatus().ForcedSuccess
-		basicAssessmentResult = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+		childName := rolloutObject.GetUpgradingChildStatus().Name
+		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
+		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		r.customMetrics.IncISBSvcProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
+			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
 	}
-	r.customMetrics.IncISBSvcProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
-		childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
 }
 
 func (r *ISBServiceRolloutReconciler) ProgressiveUnsupported(ctx context.Context, rolloutObject progressive.ProgressiveRolloutObject) bool {

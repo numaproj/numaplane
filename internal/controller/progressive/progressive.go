@@ -785,12 +785,14 @@ func startUpgradeProcess(
 	// only guaranteed to be called up until that child has been created.
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
-	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+	if err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef); err != nil {
+		return newUpgradingChildDef, false, err
+	}
 
 	// Update progressive metrics after creating the upgrading child
 	controller.UpdateProgressiveMetrics(rolloutObject, false)
 
-	return newUpgradingChildDef, false, err
+	return newUpgradingChildDef, false, nil
 }
 
 func startPostUpgradeProcess(

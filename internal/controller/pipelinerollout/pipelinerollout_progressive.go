@@ -789,15 +789,13 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 }
 
 func (r *PipelineRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
-	var forcedSuccess bool
-	var childName string
-	var successStatus, basicAssessmentResult util.OptionalBoolStr
 	if rolloutObject.GetUpgradingChildStatus() != nil {
-		childName = rolloutObject.GetUpgradingChildStatus().Name
-		successStatus = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
-		forcedSuccess = rolloutObject.GetUpgradingChildStatus().ForcedSuccess
-		basicAssessmentResult = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+		childName := rolloutObject.GetUpgradingChildStatus().Name
+		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
+		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		r.customMetrics.IncPipelineProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
+			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
 	}
-	r.customMetrics.IncPipelineProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
-		childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
 }
