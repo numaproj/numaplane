@@ -626,27 +626,26 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 
-			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
+			// we need to prevent the possibility that we're done, but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 			if err != nil {
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+
+			if pipelineRollout.GetUpgradingChildStatus() != nil {
+				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult)
+				if assessmentResult != "" {
+					r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
+						pipelineRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+						assessmentResult, pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+				}
+			}
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
-
-		if pipelineRollout.GetUpgradingChildStatus() != nil {
-			// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
-			assessmentResult := progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult)
-			if assessmentResult != "" {
-				r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
-					pipelineRollout.GetUpgradingChildStatus().Name, progressive.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-					assessmentResult, pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
-			}
-		}
-
 	default:
 		if needsUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.client, pipelineRollout, newPipelineDef, existingPipelineDef); err != nil {

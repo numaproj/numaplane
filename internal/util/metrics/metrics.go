@@ -611,3 +611,13 @@ func (m *CustomMetrics) IncISBSvcProgressiveResults(namespace, name, childName s
 func (m *CustomMetrics) IncMonovertexProgressiveResults(namespace, name, childName string, basicAssessmentResult, successStatus util.OptionalBoolStr, forcedSuccess, completed bool) {
 	m.MonoVertexProgressiveResults.WithLabelValues(namespace, childName, name, successStatus.ToString(), strconv.FormatBool(forcedSuccess), basicAssessmentResult.ToString(), strconv.FormatBool(completed)).Inc()
 }
+
+func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) util.OptionalBoolStr {
+	if assessmentResult == apiv1.AssessmentResultSuccess {
+		return "true"
+	} else if assessmentResult == apiv1.AssessmentResultFailure {
+		return "false"
+	} else {
+		return ""
+	}
+}

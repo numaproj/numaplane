@@ -27,7 +27,6 @@ import (
 	analysisutil "github.com/argoproj/argo-rollouts/utils/analysis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 
@@ -248,14 +247,4 @@ func AssessAnalysisStatus(
 
 	// no AnalysisRun so by default we can mark this successful
 	return apiv1.AssessmentResultSuccess, "", nil
-}
-
-func EvaluateSuccessStatusForMetrics(assessmentResult apiv1.AssessmentResult) util.OptionalBoolStr {
-	if assessmentResult == apiv1.AssessmentResultSuccess {
-		return "true"
-	} else if assessmentResult == apiv1.AssessmentResultFailure {
-		return "false"
-	} else {
-		return ""
-	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -787,13 +788,15 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 	return false
 }
 
-func (r *PipelineRolloutReconciler) UpdateProgressiveMetrics(childName string, rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+func (r *PipelineRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
 	var forcedSuccess bool
+	var childName string
 	var successStatus, basicAssessmentResult util.OptionalBoolStr
 	if rolloutObject.GetUpgradingChildStatus() != nil {
-		successStatus = progressive.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		childName = rolloutObject.GetUpgradingChildStatus().Name
+		successStatus = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
 		forcedSuccess = rolloutObject.GetUpgradingChildStatus().ForcedSuccess
-		basicAssessmentResult = progressive.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+		basicAssessmentResult = metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
 	}
 	r.customMetrics.IncPipelineProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
 		childName, basicAssessmentResult, successStatus, forcedSuccess, completed)

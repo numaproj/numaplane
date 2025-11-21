@@ -88,7 +88,7 @@ type progressiveController interface {
 	// ProgressiveUnsupported checks to see if Full Progressive Rollout (with assessment) is unsupported for this Rollout
 	ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool
 
-	UpdateProgressiveMetrics(name string, rolloutObject ProgressiveRolloutObject, completed bool)
+	UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject, completed bool)
 }
 
 // ProgressiveRolloutObject describes a Rollout instance that supports progressive upgrade
@@ -165,8 +165,6 @@ func ProcessResource(
 	if err != nil {
 		return false, 0, err
 	}
-	// Set the metrics data
-	controller.UpdateProgressiveMetrics(childStatus.Name, rolloutObject, false)
 
 	// if the Upgrading child status exists but indicates that we aren't done with upgrade process, then do postupgrade process
 	initializationIncomplete := !childStatus.InitializationComplete && childStatus.AssessmentResult == apiv1.AssessmentResultUnknown
@@ -788,6 +786,9 @@ func startUpgradeProcess(
 
 	numaLogger.Debugf("Upgrading child of type %s %s/%s doesn't exist so creating", newUpgradingChildDef.GetKind(), newUpgradingChildDef.GetNamespace(), newUpgradingChildDef.GetName())
 	err = kubernetes.CreateResource(ctx, c, newUpgradingChildDef)
+
+	// Update progressive metrics after creating the upgrading child
+	controller.UpdateProgressiveMetrics(rolloutObject, false)
 
 	return newUpgradingChildDef, false, err
 }

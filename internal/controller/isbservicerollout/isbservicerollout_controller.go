@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"time"
 
+	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -40,8 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
@@ -244,11 +243,6 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 		return ctrl.Result{}, fmt.Errorf("error looking for promoted ISBService: %v", err)
 	}
 
-	newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
-	}
-
 	if len(promotedISBSvcs.Items) == 0 {
 
 		deleteRecreateLabel := common.LabelValueDeleteRecreateChild
@@ -263,6 +257,11 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 			requeueDelay = common.DefaultRequeueDelay
 		} else {
 			// create an object as it doesn't exist
+			newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+			}
+
 			numaLogger.Debugf("ISBService %s/%s doesn't exist so creating", isbServiceRollout.Namespace, newISBServiceDef.GetName())
 			isbServiceRollout.Status.MarkPending()
 			if newISBServiceDef != nil {
@@ -284,6 +283,10 @@ func (r *ISBServiceRolloutReconciler) reconcile(ctx context.Context, isbServiceR
 	} else {
 		// Object already exists
 		// perform logic related to updating
+		newISBServiceDef, err := r.makeTargetISBServiceDef(ctx, isbServiceRollout)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error generating ISBService: %v", err)
+		}
 		existingISBServiceDef, err := kubernetes.GetResource(ctx, r.client, newISBServiceDef.GroupVersionKind(),
 			k8stypes.NamespacedName{Namespace: newISBServiceDef.GetNamespace(), Name: newISBServiceDef.GetName()})
 		if err != nil {
@@ -468,6 +471,17 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 			r.SetCurrentRiderList(ctx, isbServiceRollout, currentRiderList)
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, isbServiceRollout)
+
+			// Update metrics for progressive rollout
+			if isbServiceRollout.GetUpgradingChildStatus() != nil {
+				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
+				if assessmentResult != "" {
+					r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
+						isbServiceRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+						assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+				}
+			}
 		} else {
 
 			// we need to make sure the PipelineRollouts using this isbsvc are reconciled
@@ -484,17 +498,6 @@ func (r *ISBServiceRolloutReconciler) processExistingISBService(ctx context.Cont
 
 			// requeue using the provided delay
 			return progressiveRequeueDelay, nil
-		}
-
-		// Update metrics for progressive rollout
-		if isbServiceRollout.GetUpgradingChildStatus() != nil {
-			// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
-			assessmentResult := progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().AssessmentResult)
-			if assessmentResult != "" {
-				r.customMetrics.IncISBSvcProgressiveResults(isbServiceRollout.GetRolloutObjectMeta().GetNamespace(), isbServiceRollout.GetRolloutObjectMeta().GetName(),
-					isbServiceRollout.GetUpgradingChildStatus().Name, progressive.EvaluateSuccessStatusForMetrics(isbServiceRollout.GetUpgradingChildStatus().BasicAssessmentResult),
-					assessmentResult, isbServiceRollout.GetUpgradingChildStatus().ForcedSuccess, true)
-			}
 		}
 	case apiv1.UpgradeStrategyApply:
 		// update ISBService
