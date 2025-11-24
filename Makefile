@@ -114,6 +114,7 @@ help: ## Display this help.
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(KUBECTL) kustomize config/default > config/install.yaml
+	@./hack/fix-configmap-formatting.py config/install.yaml
 
 .PHONY: codegen
 codegen:
