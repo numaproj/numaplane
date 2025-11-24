@@ -18,6 +18,14 @@ data:
         includeSubfields: true
 
       # Principal: Changing an Image definition could cause data loss if the new Image is not able to process the old data from the InterstepBufferService
+      - path: spec.vertices.containerTemplate.env
+        includeSubfields: true
+      - path: spec.vertices.containerTemplate.envFrom
+        includeSubfields: true
+      - path: spec.vertices.initContainerTemplate.env
+        includeSubfields: true
+      - path: spec.vertices.initContainerTemplate.envFrom
+        includeSubfields: true 
       - path: spec.vertices.source.generator
       - path: spec.vertices.source.kafka
       - path: spec.vertices.source.http
@@ -74,8 +82,7 @@ data:
         includeSubfields: true
       - path: spec.templates     # note: this one could be broken down further into just the fields that are at risk
         includeSubfields: true
-
-      # Principal: TBD
+      
       - path: spec.sideInputs.container.envfrom
         includeSubfields: true
   interstepbufferservice: |
@@ -101,42 +108,64 @@ data:
       - path: spec.redis.external.masterName
   monovertex: |
     progressive:
+      - path: spec.containerTemplate.env
+        includeSubfields: true
+      - path: spec.containerTemplate.envFrom
+        includeSubfields: true
       - path: spec.initContainers.image
       - path: spec.initContainers.volumeMounts
         includeSubfields: true
       - path: spec.initContainers.command
       - path: spec.initContainers.args
       - path: spec.initContainers.env
+        includeSubfields: true
+      - path: spec.initContainers.envfrom
+        includeSubfields: true
       - path: spec.sidecars.image
       - path: spec.sidecars.volumeMounts
         includeSubfields: true
       - path: spec.sidecars.command
       - path: spec.sidecars.args
       - path: spec.sidecars.env
+        includeSubfields: true
+      - path: spec.sidecars.envfrom
+        includeSubfields: true
       - path: spec.sink.fallback.udsink.container.image
       - path: spec.sink.fallback.udsink.container.volumeMounts
         includeSubfields: true
       - path: spec.sink.fallback.udsink.container.command
       - path: spec.sink.fallback.udsink.container.args
       - path: spec.sink.fallback.udsink.container.env
+        includeSubfields: true
+      - path: spec.sink.fallback.udsink.container.envfrom
+        includeSubfields: true
       - path: spec.sink.udsink.container.image
       - path: spec.sink.udsink.container.volumeMounts
         includeSubfields: true
       - path: spec.sink.udsink.container.command
       - path: spec.sink.udsink.container.args
       - path: spec.sink.udsink.container.env
+        includeSubfields: true   
+      - path: spec.sink.udsink.container.envfrom
+        includeSubfields: true
       - path: spec.source.transformer.container.image
       - path: spec.source.transformer.container.volumeMounts
         includeSubfields: true
       - path: spec.source.transformer.container.command
       - path: spec.source.transformer.container.args
       - path: spec.source.transformer.container.env
+        includeSubfields: true
+      - path: spec.source.transformer.container.envfrom
+        includeSubfields: true
       - path: spec.source.udsource.container.image
       - path: spec.source.udsource.container.volumeMounts
         includeSubfields: true
       - path: spec.source.udsource.container.command
       - path: spec.source.udsource.container.args
       - path: spec.source.udsource.container.env
+        includeSubfields: true
+      - path: spec.source.udsource.container.envfrom
+        includeSubfields: true
       - path: spec.volumes
         includeSubfields: true
   numaflowcontroller: |
