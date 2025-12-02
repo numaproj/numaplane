@@ -277,10 +277,7 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 	// check if it fully drained or if it went to the maximum pause time
 	if paused {
 		// patch the annotation to mark that we've completed the drain with this promoted pipeline spec
-		currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
-		err := kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
-			common.AnnotationKeyForceDrainSpecsCompleted: currentVal + promotedPipeline.GetName() + ",",
-		})
+		err := markPipelineForceDrainCompleted(ctx, c, pipeline, promotedPipeline.GetName())
 		if err != nil {
 			return false, err
 		}
@@ -390,8 +387,6 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 		return err
 	}
 
-	markPipelineForceDrainStarted(currentPipeline, newPipelineCopy.GetName())
-
 	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
 
 	// Create a strategic merge patch by comparing the current pipeline with the new pipeline copy
@@ -415,6 +410,12 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 	err = kubernetes.PatchResource(ctx, c, currentPipeline, string(patchBytes), k8stypes.MergePatchType)
 	if err != nil {
 		return fmt.Errorf("failed to apply patch to pipeline %s: %w", currentPipeline.GetName(), err)
+	}
+
+	// patch the annotation to mark that we've started the force drain with this promoted pipeline spec
+	err = markPipelineForceDrainStarted(ctx, c, currentPipeline, newPipeline.GetName())
+	if err != nil {
+		return err
 	}
 
 	numaLogger.WithValues("currentPipeline", currentPipeline.GetName()).Debug("successfully applied patch to pipeline")
@@ -681,25 +682,45 @@ func checkUserDesiresPause(ctx context.Context, pipelineRollout *apiv1.PipelineR
 }
 
 // update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
-func markPipelineForceDrainStarted(pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) {
+func markPipelineForceDrainStarted(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
 	// first check if it's already marked in which case we'll skip this
 	if checkForValueInCommaDelimitedAnnotation(pipeline, forceDrainSpecPipeline, common.AnnotationKeyForceDrainSpecsStarted) {
-		return
+		return nil
 	}
 	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsStarted)
-	kubernetes.SetAnnotations(pipeline, map[string]string{
+
+	// Update in-memory
+	err := kubernetes.SetAnnotations(pipeline, map[string]string{
+		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
+	})
+	if err != nil {
+		return err
+	}
+
+	// Patch in Kubernetes
+	return kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsStarted: currentVal + forceDrainSpecPipeline + ",",
 	})
 }
 
 // update the Pipeline's annotation to mark that a new pipeline's spec has been used to update the pipeline
-func markPipelineForceDrainCompleted(pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) {
+func markPipelineForceDrainCompleted(ctx context.Context, c client.Client, pipeline *unstructured.Unstructured, forceDrainSpecPipeline string) error {
 	// first check if it's already marked in which case we'll skip this
 	if checkForValueInCommaDelimitedAnnotation(pipeline, forceDrainSpecPipeline, common.AnnotationKeyForceDrainSpecsCompleted) {
-		return
+		return nil
 	}
 	currentVal, _ := kubernetes.GetAnnotation(pipeline, common.AnnotationKeyForceDrainSpecsCompleted)
-	kubernetes.SetAnnotations(pipeline, map[string]string{
+
+	// Update in-memory
+	err := kubernetes.SetAnnotations(pipeline, map[string]string{
+		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
+	})
+	if err != nil {
+		return err
+	}
+
+	// Patch in Kubernetes
+	return kubernetes.PatchAnnotations(ctx, c, pipeline, map[string]string{
 		common.AnnotationKeyForceDrainSpecsCompleted: currentVal + forceDrainSpecPipeline + ",",
 	})
 }
