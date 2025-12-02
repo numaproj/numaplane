@@ -390,7 +390,7 @@ func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, n
 		return err
 	}
 
-	markPipelineForceDrainStarted(currentPipeline, newPipeline.GetName())
+	markPipelineForceDrainStarted(currentPipeline, newPipelineCopy.GetName())
 
 	// Take the difference between this newPipelineCopy spec and the original currentPipeline spec to derive the patch we need and then apply it
 
