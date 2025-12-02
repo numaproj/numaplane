@@ -2658,6 +2658,7 @@ data:
     permittedRiders: "group=autoscaling.k8s.io,kind=VerticalPodAutoscaler;group=autoscaling,kind=HorizontalPodAutoscaler"
     pipeline:
       forceDrainFailureWaitDuration: 15
+      maxRecyclableDurationMinutes: 1440 # 24 hours
 kind: ConfigMap
 metadata:
   name: numaplane-controller-config

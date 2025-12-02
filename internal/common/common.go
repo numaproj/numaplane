@@ -161,6 +161,8 @@ const (
 
 	AnnotationKeyForceDrainFailureStartTime = KeyNumaplanePrefix + "force-drain-failure-start-time"
 
+	AnnotationKeyRecyclableStartTime = KeyNumaplanePrefix + "recyclable-start-time"
+
 	// NumaplaneSystemNamespace is the namespace where the Numaplane Controller is deployed
 	NumaplaneSystemNamespace = "numaplane-system"
 

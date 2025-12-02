@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -165,6 +166,19 @@ func FindMostCurrentChildOfUpgradeState(ctx context.Context, rolloutObject Rollo
 	} else {
 		return nil, nil
 	}
+}
+
+func MarkRecyclable(ctx context.Context, c client.Client, upgradeStateReason *common.UpgradeStateReason, childObject *unstructured.Unstructured) error {
+
+	err := UpdateUpgradeState(ctx, c, common.LabelValueUpgradeRecyclable, upgradeStateReason, childObject)
+	if err != nil {
+		return err
+	}
+	// patch the annotation to mark the time when the resource was marked as recyclable
+	return kubernetes.PatchAnnotations(ctx, c, childObject, map[string]string{
+		common.AnnotationKeyRecyclableStartTime: time.Now().Format(time.RFC3339),
+	})
+
 }
 
 // update the in-memory object with the new Label and patch the object in K8S
