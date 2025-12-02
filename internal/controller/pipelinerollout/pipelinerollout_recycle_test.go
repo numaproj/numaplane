@@ -25,6 +25,12 @@ import (
 	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/config"
@@ -33,11 +39,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	commontest "github.com/numaproj/numaplane/tests/common"
-	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctlrruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func Test_calculateScaleForRecycle(t *testing.T) {
@@ -304,6 +305,7 @@ func Test_Recycle(t *testing.T) {
 	originalPauseGracePeriodSeconds := float64(60)
 	paused := numaflowv1.PipelinePhasePaused
 	running := numaflowv1.PipelinePhaseRunning
+	failed := numaflowv1.PipelinePhaseFailed
 	pipelineRolloutName := "test-pipeline"
 
 	newImage := "quay.io/repo/image:new"
@@ -370,6 +372,8 @@ func Test_Recycle(t *testing.T) {
 		expectSpecOverridden bool
 		// expected pipeline vertex scale definitions at the end of the call
 		expectedVertexScaleDefinitions []apiv1.VertexScaleDefinition
+		// expected whether the force drain failure time annotation is set
+		expectForceDrainFailureTimeSet bool
 	}{
 		{
 			name:                  "Delete/Recreate - should delete immediately",
@@ -380,6 +384,18 @@ func Test_Recycle(t *testing.T) {
 			expectedDeleted:       true, // Delete recreate should delete immediately
 			expectSpecOverridden:  false,
 			expectedError:         false,
+		},
+		{
+			name:                           "Progressive Replace - second attempt (force drain failed)",
+			upgradeStateReason:             string(common.LabelValueProgressiveReplaced),
+			specHasBeenOverridden:          true,
+			requiresDrain:                  true,
+			desiredPhase:                   &paused,
+			pipelinePhase:                  failed,
+			isPromotedPipelineNew:          true,
+			expectForceDrainFailureTimeSet: true,
+			expectSpecOverridden:           true,
+			expectedDesiredPhase:           &running,
 		},
 		{
 			name:                  "Progressive Replaced - second attempt (force drain) - first apply the new spec",
@@ -638,6 +654,11 @@ func Test_Recycle(t *testing.T) {
 					// Verify desiredPhase was set correctly
 					assert.Equal(t, *tc.expectedDesiredPhase, getDesiredPhase(updatedPipeline))
 					assert.Equal(t, int64(120), *updatedPipeline.Spec.Lifecycle.PauseGracePeriodSeconds)
+				}
+
+				// Verify if the force drain failure time annotation is set
+				if tc.expectForceDrainFailureTimeSet {
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainFailureStartTime)
 				}
 
 				// Should the spec be overridden with the "promoted" spec?

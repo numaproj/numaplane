@@ -20,6 +20,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 )
 
@@ -190,7 +191,7 @@ func (r *PipelineRolloutReconciler) checkAnalysisTemplates(ctx context.Context,
 }
 
 // CheckForDifferences checks to see if the pipeline definition matches the spec and the required metadata
-func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pipelineDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	pipelineCopy := pipelineDef.DeepCopy()
 
@@ -210,10 +211,10 @@ func (r *PipelineRolloutReconciler) CheckForDifferences(ctx context.Context, pip
 
 	specsEqual := util.CompareStructNumTypeAgnostic(pipelineCopy.Object["spec"], requiredSpecCopy["spec"])
 	// Check required metadata (labels and annotations)
-	requiredLabels := requiredMetadata.Labels
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := pipelineDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
 	actualAnnotations := pipelineDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -241,7 +242,8 @@ func (r *PipelineRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx contex
 	if err != nil {
 		return false, err
 	}
-	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, pipelineRollout.Spec.Pipeline.Metadata)
+	rolloutDefinedMetadata, _ := rolloutBasedPipelineDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingPipeline, rolloutBasedPipelineDef.Object, rolloutDefinedMetadata)
 }
 
 /*
@@ -784,4 +786,16 @@ func (r *PipelineRolloutReconciler) ProgressiveUnsupported(ctx context.Context, 
 	}
 
 	return false
+}
+
+func (r *PipelineRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+	if rolloutObject.GetUpgradingChildStatus() != nil {
+		childName := rolloutObject.GetUpgradingChildStatus().Name
+		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
+		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		r.customMetrics.IncPipelineProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
+			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
+	}
 }

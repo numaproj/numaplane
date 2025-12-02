@@ -29,6 +29,9 @@ import (
 
 type fakeProgressiveController struct{}
 
+func (fpc fakeProgressiveController) UpdateProgressiveMetrics(rolloutObject ProgressiveRolloutObject, completed bool) {
+}
+
 func (fpc fakeProgressiveController) CreateUpgradingChildDefinition(ctx context.Context, rolloutObject ProgressiveRolloutObject, name string) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
@@ -49,7 +52,7 @@ func (fpc fakeProgressiveController) GetExistingRiders(ctx context.Context, roll
 	return unstructured.UnstructuredList{}, nil
 }
 
-func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (fpc fakeProgressiveController) CheckForDifferences(ctx context.Context, childDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	return false, nil
 }
 
@@ -101,6 +104,10 @@ func (fpc fakeProgressiveController) SetCurrentRiderList(ctx context.Context, ro
 
 func (fpc fakeProgressiveController) ProgressiveUnsupported(ctx context.Context, rolloutObject ProgressiveRolloutObject) bool {
 	return false
+}
+
+func (fpc fakeProgressiveController) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return map[string]interface{}{}
 }
 
 func Test_processUpgradingChild(t *testing.T) {

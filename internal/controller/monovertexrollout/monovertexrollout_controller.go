@@ -376,10 +376,20 @@ func (r *MonoVertexRolloutReconciler) processExistingMonoVertex(ctx context.Cont
 
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, monoVertexRollout)
 			monoVertexRollout.Status.ProgressiveStatus.PromotedMonoVertexStatus = nil
+
+			// generate metrics for MonoVertex progressive rollout results
+			if monoVertexRollout.GetUpgradingChildStatus() != nil {
+				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().AssessmentResult)
+				if assessmentResult != "" {
+					r.customMetrics.IncMonovertexProgressiveResults(monoVertexRollout.GetRolloutObjectMeta().GetNamespace(), monoVertexRollout.GetRolloutObjectMeta().GetName(),
+						monoVertexRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(monoVertexRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+						assessmentResult, monoVertexRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+				}
+			}
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
-
 	default:
 		if needsUpdate {
 			err := r.updateMonoVertex(ctx, monoVertexRollout, newMonoVertexDef, existingMonoVertexDef)
@@ -696,16 +706,25 @@ func (r *MonoVertexRolloutReconciler) makeTargetMonoVertexDefinition(
 	return r.makeMonoVertexDefinition(monoVertexRollout, monoVertexName, metadata)
 }
 
+// templates are used to dynamically evaluate child spec, metadata, as well as Riders
+func (r *MonoVertexRolloutReconciler) GetTemplateArguments(monovertex *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(monovertex.GetName(), monovertex.GetNamespace())
+}
+
+func (r *MonoVertexRolloutReconciler) getTemplateArguments(monovertexName string, namespace string) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplateMonoVertexName:      monovertexName,
+		common.TemplateMonoVertexNamespace: namespace,
+	}
+}
+
 func (r *MonoVertexRolloutReconciler) makeMonoVertexDefinition(
 	monoVertexRollout *apiv1.MonoVertexRollout,
 	monoVertexName string,
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplateMonoVertexName:      monoVertexName,
-		common.TemplateMonoVertexNamespace: monoVertexRollout.Namespace,
-	}
+	args := r.getTemplateArguments(monoVertexName, monoVertexRollout.Namespace)
 
 	monoVertexSpec, err := util.ResolveTemplatedSpec(monoVertexRollout.Spec.MonoVertex.Spec, args)
 	if err != nil {
@@ -889,5 +908,4 @@ func (r *MonoVertexRolloutReconciler) SetCurrentRiderList(
 		}
 	}
 	numaLogger.Debugf("setting MonoVertexRollout.Status.Riders=%+v", monoVertexRollout.Status.Riders)
-
 }

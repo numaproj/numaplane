@@ -256,8 +256,14 @@ func resourceMetadataNeedsUpdating(ctx context.Context, newDef, existingDef *uns
 		return true, upgradeStrategy, nil
 	}
 
-	// now see if any Labels or Annotations changed at all
-	if !checkMapsEqual(newDef.GetLabels(), existingDef.GetLabels()) || !checkMapsEqual(newDef.GetAnnotations(), existingDef.GetAnnotations()) {
+	// We don't need to do PPND or Progressive strategy.
+	// Now to determine if we need to do a Direct Apply type of change, we actually don't want to compare the newDef to the existingDef.
+	// Because the existingDef may have other Labels and Annotations that have been applied outside of what was defined in the Rollout,
+	// we want to ignore those.
+	// Therefore, we just check to see if the existingDef contains the annotations and labels that are required (by the newDef)
+	requiredAnnotationsPresent := util.IsMapSubset(newDef.GetAnnotations(), existingDef.GetAnnotations())
+	requiredLabelsPresent := util.IsMapSubset(newDef.GetLabels(), existingDef.GetLabels())
+	if !requiredAnnotationsPresent || !requiredLabelsPresent {
 		return true, apiv1.UpgradeStrategyApply, nil
 	}
 	return false, apiv1.UpgradeStrategyNoOp, nil
@@ -377,18 +383,6 @@ func getNamesAndKinds(ulist unstructured.UnstructuredList) string {
 		namesAndKinds = namesAndKinds + u.GetKind() + "/" + u.GetName() + "; "
 	}
 	return namesAndKinds
-}
-
-func checkMapsEqual(map1 map[string]string, map2 map[string]string) bool {
-	tempMap1 := map1
-	if tempMap1 == nil {
-		tempMap1 = map[string]string{}
-	}
-	tempMap2 := map2
-	if tempMap2 == nil {
-		tempMap2 = map[string]string{}
-	}
-	return util.CompareStructNumTypeAgnostic(tempMap1, tempMap2)
 }
 
 // return the upgrade strategy that represents what the user prefers to do when there's a concern for data loss

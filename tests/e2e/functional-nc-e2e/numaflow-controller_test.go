@@ -26,6 +26,7 @@ import (
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 	. "github.com/numaproj/numaplane/tests/e2e"
 )
 
@@ -128,11 +129,11 @@ var _ = Describe("Functional e2e:", Serial, func() {
 	})
 
 	It("Should create the PipelineRollout if it does not exist", func() {
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 	})
 
 	It("Should create the MonoVertexRollout if it does not exist", func() {
-		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil)
+		CreateMonoVertexRollout(monoVertexRolloutName, Namespace, initialMonoVertexSpec, nil, apiv1.Metadata{})
 	})
 
 	It("Should update the child NumaflowController if the NumaflowControllerRollout is updated", func() {

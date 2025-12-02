@@ -7,13 +7,14 @@ import (
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	"github.com/numaproj/numaplane/internal/controller/common/riders"
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type RolloutController interface {
@@ -37,6 +38,9 @@ type RolloutController interface {
 
 	// SetCurrentRiderList updates the list of Riders
 	SetCurrentRiderList(ctx context.Context, rolloutObject RolloutObject, riders []riders.Rider)
+
+	// GetTemplateArguments is the map of Arguments used for templating the child definition
+	GetTemplateArguments(child *unstructured.Unstructured) map[string]interface{}
 }
 
 // Garbage Collect all recyclable children; return true if we've deleted all that are recyclable

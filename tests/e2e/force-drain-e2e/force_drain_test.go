@@ -153,7 +153,7 @@ var _ = Describe("Force Drain e2e", Serial, func() {
 		CreateISBServiceRollout(isbServiceRolloutName, initialISBServiceSpec)
 
 		// this will be the original successful Pipeline to drain
-		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil)
+		CreatePipelineRollout(pipelineRolloutName, Namespace, initialPipelineSpec, false, nil, apiv1.Metadata{})
 	})
 
 	It("Should create 2 failed Pipelines which will need to be drained and deleted and update back to original Pipeline", func() {

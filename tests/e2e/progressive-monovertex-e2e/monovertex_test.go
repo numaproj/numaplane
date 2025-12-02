@@ -88,7 +88,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Progressive strategy", func() {
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy, apiv1.Metadata{})
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)
@@ -106,7 +106,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on MonoVertexRollout Failure case", func() {
 		strategy := defaultStrategy.DeepCopy()
 		strategy.Progressive.ForcePromote = true
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, strategy)
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, strategy, apiv1.Metadata{})
 
 		By("Updating the MonoVertex Topology to cause a Progressive change Force promoted failure into success")
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
@@ -121,7 +121,7 @@ var _ = Describe("Progressive MonoVertex E2E", Serial, func() {
 	})
 
 	It("Should validate MonoVertex upgrade using Progressive strategy via Forced Promotion configured on MonoVertex", func() {
-		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy)
+		CreateInitialMonoVertexRollout(monoVertexRolloutName, initialMonoVertexSpec, &defaultStrategy, apiv1.Metadata{})
 
 		updatedMonoVertexSpec := UpdateMonoVertexRolloutForFailure(monoVertexRolloutName, invalidUDTransformerImage, initialMonoVertexSpec, udTransformer)
 		VerifyMonoVertexProgressiveFailure(monoVertexRolloutName, monoVertexScaleMinMaxJSONString, updatedMonoVertexSpec, monoVertexScaleTo, false)

@@ -48,6 +48,7 @@ import (
 
 	argorolloutsv1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -451,7 +452,7 @@ func (r *PipelineRolloutReconciler) reconcile(
 	if err != nil {
 		return 0, nil, err
 	}
-	// there are some cases that require requeueing
+	// there are some cases that require re-queueing
 	if !allDeleted || inProgressStrategySet {
 		if requeueDelay == 0 {
 			requeueDelay = common.DefaultRequeueDelay
@@ -625,17 +626,26 @@ func (r *PipelineRolloutReconciler) processExistingPipeline(ctx context.Context,
 
 			pipelineRollout.Status.ProgressiveStatus.PromotedPipelineStatus = nil
 
-			// we need to prevent the possibility that we're done but we fail to update the Progressive Status
+			// we need to prevent the possibility that we're done, but we fail to update the Progressive Status
 			// therefore, we publish Rollout.Status here, so if that fails, then we won't be "done" and so we'll come back in here to try again
 			err = r.updatePipelineRolloutStatus(ctx, pipelineRollout)
 			if err != nil {
 				return 0, err
 			}
 			r.inProgressStrategyMgr.UnsetStrategy(ctx, pipelineRollout)
+
+			if pipelineRollout.GetUpgradingChildStatus() != nil {
+				// assessmentResult value indicates that the progressive rollout is completed, so we can generate the metrics for the same
+				assessmentResult := metrics.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().AssessmentResult)
+				if assessmentResult != "" {
+					r.customMetrics.IncPipelineProgressiveResults(pipelineRollout.GetRolloutObjectMeta().GetNamespace(), pipelineRollout.GetRolloutObjectMeta().GetName(),
+						pipelineRollout.GetUpgradingChildStatus().Name, metrics.EvaluateSuccessStatusForMetrics(pipelineRollout.GetUpgradingChildStatus().BasicAssessmentResult),
+						assessmentResult, pipelineRollout.GetUpgradingChildStatus().ForcedSuccess, true)
+				}
+			}
 		} else {
 			requeueDelay = progressiveRequeueDelay
 		}
-
 	default:
 		if needsUpdate && upgradeStrategyType == apiv1.UpgradeStrategyApply {
 			if err := updatePipelineSpec(ctx, r.client, pipelineRollout, newPipelineDef, existingPipelineDef); err != nil {
@@ -1114,6 +1124,18 @@ func (r *PipelineRolloutReconciler) getISBSvcRollout(
 	return isbServiceRollout, err
 }
 
+// templates are used to dynamically evaluate child spec, metadata, as well as Riders
+func (r *PipelineRolloutReconciler) GetTemplateArguments(pipeline *unstructured.Unstructured) map[string]interface{} {
+	return r.getTemplateArguments(pipeline.GetName(), pipeline.GetNamespace())
+}
+
+func (r *PipelineRolloutReconciler) getTemplateArguments(pipelineName string, namespace string) map[string]interface{} {
+	return map[string]interface{}{
+		common.TemplatePipelineName:      pipelineName,
+		common.TemplatePipelineNamespace: namespace,
+	}
+}
+
 func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	pipelineRollout *apiv1.PipelineRollout,
 	pipelineName string,
@@ -1121,10 +1143,7 @@ func (r *PipelineRolloutReconciler) makePipelineDefinition(
 	metadata apiv1.Metadata,
 ) (*unstructured.Unstructured, error) {
 
-	args := map[string]interface{}{
-		common.TemplatePipelineName:      pipelineName,
-		common.TemplatePipelineNamespace: pipelineRollout.Namespace,
-	}
+	args := r.getTemplateArguments(pipelineName, pipelineRollout.Namespace)
 
 	pipelineSpec, err := util.ResolveTemplatedSpec(pipelineRollout.Spec.Pipeline.Spec, args)
 	if err != nil {

@@ -175,7 +175,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 
 			UpdatePipelineRollout(slowPipelineRolloutName, *slowPipelineSpec, numaflowv1.PipelinePhasePausing, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 				return true
-			}, true, false, true)
+			}, nil, true, false, true, apiv1.Metadata{})
 
 			verifyPipelineIsSlowToPause()
 			allowDataLoss()
@@ -250,7 +250,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -258,7 +258,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change
 		UpdatePipelineRollout(failedPipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, true)
+		}, nil, true, false, true, apiv1.Metadata{})
 
 		time.Sleep(5 * time.Second)
 
@@ -272,7 +272,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -300,7 +300,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		failedPipelineSpec := initialPipelineSpec
 		failedPipelineSpec.Edges = append(failedPipelineSpec.Edges, numaflowv1.Edge{From: "not", To: "valid"})
 
-		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil)
+		CreatePipelineRollout(failedPipelineRolloutName, Namespace, failedPipelineSpec, true, nil, apiv1.Metadata{})
 		VerifyPromotedPipelineFailed(Namespace, failedPipelineRolloutName)
 
 		time.Sleep(5 * time.Second)
@@ -321,7 +321,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			PPNDStrategy: apiv1.PPNDStrategy{
 				FastResume: false,
 			},
-		})
+		}, apiv1.Metadata{})
 
 		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
 		pipelineName := GetInstanceName(pipelineRolloutName, 0)
@@ -336,7 +336,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change: Since user prefers "gradual resume", we want to see that it scaled the replicas back down
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, true)
+		}, nil, true, false, true, apiv1.Metadata{})
 
 		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
 			return spec.Replicas == nil || *spec.Replicas < 2
@@ -352,7 +352,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 			PPNDStrategy: apiv1.PPNDStrategy{
 				FastResume: true,
 			},
-		})
+		}, apiv1.Metadata{})
 
 		// patch "out" vertex's replicas to 2, thereby imitating the Numaflow autoscaler scaling up
 		pipelineName := GetInstanceName(pipelineRolloutName, 0)
@@ -367,7 +367,7 @@ var _ = Describe("Pause and drain e2e", Serial, func() {
 		// update spec to have topology change: Since user prefers "fast resume", we want to see that the replicas are still scaled to 2
 		UpdatePipelineRollout(pipelineRolloutName, updatedPipelineSpec, numaflowv1.PipelinePhaseRunning, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {
 			return len(retrievedPipelineSpec.Vertices) == 3
-		}, true, false, true)
+		}, nil, true, false, true, apiv1.Metadata{})
 
 		VerifyVertexSpecStatus(Namespace, vertexName, func(spec numaflowv1.VertexSpec, status numaflowv1.VertexStatus) bool {
 			return spec.Replicas != nil && *spec.Replicas == 2
@@ -397,7 +397,7 @@ func createSlowPipelineRollout() {
 		Image: "quay.io/numaio/numaflow-go/map-slow-cat:stable",
 	}}
 
-	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil)
+	CreatePipelineRollout(slowPipelineRolloutName, Namespace, *slowPipelineSpec, false, nil, apiv1.Metadata{})
 
 	By("Verifying that the slow pipeline was created")
 	VerifyPromotedPipelineSpec(Namespace, slowPipelineRolloutName, func(retrievedPipelineSpec numaflowv1.PipelineSpec) bool {

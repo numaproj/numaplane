@@ -7,8 +7,13 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	numaflowv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/numaproj/numaplane/internal/common"
 	ctlrcommon "github.com/numaproj/numaplane/internal/controller/common"
 	"github.com/numaproj/numaplane/internal/controller/common/numaflowtypes"
@@ -17,9 +22,6 @@ import (
 	"github.com/numaproj/numaplane/internal/util/logger"
 	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Recycle deletes child; returns true if it was in fact deleted
@@ -75,6 +77,14 @@ func (r *PipelineRolloutReconciler) Recycle(
 	}
 
 	numaLogger.WithValues("reason", upgradeStateReason).Debug("Recycling Pipeline")
+
+	if requiresPause {
+		if pipelineRollout.Spec.Strategy != nil && pipelineRollout.Spec.Strategy.Progressive.ForcePromote {
+			// this is a case in which user likely doesn't care about data loss (and also we have no idea if the "promoted" pipeline is any good), so we can just delete the pipeline without draining
+			numaLogger.Debug("PipelineRollout strategy implies no concern for data loss so Pipeline will be deleted without draining")
+			requiresPause = false
+		}
+	}
 
 	if !requiresPause {
 		numaLogger.Info("Pipeline will be deleted now")
@@ -246,14 +256,45 @@ func (r *PipelineRolloutReconciler) forceDrain(ctx context.Context,
 		}
 		return true, err
 	}
-	if failed { // TODO: are we okay to delete on failure? could it be an intermittent failure? Ideally maybe we'd wait until pauseGracePeriodSeconds regardless?
-		numaLogger.WithValues("failed", failed).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
+	// If force drain failed, we need to wait some time before deleting it, as there may be transient failures.
+	if failed {
+		return r.checkForFailedPipeline(ctx, c, pipelineRollout, pipeline)
+	}
+
+	return false, nil
+}
+
+// checkForFailedPipeline checks if the Pipeline has been in Failed state for long enough to consider it a permanent failure
+// if so, delete it; otherwise, return false to indicate we haven't deleted it yet.
+// decision: just use original failure start time in the case of Pipeline switching Failed->Running->Failed
+func (r *PipelineRolloutReconciler) checkForFailedPipeline(ctx context.Context, c client.Client,
+	pipelineRollout *apiv1.PipelineRollout, pipeline *unstructured.Unstructured) (bool, error) {
+
+	numaLogger := logger.FromContext(ctx)
+	currentTime := time.Now()
+	if pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime] == "" {
+		patchJson := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "%s"}}}`, common.AnnotationKeyForceDrainFailureStartTime, currentTime.Format(time.RFC3339))
+		if err := kubernetes.PatchResource(ctx, c, pipeline, patchJson, k8stypes.MergePatchType); err != nil {
+			return false, fmt.Errorf("failed to set force drain failure start time annotation on pipeline %s/%s: %w", pipeline.GetNamespace(), pipeline.GetName(), err)
+		}
+		return false, nil
+	}
+
+	// check if we've waited long enough
+	startTime, err := time.Parse(time.RFC3339, pipeline.GetAnnotations()[common.AnnotationKeyForceDrainFailureStartTime])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse force drain failure start time annotation %q on pipeline %s/%s: %w", startTime, pipeline.GetNamespace(), pipeline.GetName(), err)
+	}
+	waitDurationSeconds := getForceDrainFailureWaitDuration()
+	if int32(currentTime.Sub(startTime).Seconds()) < waitDurationSeconds {
+		numaLogger.WithValues("startTime", startTime, "currentTime", currentTime, "waitDuration", waitDurationSeconds).Debug("waiting longer before deleting failed pipeline during force drain")
+		return false, nil
+	} else {
+		numaLogger.WithValues("failed", true).Infof("Pipeline has the promoted pipeline's spec and has failed, now deleting it, pipeline definition: %v", kubernetes.GetLoggableResource(pipeline))
 		err = kubernetes.DeleteResource(ctx, c, pipeline)
 		r.registerFinalDrainStatus(pipelineRollout.Namespace, pipelineRollout.Name, pipeline, false, metrics.LabelValueDrainResult_PipelineFailed)
 		return true, err
 	}
-
-	return false, nil
 }
 
 // if there's a Promoted Pipeline we can use for force drain, return it; otherwise return nil
@@ -281,16 +322,10 @@ func (r *PipelineRolloutReconciler) checkForPromotedPipelineForForceDrain(ctx co
 
 // Update the pipeline to the new spec with min=max=0 initially and set to desiredPhase=Running
 // (it will be set to Paused later)
-func forceApplySpecOnUndrainablePipeline(
-	ctx context.Context,
-	// the pipeline that will be updated
-	currentPipeline *unstructured.Unstructured,
-	// spec from the new pipeline which will be applied
-	newPipeline *unstructured.Unstructured,
-	c client.Client) error {
-
+// currentPipeline: the pipeline that will be updated
+// newPipeline: spec from the new pipeline which will be applied
+func forceApplySpecOnUndrainablePipeline(ctx context.Context, currentPipeline, newPipeline *unstructured.Unstructured, c client.Client) error {
 	numaLogger := logger.FromContext(ctx)
-
 	// take the newPipeline Spec, make a copy, and set any sources to min=max=0
 	newPipelineCopy := newPipeline.DeepCopy()
 	err := numaflowtypes.ScalePipelineDefSourceVerticesToZero(ctx, newPipelineCopy)
@@ -629,4 +664,12 @@ func checkIfPipelineMarkedForForceDrain(pipeline *unstructured.Unstructured, for
 func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
 	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecs]
 	return found && forceDrainSpecs != ""
+}
+
+func getForceDrainFailureWaitDuration() int32 {
+	globalConfig, _ := config.GetConfigManagerInstance().GetConfig()
+	if globalConfig.Pipeline.ForceDrainFailureWaitDuration != nil {
+		return *globalConfig.Pipeline.ForceDrainFailureWaitDuration
+	}
+	return 15
 }

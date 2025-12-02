@@ -18,6 +18,7 @@ import (
 	"github.com/numaproj/numaplane/internal/util"
 	"github.com/numaproj/numaplane/internal/util/kubernetes"
 	"github.com/numaproj/numaplane/internal/util/logger"
+	"github.com/numaproj/numaplane/internal/util/metrics"
 	apiv1 "github.com/numaproj/numaplane/pkg/apis/numaplane/v1alpha1"
 
 	"github.com/numaproj/numaplane/internal/common"
@@ -143,7 +144,7 @@ func (r *MonoVertexRolloutReconciler) checkAnalysisTemplates(ctx context.Context
 }
 
 // CheckForDifferences checks to see if the monovertex definition matches the spec and the required metadata
-func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata apiv1.Metadata) (bool, error) {
+func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, monoVertexDef *unstructured.Unstructured, requiredSpec map[string]interface{}, requiredMetadata map[string]interface{}) (bool, error) {
 	numaLogger := logger.FromContext(ctx)
 	// remove certain fields (which numaplane needs to set) from comparison to test for equality
 	removeFunc := func(monoVertex map[string]interface{}) (map[string]interface{}, error) {
@@ -178,11 +179,10 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferences(ctx context.Context, m
 	specsEqual := util.CompareStructNumTypeAgnostic(from, to)
 
 	// Check required metadata (labels and annotations)
-
-	requiredLabels := requiredMetadata.Labels
+	requiredLabels, requiredAnnotations := kubernetes.ExtractMetadataSubmaps(requiredMetadata)
 	actualLabels := monoVertexDef.GetLabels()
-	requiredAnnotations := requiredMetadata.Annotations
 	actualAnnotations := monoVertexDef.GetAnnotations()
+
 	labelsFound := util.IsMapSubset(requiredLabels, actualLabels)
 	annotationsFound := util.IsMapSubset(requiredAnnotations, actualAnnotations)
 	numaLogger.Debugf("specsEqual: %t, labelsFound=%t, annotationsFound=%v, from=%v, to=%v, requiredLabels=%v, actualLabels=%v, requiredAnnotations=%v, actualAnnotations=%v\n",
@@ -206,7 +206,8 @@ func (r *MonoVertexRolloutReconciler) CheckForDifferencesWithRolloutDef(ctx cont
 		return false, err
 	}
 
-	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, monoVertexRollout.Spec.MonoVertex.Metadata)
+	rolloutDefinedMetadata, _ := rolloutBasedMVDef.Object["metadata"].(map[string]interface{})
+	return r.CheckForDifferences(ctx, existingMonoVertex, rolloutBasedMVDef.Object, rolloutDefinedMetadata)
 }
 
 /*
@@ -754,4 +755,16 @@ func (r *MonoVertexRolloutReconciler) ProgressiveUnsupported(ctx context.Context
 	}
 
 	return false
+}
+
+func (r *MonoVertexRolloutReconciler) UpdateProgressiveMetrics(rolloutObject progressive.ProgressiveRolloutObject, completed bool) {
+	if rolloutObject.GetUpgradingChildStatus() != nil {
+		childName := rolloutObject.GetUpgradingChildStatus().Name
+		successStatus := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().AssessmentResult)
+		forcedSuccess := rolloutObject.GetUpgradingChildStatus().ForcedSuccess
+		basicAssessmentResult := metrics.EvaluateSuccessStatusForMetrics(rolloutObject.GetUpgradingChildStatus().BasicAssessmentResult)
+
+		r.customMetrics.IncMonovertexProgressiveResults(rolloutObject.GetRolloutObjectMeta().GetNamespace(), rolloutObject.GetRolloutObjectMeta().GetName(),
+			childName, basicAssessmentResult, successStatus, forcedSuccess, completed)
+	}
 }
