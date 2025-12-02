@@ -103,8 +103,6 @@ func (r *PipelineRolloutReconciler) Recycle(
 
 	// First check if the PipelineRollout is configured to run
 	// If it's configured to be paused or has Vertex.scale.max==0, then we must respect the user's preference not to run
-	// TODO: reduce the number of Pipelines which are in this state by deleting any pipeline which has always been paused or scaled to 0 its entire life, in which case there's
-	// no risk of there being data in it to drain
 	pauseDesired, err := checkUserDesiresPause(ctx, pipelineRollout, pipeline, c)
 	if err != nil {
 		return false, err
