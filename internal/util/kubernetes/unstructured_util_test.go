@@ -140,6 +140,387 @@ func TestGetLabelWithInvalidData(t *testing.T) {
 	assert.Equal(t, "failed to get labels from target object /v1, Kind=Service /my-service: .metadata.labels accessor error: contains non-string value in the map under key \"invalid-label\": <nil> is of the type <nil>, expected string", err.Error())
 }
 
+func TestPatchAnnotations(t *testing.T) {
+	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	runtimeClient, err := client.New(restConfig, client.Options{Scheme: runtime.NewScheme()})
+	assert.Nil(t, err)
+	assert.Nil(t, SetClientSets(restConfig))
+
+	ctx := context.Background()
+	namespace := "default"
+
+	tests := []struct {
+		name                    string
+		initialAnnotations      map[string]string
+		patchAnnotations        map[string]string
+		expectedAnnotations     map[string]string
+		expectedError           bool
+		expectedResourceVersion bool // whether resource version should change
+	}{
+		{
+			name:               "patch single annotation on resource with no annotations",
+			initialAnnotations: nil,
+			patchAnnotations: map[string]string{
+				"numaplane.io/test": "value1",
+			},
+			expectedAnnotations: map[string]string{
+				"numaplane.io/test": "value1",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch single annotation on resource with existing annotations",
+			initialAnnotations: map[string]string{
+				"existing": "annotation",
+			},
+			patchAnnotations: map[string]string{
+				"numaplane.io/test": "value1",
+			},
+			expectedAnnotations: map[string]string{
+				"existing":          "annotation",
+				"numaplane.io/test": "value1",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch multiple annotations",
+			initialAnnotations: map[string]string{
+				"existing": "annotation",
+			},
+			patchAnnotations: map[string]string{
+				"numaplane.io/test1": "value1",
+				"numaplane.io/test2": "value2",
+			},
+			expectedAnnotations: map[string]string{
+				"existing":           "annotation",
+				"numaplane.io/test1": "value1",
+				"numaplane.io/test2": "value2",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "update existing annotation value",
+			initialAnnotations: map[string]string{
+				"numaplane.io/test": "old-value",
+				"existing":          "annotation",
+			},
+			patchAnnotations: map[string]string{
+				"numaplane.io/test": "new-value",
+			},
+			expectedAnnotations: map[string]string{
+				"numaplane.io/test": "new-value",
+				"existing":          "annotation",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch with special characters in value",
+			initialAnnotations: map[string]string{
+				"existing": "annotation",
+			},
+			patchAnnotations: map[string]string{
+				"numaplane.io/timestamp": "2025-12-02T10:30:00Z",
+				"numaplane.io/json":      `{"key":"value"}`,
+			},
+			expectedAnnotations: map[string]string{
+				"existing":               "annotation",
+				"numaplane.io/timestamp": "2025-12-02T10:30:00Z",
+				"numaplane.io/json":      `{"key":"value"}`,
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name:               "patch empty map (no-op)",
+			initialAnnotations: map[string]string{"existing": "annotation"},
+			patchAnnotations:   map[string]string{},
+			expectedAnnotations: map[string]string{
+				"existing": "annotation",
+			},
+			expectedError:           false,
+			expectedResourceVersion: false, // no change expected
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a pipeline for testing
+			pipelineSpec := numaflowv1.PipelineSpec{
+				Vertices: []numaflowv1.AbstractVertex{
+					{
+						Name: "in",
+						Source: &numaflowv1.Source{
+							Generator: &numaflowv1.GeneratorSource{},
+						},
+					},
+					{
+						Name: "out",
+						Sink: &numaflowv1.Sink{
+							AbstractSink: numaflowv1.AbstractSink{
+								Log: &numaflowv1.Log{},
+							},
+						},
+					},
+				},
+				Edges: []numaflowv1.Edge{
+					{
+						From: "in",
+						To:   "out",
+					},
+				},
+			}
+
+			pipelineObject := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			pipelineObject.SetName(fmt.Sprintf("test-pipeline-%s", tt.name))
+			pipelineObject.SetNamespace(namespace)
+
+			// Set initial annotations if any
+			if tt.initialAnnotations != nil {
+				pipelineObject.SetAnnotations(tt.initialAnnotations)
+			}
+
+			var pipelineSpecMap map[string]interface{}
+			err = util.StructToStruct(pipelineSpec, &pipelineSpecMap)
+			assert.Nil(t, err)
+			pipelineObject.Object["spec"] = pipelineSpecMap
+
+			// Create the resource
+			err = CreateResource(ctx, runtimeClient, pipelineObject)
+			assert.Nil(t, err)
+
+			// Get the resource to get the initial resource version
+			pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
+			assert.Nil(t, err)
+			initialResourceVersion := pipelineObject.GetResourceVersion()
+
+			// Perform the patch
+			err = PatchAnnotations(ctx, runtimeClient, pipelineObject, tt.patchAnnotations)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.Nil(t, err)
+
+				// Get the updated resource
+				pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
+				assert.Nil(t, err)
+
+				// Verify annotations
+				actualAnnotations := pipelineObject.GetAnnotations()
+				assert.Equal(t, tt.expectedAnnotations, actualAnnotations, "annotations should match expected")
+
+				// Verify resource version changed (or not)
+				if tt.expectedResourceVersion {
+					assert.NotEqual(t, initialResourceVersion, pipelineObject.GetResourceVersion(), "resource version should change after patch")
+				} else {
+					// For empty patch, resource version might still change depending on K8s behavior
+					// so we don't strictly assert this
+				}
+			}
+
+			// Clean up
+			err = DeleteResource(ctx, runtimeClient, pipelineObject)
+			assert.Nil(t, err)
+		})
+	}
+}
+
+func TestPatchLabels(t *testing.T) {
+	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
+	assert.Nil(t, err)
+	runtimeClient, err := client.New(restConfig, client.Options{Scheme: runtime.NewScheme()})
+	assert.Nil(t, err)
+	assert.Nil(t, SetClientSets(restConfig))
+
+	ctx := context.Background()
+	namespace := "default"
+
+	tests := []struct {
+		name                    string
+		initialLabels           map[string]string
+		patchLabels             map[string]string
+		expectedLabels          map[string]string
+		expectedError           bool
+		expectedResourceVersion bool // whether resource version should change
+	}{
+		{
+			name:          "patch single label on resource with no labels",
+			initialLabels: nil,
+			patchLabels: map[string]string{
+				"app": "test-app",
+			},
+			expectedLabels: map[string]string{
+				"app": "test-app",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch single label on resource with existing labels",
+			initialLabels: map[string]string{
+				"existing": "label",
+			},
+			patchLabels: map[string]string{
+				"app": "test-app",
+			},
+			expectedLabels: map[string]string{
+				"existing": "label",
+				"app":      "test-app",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch multiple labels",
+			initialLabels: map[string]string{
+				"existing": "label",
+			},
+			patchLabels: map[string]string{
+				"app":     "test-app",
+				"version": "v1.0",
+				"env":     "production",
+			},
+			expectedLabels: map[string]string{
+				"existing": "label",
+				"app":      "test-app",
+				"version":  "v1.0",
+				"env":      "production",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "update existing label value",
+			initialLabels: map[string]string{
+				"app":      "old-app",
+				"existing": "label",
+			},
+			patchLabels: map[string]string{
+				"app": "new-app",
+			},
+			expectedLabels: map[string]string{
+				"app":      "new-app",
+				"existing": "label",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name: "patch upgrade state labels",
+			initialLabels: map[string]string{
+				"existing": "label",
+			},
+			patchLabels: map[string]string{
+				common.LabelKeyUpgradeState:       string(common.LabelValueUpgradePromoted),
+				common.LabelKeyUpgradeStateReason: "test-reason",
+			},
+			expectedLabels: map[string]string{
+				"existing":                        "label",
+				common.LabelKeyUpgradeState:       string(common.LabelValueUpgradePromoted),
+				common.LabelKeyUpgradeStateReason: "test-reason",
+			},
+			expectedError:           false,
+			expectedResourceVersion: true,
+		},
+		{
+			name:          "patch empty map (no-op)",
+			initialLabels: map[string]string{"existing": "label"},
+			patchLabels:   map[string]string{},
+			expectedLabels: map[string]string{
+				"existing": "label",
+			},
+			expectedError:           false,
+			expectedResourceVersion: false, // no change expected
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a pipeline for testing
+			pipelineSpec := numaflowv1.PipelineSpec{
+				Vertices: []numaflowv1.AbstractVertex{
+					{
+						Name: "in",
+						Source: &numaflowv1.Source{
+							Generator: &numaflowv1.GeneratorSource{},
+						},
+					},
+					{
+						Name: "out",
+						Sink: &numaflowv1.Sink{
+							AbstractSink: numaflowv1.AbstractSink{
+								Log: &numaflowv1.Log{},
+							},
+						},
+					},
+				},
+				Edges: []numaflowv1.Edge{
+					{
+						From: "in",
+						To:   "out",
+					},
+				},
+			}
+
+			pipelineObject := &unstructured.Unstructured{Object: make(map[string]interface{})}
+			pipelineObject.SetGroupVersionKind(numaflowv1.PipelineGroupVersionKind)
+			pipelineObject.SetName(fmt.Sprintf("test-pipeline-labels-%s", tt.name))
+			pipelineObject.SetNamespace(namespace)
+
+			// Set initial labels if any
+			if tt.initialLabels != nil {
+				pipelineObject.SetLabels(tt.initialLabels)
+			}
+
+			var pipelineSpecMap map[string]interface{}
+			err = util.StructToStruct(pipelineSpec, &pipelineSpecMap)
+			assert.Nil(t, err)
+			pipelineObject.Object["spec"] = pipelineSpecMap
+
+			// Create the resource
+			err = CreateResource(ctx, runtimeClient, pipelineObject)
+			assert.Nil(t, err)
+
+			// Get the resource to get the initial resource version
+			pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
+			assert.Nil(t, err)
+			initialResourceVersion := pipelineObject.GetResourceVersion()
+
+			// Perform the patch
+			err = PatchLabels(ctx, runtimeClient, pipelineObject, tt.patchLabels)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.Nil(t, err)
+
+				// Get the updated resource
+				pipelineObject, err = GetLiveResource(ctx, pipelineObject, "pipelines")
+				assert.Nil(t, err)
+
+				// Verify labels
+				actualLabels := pipelineObject.GetLabels()
+				assert.Equal(t, tt.expectedLabels, actualLabels, "labels should match expected")
+
+				// Verify resource version changed (or not)
+				if tt.expectedResourceVersion {
+					assert.NotEqual(t, initialResourceVersion, pipelineObject.GetResourceVersion(), "resource version should change after patch")
+				}
+			}
+
+			// Clean up
+			err = DeleteResource(ctx, runtimeClient, pipelineObject)
+			assert.Nil(t, err)
+		})
+	}
+}
+
 func TestCreateUpdateGetListDeleteCR(t *testing.T) {
 	restConfig, _, _, _, err := commontest.PrepareK8SEnvironment()
 	assert.Nil(t, err)

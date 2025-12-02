@@ -727,7 +727,7 @@ func checkForValueInCommaDelimitedAnnotation(pipeline *unstructured.Unstructured
 
 func isPipelineSpecOriginal(pipeline *unstructured.Unstructured) bool {
 	forceDrainSpecs, found := pipeline.GetAnnotations()[common.AnnotationKeyForceDrainSpecsStarted]
-	return found && forceDrainSpecs != ""
+	return !found || forceDrainSpecs == ""
 }
 
 func getForceDrainFailureWaitDuration() int32 {
