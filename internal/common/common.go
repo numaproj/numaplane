@@ -147,9 +147,13 @@ const (
 	// AnnotationKeyHash is used to maintain a hash of a Rider to know whether it's changed
 	AnnotationKeyHash = KeyNumaplanePrefix + "hash"
 
-	// AnnotationKeyForceDrainSpecs is used on a Pipeline in the process of deleting it for describing the promoted Pipelines' specs which
+	// AnnotationKeyForceDrainSpecsStarted is used on a Pipeline in the process of recycling it for describing the promoted Pipelines' specs which
 	// have been force applied to it for draining
-	AnnotationKeyForceDrainSpecs = KeyNumaplanePrefix + "force-drain-specs"
+	AnnotationKeyForceDrainSpecsStarted = KeyNumaplanePrefix + "force-drain-specs-started"
+
+	// AnnotationKeyForceDrainSpecsCompleted is used on a Pipeline in the process of recycling it for describing the promoted Pipelines' specs which
+	// have been force applied to it for draining, which have completed the drain attempt
+	AnnotationKeyForceDrainSpecsCompleted = KeyNumaplanePrefix + "force-drain-specs-completed"
 
 	// AnnotationKeyRequiresDrain is annotated on a pipeline if at least some point in its lifetime it has had Source scaled > 0 and desiredPhase=Running
 	// (if not, it is safe to delete without needing to drain it first)

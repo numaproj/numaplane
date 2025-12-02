@@ -118,7 +118,9 @@ func TestGetLabel(t *testing.T) {
 	var obj unstructured.Unstructured
 	err = yaml.Unmarshal(yamlBytes, &obj)
 	assert.Nil(t, err)
-	err = SetLabel(&obj, common.LabelKeyNumaplaneInstance, "my-example")
+	err = SetLabels(&obj, map[string]string{
+		common.LabelKeyNumaplaneInstance: "my-example",
+	})
 	assert.Nil(t, err)
 
 	label, err := GetLabel(&obj, common.LabelKeyNumaplaneInstance)

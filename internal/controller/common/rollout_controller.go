@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	k8stypes "k8s.io/apimachinery/pkg/types"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -175,20 +173,21 @@ func UpdateUpgradeState(ctx context.Context, c client.Client, upgradeState commo
 
 	numaLogger.WithValues("upgradeState", upgradeState, "upgradeStateReason", util.OptionalString(upgradeStateReason)).Debugf("patching upgradeState and upgradeStateReason to %s:%s/%s",
 		childObject.GetKind(), childObject.GetNamespace(), childObject.GetName())
-	var patchJson string
-	labels := childObject.GetLabels()
-	if labels == nil {
-		labels = make(map[string]string)
+
+	labelsToSet := map[string]string{
+		common.LabelKeyUpgradeState: string(upgradeState),
 	}
-	labels[common.LabelKeyUpgradeState] = string(upgradeState)
 	if upgradeStateReason != nil {
-		labels[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
-		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `","` + common.LabelKeyUpgradeStateReason + `":"` + string(*upgradeStateReason) + `"}}}`
-	} else {
-		patchJson = `{"metadata":{"labels":{"` + common.LabelKeyUpgradeState + `":"` + string(upgradeState) + `"}}}`
+		labelsToSet[common.LabelKeyUpgradeStateReason] = string(*upgradeStateReason)
 	}
-	childObject.SetLabels(labels)
-	return kubernetes.PatchResource(ctx, c, childObject, patchJson, k8stypes.MergePatchType)
+
+	// Update in-memory labels
+	if err := kubernetes.SetLabels(childObject, labelsToSet); err != nil {
+		return err
+	}
+
+	// Patch the labels in Kubernetes
+	return kubernetes.PatchLabels(ctx, c, childObject, labelsToSet)
 }
 
 func GetUpgradeState(ctx context.Context, c client.Client, childObject *unstructured.Unstructured) (*common.UpgradeState, *common.UpgradeStateReason) {

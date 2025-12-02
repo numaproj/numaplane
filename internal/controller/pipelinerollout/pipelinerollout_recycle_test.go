@@ -663,10 +663,10 @@ func Test_Recycle(t *testing.T) {
 
 				// Should the spec be overridden with the "promoted" spec?
 				if tc.expectSpecOverridden {
-					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecs)
-					assert.Equal(t, "true", updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecs])
+					assert.Contains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
+					assert.Equal(t, "true", updatedPipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted])
 				} else {
-					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecs)
+					assert.NotContains(t, updatedPipeline.Annotations, common.AnnotationKeyForceDrainSpecsStarted)
 				}
 
 				if len(tc.expectedVertexScaleDefinitions) > 0 {
@@ -782,7 +782,7 @@ func createPipelineForRecycleTest(pipelineRolloutName, pipelineName string, desi
 
 	// Set annotations if needed
 	if overriddenSpec {
-		pipeline.Annotations[common.AnnotationKeyForceDrainSpecs] = "true"
+		pipeline.Annotations[common.AnnotationKeyForceDrainSpecsStarted] = "true"
 	}
 
 	if requiresDrain {
